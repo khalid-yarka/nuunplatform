@@ -1,0 +1,384 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Group Analytics - Admin{% endblock %}
+
+{% block page_title %}Group Analytics{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<style>
+    .analytics-container {
+        max-width: 100%;
+    }
+
+    .analytics-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .analytics-header h2 {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--text);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .analytics-header .sub {
+        color: var(--text-secondary);
+        font-size: 14px;
+        margin-top: 4px;
+    }
+
+    .analytics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .analytics-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 18px 20px;
+        box-shadow: var(--shadow-sm);
+        transition: var(--transition);
+    }
+
+    .analytics-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+    }
+
+    .analytics-card .number {
+        font-size: 32px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.2;
+    }
+
+    .analytics-card .number.primary { color: var(--primary); }
+    .analytics-card .number.green { color: #10B981; }
+    .analytics-card .number.red { color: #EF4444; }
+    .analytics-card .number.gold { color: #F59E0B; }
+    .analytics-card .number.blue { color: #3B82F6; }
+
+    .analytics-card .label {
+        font-size: 13px;
+        color: var(--text-secondary);
+        font-weight: 500;
+        margin-top: 4px;
+    }
+
+    .analytics-card .trend {
+        font-size: 12px;
+        margin-top: 6px;
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 10px;
+    }
+
+    .analytics-card .trend.up {
+        background: #ECFDF5;
+        color: #10B981;
+    }
+
+    .analytics-card .trend.down {
+        background: #FEF2F2;
+        color: #EF4444;
+    }
+
+    .analytics-card .trend.neutral {
+        background: #F3F4F6;
+        color: #6B7280;
+    }
+
+    .analytics-section {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 20px 24px;
+        margin-bottom: 24px;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .analytics-section .section-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .analytics-section .section-title .badge {
+        font-size: 11px;
+        background: var(--primary-light);
+        color: var(--primary);
+        padding: 1px 12px;
+        border-radius: 12px;
+        font-weight: 600;
+    }
+
+    .top-groups-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .top-group-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        background: var(--background);
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-light);
+        transition: var(--transition);
+    }
+
+    .top-group-item:hover {
+        border-color: var(--primary);
+        background: var(--primary-light);
+    }
+
+    .top-group-item .rank {
+        font-weight: 700;
+        color: var(--text-secondary);
+        min-width: 28px;
+        font-size: 13px;
+    }
+
+    .top-group-item .rank.gold { color: #F59E0B; }
+    .top-group-item .rank.silver { color: #9CA3AF; }
+    .top-group-item .rank.bronze { color: #D97706; }
+
+    .top-group-item .info {
+        flex: 1;
+    }
+
+    .top-group-item .info .name {
+        font-weight: 600;
+        color: var(--text);
+        font-size: 14px;
+    }
+
+    .top-group-item .info .meta {
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+
+    .top-group-item .clicks {
+        font-weight: 700;
+        color: var(--primary);
+        font-size: 16px;
+    }
+
+    .top-group-item .icon {
+        font-size: 24px;
+    }
+
+    .platform-distribution {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+
+    .platform-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        background: var(--background);
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-light);
+    }
+
+    .platform-item .platform-icon {
+        font-size: 28px;
+    }
+
+    .platform-item .platform-icon.whatsapp { color: #25D366; }
+    .platform-item .platform-icon.telegram { color: #0088CC; }
+
+    .platform-item .platform-info {
+        flex: 1;
+    }
+
+    .platform-item .platform-info .name {
+        font-weight: 600;
+        color: var(--text);
+        font-size: 14px;
+    }
+
+    .platform-item .platform-info .count {
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+
+    .platform-item .platform-bar {
+        width: 100px;
+        height: 8px;
+        background: var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .platform-item .platform-bar .fill {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.8s ease;
+    }
+
+    .platform-item .platform-bar .fill.whatsapp { background: #25D366; }
+    .platform-item .platform-bar .fill.telegram { background: #0088CC; }
+
+    @media (max-width: 768px) {
+        .platform-distribution {
+            grid-template-columns: 1fr;
+        }
+
+        .analytics-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 480px) {
+        .analytics-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .analytics-card .number {
+            font-size: 24px;
+        }
+
+        .top-group-item {
+            flex-wrap: wrap;
+        }
+
+        .top-group-item .clicks {
+            width: 100%;
+            text-align: right;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="analytics-container">
+
+    <!-- Header -->
+    <div class="analytics-header">
+        <div>
+            <h2><i class="fas fa-chart-bar" style="color: var(--primary);"></i> Group Analytics</h2>
+            <div class="sub">Overview of group performance and engagement</div>
+        </div>
+        <a href="{{ url_for('admin.admin_groups') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Groups
+        </a>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="analytics-grid">
+        <div class="analytics-card">
+            <div class="number primary">{{ stats.total_groups|default(0) }}</div>
+            <div class="label">Total Groups</div>
+        </div>
+        <div class="analytics-card">
+            <div class="number green">{{ stats.active_groups|default(0) }}</div>
+            <div class="label">Active Groups</div>
+            <span class="trend up">● {{ ((stats.active_groups|default(0) / (stats.total_groups|default(1)) * 100)|round(0)) }}% active</span>
+        </div>
+        <div class="analytics-card">
+            <div class="number gold">{{ stats.featured_groups|default(0) }}</div>
+            <div class="label">Featured Groups</div>
+        </div>
+        <div class="analytics-card">
+            <div class="number blue">{{ stats.total_clicks|default(0) }}</div>
+            <div class="label">Total Clicks</div>
+            <span class="trend neutral">Avg {{ (stats.avg_clicks or 0)|round(1) }} per group</span>
+        </div>
+    </div>
+
+    <!-- Top Groups -->
+    <div class="analytics-section">
+        <div class="section-title">
+            🏆 Top Groups by Clicks
+            <span class="badge">Most popular</span>
+        </div>
+        {% if top_groups %}
+            <div class="top-groups-list">
+                {% for group in top_groups %}
+                    <div class="top-group-item">
+                        <span class="rank {% if loop.index == 1 %}gold{% elif loop.index == 2 %}silver{% elif loop.index == 3 %}bronze{% endif %}">
+                            {% if loop.index == 1 %}🥇{% elif loop.index == 2 %}🥈{% elif loop.index == 3 %}🥉{% else %}#{{ loop.index }}{% endif %}
+                        </span>
+                        <span class="icon">{{ group.icon or '📚' }}</span>
+                        <div class="info">
+                            <div class="name">{{ group.name }}</div>
+                            <div class="meta">{{ group.platform|capitalize }} · {{ group.category or 'Uncategorized' }}</div>
+                        </div>
+                        <div class="clicks">{{ group.click_count or 0 }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div style="text-align: center; padding: 30px 0; color: var(--text-muted);">
+                <div style="font-size: 40px; opacity: 0.3; margin-bottom: 8px;">📊</div>
+                <p>No group data available yet.</p>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Platform Distribution -->
+    <div class="analytics-section">
+        <div class="section-title">
+            📱 Platform Distribution
+            <span class="badge">By platform</span>
+        </div>
+        {% if platforms %}
+            <div class="platform-distribution">
+                {% for platform in platforms %}
+                    <div class="platform-item">
+                        <span class="platform-icon {{ platform.platform }}">
+                            <i class="fab fa-{% if platform.platform == 'whatsapp' %}whatsapp{% else %}telegram-plane{% endif %}"></i>
+                        </span>
+                        <div class="platform-info">
+                            <div class="name">{{ platform.platform|capitalize }}</div>
+                            <div class="count">{{ platform.count }} groups</div>
+                        </div>
+                        <div class="platform-bar">
+                            <div class="fill {{ platform.platform }}" style="width: {{ (platform.count / platforms|sum(attribute='count') * 100)|round(0) if platforms|sum(attribute='count') > 0 else 0 }}%;"></div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div style="text-align: center; padding: 20px 0; color: var(--text-muted);">
+                <p>No platform data available.</p>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Quick Actions -->
+    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <a href="{{ url_for('admin.admin_groups') }}" class="btn btn-secondary">
+            <i class="fas fa-list"></i> Manage Groups
+        </a>
+        <a href="{{ url_for('admin.groups_audit') }}" class="btn btn-secondary">
+            <i class="fas fa-history"></i> View Audit Log
+        </a>
+        <button onclick="window.location.reload()" class="btn btn-secondary">
+            <i class="fas fa-redo"></i> Refresh
+        </button>
+    </div>
+</div>
+{% endblock %}

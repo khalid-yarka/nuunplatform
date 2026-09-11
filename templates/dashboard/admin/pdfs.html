@@ -1,0 +1,123 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Manage PDFs - Admin{% endblock %}
+
+{% block page_title %}Manage PDFs{% endblock %}
+
+<!-- No custom CSS needed -->
+
+{% block dashboard_content %}
+<div style="max-width: 100%;">
+
+    <div class="breadcrumb">
+        <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
+        <span class="separator">/</span>
+        <span class="current">Manage PDFs</span>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <div>
+            <h2 style="font-size: 20px; font-weight: 700; color: var(--text);">
+                <i class="fas fa-file-pdf" style="color: #E74C3C;"></i> Manage PDFs
+            </h2>
+            <p style="color: var(--text-secondary); font-size: 14px;">Add and manage study materials</p>
+        </div>
+    </div>
+
+    <!-- Add PDF Form -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h3 style="font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 16px;">➕ Add New PDF</h3>
+        <form method="POST" action="{{ url_for('admin.add_pdf') }}" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;">
+            <div>
+                <div class="form-group">
+                    <label class="form-label">Title <span class="required">*</span></label>
+                    <input type="text" name="title" placeholder="e.g., Physics Notes Chapter 5" class="form-control" required>
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label class="form-label">Subject</label>
+                    <input type="text" name="subject" placeholder="e.g., Physics" class="form-control">
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label class="form-label">Grade</label>
+                    <input type="text" name="grade" placeholder="e.g., Form 4" class="form-control">
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label class="form-label">Category</label>
+                    <input type="text" name="category" placeholder="e.g., Notes" class="form-control">
+                </div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <div class="form-group">
+                    <label class="form-label">PDF File URL <span class="required">*</span></label>
+                    <input type="url" name="file_url" placeholder="https://your-supabase-storage-url.pdf" class="form-control" required>
+                </div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <div class="form-group">
+                    <label class="form-label">Telegram Download URL <span class="required">*</span></label>
+                    <input type="url" name="telegram_download_url" placeholder="https://t.me/your_channel/..." class="form-control" required>
+                    <span class="form-hint">Link to your Telegram channel where users can download</span>
+                </div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea name="description" rows="2" placeholder="Brief description of the PDF..." class="form-control"></textarea>
+                </div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> Add PDF</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- PDFs List -->
+    <div class="table-container">
+        <div class="table-header">
+            <span><strong>{{ pdfs|length }}</strong> PDFs</span>
+        </div>
+        {% if pdfs %}
+            <div style="overflow-x: auto;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Subject</th>
+                            <th>Grade</th>
+                            <th style="text-align: center;">Views</th>
+                            <th style="text-align: center;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pdf in pdfs %}
+                            <tr>
+                                <td style="font-weight: 500;">{{ pdf.title }}</td>
+                                <td>{{ pdf.subject or '-' }}</td>
+                                <td>{{ pdf.grade or '-' }}</td>
+                                <td style="text-align: center;">{{ pdf.view_count or 0 }}</td>
+                                <td style="text-align: center;">
+                                    <form method="POST" action="{{ url_for('admin.delete_pdf', pdf_id=pdf.id) }}" style="display: inline;" onsubmit="return confirm('Delete this PDF?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i> Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <span class="empty-icon">📄</span>
+                <div class="empty-title">No PDFs added yet</div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

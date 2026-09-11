@@ -1,0 +1,163 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Reports - Admin{% endblock %}
+
+{% block page_title %}Reports{% endblock %}
+
+{% block dashboard_content %}
+<div style="max-width: 100%;">
+    <div class="breadcrumb">
+        <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
+        <span class="separator">/</span>
+        <span class="current">Reports</span>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <div>
+            <h2 style="font-size: 20px; font-weight: 700; color: var(--text);">
+                <i class="fas fa-flag" style="color: #EF4444;"></i> Reports
+            </h2>
+            <p style="color: var(--text-secondary); font-size: 14px;">Manage user-reported questions</p>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <span class="badge badge-danger">{{ total }}</span>
+        </div>
+    </div>
+
+    <!-- Filter Tabs -->
+    <div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
+        <a href="{{ url_for('admin.reports', status='pending') }}" 
+           class="btn {% if status == 'pending' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">
+            Pending
+        </a>
+        <a href="{{ url_for('admin.reports', status='resolved') }}" 
+           class="btn {% if status == 'resolved' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">
+            Resolved
+        </a>
+        <a href="{{ url_for('admin.reports', status='dismissed') }}" 
+           class="btn {% if status == 'dismissed' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">
+            Dismissed
+        </a>
+        <a href="{{ url_for('admin.reports', status='all') }}" 
+           class="btn {% if status == 'all' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">
+            All
+        </a>
+    </div>
+
+    {% if reports %}
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+            {% for report in reports %}
+                <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; box-shadow: var(--shadow-sm);">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; color: var(--text); font-size: 15px;">
+                                {{ report.question_text[:100] }}{% if report.question_text|length > 100 %}...{% endif %}
+                            </div>
+                            <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">
+                                <span>Reported by: <strong>#{{ report.public_id }}</strong> ({{ report.first_name }} {{ report.last_name }})</span>
+                                <span style="margin-left: 12px;">📅 {{ report.created_at|replace('T', ' ')|truncate(16, True, '') }}</span>
+                                <span style="margin-left: 12px;">Reason: <span class="badge badge-warning">{{ report.report_reason }}</span></span>
+                            </div>
+                            {% if report.report_comment %}
+                                <div style="margin-top: 6px; font-size: 13px; color: var(--text-secondary); background: var(--background); padding: 6px 12px; border-radius: var(--radius-sm); border-left: 3px solid var(--primary);">
+                                    "{{ report.report_comment }}"
+                                </div>
+                            {% endif %}
+                            {% if report.admin_reply %}
+                                <div style="margin-top: 8px; font-size: 13px; color: var(--text); background: #ECFDF5; padding: 6px 12px; border-radius: var(--radius-sm); border-left: 3px solid #10B981;">
+                                    <strong>Admin Reply:</strong> {{ report.admin_reply }}
+                                </div>
+                            {% endif %}
+                            {% if report.report_status == 'resolved' %}
+                                <div style="margin-top: 4px; font-size: 12px; color: #10B981;">
+                                    Resolved by admin #{{ report.resolved_by }} at {{ report.resolved_at|replace('T', ' ')|truncate(16, True, '') }}
+                                </div>
+                            {% elif report.report_status == 'dismissed' %}
+                                <div style="margin-top: 4px; font-size: 12px; color: #6B7280;">
+                                    Dismissed by admin #{{ report.resolved_by }} at {{ report.resolved_at|replace('T', ' ')|truncate(16, True, '') }}
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0;">
+                            {% if report.report_status == 'pending' %}
+                                <button onclick="openReplyModal({{ report.id }}, 'resolve')" class="btn btn-success btn-sm">
+                                    <i class="fas fa-check"></i> Resolve
+                                </button>
+                                <button onclick="openReplyModal({{ report.id }}, 'dismiss')" class="btn btn-secondary btn-sm">
+                                    <i class="fas fa-times"></i> Dismiss
+                                </button>
+                            {% else %}
+                                <span class="badge {% if report.report_status == 'resolved' %}badge-success{% else %}badge-secondary{% endif %}">
+                                    {{ report.report_status|capitalize }}
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="pagination" style="margin-top: 20px;">
+            {% if page > 1 %}
+            <a href="{{ url_for('admin.reports', status=status, page=page-1) }}" class="page-link">&laquo; Previous</a>
+            {% endif %}
+            <span>Page {{ page }} of {{ total_pages }}</span>
+            {% if page < total_pages %}
+            <a href="{{ url_for('admin.reports', status=status, page=page+1) }}" class="page-link">Next &raquo;</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+    {% else %}
+        <div class="empty-state">
+            <span class="empty-icon">🎉</span>
+            <div class="empty-title">No reports found</div>
+            <p style="font-size: 14px; color: var(--text-secondary);">All clear!</p>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Reply Modal -->
+<div class="modal-overlay" id="replyModal">
+    <div class="modal-content" style="max-width: 500px;">
+        <h3 class="modal-title">Admin Reply</h3>
+        <p class="modal-body">Add a reply to the user (optional).</p>
+        <form id="replyForm" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="form-group">
+                <label class="form-label">Reply Message</label>
+                <textarea name="reply" rows="3" class="form-control" placeholder="Optional reply to the user..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button type="button" onclick="closeReplyModal()" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Confirm</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+let currentReportId = null;
+let currentAction = '';
+
+function openReplyModal(reportId, action) {
+    currentReportId = reportId;
+    currentAction = action;
+    const modal = document.getElementById('replyModal');
+    const form = document.getElementById('replyForm');
+    const actionPath = action === 'resolve' ? '/resolve' : '/dismiss';
+    form.action = '/admin/reports/' + reportId + actionPath;
+    modal.classList.add('active');
+}
+
+function closeReplyModal() {
+    document.getElementById('replyModal').classList.remove('active');
+}
+
+document.getElementById('replyModal').addEventListener('click', function(e) {
+    if (e.target === this) closeReplyModal();
+});
+</script>
+{% endblock %}

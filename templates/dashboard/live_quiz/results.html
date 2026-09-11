@@ -1,0 +1,295 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Quiz Results - Live Quiz{% endblock %}
+
+{% block page_title %}Results{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz.css') }}" />
+<style>
+    .result-hero .medal {
+        font-size: 48px;
+        margin-bottom: 8px;
+    }
+    .result-hero .rank-detail {
+        font-size: 14px;
+        opacity: 0.9;
+    }
+    .result-hero .rank-detail strong {
+        color: white;
+    }
+    .celebrate {
+        animation: celeb 0.8s ease;
+    }
+    @keyframes celeb {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+    .final-banner {
+        background: #10B981;
+        color: white;
+        padding: 12px 20px;
+        border-radius: var(--radius-sm);
+        text-align: center;
+        font-weight: 600;
+        margin-bottom: 16px;
+        animation: slideDown 0.5s ease;
+    }
+    .final-banner i {
+        margin-right: 8px;
+    }
+    .leaderboard-full .row .rank-badge.medal {
+        font-size: 18px;
+        line-height: 1;
+    }
+    .leaderboard-full .row .rank-badge.medal.gold { color: #F59E0B; }
+    .leaderboard-full .row .rank-badge.medal.silver { color: #9CA3AF; }
+    .leaderboard-full .row .rank-badge.medal.bronze { color: #D97706; }
+    
+    @media (max-width: 480px) {
+        .result-hero .medal {
+            font-size: 32px;
+        }
+        .result-hero .rank-detail {
+            font-size: 12px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div style="max-width: 800px; margin: 0 auto;">
+
+    <div class="final-banner" id="finalBanner">
+        <i class="fas fa-trophy"></i> Quiz Complete! 🎉
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+        <div>
+            <h2 style="font-size: 22px; font-weight: 700; color: var(--text);">
+                🎉 {{ quiz.title or 'Live Quiz' }}
+            </h2>
+            <p style="color: var(--text-secondary); font-size: 14px;">
+                📚 {{ quiz.subjects.name if quiz.subjects else 'Unknown Subject' }} · {{ quiz.question_count }} questions
+            </p>
+        </div>
+        <div style="font-size: 14px; color: var(--text-secondary); background: var(--background); padding: 4px 14px; border-radius: 10px;">
+            👥 <span id="participantCount">{{ participants|length }}</span> participants
+        </div>
+    </div>
+
+    {% if user_participant %}
+    <div class="result-hero" id="resultHero">
+        <div class="medal">
+            {% if user_participant.ranking == 1 %}🥇
+            {% elif user_participant.ranking == 2 %}🥈
+            {% elif user_participant.ranking == 3 %}🥉
+            {% else %}🏅{% endif %}
+        </div>
+        <div class="score">{{ user_participant.score }}</div>
+        <div class="percentage">
+            {{ ((user_participant.score / (quiz.question_count * 2)) * 100)|round(0) }}%
+        </div>
+        <div class="rank-detail">
+            🏆 Rank: <strong>#{{ user_participant.ranking or '-' }}</strong> of {{ participants|length }} participants
+        </div>
+    </div>
+
+    <div class="result-stats">
+        <div class="stat correct">
+            <div class="number">✅ {{ user_participant.correct_count or 0 }}</div>
+            <div class="label">Correct</div>
+        </div>
+        <div class="stat wrong">
+            <div class="number">❌ {{ user_participant.wrong_count or 0 }}</div>
+            <div class="label">Wrong</div>
+        </div>
+        <div class="stat skipped">
+            <div class="number">⏭️ {{ user_participant.skipped_count or 0 }}</div>
+            <div class="label">Skipped</div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if is_creator %}
+    <div class="result-analysis" id="analysisContainer">
+        <div class="title">📊 Question Analysis</div>
+        <div id="analysisContent">
+            <div style="text-align: center; color: var(--text-muted); padding: 8px 0; font-size: 13px;">
+                <i class="fas fa-spinner fa-spin"></i> Loading analysis...
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div style="margin-bottom: 20px;">
+        <h3 style="font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 12px;">
+            🏆 Full Leaderboard
+        </h3>
+        <div class="leaderboard-full" id="leaderboardFull">
+            <div class="header">
+                <span>#</span>
+                <span>Player</span>
+                <span style="text-align: center;">Score</span>
+                <span style="text-align: center;">✅</span>
+                <span style="text-align: center;">❌</span>
+                <span style="text-align: center;">Status</span>
+            </div>
+            <div id="leaderboardRows">
+                {% for p in participants %}
+                    {% set isYou = p.student_id == session.user_id %}
+                    <div class="row {% if isYou %}you{% endif %}" data-student="{{ p.student_id }}">
+                        <span>
+                            {% if loop.index == 1 %}
+                                <span class="rank-badge medal gold">🥇</span>
+                            {% elif loop.index == 2 %}
+                                <span class="rank-badge medal silver">🥈</span>
+                            {% elif loop.index == 3 %}
+                                <span class="rank-badge medal bronze">🥉</span>
+                            {% else %}
+                                <span class="rank-badge normal">#{{ loop.index }}</span>
+                            {% endif %}
+                        </span>
+                        <span>
+                            {% set student = p.student or {} %}
+                            {{ student.get('first_name', 'Unknown') }}
+                            {{ student.get('last_name', '') }}
+                            {% if isYou %}<span style="color: var(--primary); font-weight: 600;"> (You)</span>{% endif %}
+                            <span style="font-size: 10px; color: var(--text-muted); display: block;">
+                                #{{ student.get('public_id', '----') }}
+                            </span>
+                        </span>
+                        <span style="text-align: center; font-weight: 700; color: var(--primary);">
+                            {{ p.score }}
+                        </span>
+                        <span style="text-align: center; color: #10B981;">
+                            {{ p.correct_count or 0 }}
+                        </span>
+                        <span style="text-align: center; color: #EF4444;">
+                            {{ p.wrong_count or 0 }}
+                        </span>
+                        <span style="text-align: center;">
+                            {% if p.status == 'left' %}
+                                <span class="status-tag left">Left early</span>
+                            {% elif p.status == 'completed' or p.ranking %}
+                                <span class="status-tag completed">✅ Done</span>
+                            {% else %}
+                                <span class="status-tag playing">🔄 Active</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <a href="{{ url_for('dashboard.home') }}" style="padding: 10px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); text-decoration: none; color: var(--text); font-weight: 500; transition: var(--transition);">
+            <i class="fas fa-home"></i> Home
+        </a>
+        <a href="{{ url_for('live_quiz.index') }}" style="padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: var(--radius-sm); text-decoration: none; font-weight: 600; transition: var(--transition);">
+            <i class="fas fa-plus"></i> New Quiz
+        </a>
+        {% if is_creator %}
+        <button onclick="exportResults()" style="padding: 10px 20px; background: #10B981; color: white; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: var(--transition);">
+            <i class="fas fa-download"></i> Export CSV
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const quizId = '{{ quiz.id }}';
+    const isCreator = {{ 'true' if is_creator else 'false' }};
+    const totalParticipants = {{ participants|length }};
+    
+    function pollResults() {
+        fetch('/live-quiz/quiz-state/' + quizId + '?t=' + Date.now())
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.warn('Results poll error:', data.error);
+                    setTimeout(pollResults, 5000);
+                    return;
+                }
+                
+                const countEl = document.getElementById('participantCount');
+                if (countEl && data.total_participants !== undefined) {
+                    countEl.textContent = data.total_participants;
+                }
+                
+                setTimeout(pollResults, 3000);
+            })
+            .catch(function(err) {
+                console.warn('Results poll error:', err);
+                setTimeout(pollResults, 5000);
+            });
+    }
+    
+    function fetchLeaderboard() {
+        fetch('/live-quiz/leaderboard/' + quizId + '?t=' + Date.now())
+            .then(response => response.json())
+            .then(data => {})
+            .catch(function(err) {});
+    }
+    
+    if (isCreator) {
+        fetch('/live-quiz/analysis/' + quizId + '?t=' + Date.now())
+            .then(response => response.json())
+            .then(data => {
+                const container = document.getElementById('analysisContent');
+                if (!container) return;
+                let html = '';
+                if (data.most_correct && data.most_correct.length > 0) {
+                    html += `<div style="margin-bottom: 4px; font-weight: 600; color: #10B981;">✅ Most Correct Questions</div>`;
+                    data.most_correct.slice(0, 3).forEach(q => {
+                        html += `
+                            <div class="qa-item">
+                                <span>Q${q.index + 1}: ${q.text}</span>
+                                <span class="correct-rate">${q.correct_rate}% correct</span>
+                            </div>
+                        `;
+                    });
+                }
+                if (data.most_wrong && data.most_wrong.length > 0) {
+                    html += `<div style="margin-top: 8px; margin-bottom: 4px; font-weight: 600; color: #EF4444;">❌ Most Wrong Questions</div>`;
+                    data.most_wrong.slice(0, 3).forEach(q => {
+                        html += `
+                            <div class="qa-item">
+                                <span>Q${q.index + 1}: ${q.text}</span>
+                                <span class="wrong-rate">${q.wrong_rate}% wrong</span>
+                            </div>
+                        `;
+                    });
+                }
+                if (!html) {
+                    html = '<div style="text-align: center; color: var(--text-muted); padding: 8px 0; font-size: 13px;">No data available</div>';
+                }
+                container.innerHTML = html;
+            })
+            .catch(function() {
+                const container = document.getElementById('analysisContent');
+                if (container) {
+                    container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 8px 0; font-size: 13px;">Analysis not available</div>';
+                }
+            });
+    }
+    
+    function exportResults() {
+        window.location.href = '/live-quiz/export/' + quizId;
+    }
+    window.exportResults = exportResults;
+    
+    const hero = document.getElementById('resultHero');
+    if (hero) {
+        const rank = {{ user_participant.ranking if user_participant else 0 }};
+        if (rank >= 1 && rank <= 3) {
+            hero.classList.add('celebrate');
+        }
+    }
+});
+</script>
+{% endblock %}

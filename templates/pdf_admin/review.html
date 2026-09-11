@@ -1,0 +1,52 @@
+{% extends "pdf_admin/base.html" %}
+
+{% block title %}Review PDF - PDF Admin{% endblock %}
+
+{% block content %}
+<div class="pdf-admin-page">
+    <div class="pdf-page-header">
+        <h1><i class="fas fa-clipboard-check"></i> Final Review</h1>
+        <a href="{{ url_for('pdf_admin.process_pending', pending_id=pending.id) }}" class="pdf-btn pdf-btn-secondary pdf-btn-sm">
+            <i class="fas fa-edit"></i> Edit
+        </a>
+    </div>
+
+    <div class="pdf-review-card">
+        <h3><i class="fas fa-file-pdf"></i> PDF Details</h3>
+        <div class="pdf-review-grid">
+            <div class="pdf-review-item"><span class="label">Title:</span> <span>{{ data.title }}</span></div>
+            <div class="pdf-review-item"><span class="label">Description:</span> <span>{{ data.description or '—' }}</span></div>
+            <div class="pdf-review-item"><span class="label">Subject:</span> <span>{{ data.subject_name or data.subject }}</span></div>
+            <div class="pdf-review-item"><span class="label">Grade:</span> <span>{{ data.grade }}</span></div>
+            <div class="pdf-review-item"><span class="label">Category:</span> <span>{{ data.category or '—' }}</span></div>
+            <div class="pdf-review-item"><span class="label">Chapters:</span> <span>{{ data.chapters or '—' }}</span></div>
+            <div class="pdf-review-item"><span class="label">Tags:</span> <span>{{ data.tags or '—' }}</span></div>
+            <div class="pdf-review-item"><span class="label">Premium:</span> <span>{{ 'Yes' if data.is_premium else 'No' }}</span></div>
+        </div>
+        <div class="pdf-review-actions">
+            <form method="POST" action="{{ url_for('pdf_admin.save_pending', pending_id=pending.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <!-- Pass all data as hidden fields -->
+                <input type="hidden" name="title" value="{{ data.title }}">
+                <input type="hidden" name="description" value="{{ data.description or '' }}">
+                <input type="hidden" name="subject" value="{{ data.subject }}">
+                <input type="hidden" name="grade" value="{{ data.grade }}">
+                <input type="hidden" name="category" value="{{ data.category or '' }}">
+                <input type="hidden" name="chapters" value="{{ data.chapters or '' }}">
+                <input type="hidden" name="tags" value="{{ data.tags or '' }}">
+                <input type="hidden" name="is_premium" value="{{ '1' if data.is_premium else '0' }}">
+                <button type="submit" class="pdf-btn pdf-btn-success pdf-btn-lg">
+                    <i class="fas fa-save"></i> Confirm & Save PDF
+                </button>
+                <a href="{{ url_for('pdf_admin.process_pending', pending_id=pending.id) }}" class="pdf-btn pdf-btn-secondary pdf-btn-lg">
+                    <i class="fas fa-undo-alt"></i> Go Back and Edit
+                </a>
+            </form>
+        </div>
+        <div class="pdf-review-warning">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span>This action will permanently move the PDF to the public library and remove it from pending.</span>
+        </div>
+    </div>
+</div>
+{% endblock %}

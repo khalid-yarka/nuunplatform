@@ -1,0 +1,140 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}All Backups{% endblock %}
+
+{% block page_title %}All Backups{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<style>
+    .backup-table td, .backup-table th {
+        vertical-align: middle;
+    }
+    .backup-table .action-buttons {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+    }
+    .backup-table .action-buttons .btn-sm {
+        padding: 2px 8px;
+        font-size: 11px;
+    }
+    .status-valid { color: #10B981; }
+    .status-invalid { color: #EF4444; }
+    .status-unknown { color: #F59E0B; }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="font-size: 20px; font-weight: 700; color: var(--text);">
+            <i class="fas fa-database" style="color: var(--primary);"></i> All Backups
+        </h2>
+        <a href="{{ url_for('admin_backup.dashboard') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back</a>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">
+            <span><strong>{{ backups|length }}</strong> backups</span>
+        </div>
+        <div style="overflow-x: auto;">
+            <table class="table backup-table">
+                <thead>
+                    <tr>
+                        <th>Filename</th>
+                        <th>Type</th>
+                        <th>Size</th>
+                        <th>Created</th>
+                        <th>Status</th>
+                        <th style="text-align: center;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for backup in backups %}
+                    <tr>
+                        <td style="font-family: monospace; font-size: 13px;">{{ backup.filename }}</td>
+                        <td><span class="badge">{{ backup.type|capitalize }}</span></td>
+                        <td>{{ (backup.size_kb|round(1)) if backup.size_kb else '—' }} KB</td>
+                        <td>{{ backup.timestamp|replace('T', ' ')|truncate(16, True, '') if backup.timestamp else '—' }}</td>
+                        <td>
+                            {% set status = backup.integrity_status|default('unknown') %}
+                            <span class="status-{{ status }}">{{ status|upper }}</span>
+                            {% if backup.exists == False %}
+                                <span style="color: #EF4444;">(missing)</span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align: center;">
+                            <div class="action-buttons">
+                                <a href="{{ url_for('admin_backup.download_backup', filename=backup.filename) }}" class="btn btn-sm btn-primary" title="Download"><i class="fas fa-download"></i></a>
+                                <button onclick="verifyBackup('{{ backup.filename }}', event)" class="btn btn-sm btn-secondary" title="Verify"><i class="fas fa-check"></i></button>
+                                <button onclick="restoreBackup('{{ backup.filename }}', event)" class="btn btn-sm btn-success" title="Restore"><i class="fas fa-undo"></i></button>
+                                <button onclick="deleteBackup('{{ backup.filename }}', event)" class="btn btn-sm btn-danger" title="Delete"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function verifyBackup(filename, event) {
+    if (!confirm('Verify integrity of ' + filename + '?')) return;
+    const btn = event.target.closest('button');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    fetch('/admin/backup/verify/' + filename, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            alert(data.success ? 'Backup is valid.' : 'Backup is invalid: ' + data.details?.error);
+        })
+        .catch(err => alert('Error: ' + err))
+        .finally(() => { btn.innerHTML = '<i class="fas fa-check"></i>'; btn.disabled = false; });
+}
+
+function restoreBackup(filename, event) {
+    const password = prompt('Enter admin password to restore ' + filename + ':\n(This will replace the current database)');
+    if (!password) return;
+    if (!confirm('Are you sure you want to restore ' + filename + '? This will overwrite the current database.')) return;
+    const btn = event.target.closest('button');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    const formData = new FormData();
+    formData.append('confirm_password', password);
+    fetch('/admin/backup/restore/' + filename, { method: 'POST', body: formData })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Restore successful!');
+                location.reload();
+            } else {
+                alert('Restore failed: ' + data.message);
+            }
+        })
+        .catch(err => alert('Error: ' + err))
+        .finally(() => { btn.innerHTML = '<i class="fas fa-undo"></i>'; btn.disabled = false; });
+}
+
+function deleteBackup(filename, event) {
+    if (!confirm('Delete ' + filename + '?')) return;
+    const btn = event.target.closest('button');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    fetch('/admin/backup/delete/' + filename, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Deleted.');
+                location.reload();
+            } else {
+                alert('Delete failed: ' + data.error);
+            }
+        })
+        .catch(err => alert('Error: ' + err))
+        .finally(() => { btn.innerHTML = '<i class="fas fa-trash"></i>'; btn.disabled = false; });
+}
+</script>
+{% endblock %}

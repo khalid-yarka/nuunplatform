@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="so">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Dokumentiyo – NuunPlatform{% endblock %}</title>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <!-- Main styles (borrow from site) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+    <!-- Docs specific styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/docs.css') }}" />
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <header class="docs-header">
+        <div class="docs-header-inner">
+            <div class="docs-brand">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="docs-logo" />
+                <span class="docs-brand-text">Nuun<span>Platform</span></span>
+            </div>
+            <div class="docs-header-right">
+                <a href="{{ url_for('auth.login') }}" class="docs-btn docs-btn-primary">Gal</a>
+                <a href="{{ url_for('auth.register') }}" class="docs-btn docs-btn-secondary">Is diwaan geli</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="docs-main">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="docs-footer">
+        <p>&copy; 2026 NuunPlatform. Dhammaan xuquuqda way xifsan yihiin.</p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/docs.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

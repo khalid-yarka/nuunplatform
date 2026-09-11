@@ -1,0 +1,983 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}My History - NuunPlatform{% endblock %}
+{% block page_title %}My History{% endblock %}
+
+{% block dashboard_css %}
+<style>
+    /* ============================================
+       PAGE
+       ============================================ */
+    .history-page { max-width: 100%; }
+
+    /* ============================================
+       HEADER
+       ============================================ */
+    .hist-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+    .hist-header .title-block h2 {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--text);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .hist-header .title-block p {
+        color: var(--text-secondary);
+        font-size: 14px;
+        margin: 4px 0 0 0;
+    }
+    .hist-header .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    /* Tier badge in header */
+    .tier-badge-h {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 14px;
+        border-radius: 14px;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .tier-badge-h.danbe { background: #F3F4F6; color: #4B5563; }
+    .tier-badge-h.dhexe { background: var(--primary-light); color: var(--primary); }
+    .tier-badge-h.hore  { background: linear-gradient(135deg, var(--primary), #B91C1C); color: white; }
+
+    /* ============================================
+       TIER PANEL (quota + features)
+       ============================================ */
+    .hist-tier-panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+        box-shadow: var(--shadow-sm);
+    }
+    .hist-tier-panel .tp-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .hist-tier-panel .tp-header h3 {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--text);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* Quota bar */
+    .hist-quota {
+        margin-bottom: 18px;
+    }
+    .hist-quota .q-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 6px;
+        font-size: 13px;
+    }
+    .hist-quota .q-head .q-label {
+        color: var(--text-secondary);
+        font-weight: 500;
+    }
+    .hist-quota .q-head .q-value {
+        color: var(--text);
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+    .hist-quota .q-head .q-value.unlimited {
+        color: #10B981;
+    }
+    .hist-quota .q-bar {
+        width: 100%;
+        height: 8px;
+        background: var(--background);
+        border-radius: 10px;
+        overflow: hidden;
+        position: relative;
+    }
+    .hist-quota .q-bar .fill {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.6s ease;
+    }
+    .hist-quota .q-bar .fill.low    { background: #10B981; }
+    .hist-quota .q-bar .fill.medium { background: #F59E0B; }
+    .hist-quota .q-bar .fill.high   { background: #EF4444; }
+    .hist-quota .q-bar .fill.full   { background: #DC2626; }
+    .hist-quota .q-bar .fill.unlimited {
+        background: linear-gradient(90deg, #10B981, #059669);
+        width: 100% !important;
+    }
+    .hist-quota .q-hint {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 6px;
+    }
+
+    /* Feature grid */
+    .hist-features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 10px;
+    }
+    .hist-feature {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        background: var(--background);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+    }
+    .hist-feature .fi {
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+    .hist-feature .ft {
+        flex: 1;
+        min-width: 0;
+        color: var(--text);
+    }
+    .hist-feature .ft .name {
+        font-weight: 600;
+        display: block;
+    }
+    .hist-feature .ft .val {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-top: 1px;
+    }
+    .hist-feature.locked {
+        background: var(--surface-alt);
+        border-style: dashed;
+    }
+    .hist-feature.locked .ft .name { color: var(--text-muted); }
+    .hist-feature .lock-icon {
+        font-size: 14px;
+        color: #F59E0B;
+        flex-shrink: 0;
+        cursor: pointer;
+    }
+    .hist-feature .ok-icon {
+        font-size: 14px;
+        color: #10B981;
+        flex-shrink: 0;
+    }
+
+    /* Upgrade CTA */
+    .hist-upgrade-cta {
+        background: linear-gradient(135deg, var(--primary-light), rgba(255,49,56,0.06));
+        border: 1px solid rgba(255,49,56,0.2);
+        border-radius: var(--radius-sm);
+        padding: 14px 18px;
+        margin-top: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+    .hist-upgrade-cta .cta-text {
+        font-size: 13px;
+        color: var(--text);
+        flex: 1;
+        min-width: 200px;
+        line-height: 1.5;
+    }
+    .hist-upgrade-cta .cta-text strong {
+        color: var(--primary);
+    }
+    .hist-upgrade-cta .btn-upgrade {
+        background: var(--primary);
+        color: white;
+        border: none;
+        padding: 8px 20px;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 13px;
+        cursor: pointer;
+        transition: var(--transition);
+        white-space: nowrap;
+        box-shadow: 0 4px 12px rgba(255,49,56,0.25);
+    }
+    .hist-upgrade-cta .btn-upgrade:hover {
+        background: var(--primary-hover);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(255,49,56,0.35);
+    }
+
+    /* ============================================
+       STATS CARDS
+       ============================================ */
+    .hist-stats {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 12px;
+        margin-bottom: 22px;
+    }
+    .hist-stat-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        box-shadow: var(--shadow-sm);
+        transition: var(--transition);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .hist-stat-card .stat-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .hist-stat-card .stat-icon {
+        font-size: 16px;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .hist-stat-card .stat-icon.blue    { background: #EFF6FF; color: #1E40AF; }
+    .hist-stat-card .stat-icon.green   { background: #ECFDF5; color: #065F46; }
+    .hist-stat-card .stat-icon.purple  { background: #F3E8FF; color: #6B21A8; }
+    .hist-stat-card .stat-icon.amber   { background: #FFFBEB; color: #92400E; }
+    .hist-stat-card .stat-icon.primary { background: var(--primary-light); color: var(--primary); }
+    .hist-stat-card .stat-icon.red     { background: #FEF2F2; color: #991B1B; }
+
+    .hist-stat-card .stat-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .hist-stat-card .stat-number {
+        font-size: 26px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.1;
+        letter-spacing: -0.5px;
+    }
+    .hist-stat-card .stat-number.primary { color: var(--primary); }
+    .hist-stat-card .stat-number.blue    { color: #3B82F6; }
+    .hist-stat-card .stat-number.green   { color: #10B981; }
+    .hist-stat-card .stat-number.purple  { color: #8B5CF6; }
+    .hist-stat-card .stat-number.amber   { color: #F59E0B; }
+    .hist-stat-card .stat-number.red     { color: #EF4444; }
+
+    /* ============================================
+       FILTER BAR
+       ============================================ */
+    .hist-filters {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 12px 14px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        box-shadow: var(--shadow-sm);
+    }
+    .hist-filters .search-wrapper {
+        flex: 2;
+        min-width: 220px;
+        position: relative;
+        display: flex;
+    }
+    .hist-filters .search-wrapper i {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        font-size: 14px;
+        pointer-events: none;
+    }
+    .hist-filters .search-wrapper input {
+        width: 100%;
+        padding: 9px 40px 9px 40px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+        font-size: 14px;
+        font-family: inherit;
+        transition: var(--transition);
+        height: 40px;
+    }
+    .hist-filters .search-wrapper input:focus {
+        border-color: var(--primary);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.10);
+    }
+    .hist-filters .search-wrapper input:disabled {
+        background: var(--surface-alt);
+        color: var(--text-muted);
+        cursor: not-allowed;
+    }
+    .hist-filters .search-wrapper .lock-icon {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 15px;
+        color: #F59E0B;
+        cursor: pointer;
+        transition: var(--transition);
+        padding: 4px;
+        border-radius: 6px;
+    }
+    .hist-filters .search-wrapper .lock-icon:hover {
+        background: #FFFBEB;
+    }
+
+    .hist-filters select,
+    .hist-filters input[type="date"] {
+        padding: 9px 34px 9px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+        font-size: 13px;
+        font-family: inherit;
+        cursor: pointer;
+        transition: var(--transition);
+        height: 40px;
+        min-width: 140px;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239CA3AF' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+    }
+    .hist-filters input[type="date"] {
+        background-image: none;
+        padding-right: 12px;
+        min-width: 130px;
+    }
+    .hist-filters select:focus,
+    .hist-filters input[type="date"]:focus {
+        border-color: var(--primary);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.10);
+    }
+
+    .hist-filters .btn-clear {
+        padding: 9px 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: var(--transition);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 40px;
+    }
+    .hist-filters .btn-clear:hover {
+        background: var(--primary-light);
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+
+    /* ============================================
+       TIMELINE
+       ============================================ */
+    .hist-timeline { display: flex; flex-direction: column; gap: 0; }
+
+    .hist-day-group {
+        margin-bottom: 24px;
+    }
+    .hist-day-group:last-child { margin-bottom: 0; }
+
+    .hist-day-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border);
+    }
+    .hist-day-header .day-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--primary);
+        flex-shrink: 0;
+        box-shadow: 0 0 0 4px var(--primary-light);
+    }
+    .hist-day-header .day-label {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text);
+        letter-spacing: 0.3px;
+    }
+    .hist-day-header .day-count {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        background: var(--background);
+        padding: 2px 10px;
+        border-radius: 10px;
+    }
+
+    .hist-entry {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        padding: 14px 16px;
+        background: var(--surface);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-sm);
+        margin-bottom: 8px;
+        transition: var(--transition);
+        cursor: default;
+        position: relative;
+        overflow: hidden;
+    }
+    .hist-entry::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 3px;
+        background: var(--primary);
+        opacity: 0.8;
+    }
+    .hist-entry.quiz_attempt::before    { background: #10B981; }
+    .hist-entry.live_quiz::before       { background: #8B5CF6; }
+    .hist-entry.achievement::before     { background: #F59E0B; }
+    .hist-entry.save::before            { background: #3B82F6; }
+    .hist-entry.pdf_view::before        { background: #E74C3C; }
+    .hist-entry.pdf_download::before    { background: #E74C3C; }
+    .hist-entry.like::before            { background: #EC4899; }
+    .hist-entry.report::before          { background: #EF4444; }
+
+    .hist-entry:hover {
+        border-color: var(--border);
+        box-shadow: var(--shadow-sm);
+        transform: translateX(2px);
+    }
+
+    .hist-entry .entry-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        flex-shrink: 0;
+        background: var(--background);
+    }
+    .hist-entry .entry-body {
+        flex: 1;
+        min-width: 0;
+    }
+    .hist-entry .entry-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+        line-height: 1.4;
+    }
+    .hist-entry .entry-title .highlight {
+        color: var(--primary);
+        font-weight: 700;
+    }
+    .hist-entry .entry-meta {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-top: 4px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+    }
+    .hist-entry .entry-meta .meta-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .hist-entry .entry-meta .meta-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: 600;
+        background: var(--background);
+        color: var(--text-secondary);
+    }
+    .hist-entry .entry-meta .meta-badge.good { background: #ECFDF5; color: #065F46; }
+    .hist-entry .entry-meta .meta-badge.mid  { background: #FFFBEB; color: #92400E; }
+    .hist-entry .entry-meta .meta-badge.low  { background: #FEF2F2; color: #991B1B; }
+
+    .hist-entry .entry-time {
+        font-size: 11px;
+        color: var(--text-muted);
+        white-space: nowrap;
+        padding-top: 4px;
+        flex-shrink: 0;
+    }
+
+    /* ============================================
+       LOAD MORE
+       ============================================ */
+    .hist-load-more-wrap {
+        text-align: center;
+        margin-top: 24px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border-light);
+    }
+    .hist-load-more {
+        padding: 10px 32px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 30px;
+        color: var(--text-secondary);
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        transition: var(--transition);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .hist-load-more:hover:not(:disabled) {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(255,49,56,0.25);
+    }
+    .hist-load-more:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* ============================================
+       EMPTY / LOADING
+       ============================================ */
+    .hist-empty {
+        text-align: center;
+        padding: 60px 24px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-sm);
+    }
+    .hist-empty .empty-icon {
+        font-size: 64px;
+        opacity: 0.4;
+        margin-bottom: 16px;
+        display: block;
+        line-height: 1;
+    }
+    .hist-empty h3 {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text);
+        margin: 0 0 8px 0;
+    }
+    .hist-empty p {
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin: 0 auto 22px auto;
+        max-width: 420px;
+        line-height: 1.6;
+    }
+    .hist-empty .empty-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .hist-loading {
+        text-align: center;
+        padding: 40px 20px;
+        color: var(--text-secondary);
+        font-size: 14px;
+    }
+    .hist-loading .spinner {
+        display: inline-block;
+        width: 26px;
+        height: 26px;
+        border: 3px solid var(--border);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-bottom: 10px;
+    }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* ============================================
+       RESPONSIVE
+       ============================================ */
+    @media (max-width: 1100px) {
+        .hist-stats { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 800px) {
+        .hist-stats { grid-template-columns: repeat(2, 1fr); }
+        .hist-header { flex-direction: column; align-items: stretch; }
+        .hist-header .actions .btn { flex: 1; justify-content: center; }
+        .hist-filters { flex-direction: column; align-items: stretch; }
+        .hist-filters .search-wrapper { min-width: unset; }
+        .hist-filters select,
+        .hist-filters input[type="date"] { width: 100%; min-width: unset; }
+        .hist-filters .btn-clear { width: 100%; justify-content: center; }
+    }
+    @media (max-width: 560px) {
+        .hist-stats { grid-template-columns: repeat(2, 1fr); }
+        .hist-stat-card { padding: 12px 14px; }
+        .hist-stat-card .stat-number { font-size: 20px; }
+        .hist-stat-card .stat-icon { width: 24px; height: 24px; font-size: 14px; }
+
+        .hist-tier-panel { padding: 16px; }
+        .hist-features { grid-template-columns: 1fr; }
+        .hist-upgrade-cta { flex-direction: column; align-items: stretch; text-align: center; }
+        .hist-upgrade-cta .btn-upgrade { width: 100%; }
+
+        .hist-entry { padding: 12px; gap: 10px; }
+        .hist-entry .entry-icon { width: 34px; height: 34px; font-size: 16px; }
+        .hist-entry .entry-title { font-size: 13px; }
+        .hist-entry .entry-time { display: none; }
+        .hist-entry .entry-meta { font-size: 11px; gap: 8px; }
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="history-page" id="historyApp">
+
+    <!-- HEADER -->
+    <div class="hist-header">
+        <div class="title-block">
+            <h2>
+                <i class="fas fa-history" style="color: var(--primary);"></i>
+                My History
+                <span class="tier-badge-h {{ tier }}">
+                    {% if tier == 'danbe' %}🔓 Danbe
+                    {% elif tier == 'dhexe' %}🔑 Dhexe
+                    {% else %}⭐ Hore{% endif %}
+                </span>
+            </h2>
+            <p>Every quiz, live quiz, save, and achievement — all in one place.</p>
+        </div>
+        <div class="actions">
+            {% if can_export %}
+                <button type="button" class="btn btn-secondary" id="exportBtn">
+                    <i class="fas fa-download"></i> Export CSV
+                </button>
+            {% else %}
+                <button type="button" class="btn btn-secondary" data-tier-locked
+                        data-feature="history_export" data-required-tier="dhexe">
+                    <i class="fas fa-lock"></i> Export CSV
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- TIER PANEL -->
+    <div class="hist-tier-panel">
+        <div class="tp-header">
+            <h3>
+                <i class="fas fa-layer-group" style="color: var(--primary);"></i>
+                Your History Plan
+            </h3>
+            <span class="tier-badge-h {{ tier }}">
+                {% if tier == 'danbe' %}🔓 Danbe
+                {% elif tier == 'dhexe' %}🔑 Dhexe
+                {% else %}⭐ Hore{% endif %}
+            </span>
+        </div>
+
+        <!-- Quota bar -->
+        <div class="hist-quota">
+            <div class="q-head">
+                <span class="q-label">Entries stored</span>
+                <span class="q-value {% if not max_entries %}unlimited{% endif %}">
+                    {% if max_entries %}
+                        {{ current_count }} / {{ max_entries }}
+                    {% else %}
+                        {{ current_count }} · Unlimited
+                    {% endif %}
+                </span>
+            </div>
+            <div class="q-bar">
+                {% if max_entries %}
+                    {% set cls = 'full' if usage_pct >= 90 else 'high' if usage_pct >= 70 else 'medium' if usage_pct >= 40 else 'low' %}
+                    <div class="fill {{ cls }}" style="width: {{ usage_pct }}%;"></div>
+                {% else %}
+                    <div class="fill unlimited" style="width: 100%;"></div>
+                {% endif %}
+            </div>
+            <div class="q-hint">
+                {% if max_entries %}
+                    Retention: {{ retention_days }} days · Entries capped at {{ max_entries }}
+                {% else %}
+                    Unlimited retention · Unlimited entries
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Feature grid -->
+        <div class="hist-features">
+            <div class="hist-feature">
+                <span class="fi">📆</span>
+                <div class="ft">
+                    <span class="name">Retention</span>
+                    <span class="val">
+                        {% if retention_days %}{{ retention_days }} days{% else %}Unlimited{% endif %}
+                    </span>
+                </div>
+                <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
+            </div>
+
+            <div class="hist-feature">
+                <span class="fi">📊</span>
+                <div class="ft">
+                    <span class="name">Entries</span>
+                    <span class="val">
+                        {% if max_entries %}{{ max_entries }} max{% else %}Unlimited{% endif %}
+                    </span>
+                </div>
+                <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
+            </div>
+
+            <div class="hist-feature {% if not can_search %}locked{% endif %}">
+                <span class="fi">🔍</span>
+                <div class="ft">
+                    <span class="name">Search</span>
+                    <span class="val">
+                        {% if can_search %}Available{% else %}Hore tier{% endif %}
+                    </span>
+                </div>
+                {% if can_search %}
+                    <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
+                {% else %}
+                    <span class="lock-icon" data-tier-locked
+                          data-feature="history_search" data-required-tier="hore"
+                          title="Upgrade to Hore">🔒</span>
+                {% endif %}
+            </div>
+
+            <div class="hist-feature {% if not can_export %}locked{% endif %}">
+                <span class="fi">⬇️</span>
+                <div class="ft">
+                    <span class="name">Export</span>
+                    <span class="val">
+                        {% if can_export %}
+                            {% if tier == 'dhexe' %}Last 100 rows{% else %}Full history{% endif %}
+                        {% else %}Dhexe+ tier{% endif %}
+                    </span>
+                </div>
+                {% if can_export %}
+                    <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
+                {% else %}
+                    <span class="lock-icon" data-tier-locked
+                          data-feature="history_export" data-required-tier="dhexe"
+                          title="Upgrade to Dhexe">🔒</span>
+                {% endif %}
+            </div>
+
+            <div class="hist-feature {% if not can_trend %}locked{% endif %}">
+                <span class="fi">📈</span>
+                <div class="ft">
+                    <span class="name">Trends</span>
+                    <span class="val">
+                        {% if can_trend %}Available{% else %}Hore tier{% endif %}
+                    </span>
+                </div>
+                {% if can_trend %}
+                    <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
+                {% else %}
+                    <span class="lock-icon" data-tier-locked
+                          data-feature="history_trends" data-required-tier="hore"
+                          title="Upgrade to Hore">🔒</span>
+                {% endif %}
+            </div>
+
+            <div class="hist-feature {% if not can_delete %}locked{% endif %}">
+                <span class="fi">🗑️</span>
+                <div class="ft">
+                    <span class="name">Delete entries</span>
+                    <span class="val">
+                        {% if can_delete %}Available{% else %}Hore tier{% endif %}
+                    </span>
+                </div>
+                {% if can_delete %}
+                    <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
+                {% else %}
+                    <span class="lock-icon" data-tier-locked
+                          data-feature="history_delete" data-required-tier="hore"
+                          title="Upgrade to Hore">🔒</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Upgrade CTA -->
+        {% if tier != 'hore' and upgrade_benefits %}
+            <div class="hist-upgrade-cta">
+                <div class="cta-text">
+                    <strong>Upgrade to {{ 'Dhexe' if tier == 'danbe' else 'Hore' }}</strong> to unlock:
+                    {{ upgrade_benefits | join(' · ') }}
+                </div>
+                <button type="button" class="btn-upgrade"
+                        onclick="openSafkaPreview({ requiredTier: '{{ 'dhexe' if tier == 'danbe' else 'hore' }}' })">
+                    ⬆ Upgrade Now
+                </button>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- STATS -->
+    <div class="hist-stats" id="statsContainer">
+        <div class="hist-stat-card">
+            <div class="stat-head">
+                <span class="stat-icon blue">📊</span>
+                <span class="stat-label">Total</span>
+            </div>
+            <div class="stat-number blue" id="statTotal">—</div>
+        </div>
+        <div class="hist-stat-card">
+            <div class="stat-head">
+                <span class="stat-icon green">📝</span>
+                <span class="stat-label">Quizzes</span>
+            </div>
+            <div class="stat-number green" id="statQuizzes">—</div>
+        </div>
+        <div class="hist-stat-card">
+            <div class="stat-head">
+                <span class="stat-icon purple">🏆</span>
+                <span class="stat-label">Achievements</span>
+            </div>
+            <div class="stat-number purple" id="statAchievements">—</div>
+        </div>
+        <div class="hist-stat-card">
+            <div class="stat-head">
+                <span class="stat-icon amber">🔖</span>
+                <span class="stat-label">Saves</span>
+            </div>
+            <div class="stat-number amber" id="statSaves">—</div>
+        </div>
+        <div class="hist-stat-card">
+            <div class="stat-head">
+                <span class="stat-icon red">📄</span>
+                <span class="stat-label">PDFs</span>
+            </div>
+            <div class="stat-number red" id="statPdfs">—</div>
+        </div>
+        <div class="hist-stat-card">
+            <div class="stat-head">
+                <span class="stat-icon primary">📈</span>
+                <span class="stat-label">Avg Score</span>
+            </div>
+            <div class="stat-number primary" id="statAvgScore">—</div>
+        </div>
+    </div>
+
+    <!-- FILTERS -->
+    <div class="hist-filters" id="filterBar">
+        <div class="search-wrapper">
+            <i class="fas fa-search"></i>
+            <input type="text" id="filterSearch"
+                   placeholder="Search your history..."
+                   {% if not can_search %}disabled{% endif %}>
+            {% if not can_search %}
+                <span class="lock-icon" data-tier-locked
+                      data-feature="history_search" data-required-tier="hore"
+                      title="Upgrade to Hore to search">🔒</span>
+            {% endif %}
+        </div>
+
+        <select id="filterType">
+            <option value="">All Types</option>
+            <option value="quiz_attempt">📝 Quizzes</option>
+            <option value="live_quiz">⚡ Live Quizzes</option>
+            <option value="achievement">🏆 Achievements</option>
+            <option value="save">🔖 Saves</option>
+            <option value="pdf_view">📄 PDF Views</option>
+            <option value="pdf_download">⬇️ PDF Downloads</option>
+            <option value="like">❤️ Likes</option>
+            <option value="report">⚠️ Reports</option>
+        </select>
+
+        <input type="date" id="filterStartDate" title="From date">
+        <input type="date" id="filterEndDate" title="To date">
+
+        <button type="button" class="btn-clear" id="clearFilters" style="display: none;">
+            <i class="fas fa-times"></i> Clear
+        </button>
+    </div>
+
+    <!-- TIMELINE -->
+    <div id="timelineContainer">
+        <div class="hist-timeline" id="timelineList">
+            <div class="hist-loading">
+                <div class="spinner"></div>
+                <div>Loading your history...</div>
+            </div>
+        </div>
+        <div class="hist-load-more-wrap" id="loadMoreWrap" style="display: none;">
+            <button type="button" class="hist-load-more" id="loadMoreBtn">
+                <i class="fas fa-chevron-down"></i> Load More
+            </button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+// ============================================
+// BOOTSTRAP DATA (from server)
+// ============================================
+window.historyConfig = {
+    tier: "{{ tier }}",
+    can_search: {{ 'true' if can_search else 'false' }},
+    can_export: {{ 'true' if can_export else 'false' }},
+    can_trend: {{ 'true' if can_trend else 'false' }},
+    can_delete: {{ 'true' if can_delete else 'false' }},
+    retention_days: {{ retention_days if retention_days else 'null' }},
+    max_entries: {{ max_entries if max_entries else 'null' }},
+    current_count: {{ current_count }},
+    csrf_token: "{{ csrf_token }}"
+};
+</script>
+<script src="{{ url_for('static', filename='js/history.js') }}"></script>
+{% endblock %}

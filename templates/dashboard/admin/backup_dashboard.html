@@ -1,0 +1,154 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Backup Management{% endblock %}
+
+{% block page_title %}Backup Management{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<style>
+    .backup-status-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+    .backup-status-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px;
+        text-align: center;
+    }
+    .backup-status-card .number {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--text);
+    }
+    .backup-status-card .label {
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+    .backup-status-card .status-badge {
+        display: inline-block;
+        padding: 4px 14px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 14px;
+    }
+    .status-badge.healthy { background: #ECFDF5; color: #10B981; }
+    .status-badge.warning { background: #FFFBEB; color: #F59E0B; }
+    .status-badge.critical { background: #FEF2F2; color: #EF4444; }
+    .backup-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin: 20px 0;
+    }
+    .backup-actions .btn {
+        flex: 1 1 auto;
+    }
+    .backup-list-preview {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px 20px;
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div>
+    <h2 style="font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 8px;">
+        <i class="fas fa-database" style="color: var(--primary);"></i> Backup Management
+    </h2>
+    <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">
+        Create, restore, schedule, and manage database backups.
+    </p>
+
+    <!-- Status Cards -->
+    <div class="backup-status-grid">
+        <div class="backup-status-card">
+            <div class="number">{{ health.valid_backups }}</div>
+            <div class="label">Valid Backups</div>
+        </div>
+        <div class="backup-status-card">
+            <div class="number">{{ health.total_backups }}</div>
+            <div class="label">Total Backups</div>
+        </div>
+        <div class="backup-status-card">
+            <div class="number">{{ health.disk_free_mb|round(0) }} MB</div>
+            <div class="label">Free Disk Space</div>
+        </div>
+        <div class="backup-status-card">
+            <div class="number">{{ health.total_size_mb|round(1) }} MB</div>
+            <div class="label">Total Backup Size</div>
+        </div>
+    </div>
+
+    <!-- Overall Status -->
+    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 20px;">
+        <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+            <span class="status-badge {{ health.status }}">{{ health.status|upper }}</span>
+            <span>Last good: <strong>{{ health.last_good or 'None' }}</strong></span>
+            <span>Last created: <strong>{{ health.last_created or 'Never' }}</strong></span>
+            {% if health.issues %}
+                <span style="color: #DC2626;"><i class="fas fa-exclamation-triangle"></i> Issues: {{ health.issues|join(', ') }}</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="backup-actions">
+        <button class="btn btn-primary" onclick="createBackup('daily')"><i class="fas fa-plus"></i> Backup Now (Daily)</button>
+        <button class="btn btn-secondary" onclick="createBackup('manual')"><i class="fas fa-plus"></i> Manual</button>
+        <a href="{{ url_for('admin_backup.list_backups') }}" class="btn btn-secondary"><i class="fas fa-list"></i> View All Backups</a>
+        <a href="{{ url_for('admin_backup.settings') }}" class="btn btn-secondary"><i class="fas fa-cog"></i> Settings</a>
+    </div>
+
+    <!-- Quick info -->
+    <div class="backup-list-preview">
+        <h3 style="font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 12px;">Recent Backups</h3>
+        <div id="recentBackups">Loading...</div>
+    </div>
+</div>
+
+<script>
+function createBackup(type) {
+    if (!confirm('Start a ' + type + ' backup?')) return;
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+
+    fetch('/admin/backup/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'type=' + type
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Backup created: ' + data.filename + ' (' + data.size_kb.toFixed(1) + ' KB)');
+            location.reload();
+        } else {
+            alert('Backup failed: ' + data.message);
+        }
+    })
+    .catch(err => alert('Error: ' + err))
+    .finally(() => {
+        btn.disabled = false;
+        btn.textContent = 'Backup Now (Daily)';
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/admin/backup/list')
+        .then(response => response.text())
+        .then(html => {
+            // Extract table rows from the list page (simplistic)
+            // Better to have a separate JSON endpoint, but for simplicity we'll just show a message.
+            document.getElementById('recentBackups').innerHTML = '<p style="color: var(--text-secondary);"><a href="/admin/backup/list">View full list →</a></p>';
+        });
+});
+</script>
+{% endblock %}

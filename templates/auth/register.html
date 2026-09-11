@@ -1,0 +1,308 @@
+{% extends "auth/_base.html" %}
+
+{% block title %}Register - NuunPlatform{% endblock %}
+
+{% block auth_body %}
+<h1 class="auth-title">Create <span>Account</span></h1>
+<p class="auth-subtitle">Join our learning platform</p>
+
+<hr class="divider" />
+
+<!-- WIZARD PROGRESS -->
+<div class="wizard-progress" id="wizardProgress">
+    <div class="wizard-step active" data-step="1">
+        <div class="wizard-step-circle"><span class="num">1</span><i class="fas fa-check check"></i></div>
+        <div class="wizard-step-label">Account</div>
+    </div>
+    <div class="wizard-step-line"><div class="line-fill"></div></div>
+    <div class="wizard-step" data-step="2">
+        <div class="wizard-step-circle"><span class="num">2</span><i class="fas fa-check check"></i></div>
+        <div class="wizard-step-label">Name</div>
+    </div>
+    <div class="wizard-step-line"><div class="line-fill"></div></div>
+    <div class="wizard-step" data-step="3">
+        <div class="wizard-step-circle"><span class="num">3</span><i class="fas fa-check check"></i></div>
+        <div class="wizard-step-label">Location</div>
+    </div>
+    <div class="wizard-step-line"><div class="line-fill"></div></div>
+    <div class="wizard-step" data-step="4">
+        <div class="wizard-step-circle"><span class="num">4</span><i class="fas fa-check check"></i></div>
+        <div class="wizard-step-label">School</div>
+    </div>
+</div>
+
+<form method="POST" action="{{ url_for('auth.register') }}" class="auth-form" id="registerForm" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <!-- STEP 1 — ACCOUNT -->
+    <div class="wizard-panel active" data-step="1">
+        <div class="wizard-panel-head">
+            <h3>Account credentials</h3>
+            <p>Choose your login details</p>
+        </div>
+
+        <div class="form-group">
+            <label>📞 Phone Number <span class="required">*</span></label>
+            <div class="input-wrapper" id="phoneWrapper">
+                <span class="phone-prefix">+252</span>
+                <input type="tel" name="phone" id="phone"
+                       placeholder="61 234 5678" maxlength="9"
+                       inputmode="numeric" pattern="[0-9]*"
+                       autocomplete="tel" required />
+                <span class="input-status" id="phoneStatus"></span>
+            </div>
+            <div class="error-message" id="phoneError">
+                Please enter a valid 9-digit phone number
+            </div>
+            <div class="phone-taken-notice" id="phoneTakenNotice" style="display: none;">
+                <i class="fas fa-info-circle"></i>
+                <div>
+                    This phone number is already registered.
+                    <a href="{{ url_for('auth.login') }}">Login instead</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>🔒 Password <span class="required">*</span></label>
+            <div class="input-wrapper" id="passwordWrapper">
+                <span class="input-icon"><i class="fas fa-lock"></i></span>
+                <input type="password" name="password" id="password"
+                       placeholder="Minimum 8 characters"
+                       autocomplete="new-password" required />
+                <button type="button" class="toggle-password" onclick="togglePassword('password')">
+                    <i class="fas fa-eye" id="passwordIcon"></i>
+                </button>
+            </div>
+            <div class="password-strength" id="passwordStrength">
+                <div class="strength-bar"><div class="strength-fill"></div></div>
+                <span class="strength-text"></span>
+            </div>
+            <div class="error-message" id="passwordError">
+                Password must be at least 8 characters
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>🔒 Confirm Password <span class="required">*</span></label>
+            <div class="input-wrapper" id="confirmWrapper">
+                <span class="input-icon"><i class="fas fa-check-circle"></i></span>
+                <input type="password" name="confirm_password" id="confirmPassword"
+                       placeholder="Re-enter password"
+                       autocomplete="new-password" required />
+                <button type="button" class="toggle-password" onclick="togglePassword('confirmPassword')">
+                    <i class="fas fa-eye" id="confirmIcon"></i>
+                </button>
+            </div>
+            <div class="error-message" id="confirmError">Passwords do not match</div>
+        </div>
+    </div>
+
+    <!-- STEP 2 — NAME -->
+    <div class="wizard-panel" data-step="2">
+        <div class="wizard-panel-head">
+            <h3>What's your name?</h3>
+            <p>All three names are required</p>
+        </div>
+
+        <div class="form-group">
+            <label>👤 First Name <span class="required">*</span></label>
+            <div class="input-wrapper" id="firstNameWrapper">
+                <span class="input-icon"><i class="fas fa-user"></i></span>
+                <input type="text" name="first_name" id="firstName"
+                       placeholder="First name" autocomplete="given-name" required />
+            </div>
+            <div class="error-message" id="firstNameError">At least 4 letters, no numbers</div>
+        </div>
+
+        <div class="form-group">
+            <label>👤 Middle Name <span class="required">*</span></label>
+            <div class="input-wrapper" id="middleNameWrapper">
+                <span class="input-icon"><i class="fas fa-user"></i></span>
+                <input type="text" name="middle_name" id="middleName"
+                       placeholder="Middle name" autocomplete="additional-name" required />
+            </div>
+            <div class="error-message" id="middleNameError">At least 4 letters, no numbers</div>
+        </div>
+
+        <div class="form-group">
+            <label>👤 Last Name <span class="required">*</span></label>
+            <div class="input-wrapper" id="lastNameWrapper">
+                <span class="input-icon"><i class="fas fa-user"></i></span>
+                <input type="text" name="last_name" id="lastName"
+                       placeholder="Last name" autocomplete="family-name" required />
+            </div>
+            <div class="error-message" id="lastNameError">At least 4 letters, no numbers</div>
+        </div>
+    </div>
+
+    <!-- STEP 3 — LOCATION -->
+    <div class="wizard-panel" data-step="3">
+        <div class="wizard-panel-head">
+            <h3>Where are you from?</h3>
+            <p>This shapes the content you see</p>
+        </div>
+
+        <div class="form-group">
+            <label>📍 Location <span class="required">*</span></label>
+            <div class="card-grid card-grid-3" id="locationCards">
+                <label class="card-option">
+                    <input type="radio" name="location" value="SO" />
+                    <span class="card-face">
+                        <span class="card-flag">🇸🇴</span>
+                        <span class="card-title">Somalia</span>
+                        <span class="card-sub">SO</span>
+                    </span>
+                </label>
+                <label class="card-option">
+                    <input type="radio" name="location" value="PL" />
+                    <span class="card-face">
+                        <span class="card-flag">🇸🇴</span>
+                        <span class="card-title">Puntland</span>
+                        <span class="card-sub">PL</span>
+                    </span>
+                </label>
+                <label class="card-option">
+                    <input type="radio" name="location" value="SL" />
+                    <span class="card-face">
+                        <span class="card-flag">🇸🇴</span>
+                        <span class="card-title">Somaliland</span>
+                        <span class="card-sub">SL</span>
+                    </span>
+                </label>
+            </div>
+            <div class="error-message" id="locationError">Please select your location</div>
+        </div>
+
+        <div class="form-group curriculum-group" id="curriculumGroup">
+            <label>📚 Curriculum <span class="required">*</span></label>
+            <div class="card-grid card-grid-3" id="curriculumCards">
+                <label class="card-option">
+                    <input type="radio" name="curriculum" value="general" />
+                    <span class="card-face">
+                        <span class="card-icon">📘</span>
+                        <span class="card-title">General</span>
+                    </span>
+                </label>
+                <label class="card-option">
+                    <input type="radio" name="curriculum" value="science" />
+                    <span class="card-face">
+                        <span class="card-icon">🔬</span>
+                        <span class="card-title">Science</span>
+                    </span>
+                </label>
+                <label class="card-option">
+                    <input type="radio" name="curriculum" value="arts" />
+                    <span class="card-face">
+                        <span class="card-icon">🎨</span>
+                        <span class="card-title">Arts</span>
+                    </span>
+                </label>
+            </div>
+            <div class="error-message" id="curriculumError">Please select your curriculum</div>
+        </div>
+
+        <div class="form-group">
+            <label>🌆 City <span class="required">*</span></label>
+            <div class="input-wrapper" id="cityWrapper">
+                <span class="input-icon"><i class="fas fa-city"></i></span>
+                <input type="text" name="city" id="city"
+                       placeholder="Enter city name"
+                       autocomplete="address-level2" required />
+            </div>
+            <div class="error-message" id="cityError">At least 5 letters, only letters</div>
+        </div>
+    </div>
+
+    <!-- STEP 4 — SCHOOL -->
+    <div class="wizard-panel" data-step="4">
+        <div class="wizard-panel-head">
+            <h3>Your education</h3>
+            <p>Tell us where you study</p>
+        </div>
+
+        <div class="form-group">
+            <label>🏫 School <span class="required">*</span></label>
+            <div class="card-grid card-grid-2" id="schoolCards">
+                <div class="card-empty">
+                    <i class="fas fa-arrow-up"></i>
+                    <span>Select a location first</span>
+                </div>
+            </div>
+            <input type="hidden" name="school" id="school" />
+
+            <div class="school-manual" id="schoolManual">
+                <div class="input-wrapper" id="schoolManualWrapper">
+                    <span class="input-icon"><i class="fas fa-pen"></i></span>
+                    <input type="text" name="school_manual" id="schoolManualInput"
+                           placeholder="Enter school name" />
+                </div>
+                <div class="error-message" id="schoolManualError">
+                    Min 2 words, each 4+ letters
+                </div>
+            </div>
+            <div class="error-message" id="schoolError">
+                Please select or enter your school
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>🎓 Grade / Level <span class="required">*</span></label>
+            <div class="card-grid card-grid-4">
+                <label class="card-option">
+                    <input type="radio" name="grade" value="G7" />
+                    <span class="card-face">
+                        <span class="card-tag">G7</span>
+                        <span class="card-title">Grade 7</span>
+                    </span>
+                </label>
+                <label class="card-option">
+                    <input type="radio" name="grade" value="G8" />
+                    <span class="card-face">
+                        <span class="card-tag">G8</span>
+                        <span class="card-title">Grade 8</span>
+                    </span>
+                </label>
+                <label class="card-option">
+                    <input type="radio" name="grade" value="F3" />
+                    <span class="card-face">
+                        <span class="card-tag">F3</span>
+                        <span class="card-title">Form 3</span>
+                    </span>
+                </label>
+                <label class="card-option">
+                    <input type="radio" name="grade" value="F4" />
+                    <span class="card-face">
+                        <span class="card-tag">F4</span>
+                        <span class="card-title">Form 4</span>
+                    </span>
+                </label>
+            </div>
+            <div class="error-message" id="gradeError">Please select your grade</div>
+        </div>
+    </div>
+
+    <!-- NAVIGATION -->
+    <div class="wizard-actions">
+        <button type="button" class="btn-wizard btn-back" id="backBtn">
+            <i class="fas fa-arrow-left"></i> Back
+        </button>
+        <div class="wizard-actions-spacer"></div>
+        <button type="button" class="btn-wizard btn-next" id="nextBtn">
+            Continue <i class="fas fa-arrow-right"></i>
+        </button>
+        <button type="submit" class="btn-wizard btn-finish" id="submitBtn" style="display: none;">
+            <i class="fas fa-rocket"></i> Create Account
+        </button>
+    </div>
+</form>
+
+<div class="auth-footer">
+    <p>Already have an account? <a href="{{ url_for('auth.login') }}">Sign in</a></p>
+    <p class="terms">By creating an account, you agree to our Terms of Service</p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/register.js') }}"></script>
+{% endblock %}

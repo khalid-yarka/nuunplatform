@@ -1,0 +1,720 @@
+{% extends "base.html" %}
+
+{% block title %}Something Went Wrong - NuunPlatform{% endblock %}
+
+{% block extra_css %}
+<style>
+    .error-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: var(--background);
+    }
+
+    .error-card {
+        max-width: 560px;
+        width: 100%;
+        background: var(--surface);
+        border-radius: var(--radius);
+        padding: 48px 40px;
+        text-align: center;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-lg);
+        animation: fadeInUp 0.6s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .error-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--primary), #B91C1C);
+    }
+
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .error-icon {
+        font-size: 72px;
+        margin-bottom: 8px;
+        display: block;
+        animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+    }
+
+    .error-title {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 8px;
+    }
+
+    .error-description {
+        color: var(--text-secondary);
+        font-size: 16px;
+        line-height: 1.6;
+        margin-bottom: 6px;
+    }
+
+    .error-id {
+        display: inline-block;
+        background: var(--background);
+        padding: 6px 16px;
+        border-radius: var(--radius-sm);
+        font-family: 'Courier New', monospace;
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin: 8px 0 20px;
+        border: 1px dashed var(--border);
+        user-select: all;
+    }
+
+    .error-id .label {
+        font-weight: 600;
+        color: var(--text-muted);
+        margin-right: 8px;
+    }
+
+    .error-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin-bottom: 16px;
+    }
+
+    .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 28px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        font-size: 15px;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 14px rgba(255, 49, 56, 0.25);
+        cursor: pointer;
+    }
+
+    .btn-primary:hover {
+        background: var(--primary-hover);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(255, 49, 56, 0.35);
+    }
+
+    .btn-secondary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 28px;
+        background: var(--surface);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        font-size: 15px;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .btn-secondary:hover {
+        background: var(--background);
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+
+    .btn-report {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 20px;
+        background: transparent;
+        color: var(--text-muted);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 14px;
+        text-decoration: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-top: 4px;
+    }
+
+    .btn-report:hover {
+        color: var(--primary);
+        border-color: var(--primary);
+        background: var(--primary-light);
+    }
+
+    /* Error Details Section (hidden by default) */
+    #error-details-section {
+        display: none;
+        margin-top: 24px;
+        text-align: left;
+        background: var(--surface-alt);
+        padding: 16px 20px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    #error-details-section.visible {
+        display: block;
+    }
+
+    #error-details-section h4 {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    #error-details-section .detail-row {
+        margin-bottom: 6px;
+        font-size: 14px;
+        color: var(--text-secondary);
+    }
+
+    #error-details-section .detail-row strong {
+        color: var(--text);
+        font-weight: 600;
+    }
+
+    #error-details-section pre {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 12px;
+        border-radius: 4px;
+        overflow-x: auto;
+        font-size: 12px;
+        line-height: 1.6;
+        max-height: 200px;
+        overflow-y: auto;
+        margin-top: 8px;
+        font-family: 'Courier New', monospace;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+
+    /* Admin auto‑show section */
+    .admin-toggle-area {
+        margin-top: 16px;
+        display: none;
+    }
+
+    .admin-toggle-area.visible {
+        display: block;
+    }
+
+    .btn-toggle-details {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 24px;
+        background: #EFF6FF;
+        color: #1E40AF;
+        border: 1px solid #BFDBFE;
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .btn-toggle-details:hover {
+        background: #DBEAFE;
+        color: #1E3A8A;
+        transform: translateY(-2px);
+    }
+
+    [data-theme="dark"] .btn-toggle-details {
+        background: #1A2A4A;
+        border-color: #3B82F6;
+        color: #93C5FD;
+    }
+
+    [data-theme="dark"] .btn-toggle-details:hover {
+        background: #1E3A5F;
+        color: #BFDBFE;
+    }
+
+    /* Secret reveal section (non‑admin) */
+    #secret-section {
+        display: none;
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+    }
+
+    #secret-section.visible {
+        display: block;
+    }
+
+    #secret-section .secret-form {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    #secret-section .secret-form input {
+        padding: 10px 16px;
+        border: 2px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 14px;
+        background: var(--surface);
+        color: var(--text);
+        width: 220px;
+        transition: border-color 0.3s ease;
+        font-family: 'Courier New', monospace;
+        letter-spacing: 1px;
+    }
+
+    #secret-section .secret-form input:focus {
+        border-color: var(--primary);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.1);
+    }
+
+    #secret-section .secret-form .btn-submit {
+        padding: 10px 24px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    #secret-section .secret-form .btn-submit:hover {
+        background: var(--primary-hover);
+        transform: translateY(-2px);
+    }
+
+    #secret-section .secret-error {
+        color: #EF4444;
+        font-size: 13px;
+        margin-top: 8px;
+        text-align: center;
+        display: none;
+    }
+
+    #secret-section .secret-error.visible {
+        display: block;
+        animation: shake 0.3s ease;
+    }
+
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-6px); }
+        75% { transform: translateX(6px); }
+    }
+
+    .btn-reveal-secret {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 24px;
+        background: #FEF3C7;
+        color: #92400E;
+        border: 1px solid #FDE68A;
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-top: 8px;
+    }
+
+    .btn-reveal-secret:hover {
+        background: #FDE68A;
+        color: #78350F;
+        transform: translateY(-2px);
+    }
+
+    [data-theme="dark"] .btn-reveal-secret {
+        background: #3A2E1A;
+        border-color: #92400E;
+        color: #FCD34D;
+    }
+
+    [data-theme="dark"] .btn-reveal-secret:hover {
+        background: #92400E;
+        color: #FEF3C7;
+    }
+
+    /* Suggestions */
+    .error-suggestions {
+        margin-top: 24px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        gap: 16px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .error-suggestions a {
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 13px;
+        transition: color 0.3s ease;
+    }
+
+    .error-suggestions a:hover {
+        color: var(--primary);
+    }
+
+    .error-suggestions .dot {
+        color: var(--text-muted);
+    }
+
+    /* Responsive */
+    @media (max-width: 480px) {
+        .error-card {
+            padding: 28px 16px;
+        }
+        .error-icon {
+            font-size: 54px;
+        }
+        .error-title {
+            font-size: 22px;
+        }
+        .error-actions {
+            flex-direction: column;
+        }
+        .btn-primary,
+        .btn-secondary {
+            justify-content: center;
+        }
+        #secret-section .secret-form input {
+            width: 100%;
+        }
+        #secret-section .secret-form .btn-submit {
+            width: 100%;
+        }
+    }
+
+    [data-theme="dark"] #error-details-section {
+        background: var(--surface-alt);
+        border-color: var(--border);
+    }
+
+    [data-theme="dark"] #error-details-section pre {
+        background: #0A0A1A;
+        color: #D4D4D4;
+    }
+
+    [data-theme="dark"] #secret-section .secret-form input {
+        background: var(--surface-alt);
+        border-color: var(--border);
+        color: var(--text);
+    }
+
+    [data-theme="dark"] #secret-section .secret-form input:focus {
+        border-color: #FF6B70;
+        box-shadow: 0 0 0 3px rgba(255, 107, 112, 0.15);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <div class="error-card">
+        <span class="error-icon">😅</span>
+        <h1 class="error-title">Something Went Wrong</h1>
+        <p class="error-description">
+            We're experiencing technical difficulties on our end.
+        </p>
+        <p class="error-description" style="font-size:14px; color: var(--text-muted);">
+            Our team has been notified and is working to fix the issue.
+        </p>
+
+        <div class="error-id">
+            <span class="label">🔍 Error ID:</span>
+            <span id="errorRequestId">{{ request_id or 'no-req' }}</span>
+        </div>
+
+        <div class="error-actions">
+            <button onclick="location.reload()" class="btn-primary">
+                <i class="fas fa-redo"></i> Try Again
+            </button>
+            <button onclick="openReportModal()" class="btn-secondary">
+                <i class="fas fa-bug"></i> Report This Problem
+            </button>
+        </div>
+
+        <!-- Admin auto‑show toggle (visible only if session.is_admin) -->
+        {% if session.is_admin %}
+            <div class="admin-toggle-area visible">
+                <button class="btn-toggle-details" id="adminToggleBtn" onclick="toggleAdminDetails()">
+                    <i class="fas fa-eye"></i> <span id="adminToggleText">Show Error Details</span>
+                </button>
+                <div id="adminDetailsContainer" style="margin-top: 12px; display: none;">
+                    <!-- Fetched via JavaScript -->
+                    <div id="adminDetailsContent" style="background: var(--surface-alt); border-radius: var(--radius-sm); padding: 12px; border: 1px solid var(--border);">
+                        <div style="text-align: center; color: var(--text-muted); padding: 10px 0;">
+                            <i class="fas fa-spinner fa-spin"></i> Loading details...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <!-- Non‑admin: secret key reveal -->
+            <button class="btn-reveal-secret" onclick="toggleSecretSection()">
+                <i class="fas fa-lock"></i> Reveal Error Details (Admin)
+            </button>
+
+            <div id="secret-section">
+                <form id="reveal-form" onsubmit="return revealError(event);">
+                    <input type="hidden" name="request_id" value="{{ request_id or 'no-req' }}">
+                    <div class="secret-form">
+                        <input type="password" id="error-secret" placeholder="Enter admin secret" autocomplete="off" required>
+                        <button type="submit" class="btn-submit">Show Details</button>
+                    </div>
+                    <div id="secret-error" class="secret-error">Invalid secret. Please try again.</div>
+                </form>
+            </div>
+        {% endif %}
+
+        <!-- Error details container (shared by both admin and secret) -->
+        <div id="error-details-section">
+            <h4><i class="fas fa-tools"></i> Error Details</h4>
+            <div id="error-details-content">
+                <div style="text-align: center; color: var(--text-muted); padding: 10px 0;">
+                    <i class="fas fa-spinner fa-spin"></i> Loading...
+                </div>
+            </div>
+        </div>
+
+        <div class="error-suggestions">
+            <a href="{{ url_for('quiz.index') }}">📝 Quizzes</a>
+            <span class="dot">•</span>
+            <a href="{{ url_for('groups.list_groups') }}">👥 Groups</a>
+            <span class="dot">•</span>
+            <a href="{{ url_for('pdfs.list_pdfs') }}">📄 PDFs</a>
+            <span class="dot">•</span>
+            <a href="{{ url_for('live_quiz.index') }}">⚡ Live Quiz</a>
+        </div>
+    </div>
+</div>
+
+<!-- Report Modal -->
+<div class="modal-overlay" id="reportModal">
+    <div class="modal-content">
+        <h3 class="modal-title">📋 Report This Problem</h3>
+        <p class="modal-body">Help us fix this issue by telling us what happened.</p>
+
+        <form id="reportForm" method="POST" action="{{ url_for('admin_errors.report') }}">
+            <input type="hidden" name="request_id" value="{{ request_id or 'no-req' }}">
+            <input type="hidden" name="url" value="{{ request.url }}">
+
+            <div class="form-group">
+                <label class="form-label">What were you doing when this happened? <span class="required">*</span></label>
+                <textarea id="description" name="description" required placeholder="e.g., I was trying to submit my quiz answer and the page froze..." rows="4" class="form-control"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Email (optional)</label>
+                <input type="email" id="email" name="email" placeholder="your@email.com" class="form-control">
+                <div class="form-hint">We'll only use this to follow up if we need more information.</div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" onclick="closeReportModal()" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Send Report</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // ============================================
+    // ADMIN AUTO‑SHOW TOGGLE
+    // ============================================
+    var adminDetailsVisible = false;
+
+    function toggleAdminDetails() {
+        var container = document.getElementById('adminDetailsContainer');
+        var text = document.getElementById('adminToggleText');
+        if (adminDetailsVisible) {
+            container.style.display = 'none';
+            text.textContent = 'Show Error Details';
+            adminDetailsVisible = false;
+        } else {
+            container.style.display = 'block';
+            text.textContent = 'Hide Error Details';
+            adminDetailsVisible = true;
+            // Fetch details immediately if not loaded
+            var content = document.getElementById('adminDetailsContent');
+            if (content.innerHTML.includes('Loading')) {
+                fetchAdminDetails();
+            }
+        }
+    }
+
+    function fetchAdminDetails() {
+        var content = document.getElementById('adminDetailsContent');
+        var requestId = document.getElementById('errorRequestId').textContent.trim();
+
+        fetch('/admin/errors/reveal-error', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'request_id=' + encodeURIComponent(requestId) + '&admin_bypass=1'
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Failed to load details');
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                content.innerHTML = '<div style="color: #EF4444; padding: 8px;">❌ ' + data.error + '</div>';
+                return;
+            }
+            content.innerHTML = `
+                <div class="detail-row"><strong>Type:</strong> ${data.error_type || 'Unknown'}</div>
+                <div class="detail-row"><strong>Message:</strong> ${data.error_message || 'No message'}</div>
+                <div class="detail-row"><strong>URL:</strong> ${data.url || 'N/A'}</div>
+                <div class="detail-row"><strong>Method:</strong> ${data.method || 'N/A'}</div>
+                <div class="detail-row"><strong>User ID:</strong> ${data.user_id || 'Not logged in'}</div>
+                <div class="detail-row"><strong>Time:</strong> ${data.timestamp || 'Unknown'}</div>
+                <div style="margin-top: 8px;"><strong>Stack Trace:</strong></div>
+                <pre>${data.stack_trace || 'No stack trace available'}</pre>
+            `;
+            // Also populate the main details section (for consistency)
+            document.getElementById('error-details-content').innerHTML = content.innerHTML;
+            document.getElementById('error-details-section').classList.add('visible');
+        })
+        .catch(err => {
+            content.innerHTML = '<div style="color: #EF4444; padding: 8px;">❌ ' + err.message + '</div>';
+        });
+    }
+
+    // ============================================
+    // SECRET REVEAL (non‑admin)
+    // ============================================
+    function toggleSecretSection() {
+        var section = document.getElementById('secret-section');
+        section.classList.toggle('visible');
+        if (section.classList.contains('visible')) {
+            document.getElementById('error-secret').focus();
+        }
+        document.getElementById('secret-error').classList.remove('visible');
+    }
+
+    function revealError(e) {
+        e.preventDefault();
+        var form = document.getElementById('reveal-form');
+        var formData = new FormData(form);
+        var secret = document.getElementById('error-secret').value;
+
+        if (!secret) {
+            document.getElementById('secret-error').textContent = 'Please enter the admin secret.';
+            document.getElementById('secret-error').classList.add('visible');
+            return false;
+        }
+
+        document.getElementById('secret-error').classList.remove('visible');
+
+        fetch('/admin/errors/reveal-error', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Authentication failed');
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                document.getElementById('secret-error').textContent = data.error;
+                document.getElementById('secret-error').classList.add('visible');
+                return;
+            }
+
+            // Populate main details
+            var content = document.getElementById('error-details-content');
+            content.innerHTML = `
+                <div class="detail-row"><strong>Type:</strong> ${data.error_type || 'Unknown'}</div>
+                <div class="detail-row"><strong>Message:</strong> ${data.error_message || 'No message'}</div>
+                <div class="detail-row"><strong>URL:</strong> ${data.url || 'N/A'}</div>
+                <div class="detail-row"><strong>Method:</strong> ${data.method || 'N/A'}</div>
+                <div class="detail-row"><strong>User ID:</strong> ${data.user_id || 'Not logged in'}</div>
+                <div class="detail-row"><strong>Time:</strong> ${data.timestamp || 'Unknown'}</div>
+                <div style="margin-top: 8px;"><strong>Stack Trace:</strong></div>
+                <pre>${data.stack_trace || 'No stack trace available'}</pre>
+            `;
+            document.getElementById('error-details-section').classList.add('visible');
+            document.getElementById('secret-section').classList.remove('visible');
+        })
+        .catch(err => {
+            document.getElementById('secret-error').textContent = err.message || 'Network error. Please try again.';
+            document.getElementById('secret-error').classList.add('visible');
+        });
+    }
+
+    // ============================================
+    // REPORT MODAL
+    // ============================================
+    function openReportModal() {
+        document.getElementById('reportModal').classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeReportModal() {
+        document.getElementById('reportModal').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    document.getElementById('reportModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeReportModal();
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+        var desc = document.getElementById('description');
+        if (desc) {
+            desc.focus();
+        }
+    });
+</script>
+{% endblock %}

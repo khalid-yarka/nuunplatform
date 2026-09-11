@@ -1,0 +1,81 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Backup Settings{% endblock %}
+
+{% block page_title %}Backup Settings{% endblock %}
+
+{% block dashboard_content %}
+<div style="max-width: 600px; margin: 0 auto;">
+    <h2 style="font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 8px;">
+        <i class="fas fa-cog" style="color: var(--primary);"></i> Backup Settings
+    </h2>
+    <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">
+        Configure retention and scheduled backups.
+    </p>
+
+    <form id="settingsForm" onsubmit="saveSettings(event)">
+        <div class="card" style="margin-bottom: 20px;">
+            <h3 style="font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 16px;">Retention Policies</h3>
+            <div class="form-group">
+                <label class="form-label">Daily backups to keep</label>
+                <input type="number" name="daily_retention" class="form-control" value="{{ config.daily_retention }}" min="1" max="365">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Weekly backups to keep</label>
+                <input type="number" name="weekly_retention" class="form-control" value="{{ config.weekly_retention }}" min="1" max="52">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Monthly backups to keep</label>
+                <input type="number" name="monthly_retention" class="form-control" value="{{ config.monthly_retention }}" min="1" max="120">
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 20px;">
+            <h3 style="font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 16px;">Scheduled Backups</h3>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" name="scheduled_enabled" {% if config.scheduled_enabled %}checked{% endif %}>
+                    Enable scheduled backups
+                </label>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Backup type</label>
+                <select name="scheduled_type" class="form-control">
+                    <option value="daily" {% if config.scheduled_type == 'daily' %}selected{% endif %}>Daily</option>
+                    <option value="weekly" {% if config.scheduled_type == 'weekly' %}selected{% endif %}>Weekly</option>
+                    <option value="monthly" {% if config.scheduled_type == 'monthly' %}selected{% endif %}>Monthly</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Time (HH:MM, 24h)</label>
+                <input type="time" name="scheduled_time" class="form-control" value="{{ config.scheduled_time }}">
+                <span class="form-hint">The backup runner cron job must be set to run every 10 minutes (see documentation).</span>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Settings</button>
+        <a href="{{ url_for('admin_backup.dashboard') }}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+
+<script>
+function saveSettings(e) {
+    e.preventDefault();
+    const form = document.getElementById('settingsForm');
+    const data = new FormData(form);
+    fetch('/admin/backup/settings', {
+        method: 'POST',
+        body: data
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Settings saved successfully.');
+        } else {
+            alert('Failed to save settings.');
+        }
+    })
+    .catch(err => alert('Error: ' + err));
+}
+</script>
+{% endblock %}

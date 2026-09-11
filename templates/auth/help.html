@@ -1,0 +1,120 @@
+{% extends "auth/_base.html" %}
+
+{% block title %}Help - NuunPlatform{% endblock %}
+
+{% block extra_css %}
+<style>
+    .help-icon {
+        text-align: center;
+        font-size: 56px;
+        margin-bottom: 8px;
+    }
+    .help-block {
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px 18px;
+        margin-bottom: 14px;
+    }
+    .help-block h3 {
+        margin: 0 0 6px 0;
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .help-block h3 i {
+        color: var(--primary);
+        font-size: 15px;
+    }
+    .help-block p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 1.55;
+    }
+    .btn-whatsapp {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 100%;
+        padding: 14px 20px;
+        background: #25D366;
+        color: #ffffff;
+        border: none;
+        border-radius: 12px;
+        font-weight: 700;
+        font-size: 15px;
+        text-decoration: none;
+        transition: all 0.25s ease;
+        box-shadow: 0 4px 14px rgba(37, 211, 102, 0.28);
+        margin-top: 8px;
+    }
+    .btn-whatsapp:hover {
+        background: #1DA851;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(37, 211, 102, 0.4);
+        color: #ffffff;
+        text-decoration: none;
+    }
+    .btn-whatsapp i {
+        font-size: 20px;
+    }
+    .help-footer-note {
+        text-align: center;
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 12px;
+        line-height: 1.5;
+    }
+</style>
+{% endblock %}
+
+{% block auth_body %}
+<div class="help-icon">💬</div>
+<h1 class="auth-title">Need <span>Help</span>?</h1>
+<p class="auth-subtitle">Get in touch with the admin</p>
+
+<hr class="divider" />
+
+<div class="help-block">
+    <h3><i class="fas fa-key"></i> Forgot your password?</h3>
+    <p>Contact the admin on WhatsApp. They will help you reset it.</p>
+</div>
+
+<div class="help-block">
+    <h3><i class="fas fa-user-check"></i> Account not verified?</h3>
+    <p>New accounts need admin approval. Message the admin to verify your account.</p>
+</div>
+
+<div class="help-block">
+    <h3><i class="fas fa-question-circle"></i> Other issues?</h3>
+    <p>Any other account problems — the admin can help.</p>
+</div>
+
+{% if super_admin_phone %}
+    <a href="https://wa.me/{{ super_admin_phone }}?text={{ 'Hello Admin, I need help with my NuunPlatform account. Please assist.' | urlencode }}"
+       target="_blank" rel="noopener"
+       class="btn-whatsapp">
+        <i class="fab fa-whatsapp"></i> Message Admin on WhatsApp
+    </a>
+{% else %}
+    <div class="help-block" style="text-align: center; background: #FFFBEB; border-color: #FDE68A;">
+        <p style="color: #92400E;">
+            <i class="fas fa-info-circle"></i>
+            Admin contact is not configured. Please ask a teacher or school admin for help.
+        </p>
+    </div>
+{% endif %}
+
+<div class="help-footer-note">
+    The admin will respond within 24 hours.
+</div>
+
+<div class="auth-footer">
+    <p><a href="{{ url_for('auth.login') }}">Back to login</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Send Announcement - Admin{% endblock %}
+
+{% block page_title %}Send Announcement{% endblock %}
+
+{% block dashboard_css %}
+<style>
+    /* Page-specific – uses .card and .form-control from style.css */
+    [data-theme="dark"] .form-control {
+        background: var(--surface-alt) !important;
+        border-color: var(--border) !important;
+        color: var(--text) !important;
+    }
+    [data-theme="dark"] .form-control:focus {
+        border-color: #FF6B70 !important;
+        box-shadow: 0 0 0 3px rgba(255, 107, 112, 0.1) !important;
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div style="max-width: 640px; margin: 0 auto;">
+
+    <div class="breadcrumb">
+        <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
+        <span class="separator">/</span>
+        <span class="current">Send Announcement</span>
+    </div>
+
+    <div style="margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 700; color: var(--text);">
+            <i class="fas fa-bullhorn" style="color: var(--primary);"></i> Send Announcement
+        </h2>
+        <p style="color: var(--text-secondary); font-size: 14px;">Send a notification to all users on the platform</p>
+    </div>
+
+    <div class="card">
+        <form method="POST" action="{{ url_for('notifications.admin_announcement') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="form-group">
+                <label class="form-label">📢 Title <span class="required">*</span></label>
+                <input type="text" name="title" placeholder="e.g., New Questions Added!" class="form-control" required>
+                <span class="form-hint">Short, catchy title (max 100 chars)</span>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">📝 Message <span class="required">*</span></label>
+                <textarea name="body" rows="5" placeholder="Your announcement message here..." class="form-control" required></textarea>
+                <span class="form-hint">Clear, informative message (max 500 chars)</span>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">🔗 Link (Optional)</label>
+                <input type="text" name="link" placeholder="e.g., /quiz or /live-quiz" class="form-control">
+                <span class="form-hint">Users will be directed here when they click the notification</span>
+            </div>
+
+            <div style="background: var(--background); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 24px; border: 1px solid var(--border);">
+                <div style="display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 13px;">
+                    <i class="fas fa-info-circle" style="color: var(--info);"></i>
+                    <span>This announcement will be sent to <strong>all</strong> registered users on the platform.</span>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Send Announcement</button>
+                <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+    <div style="margin-top: 16px; padding: 16px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm);">
+        <div style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 13px;">
+            <i class="fas fa-clock"></i>
+            <span>Recent announcements will appear here once sent.</span>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

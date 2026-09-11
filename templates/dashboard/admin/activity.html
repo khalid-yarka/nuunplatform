@@ -1,0 +1,252 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Activity Log - Admin{% endblock %}
+
+{% block page_title %}Activity Log{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<style>
+    .activity-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 20px;
+        align-items: end;
+    }
+    .activity-filters .filter-group {
+        flex: 1 1 150px;
+    }
+    .activity-filters .filter-group label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        display: block;
+        margin-bottom: 2px;
+    }
+    .activity-filters .filter-group select,
+    .activity-filters .filter-group input {
+        width: 100%;
+        padding: 6px 10px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        background: var(--surface);
+        color: var(--text);
+    }
+    .activity-feed-container {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px 20px;
+        max-height: 600px;
+        overflow-y: auto;
+        box-shadow: var(--shadow-sm);
+    }
+    .activity-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--border-light);
+        font-size: 14px;
+    }
+    .activity-item:last-child {
+        border-bottom: none;
+    }
+    .activity-item .severity-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-top: 6px;
+        flex-shrink: 0;
+    }
+    .severity-dot.critical { background: #EF4444; }
+    .severity-dot.warning { background: #F59E0B; }
+    .severity-dot.info { background: #3B82F6; }
+    .activity-item .timestamp {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-left: auto;
+        flex-shrink: 0;
+        padding-left: 12px;
+    }
+    .load-more-btn {
+        display: block;
+        width: 100%;
+        text-align: center;
+        padding: 10px;
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        margin-top: 12px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: var(--transition);
+    }
+    .load-more-btn:hover {
+        background: var(--primary-light);
+        color: var(--primary);
+    }
+    .no-activity {
+        text-align: center;
+        padding: 40px 0;
+        color: var(--text-muted);
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div>
+    <h2 style="font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 8px;">
+        <i class="fas fa-list-ul" style="color: var(--primary);"></i> Activity Log
+    </h2>
+    <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">
+        Full audit trail of user and system events.
+    </p>
+
+    <!-- Filters -->
+    <div class="activity-filters" id="filterForm">
+        <div class="filter-group">
+            <label for="filterType">Activity Type</label>
+            <select id="filterType">
+                <option value="">All Types</option>
+                <!-- populated by JS -->
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="filterSeverity">Severity</label>
+            <select id="filterSeverity">
+                <option value="">All</option>
+                <option value="info">Info</option>
+                <option value="warning">Warning</option>
+                <option value="critical">Critical</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="filterUser">User ID</label>
+            <input type="text" id="filterUser" placeholder="User ID">
+        </div>
+        <div class="filter-group">
+            <label for="filterSearch">Search</label>
+            <input type="text" id="filterSearch" placeholder="Search message...">
+        </div>
+        <div class="filter-group" style="flex: 0 0 auto;">
+            <button onclick="applyFilters()" class="btn btn-primary">Apply</button>
+            <button onclick="resetFilters()" class="btn btn-secondary">Reset</button>
+        </div>
+    </div>
+
+    <!-- Feed -->
+    <div class="activity-feed-container" id="activityFeed">
+        <div id="feedItems">
+            <div class="no-activity">Loading...</div>
+        </div>
+        <div class="load-more-btn" id="loadMoreBtn" style="display: none;" onclick="loadMore()">Load More</div>
+    </div>
+</div>
+
+<script>
+let currentOffset = 0;
+const limit = 50;
+let totalItems = 0;
+
+function loadFeed(reset = true) {
+    if (reset) {
+        currentOffset = 0;
+        document.getElementById('feedItems').innerHTML = '<div class="no-activity">Loading...</div>';
+        document.getElementById('loadMoreBtn').style.display = 'none';
+    }
+
+    const type = document.getElementById('filterType').value;
+    const severity = document.getElementById('filterSeverity').value;
+    const user_id = document.getElementById('filterUser').value.trim();
+    const search = document.getElementById('filterSearch').value.trim();
+
+    let url = '/admin/activity/feed?limit=' + limit + '&offset=' + currentOffset;
+    if (type) url += '&type=' + encodeURIComponent(type);
+    if (severity) url += '&severity=' + encodeURIComponent(severity);
+    if (user_id) url += '&user_id=' + encodeURIComponent(user_id);
+    if (search) url += '&search=' + encodeURIComponent(search);
+
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (reset) {
+                document.getElementById('feedItems').innerHTML = '';
+                totalItems = data.total;
+                // Populate types dropdown
+                const typeSelect = document.getElementById('filterType');
+                const currentVal = typeSelect.value;
+                typeSelect.innerHTML = '<option value="">All Types</option>';
+                data.types.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t;
+                    opt.textContent = t;
+                    if (t === currentVal) opt.selected = true;
+                    typeSelect.appendChild(opt);
+                });
+            }
+
+            const container = document.getElementById('feedItems');
+            if (data.logs.length === 0 && reset) {
+                container.innerHTML = '<div class="no-activity">No activity found.</div>';
+                return;
+            }
+
+            data.logs.forEach(log => {
+                const item = document.createElement('div');
+                item.className = 'activity-item';
+                item.innerHTML = `
+                    <span class="severity-dot ${log.severity}"></span>
+                    <div style="flex:1;">
+                        <div style="font-weight: 500; color: var(--text);">${log.message}</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">
+                            ${log.activity_type} · ${log.created_at.replace('T', ' ').slice(0,16)}
+                            ${log.user_id ? '· User #' + log.user_id : ''}
+                        </div>
+                    </div>
+                    <div class="timestamp">${log.created_at.replace('T', ' ').slice(0,16)}</div>
+                `;
+                container.appendChild(item);
+            });
+
+            if (data.logs.length === limit && currentOffset + limit < totalItems) {
+                document.getElementById('loadMoreBtn').style.display = 'block';
+            } else {
+                document.getElementById('loadMoreBtn').style.display = 'none';
+            }
+            currentOffset += data.logs.length;
+        })
+        .catch(err => console.error(err));
+}
+
+function applyFilters() {
+    loadFeed(true);
+}
+
+function resetFilters() {
+    document.getElementById('filterType').value = '';
+    document.getElementById('filterSeverity').value = '';
+    document.getElementById('filterUser').value = '';
+    document.getElementById('filterSearch').value = '';
+    applyFilters();
+}
+
+function loadMore() {
+    loadFeed(false);
+}
+
+// Auto-load on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadFeed(true);
+});
+
+// Auto-submit on change (optional)
+document.querySelectorAll('#filterForm select, #filterForm input').forEach(el => {
+    el.addEventListener('change', applyFilters);
+    el.addEventListener('keydown', function(e) { if (e.key === 'Enter') applyFilters(); });
+});
+</script>
+{% endblock %}

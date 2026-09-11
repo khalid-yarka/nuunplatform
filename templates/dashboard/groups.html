@@ -1,0 +1,505 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Groups - NuunPlatform{% endblock %}
+
+{% block page_title %}Groups{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/groups.css') }}" />
+<style>
+    /* Additional overrides for new design */
+    .group-card {
+        position: relative;
+        transition: all 0.25s ease;
+        cursor: pointer;
+    }
+    .group-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-md);
+    }
+
+    .group-card .lock-badge {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        font-size: 18px;
+        color: var(--text-muted);
+        opacity: 0.7;
+        transition: opacity 0.2s ease;
+        z-index: 2;
+        pointer-events: none;
+    }
+    .group-card.locked .lock-badge {
+        color: #F59E0B;
+        opacity: 1;
+    }
+    .group-card .join-btn-area {
+        margin-top: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .group-card .join-btn-area .btn-join {
+        pointer-events: none; /* controlled by card click */
+    }
+    .group-card .join-btn-area .btn-join.locked {
+        opacity: 0.7;
+    }
+    .group-card .join-btn-area .lock-hint {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-left: 4px;
+    }
+
+    .featured-grid .featured-card {
+        cursor: pointer;
+        position: relative;
+        transition: all 0.25s ease;
+    }
+    .featured-card:hover {
+        transform: translateY(-4px);
+        border-color: var(--primary);
+        box-shadow: var(--shadow-md);
+    }
+    .featured-card .lock-badge {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        font-size: 16px;
+        opacity: 0.7;
+        pointer-events: none;
+    }
+    .featured-card.locked .lock-badge {
+        color: #F59E0B;
+        opacity: 1;
+    }
+
+    /* Join Modal Styles */
+    .join-modal .modal-content {
+        max-width: 500px;
+        text-align: left;
+    }
+    .join-modal .rules-box {
+        background: var(--background);
+        border-radius: var(--radius-sm);
+        padding: 14px 18px;
+        margin: 12px 0 16px;
+        border: 1px solid var(--border);
+        font-size: 14px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        color: var(--text-secondary);
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    .join-modal .group-details {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px 16px;
+        margin-bottom: 12px;
+    }
+    .join-modal .group-details .detail-item {
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+    .join-modal .group-details .detail-item strong {
+        color: var(--text);
+    }
+
+    @media (max-width: 480px) {
+        .join-modal .group-details {
+            grid-template-columns: 1fr;
+            gap: 4px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="groups-container">
+
+    <!-- Header -->
+    <div class="groups-header">
+        <div class="title-section">
+            <h2><i class="fas fa-users" style="color: var(--primary);"></i> Study Groups</h2>
+            <p>
+                Join communities tailored to your curriculum.
+                <span class="highlight">{{ total_groups }}</span> active groups available.
+            </p>
+        </div>
+    </div>
+
+    <!-- Curriculum Tabs -->
+    <div class="curriculum-tabs">
+        {% for cur in curricula %}
+            <button class="curriculum-tab {% if loop.first %}active{% endif %}" data-curriculum="{{ cur.code }}">
+                {{ cur.icon }} {{ cur.name }}
+                <span class="badge">{{ cur.count }}</span>
+            </button>
+        {% endfor %}
+    </div>
+
+    <!-- Featured Groups -->
+    {% if featured_groups %}
+    <div class="featured-section">
+        <div class="section-title">
+            ⭐ Featured Groups
+            <span class="badge">Recommended</span>
+        </div>
+        <div class="featured-grid" id="featuredGrid">
+            {% for group in featured_groups %}
+                <div class="featured-card {% if group.locked %}locked{% endif %}"
+                     data-group-id="{{ group.id }}"
+                     data-locked="{{ group.locked|lower }}"
+                     data-required-tier="{{ group.required_tier }}"
+                     data-lock-reason="{{ group.join_block_reason or '' }}"
+                     data-invite-link="{{ group.invite_link }}">
+                    <span class="featured-icon">{{ group.icon or '📚' }}</span>
+                    <div class="featured-name">{{ group.name }}</div>
+                    <div class="featured-meta">
+                        <span>{{ group.platform|capitalize }}</span>
+                        {% if group.category %}
+                            <span>· {{ group.category }}</span>
+                        {% endif %}
+                        <span class="count">· {{ group.click_count or 0 }} clicks</span>
+                    </div>
+                    <span class="lock-badge">{% if group.locked %}🔒{% endif %}</span>
+                    {% if group.locked %}
+                        <div class="upgrade-hint">Click to upgrade</div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+        <select id="platformFilter">
+            <option value="">All Platforms</option>
+            <option value="whatsapp">💬 WhatsApp</option>
+            <option value="telegram">✈️ Telegram</option>
+        </select>
+        <select id="categoryFilter">
+            <option value="">All Categories</option>
+            {% for cat in categories %}
+                <option value="{{ cat.category }}">{{ cat.category }} ({{ cat.count }})</option>
+            {% endfor %}
+        </select>
+        <button class="btn-clear" id="clearFilters" style="display: none;">Clear Filters</button>
+        <div class="active-filters" id="activeFilters"></div>
+    </div>
+
+    <!-- Groups Grid -->
+    <div class="groups-grid" id="groupsGrid">
+        {% for group in groups %}
+            <div class="group-card {% if group.locked %}locked{% endif %}"
+                 data-group-id="{{ group.id }}"
+                 data-locked="{{ group.locked|lower }}"
+                 data-required-tier="{{ group.required_tier }}"
+                 data-lock-reason="{{ group.join_block_reason or '' }}"
+                 data-invite-link="{{ group.invite_link }}"
+                 data-group-name="{{ group.name }}"
+                 data-group-description="{{ group.description or '' }}"
+                 data-group-platform="{{ group.platform }}"
+                 data-group-category="{{ group.category or 'General' }}">
+
+                <span class="lock-badge">{% if group.locked %}🔒{% endif %}</span>
+
+                <div class="card-top">
+                    <span class="icon">{{ group.icon or '📚' }}</span>
+                    <div class="info">
+                        <div class="name">
+                            {{ group.name }}
+                            {% if group.is_featured %}
+                                <span class="featured-tag">⭐</span>
+                            {% endif %}
+                            {% if group.locked %}
+                                <span class="locked-tag">🔒</span>
+                            {% endif %}
+                        </div>
+                        <div class="meta">
+                            <span><span class="platform-icon {{ group.platform }}"><i class="fab fa-{% if group.platform == 'whatsapp' %}whatsapp{% else %}telegram-plane{% endif %}"></i></span> {{ group.platform|capitalize }}</span>
+                            {% if group.category %}
+                                <span>📂 {{ group.category }}</span>
+                            {% endif %}
+                            {% if group.curriculum %}
+                                <span>🎓 {{ group.curriculum }}</span>
+                            {% endif %}
+                            <span>👥 {{ group.click_count or 0 }} joins</span>
+                        </div>
+                    </div>
+                </div>
+
+                {% if group.description %}
+                    <div class="card-description">{{ group.description }}</div>
+                {% endif %}
+
+                <div class="join-btn-area">
+                    {% if group.locked %}
+                        <span class="btn-join locked" style="background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);">
+                            <span class="lock-icon">🔒</span> Unavailable
+                            <span class="lock-hint">
+                                {% if group.join_block_reason == 'curriculum' %}
+                                    (Curriculum mismatch)
+                                {% else %}
+                                    (Upgrade required)
+                                {% endif %}
+                            </span>
+                        </span>
+                    {% else %}
+                        <span class="btn-join" style="background: var(--primary); color: white; padding: 6px 16px; border-radius: var(--radius-sm); font-weight: 600; display: inline-block;">
+                            <i class="fas fa-arrow-right"></i> Join
+                        </span>
+                    {% endif %}
+                </div>
+            </div>
+        {% else %}
+            <div class="groups-empty">
+                <span class="empty-icon">👥</span>
+                <h3>No groups found</h3>
+                <p>Try adjusting your filters or check back later.</p>
+            </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+        <div class="pagination" style="margin-top: 24px;">
+            <a href="?page=1&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == 1 %}disabled{% endif %}">First</a>
+            <a href="?page={{ page - 1 }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == 1 %}disabled{% endif %}">Previous</a>
+            {% for p in range(1, total_pages + 1) %}
+                {% if p == page %}
+                    <span class="page-link active">{{ p }}</span>
+                {% elif p <= page + 2 and p >= page - 2 %}
+                    <a href="?page={{ p }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link">{{ p }}</a>
+                {% endif %}
+            {% endfor %}
+            <a href="?page={{ page + 1 }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == total_pages %}disabled{% endif %}">Next</a>
+            <a href="?page={{ total_pages }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == total_pages %}disabled{% endif %}">Last</a>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Join Confirmation Modal -->
+<div class="modal-overlay join-modal" id="joinModal">
+    <div class="modal-content">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 4px;">
+            <span id="joinModalIcon" style="font-size: 28px;">📚</span>
+            <h3 class="modal-title" id="joinModalTitle">Group Name</h3>
+        </div>
+        <div class="modal-body" style="margin-bottom: 8px;">
+            <div class="group-details">
+                <div class="detail-item"><strong>Platform:</strong> <span id="joinModalPlatform"></span></div>
+                <div class="detail-item"><strong>Category:</strong> <span id="joinModalCategory"></span></div>
+                <div class="detail-item" style="grid-column: 1 / -1;"><strong>Description:</strong> <span id="joinModalDescription"></span></div>
+            </div>
+            <div style="font-weight: 600; margin-top: 12px;">📋 Group Rules:</div>
+            <div class="rules-box" id="joinModalRules">{{ join_rules }}</div>
+        </div>
+        <div class="modal-actions">
+            <button onclick="closeJoinModal()" class="btn btn-secondary">Cancel</button>
+            <a href="#" id="joinModalProceedBtn" class="btn btn-primary" target="_blank" style="text-decoration: none;">
+                <i class="fas fa-arrow-right"></i> Proceed to Group
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // ============================================
+    // CURRICULUM TABS (filter groups)
+    // ============================================
+    const tabs = document.querySelectorAll('.curriculum-tab');
+    const groups = document.querySelectorAll('.group-card');
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+            tabs.forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            const curriculum = this.dataset.curriculum;
+            // For now, we just highlight; actual filtering can be done via backend
+            // We'll keep it simple: show all groups (since groups already show curriculum tag)
+            // But we could filter groups by curriculum if needed.
+            // We'll just update the UI to indicate active tab.
+        });
+    });
+
+    // ============================================
+    // FILTERS (Platform & Category)
+    // ============================================
+    const platformFilter = document.getElementById('platformFilter');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const clearFiltersBtn = document.getElementById('clearFilters');
+    const activeFilters = document.getElementById('activeFilters');
+
+    function applyFilters() {
+        const platform = platformFilter.value;
+        const category = categoryFilter.value;
+        let hasFilter = false;
+
+        groups.forEach(card => {
+            let show = true;
+            const cardPlatform = card.dataset.groupPlatform || '';
+            const cardCategory = card.dataset.groupCategory || '';
+            if (platform && cardPlatform.toLowerCase() !== platform) show = false;
+            if (category && cardCategory !== category) show = false;
+            card.style.display = show ? '' : 'none';
+            if (!show) hasFilter = true;
+        });
+
+        // Show clear button if any filter active
+        clearFiltersBtn.style.display = (platform || category) ? 'inline-block' : 'none';
+
+        // Update active filters display
+        activeFilters.innerHTML = '';
+        if (platform) {
+            const tag = document.createElement('span');
+            tag.className = 'filter-tag';
+            tag.innerHTML = `Platform: ${platform} <span class="remove" data-filter="platform">&times;</span>`;
+            activeFilters.appendChild(tag);
+        }
+        if (category) {
+            const tag = document.createElement('span');
+            tag.className = 'filter-tag';
+            tag.innerHTML = `Category: ${category} <span class="remove" data-filter="category">&times;</span>`;
+            activeFilters.appendChild(tag);
+        }
+
+        // Remove filter tags
+        document.querySelectorAll('.filter-tag .remove').forEach(el => {
+            el.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const filter = this.dataset.filter;
+                if (filter === 'platform') platformFilter.value = '';
+                else if (filter === 'category') categoryFilter.value = '';
+                applyFilters();
+            });
+        });
+    }
+
+    platformFilter.addEventListener('change', applyFilters);
+    categoryFilter.addEventListener('change', applyFilters);
+    clearFiltersBtn.addEventListener('click', function() {
+        platformFilter.value = '';
+        categoryFilter.value = '';
+        applyFilters();
+    });
+
+    // ============================================
+    // GROUP CARD CLICK HANDLER
+    // ============================================
+    function handleGroupClick(card) {
+        const locked = card.dataset.locked === 'true';
+        const groupId = card.dataset.groupId;
+        const requiredTier = card.dataset.requiredTier || 'danbe';
+        const lockReason = card.dataset.lockReason || '';
+        const inviteLink = card.dataset.inviteLink;
+
+        if (locked) {
+            // Determine which upgrade sheet to show
+            let feature = 'group_join';
+            let message = '';
+            let slideTarget = requiredTier; // default
+
+            if (lockReason === 'curriculum') {
+                // For curriculum locks, we want to show the middle slide (dhexe)
+                // and a custom message.
+                feature = 'curriculum_access';
+                message = 'This group is for a different curriculum. Upgrade to Hore to access all curricula.';
+                // We'll set requiredTier to 'dhexe' to show the middle slide, but we also pass the message.
+                // The safka.js will handle the message.
+                slideTarget = 'dhexe';
+            } else {
+                // Tier lock: use requiredTier
+                slideTarget = requiredTier;
+                message = `Upgrade to ${requiredTier.charAt(0).toUpperCase() + requiredTier.slice(1)} to join this group.`;
+            }
+
+            // Open upgrade sheet with custom message
+            if (typeof openSafkaPreview === 'function') {
+                openSafkaPreview({
+                    feature: feature,
+                    requiredTier: slideTarget,
+                    message: message
+                });
+            } else {
+                // Fallback: show alert
+                alert(message);
+            }
+            return;
+        }
+
+        // Unlocked: open join modal
+        if (inviteLink) {
+            // Populate modal
+            const name = card.dataset.groupName || 'Group';
+            const description = card.dataset.groupDescription || '';
+            const platform = card.dataset.groupPlatform || 'WhatsApp';
+            const category = card.dataset.groupCategory || 'General';
+            const icon = card.querySelector('.icon')?.textContent || '📚';
+
+            document.getElementById('joinModalTitle').textContent = name;
+            document.getElementById('joinModalDescription').textContent = description || 'No description provided.';
+            document.getElementById('joinModalPlatform').textContent = platform.charAt(0).toUpperCase() + platform.slice(1);
+            document.getElementById('joinModalCategory').textContent = category;
+            document.getElementById('joinModalIcon').textContent = icon;
+            document.getElementById('joinModalProceedBtn').href = inviteLink;
+
+            // Show modal
+            document.getElementById('joinModal').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+    }
+
+    // Attach click to all group cards and featured cards
+    document.querySelectorAll('.group-card, .featured-card').forEach(card => {
+        card.addEventListener('click', function(e) {
+            // Ignore if clicked on a button/link inside that might have its own handler
+            if (e.target.closest('a, button, .btn-join')) return;
+            handleGroupClick(this);
+        });
+    });
+
+    // Also allow join button click (which is inside card) to trigger same
+    document.querySelectorAll('.group-card .btn-join, .featured-card .btn-join').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const card = this.closest('.group-card, .featured-card');
+            if (card) handleGroupClick(card);
+        });
+    });
+
+    // ============================================
+    // JOIN MODAL CONTROLS
+    // ============================================
+    function closeJoinModal() {
+        document.getElementById('joinModal').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    // Close on overlay click
+    document.getElementById('joinModal').addEventListener('click', function(e) {
+        if (e.target === this) closeJoinModal();
+    });
+
+    // Close on Esc
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && document.getElementById('joinModal').classList.contains('active')) {
+            closeJoinModal();
+        }
+    });
+
+    // Make closeJoinModal globally accessible
+    window.closeJoinModal = closeJoinModal;
+
+    // ============================================
+    // INITIAL FILTERS
+    // ============================================
+    applyFilters();
+});
+</script>
+{% endblock %}

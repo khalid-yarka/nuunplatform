@@ -1,0 +1,177 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Manage Questions - Admin{% endblock %}
+
+{% block page_title %}Manage Questions{% endblock %}
+
+<!-- No custom CSS needed; dashboard.css provides table and form styling -->
+<!-- The inline styles for difficulty badges are fine because they're not CSS rules, just inline styles in the template -->
+
+{% block dashboard_content %}
+<div style="max-width: 100%;">
+
+    <div class="breadcrumb">
+        <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
+        <span class="separator">/</span>
+        <span class="current">Manage Questions</span>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <div>
+            <h2 style="font-size: 20px; font-weight: 700; color: var(--text);">
+                <i class="fas fa-question-circle" style="color: var(--primary);"></i> Manage Questions
+            </h2>
+            <p style="color: var(--text-secondary); font-size: 14px;">Add and manage quiz questions</p>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <a href="{{ url_for('admin.bulk_import') }}" class="btn btn-success">
+                <i class="fas fa-upload"></i> Bulk Import
+            </a>
+        </div>
+    </div>
+
+    <!-- Add Question Form -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h3 style="font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 16px;">➕ Add New Question</h3>
+        <form method="POST" action="{{ url_for('admin.add_question') }}" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div style="grid-column: 1 / -1;">
+                <div class="form-group">
+                    <label class="form-label">Subject <span class="required">*</span></label>
+                    <select name="subject_code" class="form-control" required>
+                        <option value="">Select Subject</option>
+                        {% for subject in subjects %}
+                            <option value="{{ subject.code }}">{{ subject.icon or '📚' }} {{ subject.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <div class="form-group">
+                    <label class="form-label">Chapter</label>
+                    <input type="text" name="chapter" placeholder="e.g., Chapter 1, Unit 2" class="form-control">
+                </div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <div class="form-group">
+                    <label class="form-label">Question <span class="required">*</span></label>
+                    <input type="text" name="question_text" placeholder="Enter the question" class="form-control" required>
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label class="form-label">Option A <span class="required">*</span></label>
+                    <input type="text" name="option_a" placeholder="Option A" class="form-control" required>
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label class="form-label">Option B <span class="required">*</span></label>
+                    <input type="text" name="option_b" placeholder="Option B" class="form-control" required>
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label class="form-label">Option C <span class="required">*</span></label>
+                    <input type="text" name="option_c" placeholder="Option C" class="form-control" required>
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label class="form-label">Option D</label>
+                    <input type="text" name="option_d" placeholder="Option D (optional)" class="form-control">
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label class="form-label">Correct Answer <span class="required">*</span></label>
+                    <select name="correct_answer" class="form-control" required>
+                        <option value="">Select</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label class="form-label">Difficulty</label>
+                    <select name="difficulty" class="form-control">
+                        <option value="1">⭐ Easy</option>
+                        <option value="2">⭐⭐ Easy</option>
+                        <option value="3" selected>⭐⭐⭐ Medium</option>
+                        <option value="4">⭐⭐⭐⭐ Hard</option>
+                        <option value="5">⭐⭐⭐⭐⭐ Expert</option>
+                    </select>
+                </div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <div class="form-group">
+                    <label class="form-label">Tags</label>
+                    <input type="text" name="tags" placeholder="e.g., geography, africa, capitals" class="form-control">
+                </div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <div class="form-group">
+                    <label class="form-label">Explanation</label>
+                    <textarea name="explanation" rows="2" placeholder="Explanation of the correct answer" class="form-control"></textarea>
+                </div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> Add Question</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Questions List -->
+    <div class="table-container">
+        <div class="table-header">
+            <span><strong>{{ questions|length }}</strong> questions</span>
+            <span style="font-size: 13px; color: var(--text-secondary);"><i class="fas fa-info-circle"></i> Use Bulk Import for multiple questions</span>
+        </div>
+        {% if questions %}
+            <div style="overflow-x: auto;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Subject</th>
+                            <th>Chapter</th>
+                            <th>Question</th>
+                            <th style="text-align: center;">Difficulty</th>
+                            <th style="text-align: center;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for question in questions %}
+                            <tr>
+                                <td>{{ question.subjects.name if question.subjects else '-' }}</td>
+                                <td style="color: var(--text-secondary); font-size: 13px;">{{ question.chapter or '-' }}</td>
+                                <td style="max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ question.question_text }}</td>
+                                <td style="text-align: center;">
+                                    <span class="badge {% if question.difficulty <= 2 %}badge-success{% elif question.difficulty <= 4 %}badge-warning{% else %}badge-danger{% endif %}">
+                                        {% if question.difficulty <= 2 %}⭐ Easy{% elif question.difficulty <= 4 %}⭐⭐ Medium{% else %}⭐⭐⭐ Hard{% endif %}
+                                    </span>
+                                </td>
+                                <td style="text-align: center;">
+                                    <form method="POST" action="{{ url_for('admin.delete_question', question_id=question.id) }}" style="display: inline;" onsubmit="return confirm('Archive this question?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-archive"></i> Archive</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <span class="empty-icon">❓</span>
+                <div class="empty-title">No questions added yet</div>
+                <p style="font-size: 14px;">Add a question to start building your quiz!</p>
+                <p style="font-size: 13px; color: var(--text-muted);">💡 Use Bulk Import to add multiple questions at once.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

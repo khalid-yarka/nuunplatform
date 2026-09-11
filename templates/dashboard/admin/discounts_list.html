@@ -1,0 +1,1154 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Discount Codes - Admin{% endblock %}
+{% block page_title %}Discount Codes{% endblock %}
+
+{% block dashboard_css %}
+<style>
+    /* ============================================
+       PAGE WRAPPER
+       ============================================ */
+    .dc-page { max-width: 100%; }
+
+    /* ============================================
+       HEADER
+       ============================================ */
+    .dc-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+    .dc-header .title-section h2 {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .dc-header .title-section p {
+        color: var(--text-secondary);
+        font-size: 14px;
+        margin: 4px 0 0 0;
+    }
+    .dc-header .header-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    /* ============================================
+       STATS CARDS
+       ============================================ */
+    .dc-stats {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 12px;
+        margin-bottom: 22px;
+    }
+    .dc-stat-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        box-shadow: var(--shadow-sm);
+        transition: var(--transition);
+        text-decoration: none;
+        color: inherit;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        position: relative;
+        overflow: hidden;
+    }
+    a.dc-stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+        border-color: var(--primary);
+    }
+    .dc-stat-card .stat-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .dc-stat-card .stat-icon {
+        font-size: 16px;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .dc-stat-card .stat-icon.grey    { background: #F3F4F6; color: #4B5563; }
+    .dc-stat-card .stat-icon.green   { background: #ECFDF5; color: #065F46; }
+    .dc-stat-card .stat-icon.red     { background: #FEF2F2; color: #991B1B; }
+    .dc-stat-card .stat-icon.amber   { background: #FFFBEB; color: #92400E; }
+    .dc-stat-card .stat-icon.primary { background: var(--primary-light); color: var(--primary); }
+
+    .dc-stat-card .stat-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .dc-stat-card .stat-number {
+        font-size: 26px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.1;
+        letter-spacing: -0.5px;
+    }
+    .dc-stat-card .stat-number.green   { color: #10B981; }
+    .dc-stat-card .stat-number.red     { color: #EF4444; }
+    .dc-stat-card .stat-number.amber   { color: #F59E0B; }
+    .dc-stat-card .stat-number.primary { color: var(--primary); }
+    .dc-stat-card .stat-sub {
+        font-size: 11px;
+        color: var(--text-muted);
+        font-weight: 500;
+    }
+
+    /* ============================================
+       FILTER BAR
+       ============================================ */
+    .dc-filter {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+    }
+    .dc-filter .search-wrapper {
+        flex: 1;
+        min-width: 240px;
+        position: relative;
+        display: flex;
+    }
+    .dc-filter .search-wrapper i {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        font-size: 14px;
+        pointer-events: none;
+    }
+    .dc-filter .search-wrapper input {
+        width: 100%;
+        padding: 10px 14px 10px 40px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+        font-size: 14px;
+        font-family: inherit;
+        transition: var(--transition);
+    }
+    .dc-filter .search-wrapper input:focus {
+        border-color: var(--primary);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.10);
+    }
+    .dc-filter select {
+        padding: 10px 36px 10px 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+        font-size: 14px;
+        font-family: inherit;
+        cursor: pointer;
+        transition: var(--transition);
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239CA3AF' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+    }
+    .dc-filter select:focus {
+        border-color: var(--primary);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.10);
+    }
+
+    /* ============================================
+       BULK ACTIONS BAR
+       ============================================ */
+    .dc-bulk-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 12px 18px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius) var(--radius) 0 0;
+        border-bottom: none;
+    }
+    .dc-bulk-bar .bulk-left {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        flex-wrap: wrap;
+    }
+    .dc-bulk-bar .bulk-checkbox {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        user-select: none;
+    }
+    .dc-bulk-bar .bulk-checkbox input {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+        accent-color: var(--primary);
+        margin: 0;
+    }
+    .dc-bulk-bar .bulk-count {
+        font-size: 13px;
+        color: var(--text-secondary);
+        padding-left: 18px;
+        border-left: 1px solid var(--border);
+    }
+    .dc-bulk-bar .bulk-count strong {
+        color: var(--primary);
+        font-weight: 700;
+        font-size: 14px;
+    }
+    .dc-bulk-bar .bulk-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .dc-bulk-bar .btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    /* ============================================
+       TABLE CONTAINER
+       ============================================ */
+    .dc-table-wrap {
+        position: relative;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 0 0 var(--radius) var(--radius);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+    }
+    .dc-table-wrap.no-bulk {
+        border-radius: var(--radius);
+    }
+    .dc-table-scroll {
+        overflow-x: auto;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border) transparent;
+    }
+    .dc-table-scroll::-webkit-scrollbar { height: 10px; }
+    .dc-table-scroll::-webkit-scrollbar-track {
+        background: var(--background);
+        border-radius: 5px;
+    }
+    .dc-table-scroll::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 5px;
+        border: 2px solid var(--surface);
+    }
+    .dc-table-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    .dc-table-wrap.has-overflow::after {
+        content: '';
+        position: absolute;
+        top: 0; right: 0; bottom: 10px;
+        width: 40px;
+        pointer-events: none;
+        background: linear-gradient(to left, rgba(0,0,0,0.05), transparent);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+    .dc-table-wrap.has-overflow.show-fade::after { opacity: 1; }
+
+    /* ============================================
+       TABLE
+       ============================================ */
+    .dc-table {
+        width: 100%;
+        min-width: 980px;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+    .dc-table th {
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-secondary);
+        background: var(--background);
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+    }
+    .dc-table td {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border-light);
+        vertical-align: middle;
+        color: var(--text);
+    }
+    .dc-table tbody tr { transition: background 0.15s ease; }
+    .dc-table tbody tr:hover { background: var(--primary-light); }
+    .dc-table tbody tr:last-child td { border-bottom: none; }
+
+    /* Checkbox */
+    .cell-check { width: 32px; text-align: center; }
+    .cell-check input {
+        width: 16px; height: 16px;
+        cursor: pointer;
+        accent-color: var(--primary);
+    }
+
+    /* Code cell */
+    .code-cell {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .code-chip {
+        display: inline-block;
+        font-family: 'Courier New', monospace;
+        font-weight: 700;
+        font-size: 13px;
+        color: var(--primary);
+        background: var(--primary-light);
+        padding: 4px 12px;
+        border-radius: 8px;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+    }
+    .copy-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 4px 6px;
+        border-radius: 6px;
+        color: var(--text-muted);
+        font-size: 12px;
+        transition: var(--transition);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .copy-btn:hover {
+        color: var(--primary);
+        background: var(--primary-light);
+    }
+    .copy-btn.copied { color: #10B981; }
+
+    /* Type pill */
+    .type-pill {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 10px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+    }
+    .type-pill.percentage {
+        background: #EFF6FF;
+        color: #1E40AF;
+    }
+    .type-pill.fixed {
+        background: #FFFBEB;
+        color: #92400E;
+    }
+
+    /* Value cell */
+    .value-cell {
+        font-weight: 700;
+        font-size: 15px;
+        color: var(--text);
+        white-space: nowrap;
+    }
+
+    /* Applies-to pill */
+    .applies-pill {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 10px;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+    }
+    .applies-pill.all {
+        background: var(--background);
+        color: var(--text-secondary);
+    }
+    .applies-pill.dhexe {
+        background: var(--primary-light);
+        color: var(--primary);
+    }
+    .applies-pill.hore {
+        background: linear-gradient(135deg, var(--primary), #B91C1C);
+        color: white;
+    }
+
+    /* Usage cell */
+    .usage-cell { min-width: 130px; }
+    .usage-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        font-size: 13px;
+        margin-bottom: 4px;
+    }
+    .usage-head .used { font-weight: 700; color: var(--text); }
+    .usage-head .limit {
+        font-size: 11px;
+        color: var(--text-muted);
+        font-weight: 500;
+    }
+    .usage-bar {
+        width: 100%;
+        height: 6px;
+        background: var(--background);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .usage-bar .fill {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.4s ease;
+    }
+    .usage-bar .fill.low    { background: #10B981; }
+    .usage-bar .fill.medium { background: #F59E0B; }
+    .usage-bar .fill.high   { background: #EF4444; }
+    .usage-bar .fill.unlimited { background: var(--primary); }
+
+    /* Expiry cell */
+    .expiry-cell { min-width: 120px; white-space: nowrap; }
+    .expiry-rel {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+    }
+    .expiry-rel.future { color: #10B981; }
+    .expiry-rel.soon   { color: #F59E0B; }
+    .expiry-rel.past   { color: #EF4444; }
+    .expiry-abs {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+
+    /* Status pill */
+    .status-pill {
+        display: inline-block;
+        padding: 3px 12px;
+        border-radius: 10px;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+    }
+    .status-pill.active    { background: #ECFDF5; color: #065F46; }
+    .status-pill.inactive  { background: #F3F4F6; color: #6B7280; }
+    .status-pill.expired   { background: #FEF2F2; color: #991B1B; }
+    .status-pill.exhausted { background: #FFFBEB; color: #92400E; }
+
+    /* Actions */
+    .cell-actions {
+        text-align: right;
+        white-space: nowrap;
+    }
+
+    /* ============================================
+       SCROLL HINT
+       ============================================ */
+    .dc-scroll-hint {
+        display: none;
+        text-align: center;
+        font-size: 12px;
+        color: var(--text-muted);
+        padding: 10px 0 4px;
+        font-weight: 500;
+    }
+    .dc-scroll-hint i {
+        margin-right: 6px;
+        animation: scrollHintNudge 1.6s ease-in-out infinite;
+    }
+    @keyframes scrollHintNudge {
+        0%, 100% { transform: translateX(0); }
+        50%      { transform: translateX(4px); }
+    }
+
+    /* ============================================
+       ZERO STATE
+       ============================================ */
+    .dc-zero {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 60px 24px;
+        text-align: center;
+        box-shadow: var(--shadow-sm);
+    }
+    .dc-zero .zero-icon {
+        font-size: 64px;
+        opacity: 0.4;
+        margin-bottom: 16px;
+        display: block;
+        line-height: 1;
+    }
+    .dc-zero h3 {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text);
+        margin: 0 0 8px 0;
+    }
+    .dc-zero p {
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin: 0 auto 22px auto;
+        max-width: 420px;
+        line-height: 1.6;
+    }
+    .dc-zero .zero-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    /* ============================================
+       TOAST (copy feedback)
+       ============================================ */
+    .dc-toast {
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%) translateY(20px);
+        background: #10B981;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 24px;
+        font-size: 13px;
+        font-weight: 600;
+        box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.25s ease;
+        z-index: 10000;
+    }
+    .dc-toast.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+
+    /* ============================================
+       RESPONSIVE
+       ============================================ */
+    @media (max-width: 1100px) {
+        .dc-stats { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 700px) {
+        .dc-header {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .dc-header .header-actions .btn {
+            flex: 1;
+            justify-content: center;
+        }
+        .dc-stats { grid-template-columns: repeat(2, 1fr); }
+        .dc-stat-card { padding: 12px 14px; }
+        .dc-stat-card .stat-number { font-size: 22px; }
+
+        .dc-filter { flex-direction: column; }
+        .dc-filter .search-wrapper { min-width: unset; }
+
+        .dc-bulk-bar {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+        }
+        .dc-bulk-bar .bulk-left { justify-content: space-between; }
+        .dc-bulk-bar .bulk-count {
+            border-left: none;
+            padding-left: 0;
+        }
+        .dc-bulk-bar .bulk-actions { width: 100%; }
+        .dc-bulk-bar .bulk-actions .btn {
+            flex: 1;
+            justify-content: center;
+        }
+        .dc-scroll-hint { display: block; }
+    }
+    @media (max-width: 560px) {
+        /* Cards mode */
+        .dc-table,
+        .dc-table tbody,
+        .dc-table tr,
+        .dc-table td {
+            display: block;
+            width: 100%;
+            min-width: unset;
+        }
+        .dc-table thead { display: none; }
+        .dc-table tr {
+            position: relative;
+            padding: 16px 16px 14px 16px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+        .dc-table tr:last-child { border-bottom: none; }
+        .dc-table tr:hover { background: var(--primary-light); }
+        .dc-table td {
+            padding: 0;
+            border: none;
+            margin-bottom: 6px;
+        }
+        .dc-table td:last-child { margin-bottom: 0; }
+
+        .dc-table td.cell-status {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            width: auto;
+            margin: 0;
+        }
+        .dc-table td.cell-check {
+            position: absolute;
+            top: 12px;
+            right: 16px;
+            width: auto;
+            margin: 0;
+            padding: 4px;
+        }
+
+        .dc-table td.cell-code {
+            padding-top: 30px;
+            margin-bottom: 10px;
+        }
+
+        .dc-table td.cell-type,
+        .dc-table td.cell-value,
+        .dc-table td.cell-applies {
+            display: inline-block;
+            vertical-align: middle;
+            width: auto;
+            margin-right: 10px;
+            margin-bottom: 8px;
+        }
+
+        .dc-table td.cell-usage { margin-bottom: 12px; }
+
+        .dc-table td.cell-expiry { margin-bottom: 12px; }
+
+        .dc-table td.cell-actions {
+            display: block;
+            width: 100%;
+            text-align: left;
+            margin-top: 10px;
+            padding-top: 12px;
+            border-top: 1px dashed var(--border-light);
+        }
+        .dc-table td.cell-actions .btn { width: 100%; justify-content: center; }
+
+        .dc-scroll-hint { display: none; }
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="dc-page">
+
+    <!-- BREADCRUMB -->
+    <div class="breadcrumb">
+        <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
+        <span class="separator">/</span>
+        <a href="{{ url_for('upgrade.admin_list') }}">Upgrade Requests</a>
+        <span class="separator">/</span>
+        <span class="current">Discount Codes</span>
+    </div>
+
+    <!-- HEADER -->
+    <div class="dc-header">
+        <div class="title-section">
+            <h2>
+                <i class="fas fa-tags" style="color: var(--primary);"></i>
+                Discount Codes
+            </h2>
+            <p>Create and manage discount codes for tier upgrades.</p>
+        </div>
+        <div class="header-actions">
+            <a href="{{ url_for('upgrade.admin_list') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Requests
+            </a>
+            <a href="{{ url_for('upgrade.admin_discount_create') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> New Code
+            </a>
+        </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="dc-stats">
+        <a href="{{ url_for('upgrade.admin_discounts') }}" class="dc-stat-card">
+            <div class="stat-head">
+                <span class="stat-icon grey">🏷️</span>
+                <span class="stat-label">Total</span>
+            </div>
+            <div class="stat-number">{{ stats.total }}</div>
+            <div class="stat-sub">All codes</div>
+        </a>
+
+        <a href="{{ url_for('upgrade.admin_discounts', filter='active') }}" class="dc-stat-card">
+            <div class="stat-head">
+                <span class="stat-icon green">✅</span>
+                <span class="stat-label">Active</span>
+            </div>
+            <div class="stat-number green">{{ stats.active }}</div>
+            <div class="stat-sub">Usable now</div>
+        </a>
+
+        <a href="{{ url_for('upgrade.admin_discounts', filter='expired') }}" class="dc-stat-card">
+            <div class="stat-head">
+                <span class="stat-icon red">⏰</span>
+                <span class="stat-label">Expired</span>
+            </div>
+            <div class="stat-number red">{{ stats.expired }}</div>
+            <div class="stat-sub">Past end date</div>
+        </a>
+
+        <a href="{{ url_for('upgrade.admin_discounts', filter='exhausted') }}" class="dc-stat-card">
+            <div class="stat-head">
+                <span class="stat-icon amber">🔥</span>
+                <span class="stat-label">Exhausted</span>
+            </div>
+            <div class="stat-number amber">{{ stats.exhausted }}</div>
+            <div class="stat-sub">Max uses hit</div>
+        </a>
+
+        <div class="dc-stat-card">
+            <div class="stat-head">
+                <span class="stat-icon primary">📊</span>
+                <span class="stat-label">Total Uses</span>
+            </div>
+            <div class="stat-number primary">{{ stats.total_uses }}</div>
+            <div class="stat-sub">Across all codes</div>
+        </div>
+    </div>
+
+    <!-- FILTER -->
+    <form method="GET" class="dc-filter">
+        <div class="search-wrapper">
+            <i class="fas fa-search"></i>
+            <input type="text" name="search"
+                   placeholder="Search by code..."
+                   value="{{ search }}">
+        </div>
+        <select name="filter">
+            <option value=""            {% if not filter_status %}selected{% endif %}>All Status</option>
+            <option value="active"      {% if filter_status == 'active' %}selected{% endif %}>✅ Active</option>
+            <option value="inactive"    {% if filter_status == 'inactive' %}selected{% endif %}>⏸️ Inactive</option>
+            <option value="expired"     {% if filter_status == 'expired' %}selected{% endif %}>⏰ Expired</option>
+            <option value="exhausted"   {% if filter_status == 'exhausted' %}selected{% endif %}>🔥 Exhausted</option>
+        </select>
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-search"></i> Search
+        </button>
+        {% if search or filter_status %}
+            <a href="{{ url_for('upgrade.admin_discounts') }}" class="btn btn-secondary">
+                <i class="fas fa-times"></i> Clear
+            </a>
+        {% endif %}
+    </form>
+
+    <!-- CONTENT -->
+    {% if discounts %}
+        <form method="POST" action="{{ url_for('upgrade.admin_discount_bulk') }}" id="bulkForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="action" id="bulkAction" value="">
+
+            <!-- BULK BAR -->
+            <div class="dc-bulk-bar">
+                <div class="bulk-left">
+                    <label class="bulk-checkbox">
+                        <input type="checkbox" id="selectAllTop" onchange="toggleAll(this)">
+                        <span>Select all</span>
+                    </label>
+                    <span class="bulk-count">
+                        <strong id="selectedCount">0</strong> selected
+                    </span>
+                </div>
+                <div class="bulk-actions">
+                    <button type="button" class="btn btn-sm btn-success"
+                            onclick="submitBulk('activate')" data-bulk-btn disabled>
+                        <i class="fas fa-play"></i> Activate
+                    </button>
+                    <button type="button" class="btn btn-sm btn-secondary"
+                            onclick="submitBulk('deactivate')" data-bulk-btn disabled>
+                        <i class="fas fa-pause"></i> Deactivate
+                    </button>
+                    <button type="button" class="btn btn-sm btn-danger"
+                            onclick="submitBulk('delete')" data-bulk-btn disabled>
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+
+            <!-- TABLE -->
+            <div class="dc-table-wrap" id="dcTableWrap">
+                <div class="dc-table-scroll" id="dcTableScroll">
+                    <table class="dc-table">
+                        <thead>
+                            <tr>
+                                <th class="cell-check"></th>
+                                <th>Code</th>
+                                <th>Type</th>
+                                <th>Value</th>
+                                <th>Applies To</th>
+                                <th>Usage</th>
+                                <th>Expiry</th>
+                                <th>Status</th>
+                                <th style="text-align: right;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in discounts %}
+                                {% set used = d.used_count or 0 %}
+                                {% set limit = d.max_uses %}
+                                {% if limit %}
+                                    {% set pct = (used / limit * 100) | round(0) %}
+                                    {% set bar_cls = 'high' if pct >= 80 else 'medium' if pct >= 50 else 'low' %}
+                                {% else %}
+                                    {% set pct = 0 %}
+                                    {% set bar_cls = 'unlimited' %}
+                                {% endif %}
+
+                                <tr>
+                                    <td class="cell-check">
+                                        <input type="checkbox" name="discount_ids"
+                                               value="{{ d.id }}"
+                                               class="row-checkbox">
+                                    </td>
+
+                                    <td class="cell-code">
+                                        <div class="code-cell">
+                                            <span class="code-chip">{{ d.code }}</span>
+                                            <button type="button"
+                                                    class="copy-btn"
+                                                    data-code="{{ d.code }}"
+                                                    title="Copy code"
+                                                    onclick="copyCode(this, '{{ d.code }}')">
+                                                <i class="fas fa-copy"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+
+                                    <td class="cell-type">
+                                        <span class="type-pill {{ d.discount_type }}">
+                                            {% if d.discount_type == 'percentage' %}% PERCENT{% else %}$ FIXED{% endif %}
+                                        </span>
+                                    </td>
+
+                                    <td class="cell-value">
+                                        <span class="value-cell">
+                                            {% if d.discount_type == 'percentage' %}
+                                                {{ d.discount_value }}%
+                                            {% else %}
+                                                ${{ (d.discount_value / 100)|round(2) }}
+                                            {% endif %}
+                                        </span>
+                                    </td>
+
+                                    <td class="cell-applies">
+                                        <span class="applies-pill {{ d.applies_to }}">
+                                            {% if d.applies_to == 'all' %}All Tiers{% else %}{{ d.applies_to }}{% endif %}
+                                        </span>
+                                    </td>
+
+                                    <td class="cell-usage">
+                                        <div class="usage-head">
+                                            <span class="used">{{ used }}</span>
+                                            <span class="limit">
+                                                {% if limit %}/ {{ limit }}{% else %}/ ∞{% endif %}
+                                            </span>
+                                        </div>
+                                        <div class="usage-bar">
+                                            <div class="fill {{ bar_cls }}"
+                                                 style="width: {% if limit %}{{ pct }}%{% else %}30%{% endif %};"></div>
+                                        </div>
+                                    </td>
+
+                                    <td class="cell-expiry">
+                                        <div class="expiry-rel"
+                                             data-expires="{{ d.expires_at or '' }}">
+                                            {% if d.expires_at %}
+                                                {{ d.expires_at[:10] }}
+                                            {% else %}
+                                                Never
+                                            {% endif %}
+                                        </div>
+                                        {% if d.expires_at %}
+                                            <div class="expiry-abs">{{ d.expires_at[:10] }}</div>
+                                        {% endif %}
+                                    </td>
+
+                                    <td class="cell-status">
+                                        <span class="status-pill {{ d.computed_status }}">
+                                            {{ d.computed_status }}
+                                        </span>
+                                    </td>
+
+                                    <td class="cell-actions">
+                                        <a href="{{ url_for('upgrade.admin_discount_edit', discount_id=d.id) }}"
+                                           class="btn btn-sm btn-secondary"
+                                           title="Edit">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <form method="POST"
+                                              action="{{ url_for('upgrade.admin_discount_delete', discount_id=d.id) }}"
+                                              style="display:inline;"
+                                              onsubmit="return confirm('Delete code {{ d.code }}? This cannot be undone.');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                            <button type="submit" class="btn btn-sm btn-danger" title="Delete">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SCROLL HINT -->
+            <div class="dc-scroll-hint">
+                <i class="fas fa-arrows-alt-h"></i>
+                Scroll the table sideways to see more columns
+            </div>
+
+        </form>
+
+    {% else %}
+        <!-- ZERO STATE -->
+        {% set is_filtered = search or filter_status %}
+        <div class="dc-zero">
+            {% if is_filtered %}
+                <span class="zero-icon">🔍</span>
+                <h3>No matching codes</h3>
+                <p>
+                    No discount codes match your current filters.
+                    Try adjusting your search terms or clearing the filter.
+                </p>
+                <div class="zero-actions">
+                    <a href="{{ url_for('upgrade.admin_discounts') }}" class="btn btn-primary">
+                        <i class="fas fa-times"></i> Clear Filters
+                    </a>
+                </div>
+            {% else %}
+                <span class="zero-icon">🏷️</span>
+                <h3>No discount codes yet</h3>
+                <p>
+                    Create your first code to offer promotions to users.
+                    Codes can be percentage- or amount-based, with optional limits and expiry.
+                </p>
+                <div class="zero-actions">
+                    <a href="{{ url_for('upgrade.admin_discount_create') }}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Create First Code
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    {% endif %}
+
+</div>
+
+<!-- Copy toast -->
+<div class="dc-toast" id="dcToast">✅ Copied!</div>
+
+<script>
+    // ============================================
+    // COPY CODE
+    // ============================================
+    function copyCode(btn, code) {
+        function done() {
+            btn.classList.add('copied');
+            btn.innerHTML = '<i class="fas fa-check"></i>';
+            const toast = document.getElementById('dcToast');
+            toast.textContent = '✅ Copied "' + code + '"';
+            toast.classList.add('show');
+            setTimeout(function() { toast.classList.remove('show'); }, 1800);
+            setTimeout(function() {
+                btn.classList.remove('copied');
+                btn.innerHTML = '<i class="fas fa-copy"></i>';
+            }, 1500);
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(code).then(done).catch(function() {
+                fallbackCopy(code, done);
+            });
+        } else {
+            fallbackCopy(code, done);
+        }
+    }
+
+    function fallbackCopy(text, cb) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); cb(); } catch (e) {}
+        document.body.removeChild(ta);
+    }
+
+    // ============================================
+    // RELATIVE EXPIRY
+    // ============================================
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.expiry-rel[data-expires]').forEach(function(el) {
+            const iso = el.getAttribute('data-expires');
+            if (!iso) return;
+
+            const target = new Date(iso.replace(' ', 'T'));
+            if (isNaN(target.getTime())) return;
+
+            const diffMs = target.getTime() - Date.now();
+            const diffDays = Math.round(diffMs / 86400000);
+            let text = '';
+
+            if (diffMs < 0) {
+                const past = Math.abs(diffDays);
+                text = past === 0 ? 'Today' : past + ' day' + (past === 1 ? '' : 's') + ' ago';
+                el.classList.add('past');
+            } else if (diffDays === 0) {
+                text = 'Expires today';
+                el.classList.add('soon');
+            } else if (diffDays === 1) {
+                text = 'Expires tomorrow';
+                el.classList.add('soon');
+            } else if (diffDays <= 7) {
+                text = 'In ' + diffDays + ' days';
+                el.classList.add('soon');
+            } else if (diffDays <= 60) {
+                text = 'In ' + diffDays + ' days';
+                el.classList.add('future');
+            } else {
+                text = 'In ' + Math.round(diffDays / 30) + ' months';
+                el.classList.add('future');
+            }
+
+            el.textContent = text;
+        });
+    });
+
+    // ============================================
+    // SELECT ALL
+    // ============================================
+    function toggleAll(source) {
+        document.querySelectorAll('.row-checkbox').forEach(function(cb) {
+            cb.checked = source.checked;
+        });
+        updateSelectedCount();
+    }
+
+    function updateSelectedCount() {
+        const checked = document.querySelectorAll('.row-checkbox:checked');
+        const count = checked.length;
+
+        const countEl = document.getElementById('selectedCount');
+        if (countEl) countEl.textContent = count;
+
+        document.querySelectorAll('[data-bulk-btn]').forEach(function(btn) {
+            btn.disabled = count === 0;
+        });
+
+        const all = document.querySelectorAll('.row-checkbox');
+        const master = document.getElementById('selectAllTop');
+        if (master) {
+            master.checked = (all.length > 0 && count === all.length);
+            master.indeterminate = (count > 0 && count < all.length);
+        }
+    }
+
+    document.querySelectorAll('.row-checkbox').forEach(function(cb) {
+        cb.addEventListener('change', updateSelectedCount);
+    });
+
+    // ============================================
+    // BULK SUBMIT
+    // ============================================
+    function submitBulk(action) {
+        const checked = document.querySelectorAll('.row-checkbox:checked');
+        if (checked.length === 0) {
+            alert('Please select at least one code.');
+            return;
+        }
+
+        const n = checked.length;
+        let msg;
+        if (action === 'delete') {
+            msg = 'Permanently DELETE ' + n + ' code(s)?\n\nThis action cannot be undone.';
+        } else if (action === 'activate') {
+            msg = 'Activate ' + n + ' code(s)?';
+        } else {
+            msg = 'Deactivate ' + n + ' code(s)?';
+        }
+
+        if (!confirm(msg)) return;
+
+        document.getElementById('bulkAction').value = action;
+        document.getElementById('bulkForm').submit();
+    }
+
+    // ============================================
+    // SCROLL HINT FADE
+    // ============================================
+    document.addEventListener('DOMContentLoaded', function() {
+        const wrap = document.getElementById('dcTableWrap');
+        const scroll = document.getElementById('dcTableScroll');
+        if (!wrap || !scroll) return;
+
+        function updateOverflow() {
+            const hasOverflow = scroll.scrollWidth > scroll.clientWidth + 2;
+            const atEnd = scroll.scrollLeft + scroll.clientWidth >= scroll.scrollWidth - 2;
+            wrap.classList.toggle('has-overflow', hasOverflow);
+            wrap.classList.toggle('show-fade', hasOverflow && !atEnd);
+        }
+
+        scroll.addEventListener('scroll', updateOverflow, { passive: true });
+        window.addEventListener('resize', updateOverflow);
+        setTimeout(updateOverflow, 50);
+        setTimeout(updateOverflow, 400);
+    });
+
+    // ============================================
+    // INIT
+    // ============================================
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('[data-bulk-btn]').forEach(function(btn) {
+            btn.disabled = true;
+        });
+    });
+</script>
+{% endblock %}

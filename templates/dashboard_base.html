@@ -1,0 +1,415 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Student Platform{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<meta name="csrf-token" content="{{ csrf_token }}">
+
+<!-- ============================================ -->
+<!-- ANTI-FLASH (dashboard): theme + sidebar     -->
+<!-- Runs before first paint                      -->
+<!-- ============================================ -->
+<script>
+    (function() {
+        try {
+            // ---- Theme ----
+            var serverTheme = "{{ settings.get('appearance.theme', '') if settings is defined else '' }}";
+            var theme = serverTheme || localStorage.getItem('preferred-theme') || 'system';
+            var resolved = (theme === 'system')
+                ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                : theme;
+            document.documentElement.setAttribute('data-theme', resolved);
+
+            // ---- Accent ----
+            var serverAccent = "{{ settings.get('appearance.accent', '') if settings is defined else '' }}";
+            var accent = serverAccent || localStorage.getItem('preferred-accent') || 'red';
+
+            var ACCENTS = {
+                red:    { hex: '#FF3138', hover: '#E62B32', light: '#FFEBE8', light_dark: '#3A1A20' },
+                blue:   { hex: '#3B82F6', hover: '#2563EB', light: '#E8F0FE', light_dark: '#1A2A4A' },
+                green:  { hex: '#10B981', hover: '#059669', light: '#D1FAE5', light_dark: '#1A3A2E' },
+                purple: { hex: '#8B5CF6', hover: '#7C3AED', light: '#EDE9FE', light_dark: '#2A1A4A' },
+                orange: { hex: '#F59E0B', hover: '#D97706', light: '#FEF3C7', light_dark: '#3A2E1A' }
+            };
+            var a = ACCENTS[accent] || ACCENTS.red;
+            var isDark = resolved === 'dark';
+            var root = document.documentElement;
+            root.style.setProperty('--primary', a.hex);
+            root.style.setProperty('--primary-hover', a.hover);
+            root.style.setProperty('--primary-light', isDark ? a.light_dark : a.light);
+
+            // ---- Font size ----
+            var serverFont = "{{ settings.get('appearance.font_size', '') if settings is defined else '' }}";
+            var fontSize = serverFont || localStorage.getItem('preferred-font-size') || 'medium';
+            var sizes = { small: '14px', medium: '16px', large: '18px' };
+            root.style.setProperty('--base-font-size', sizes[fontSize] || '16px');
+
+            // ---- Compact mode ----
+            var serverCompact = "{{ settings.get('appearance.compact_mode', '') if settings is defined else '' }}";
+            var compact = serverCompact === 'True' || serverCompact === 'true' || serverCompact === '1'
+                          || localStorage.getItem('preferred-compact') === '1';
+            if (compact) root.classList.add('compact-mode');
+
+            // ---- Reduced motion ----
+            var serverMotion = "{{ settings.get('appearance.reduced_motion', '') if settings is defined else '' }}";
+            var reduced = serverMotion === 'True' || serverMotion === 'true' || serverMotion === '1'
+                          || localStorage.getItem('preferred-reduced-motion') === '1';
+            if (reduced) root.classList.add('reduced-motion');
+
+            // ---- Sidebar collapsed state ----
+            if (localStorage.getItem('sidebar-collapsed') === '1') {
+                root.classList.add('sidebar-collapsed');
+            }
+        } catch (e) { /* silent */ }
+    })();
+</script>
+{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/safka.css') }}" />
+{% block dashboard_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<!-- Sidebar Overlay (mobile) -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<div class="dashboard-wrapper">
+    <!-- ============================================ -->
+    <!-- SIDEBAR -->
+    <!-- ============================================ -->
+    <aside class="sidebar" id="sidebar">
+
+        <!-- ---------- Brand ---------- -->
+        <div class="sidebar-brand">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="logo" />
+            <span class="brand-text">Nuun<span>Platform</span></span>
+            <button type="button"
+                    class="sidebar-collapse-btn"
+                    id="sidebarCollapseBtn"
+                    aria-label="Collapse sidebar"
+                    aria-expanded="true"
+                    title="Toggle sidebar">
+                <i class="fas fa-angles-left"></i>
+            </button>
+        </div>
+
+        <!-- ---------- User Info ---------- -->
+        <a href="{{ url_for('dashboard.profile') }}"
+           class="sidebar-user"
+           title="View profile">
+            <div class="avatar avatar-primary">
+                {{ session.user_name[0] if session.user_name else 'U' }}
+                {% if session.tier == 'hore' %}
+                    <span class="tier-badge tier-hore" title="Safka Hore"><i class="fas fa-crown"></i></span>
+                {% elif session.tier == 'dhexe' %}
+                    <span class="tier-badge tier-dhexe" title="Safka Dhexe"><i class="fas fa-key"></i></span>
+                {% endif %}
+            </div>
+            <div class="user-details">
+                <span class="user-name">{{ session.user_name or 'User' }}</span>
+                {% set show_public_id = settings.get('privacy.show_public_id', True) %}
+                {% set has_public_id = session.public_id and session.public_id != '----' %}
+                {% if not has_public_id %}
+                    <span class="user-id" style="background:#FEF3C7;color:#92400E;">⏳ PENDING</span>
+                {% elif not show_public_id %}
+                    <span class="user-id" style="background:var(--background);color:var(--text-muted);">🔒 Private</span>
+                {% else %}
+                    <span class="user-id">#{{ session.public_id }}</span>
+                {% endif %}
+            </div>
+        </a>
+
+        <!-- ---------- Navigation ---------- -->
+        <nav class="sidebar-nav">
+
+            <!-- ============ MAIN ============ -->
+            <div class="nav-section">
+                <div class="nav-label">Main</div>
+
+                <a href="{{ url_for('dashboard.home') }}"
+                   class="nav-item {% if request.endpoint == 'dashboard.home' %}active{% endif %}"
+                   data-title="Dashboard" title="Dashboard">
+                    <span class="nav-icon"><i class="fas fa-home"></i></span>
+                    <span class="nav-text">Dashboard</span>
+                </a>
+            </div>
+
+            <!-- ============ LEARNING ============ -->
+            <div class="nav-section">
+                <div class="nav-label">Learning</div>
+
+                <a href="{{ url_for('quiz.index') }}"
+                   class="nav-item {% if request.endpoint.startswith('quiz.') and request.endpoint != 'quiz.leaderboard' %}active{% endif %}"
+                   data-title="Quizzes" title="Quizzes">
+                    <span class="nav-icon"><i class="fas fa-pencil-alt"></i></span>
+                    <span class="nav-text">Quizzes</span>
+                </a>
+
+                <a href="{{ url_for('live_quiz.lobby') }}"
+                   class="nav-item {% if request.endpoint.startswith('live_quiz.') %}active{% endif %}"
+                   data-title="Live Quiz" title="Live Quiz">
+                    <span class="nav-icon"><i class="fas fa-bolt"></i></span>
+                    <span class="nav-text">Live Quiz</span>
+                    <span class="nav-badge">⚡</span>
+                </a>
+
+                <a href="{{ url_for('pdfs.list_pdfs') }}"
+                   class="nav-item {% if request.endpoint == 'pdfs.list_pdfs' or request.endpoint == 'pdfs.view_pdf' %}active{% endif %}"
+                   data-title="PDFs" title="PDFs">
+                    <span class="nav-icon"><i class="fas fa-file-pdf"></i></span>
+                    <span class="nav-text">PDFs</span>
+                </a>
+
+                <a href="{{ url_for('groups.list_groups') }}"
+                   class="nav-item {% if request.endpoint == 'groups.list_groups' %}active{% endif %}"
+                   data-title="Groups" title="Groups">
+                    <span class="nav-icon"><i class="fas fa-users"></i></span>
+                    <span class="nav-text">Groups</span>
+                </a>
+            </div>
+
+            <!-- ============ COMMUNITY ============ -->
+            <div class="nav-section">
+                <div class="nav-label">Community</div>
+
+                <a href="{{ url_for('quiz.leaderboard') }}"
+                   class="nav-item {% if request.endpoint == 'quiz.leaderboard' %}active{% endif %}"
+                   data-title="Leaderboard" title="Leaderboard">
+                    <span class="nav-icon"><i class="fas fa-trophy"></i></span>
+                    <span class="nav-text">Leaderboard</span>
+                </a>
+
+                <a href="{{ url_for('history.index') }}"
+                   class="nav-item {% if request.endpoint.startswith('history.') %}active{% endif %}"
+                   data-title="History" title="History">
+                    <span class="nav-icon"><i class="fas fa-history"></i></span>
+                    <span class="nav-text">History</span>
+                </a>
+            </div>
+
+            <!-- ============ ACCOUNT ============ -->
+            <div class="nav-section">
+                <div class="nav-label">Account</div>
+
+                <a href="{{ url_for('dashboard.profile') }}"
+                   class="nav-item {% if request.endpoint == 'dashboard.profile' %}active{% endif %}"
+                   data-title="Profile" title="Profile">
+                    <span class="nav-icon"><i class="fas fa-user"></i></span>
+                    <span class="nav-text">Profile</span>
+                </a>
+
+                <a href="{{ url_for('settings.index') }}"
+                   class="nav-item {% if request.endpoint.startswith('settings.') %}active{% endif %}"
+                   data-title="Settings" title="Settings">
+                    <span class="nav-icon"><i class="fas fa-sliders-h"></i></span>
+                    <span class="nav-text">Settings</span>
+                </a>
+            </div>
+
+            <!-- ============ ADMIN ============ -->
+            {% if session.is_admin %}
+                <div class="nav-section">
+                    <div class="nav-label">Admin</div>
+
+                    <a href="{{ url_for('admin.dashboard') }}"
+                       class="nav-item {% if request.endpoint.startswith('admin.') and not request.endpoint.startswith('admin_errors.') %}active{% endif %}"
+                       data-title="Admin Panel" title="Admin Panel">
+                        <span class="nav-icon"><i class="fas fa-shield-alt"></i></span>
+                        <span class="nav-text">Admin Panel</span>
+                    </a>
+
+                    <a href="{{ url_for('upgrade.admin_list') }}"
+                       class="nav-item {% if request.path.startswith('/upgrade/admin/upgrade-requests') %}active{% endif %}"
+                       data-title="Upgrade Requests" title="Upgrade Requests">
+                        <span class="nav-icon"><i class="fas fa-rocket"></i></span>
+                        <span class="nav-text">Upgrade Requests</span>
+                        {% if pending_upgrades_count and pending_upgrades_count > 0 %}
+                            <span class="nav-badge danger">{{ pending_upgrades_count }}</span>
+                        {% endif %}
+                    </a>
+
+                    <a href="{{ url_for('upgrade.admin_discounts') }}"
+                       class="nav-item {% if request.path.startswith('/upgrade/admin/discounts') %}active{% endif %}"
+                       data-title="Discount Codes" title="Discount Codes">
+                        <span class="nav-icon"><i class="fas fa-tags"></i></span>
+                        <span class="nav-text">Discount Codes</span>
+                    </a>
+
+                    <a href="{{ url_for('admin_errors.index') }}"
+                       class="nav-item {% if request.endpoint.startswith('admin_errors.') %}active{% endif %}"
+                       data-title="Error Logs" title="Error Logs">
+                        <span class="nav-icon"><i class="fas fa-exclamation-triangle"></i></span>
+                        <span class="nav-text">Error Logs</span>
+                        <span class="nav-badge danger">!</span>
+                    </a>
+                </div>
+            {% endif %}
+        </nav>
+
+        <!-- ---------- Footer ---------- -->
+        <div class="sidebar-footer">
+            <button type="button"
+                    class="nav-item logout"
+                    id="sidebarLogoutBtn"
+                    data-title="Logout"
+                    title="Logout">
+                <span class="nav-icon"><i class="fas fa-sign-out-alt"></i></span>
+                <span class="nav-text">Logout</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- ============================================ -->
+    <!-- MAIN CONTENT -->
+    <!-- ============================================ -->
+    <main class="main-content">
+        <!-- Top Navbar -->
+        <header class="top-navbar">
+            <div class="navbar-left">
+                <button class="menu-toggle" id="menuToggle" aria-label="Toggle sidebar">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <span class="page-title">{% block page_title %}Dashboard{% endblock %}</span>
+            </div>
+            <div class="navbar-right">
+                <button class="theme-toggle" id="themeToggle" aria-label="Change theme">
+                    <i class="fas fa-sun" id="themeIcon"></i>
+                </button>
+
+                <div class="notification-wrapper" id="notificationWrapper">
+                    <button class="notification-toggle" id="notificationToggle" aria-label="Notifications">
+                        <i class="fas fa-bell"></i>
+                        <span class="notification-badge" id="notificationBadge" style="display: none;">0</span>
+                    </button>
+
+                    <div class="notification-dropdown" id="notificationDropdown">
+                        <div class="dropdown-header">
+                            <span>Notifications</span>
+                            <button class="mark-all-btn" id="markAllReadBtn" style="display: none;">
+                                Mark all as read
+                            </button>
+                        </div>
+                        <div class="dropdown-body" id="notificationList">
+                            <div class="notification-empty">
+                                <i class="fas fa-bell-slash"></i>
+                                <p>No notifications yet</p>
+                            </div>
+                        </div>
+                        <div class="dropdown-footer">
+                            <a href="{{ url_for('notifications.index') }}">View All</a>
+                        </div>
+                    </div>
+                </div>
+
+                <span class="nav-divider"></span>
+                <a href="{{ url_for('dashboard.profile') }}" class="user-menu">
+                    <div class="avatar avatar-sm avatar-primary">
+                        {{ session.user_name[0] if session.user_name else 'U' }}
+                    </div>
+                    <span class="user-name-sm">{{ session.user_name or 'User' }}</span>
+                </a>
+            </div>
+        </header>
+
+        <!-- Page Content -->
+        <div class="page-content">
+            {% block dashboard_content %}{% endblock %}
+        </div>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="footer-logo" />
+                    <span class="footer-brand-text">Nuun<span>Platform</span></span>
+                </div>
+                <div class="footer-links">
+                    <a href="{{ url_for('dashboard.home') }}">Dashboard</a>
+                    <a href="{{ url_for('quiz.index') }}">Quizzes</a>
+                    <a href="{{ url_for('live_quiz.lobby') }}">Live Quiz</a>
+                    <a href="{{ url_for('groups.list_groups') }}">Groups</a>
+                    <a href="{{ url_for('pdfs.list_pdfs') }}">PDFs</a>
+                    <a href="{{ url_for('quiz.leaderboard') }}">Leaderboard</a>
+                </div>
+                <div class="footer-social">
+                    <a href="#" aria-label="WhatsApp"><i class="fab fa-whatsapp"></i></a>
+                    <a href="#" aria-label="Telegram"><i class="fab fa-telegram-plane"></i></a>
+                    <a href="#" aria-label="Facebook"><i class="fab fa-facebook"></i></a>
+                    <a href="#" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
+                </div>
+            </div>
+            <div class="footer-copy">
+                © 2026 NuunPlatform · Made with <span class="heart">❤️</span> for students
+            </div>
+        </footer>
+    </main>
+</div>
+
+<!-- ============================================ -->
+<!-- SAFKA PREVIEW SHEET -->
+<!-- ============================================ -->
+<div class="safka-sheet__backdrop" id="safkaBackdrop"></div>
+<div class="safka-sheet" id="safkaSheet" role="dialog" aria-modal="true" aria-label="Safka Tiers Preview">
+    <div class="safka-sheet__handle" id="safkaHandle"></div>
+    <button class="safka-sheet__close" id="safkaClose" aria-label="Close preview">&times;</button>
+    <div class="safka-sheet__content">
+        <div class="safka-carousel">
+            <div class="safka-carousel__track" id="safkaTrack">
+                <!-- Rendered by JS -->
+            </div>
+        </div>
+        <div class="safka-pagination" id="safkaPagination" style="display:none;">
+            <button class="safka-pagination__dot active" data-slide="0" aria-label="Slide 1"></button>
+            <button class="safka-pagination__dot" data-slide="1" aria-label="Slide 2"></button>
+            <button class="safka-pagination__dot" data-slide="2" aria-label="Slide 3"></button>
+        </div>
+    </div>
+</div>
+<!-- ============================================ -->
+<!-- END SAFKA PREVIEW SHEET -->
+<!-- ============================================ -->
+
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
+<script src="{{ url_for('static', filename='js/safka.js') }}"></script>
+<script src="{{ url_for('static', filename='js/font-size-fix.js') }}"></script>
+{% block dashboard_js %}{% endblock %}
+
+<!-- Settings bootstrap for authenticated pages -->
+{% if session.user_id %}
+<script id="nuun-settings-data" type="application/json">{{ settings|tojson|safe }}</script>
+<script src="{{ url_for('static', filename='js/platform-settings.js') }}"></script>
+<script>
+    (function() {
+        var data = document.getElementById('nuun-settings-data');
+        if (data && window.NuunSettings) {
+            try {
+                var initial = JSON.parse(data.textContent);
+                NuunSettings.init(initial);
+            } catch (e) {
+                console.warn('Failed to init settings:', e);
+            }
+        }
+    })();
+</script>
+{% endif %}
+
+<!-- ============================================ -->
+<!-- USER DATA FOR UPGRADE SHEET -->
+<!-- ============================================ -->
+<script>
+    window.userName = "{{ session.user_name or '' }}";
+    window.userPhone = "{{ session.user_phone or '' }}";
+    window.upgradeAdminPhone = "{{ super_admin_phone or '' }}";
+    window.baseUrl = "{{ request.url_root.rstrip('/') }}";
+</script>
+
+{% endblock %}

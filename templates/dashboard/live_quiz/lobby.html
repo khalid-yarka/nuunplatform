@@ -1,0 +1,749 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Live Quiz Lobby – NuunPlatform{% endblock %}
+
+{% block page_title %}Live Quiz Lobby{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz.css') }}" />
+<style>
+    .lobby-container { max-width: 100%; }
+    .lobby-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+    .lobby-header .title-section h2 { font-size: 24px; font-weight: 700; color: var(--text); margin: 0; display: flex; align-items: center; gap: 10px; }
+    .lobby-header .title-section p { color: var(--text-secondary); font-size: 14px; margin: 2px 0 0 0; }
+    .lobby-header .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .lobby-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 10px 16px;
+        margin-bottom: 24px;
+        box-shadow: var(--shadow-sm);
+    }
+    .lobby-filters .search-wrapper {
+        flex: 1;
+        min-width: 180px;
+        position: relative;
+    }
+    .lobby-filters .search-wrapper i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        font-size: 14px;
+        z-index: 2;
+        pointer-events: none;
+    }
+    .lobby-filters .search-wrapper input {
+        width: 100%;
+        padding: 8px 14px 8px 36px !important;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 14px;
+        background: var(--surface);
+        color: var(--text);
+        transition: var(--transition);
+        height: 40px;
+    }
+    .lobby-filters .search-wrapper input:focus {
+        border-color: var(--primary);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.1);
+    }
+    .lobby-filters select {
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 14px;
+        background: var(--surface);
+        color: var(--text);
+        min-width: 130px;
+        cursor: pointer;
+        transition: var(--transition);
+        height: 40px;
+    }
+    .lobby-filters select:focus {
+        border-color: var(--primary);
+        outline: none;
+    }
+    .lobby-filters .btn-clear {
+        padding: 8px 14px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: var(--transition);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 40px;
+    }
+    .lobby-filters .btn-clear:hover {
+        background: var(--primary-light);
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+
+    .auto-sync-status {
+        font-size: 12px;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: auto;
+    }
+    .auto-sync-status .sync-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #10B981;
+        display: inline-block;
+        animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+    }
+
+    .quiz-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px 20px;
+        margin-bottom: 14px;
+        box-shadow: var(--shadow-sm);
+        transition: var(--transition);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        position: relative;
+    }
+    .quiz-card:hover {
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
+    }
+    .quiz-card .status-indicator {
+        width: 4px;
+        height: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        border-radius: var(--radius) 0 0 var(--radius);
+    }
+    .quiz-card .status-indicator.scheduled { background: #8B5CF6; }
+    .quiz-card .status-indicator.waiting { background: #10B981; }
+    .quiz-card .status-indicator.active { background: #F59E0B; }
+    .quiz-card .status-indicator.finished { background: #3B82F6; }
+
+    .quiz-card .card-body {
+        flex: 1;
+        min-width: 200px;
+        padding-left: 12px;
+    }
+    .quiz-card .card-body .title {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text);
+        margin: 0 0 2px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .quiz-card .card-body .title .subject-icon { font-size: 20px; }
+    .quiz-card .card-body .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin: 2px 0;
+    }
+    .quiz-card .card-body .meta span { display: flex; align-items: center; gap: 4px; }
+    .quiz-card .card-body .creator { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+    .quiz-card .card-body .creator strong { color: var(--text); }
+
+    .quiz-card .card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+    .quiz-card .card-actions .participant-count {
+        font-size: 13px;
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-right: 4px;
+    }
+    .quiz-card .card-actions .participant-count strong { color: var(--text); }
+
+    .btn-sm {
+        padding: 6px 14px;
+        font-size: 13px;
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+        transition: var(--transition);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 34px;
+    }
+    .btn-sm.primary { background: var(--primary); color: white; }
+    .btn-sm.primary:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(255, 49, 56, 0.3); }
+    .btn-sm.success { background: #10B981; color: white; }
+    .btn-sm.success:hover { background: #059669; transform: translateY(-1px); }
+    .btn-sm.warning { background: #F59E0B; color: white; }
+    .btn-sm.warning:hover { background: #D97706; transform: translateY(-1px); }
+    .btn-sm.secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    .btn-sm.secondary:hover { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+    .btn-sm.danger { background: #EF4444; color: white; }
+    .btn-sm.danger:hover { background: #DC2626; }
+
+    .btn-sm.locked {
+        background: var(--surface);
+        color: var(--text-muted);
+        border: 1px solid var(--border);
+        cursor: pointer;
+        opacity: 0.7;
+    }
+    .btn-sm.locked:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+        opacity: 1;
+    }
+
+    .time-ago { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+    .status-tag {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 10px;
+        border-radius: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        display: inline-block;
+    }
+    .status-tag.scheduled { background: #EDE9FE; color: #6D28D9; }
+    .status-tag.waiting { background: #D1FAE5; color: #065F46; }
+    .status-tag.active { background: #FEF3C7; color: #92400E; }
+    .status-tag.finished { background: #DBEAFE; color: #1E40AF; }
+    .badge-you { background: #3B82F6; color: white; font-size: 10px; padding: 1px 8px; border-radius: 10px; }
+    .badge-creator { background: var(--primary); color: white; font-size: 10px; padding: 1px 8px; border-radius: 10px; }
+
+    .lobby-empty .actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 16px;
+    }
+
+    /* Locked feature styles */
+    .locked-btn {
+        opacity: 0.7;
+        cursor: pointer;
+        position: relative;
+    }
+    .locked-btn .lock-icon {
+        font-size: 12px;
+        margin-right: 4px;
+    }
+
+    /* ============================================
+       LOBBY PAGINATION (redesigned)
+       ============================================ */
+    .lobby-pagination-wrap {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 28px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+    }
+    .lobby-pagination-info {
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+    .lobby-pagination-info strong {
+        color: var(--text);
+    }
+    .lobby-pagination {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .lobby-page-btn {
+        width: 34px;
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: var(--transition);
+        color: var(--text);
+        font-size: 13px;
+    }
+    .lobby-page-btn:hover:not(.disabled):not(:disabled) {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(255, 49, 56, 0.25);
+    }
+    .lobby-page-btn:disabled,
+    .lobby-page-btn.disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+    }
+    .lobby-page-status {
+        font-size: 13px;
+        color: var(--text-secondary);
+        padding: 0 8px;
+        white-space: nowrap;
+    }
+    .lobby-page-status strong {
+        color: var(--primary);
+        font-weight: 700;
+    }
+
+    @media (max-width: 768px) {
+        .lobby-filters { flex-direction: column; align-items: stretch; }
+        .lobby-filters .search-wrapper { min-width: unset; }
+        .quiz-card { flex-direction: column; align-items: stretch; }
+        .quiz-card .card-actions { justify-content: flex-start; }
+        .auto-sync-status { margin-left: 0; }
+    }
+    @media (max-width: 480px) {
+        .lobby-header { flex-direction: column; align-items: stretch; }
+        .lobby-header .actions { justify-content: stretch; }
+        .lobby-header .actions a { flex: 1; text-align: center; }
+        .quiz-card .card-body .title { font-size: 16px; }
+        .quiz-card .card-body .meta { font-size: 12px; gap: 4px 12px; }
+        .lobby-filters select { min-width: unset; }
+        .lobby-pagination-wrap {
+            flex-direction: column;
+            align-items: stretch;
+            text-align: center;
+        }
+        .lobby-pagination {
+            justify-content: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="lobby-container" id="lobbyContainer">
+
+    <!-- Header -->
+    <div class="lobby-header">
+        <div class="title-section">
+            <h2>🎯 Live Quiz Lobby</h2>
+            <p>Find open quizzes, join games, or view results</p>
+        </div>
+        <div class="actions">
+            {% if can_create %}
+                <a href="{{ url_for('live_quiz.create') }}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Create Quiz
+                </a>
+            {% else %}
+                <button class="btn btn-secondary locked-btn"
+                        data-tier-locked
+                        data-feature="create_live_quiz"
+                        data-required-tier="dhexe"
+                        title="Upgrade to Safka Dhexe or Hore to create live quizzes.">
+                    <i class="fas fa-lock lock-icon"></i> Create Quiz (Upgrade)
+                </button>
+            {% endif %}
+            <a href="{{ url_for('live_quiz.join') }}" class="btn btn-secondary">
+                <i class="fas fa-key"></i> Join with Code
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="lobby-stats" id="lobbyStats">
+        <div class="lobby-stat scheduled">
+            <div class="number">{{ stats.scheduled_count or 0 }}</div>
+            <div class="label">⏳ Scheduled</div>
+        </div>
+        <div class="lobby-stat open">
+            <div class="number">{{ stats.waiting_count or 0 }}</div>
+            <div class="label">🟢 Open</div>
+        </div>
+        <div class="lobby-stat active">
+            <div class="number">{{ stats.active_count or 0 }}</div>
+            <div class="label">🟡 Active</div>
+        </div>
+        <div class="lobby-stat finished">
+            <div class="number">{{ stats.finished_count or 0 }}</div>
+            <div class="label">🔵 Finished</div>
+        </div>
+        <div class="lobby-stat total">
+            <div class="number">{{ stats.total_public or 0 }}</div>
+            <div class="label">📊 Total Quizzes</div>
+        </div>
+        <div class="lobby-stat total">
+            <div class="number">{{ stats.total_participants or 0 }}</div>
+            <div class="label">👥 Participants</div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="lobby-filters" id="filterBar">
+        <div class="search-wrapper">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchInput" class="form-control"
+                   placeholder="Search by title or creator…"
+                   value="{{ search }}" />
+        </div>
+
+        <select id="statusFilter" class="form-control">
+            <option value="">All Status</option>
+            <option value="scheduled" {% if status_filter == 'scheduled' %}selected{% endif %}>⏳ Scheduled</option>
+            <option value="waiting" {% if status_filter == 'waiting' %}selected{% endif %}>🟢 Open</option>
+            <option value="active" {% if status_filter == 'active' %}selected{% endif %}>🟡 Active</option>
+            <option value="finished" {% if status_filter == 'finished' %}selected{% endif %}>🔵 Finished</option>
+        </select>
+
+        <select id="subjectFilter" class="form-control">
+            <option value="">All Subjects</option>
+            {% for subject in subjects %}
+                <option value="{{ subject.code }}" {% if subject_filter == subject.code %}selected{% endif %}>
+                    {{ subject.icon or '📚' }} {{ subject.name }}
+                </option>
+            {% endfor %}
+        </select>
+
+        <button type="button"
+                id="clearFiltersBtn"
+                class="btn-clear"
+                style="{% if not (search or status_filter or subject_filter) %}display: none;{% endif %}">
+            <i class="fas fa-times"></i> Clear
+        </button>
+
+        <span class="auto-sync-status">
+            <span class="sync-dot"></span> Auto‑sync
+        </span>
+    </div>
+
+    <!-- Quiz List -->
+    <div id="quizListContainer">
+        {% include "dashboard/live_quiz/_lobby_quizzes.html" %}
+    </div>
+
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="text-center" style="margin-bottom: 16px;">
+            <div style="font-size: 48px; margin-bottom: 8px;">⚠️</div>
+            <h3 class="modal-title">Delete Quiz</h3>
+            <p class="modal-body">
+                Are you sure you want to delete <strong id="deleteQuizTitle">this quiz</strong>?
+            </p>
+            <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;">
+                This action <strong style="color: #EF4444;">cannot be undone</strong> and will remove all participant data.
+            </p>
+        </div>
+        <div class="modal-actions">
+            <button onclick="closeDeleteModal()" class="btn btn-secondary">Cancel</button>
+            <button id="confirmDeleteBtn" class="btn btn-danger">
+                <i class="fas fa-trash"></i> Delete Permanently
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============================================
+// CSRF TOKEN
+// ============================================
+const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchInput');
+    const statusFilter = document.getElementById('statusFilter');
+    const subjectFilter = document.getElementById('subjectFilter');
+    const quizListContainer = document.getElementById('quizListContainer');
+
+    let debounceTimer;
+    let autoRefreshInterval = null;
+    let currentPage = 1;
+
+    // ============================================
+    // APPLY FILTERS (with debounce)
+    // ============================================
+    function applyFilters() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function() {
+            refreshLobby(1);
+        }, 500);
+    }
+
+    // ============================================
+    // TOGGLE CLEAR BUTTON VISIBILITY
+    // ============================================
+    function updateClearButtonVisibility() {
+        const btn = document.getElementById('clearFiltersBtn');
+        if (!btn) return;
+        const hasFilter = (searchInput.value.trim() !== '')
+                       || (statusFilter.value !== '')
+                       || (subjectFilter.value !== '');
+        btn.style.display = hasFilter ? '' : 'none';
+    }
+
+    // ============================================
+    // REFRESH LOBBY (AJAX)
+    // ============================================
+    function refreshLobby(pageOverride) {
+        const params = new URLSearchParams();
+        const search = searchInput.value.trim();
+        const status = statusFilter.value;
+        const subject = subjectFilter.value;
+
+        if (search) params.set('search', search);
+        if (status) params.set('status', status);
+        if (subject) params.set('subject', subject);
+
+        // Page: use override if passed, else reset to 1
+        const page = pageOverride || 1;
+        currentPage = page;
+        params.set('page', String(page));
+
+        fetch(window.location.pathname + '?' + params.toString(), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(response => response.text())
+        .then(html => {
+            if (quizListContainer) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = html;
+                const newContent = tempDiv.querySelector('#quizListContainer');
+                if (newContent) {
+                    quizListContainer.innerHTML = newContent.innerHTML;
+                } else {
+                    quizListContainer.innerHTML = tempDiv.innerHTML;
+                }
+            }
+            // Make sure the Clear button state reflects the current filters
+            updateClearButtonVisibility();
+        })
+        .catch(err => console.warn('Lobby refresh error:', err));
+    }
+
+    // ============================================
+    // EVENT LISTENERS
+    // ============================================
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            updateClearButtonVisibility();
+            applyFilters();
+        });
+    }
+    if (statusFilter) {
+        statusFilter.addEventListener('change', function() {
+            updateClearButtonVisibility();
+            applyFilters();
+        });
+    }
+    if (subjectFilter) {
+        subjectFilter.addEventListener('change', function() {
+            updateClearButtonVisibility();
+            applyFilters();
+        });
+    }
+
+    // ============================================
+    // CLEAR FILTERS (AJAX)
+    // ============================================
+    document.addEventListener('click', function(e) {
+        const clearBtn = e.target.closest('#clearFiltersBtn');
+        if (!clearBtn) return;
+        e.preventDefault();
+
+        if (searchInput) searchInput.value = '';
+        if (statusFilter) statusFilter.value = '';
+        if (subjectFilter) subjectFilter.value = '';
+
+        updateClearButtonVisibility();
+        refreshLobby(1);
+
+        // Return focus to the search box for quick re-filtering
+        if (searchInput) searchInput.focus();
+    });
+
+    // ============================================
+    // LOBBY PAGINATION (AJAX page navigation)
+    // ============================================
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.lobby-page-btn');
+        if (!btn || btn.disabled) return;
+        const page = parseInt(btn.getAttribute('data-page'), 10);
+        if (isNaN(page) || page < 1) return;
+
+        refreshLobby(page);
+        // Smooth scroll to the top of the list
+        const container = document.getElementById('quizListContainer');
+        if (container) {
+            container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+
+    // ============================================
+    // AUTO-SYNC (every 30 seconds) — only on page 1
+    // ============================================
+    function startAutoSync() {
+        if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+        autoRefreshInterval = setInterval(function() {
+            // Only auto-refresh when viewing the first page and no filters active,
+            // to avoid yanking the user around while they browse.
+            const hasFilter = (searchInput.value.trim() !== '')
+                           || (statusFilter.value !== '')
+                           || (subjectFilter.value !== '');
+            if (currentPage === 1 && !hasFilter) {
+                refreshLobby(1);
+            }
+        }, 30000);
+    }
+    startAutoSync();
+
+    // ============================================
+    // JOIN QUIZ
+    // ============================================
+    window.joinQuiz = function(quizId) {
+        const btn = event.target.closest('.btn-sm');
+        if (!btn) return;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Joining…';
+
+        fetch('/live-quiz/lobby/join/' + quizId, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                showToast(data.error, 'error');
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+                return;
+            }
+            if (data.success && data.redirect) {
+                showToast('✅ Joined successfully! Redirecting…', 'success');
+                setTimeout(function() { window.location.href = data.redirect; }, 800);
+            }
+        })
+        .catch(function(err) {
+            console.error('Join error:', err);
+            showToast('Error joining quiz. Please try again.', 'error');
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    };
+
+    // ============================================
+    // DELETE QUIZ
+    // ============================================
+    let deleteQuizId = null;
+
+    window.deleteQuiz = function(quizId, title) {
+        deleteQuizId = quizId;
+        document.getElementById('deleteQuizTitle').textContent = title || 'this quiz';
+        document.getElementById('deleteModal').classList.add('active');
+    };
+
+    function closeDeleteModal() {
+        document.getElementById('deleteModal').classList.remove('active');
+        deleteQuizId = null;
+    }
+    window.closeDeleteModal = closeDeleteModal;
+
+    document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+        if (!deleteQuizId) return;
+        const btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting…';
+
+        fetch('/live-quiz/delete/' + deleteQuizId, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('✅ Quiz deleted successfully', 'success');
+                closeDeleteModal();
+                refreshLobby(currentPage);
+            } else {
+                showToast(data.error || 'Failed to delete quiz', 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-trash"></i> Delete Permanently';
+            }
+        })
+        .catch(function(err) {
+            console.error('Delete error:', err);
+            showToast('Error deleting quiz. Please try again.', 'error');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-trash"></i> Delete Permanently';
+        });
+    });
+
+    document.getElementById('deleteModal').addEventListener('click', function(e) {
+        if (e.target === this) closeDeleteModal();
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && document.getElementById('deleteModal').classList.contains('active')) {
+            closeDeleteModal();
+        }
+    });
+
+    function showToast(message, type) {
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, type || 'info');
+        } else {
+            alert(message);
+        }
+    }
+
+    // ============================================
+    // INITIAL STATE
+    // ============================================
+    updateClearButtonVisibility();
+});
+</script>
+{% endblock %}

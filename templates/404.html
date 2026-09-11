@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}Page Not Found - NuunPlatform{% endblock %}
+
+{% block extra_css %}
+<style>
+    .error-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: var(--background);
+    }
+
+    .error-card {
+        max-width: 560px;
+        width: 100%;
+        background: var(--surface);
+        border-radius: var(--radius);
+        padding: 48px 40px;
+        text-align: center;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-lg);
+        animation: fadeInUp 0.6s ease;
+    }
+
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .error-icon {
+        font-size: 80px;
+        margin-bottom: 8px;
+        display: block;
+        animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+    }
+
+    .error-code {
+        font-size: 80px;
+        font-weight: 800;
+        color: var(--primary);
+        line-height: 1;
+        letter-spacing: -4px;
+        margin-bottom: 4px;
+    }
+
+    .error-title {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 8px;
+    }
+
+    .error-description {
+        color: var(--text-secondary);
+        font-size: 16px;
+        line-height: 1.6;
+        margin-bottom: 6px;
+    }
+
+    .error-sub {
+        color: var(--text-muted);
+        font-size: 14px;
+        margin-bottom: 28px;
+    }
+
+    .error-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 28px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        font-size: 15px;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 14px rgba(255, 49, 56, 0.25);
+    }
+
+    .btn-primary:hover {
+        background: var(--primary-hover);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(255, 49, 56, 0.35);
+    }
+
+    .btn-secondary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 28px;
+        background: var(--surface);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        font-size: 15px;
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+
+    .btn-secondary:hover {
+        background: var(--background);
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+
+    .suggestions {
+        margin-top: 24px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        gap: 16px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .suggestions a {
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 14px;
+        transition: color 0.3s ease;
+    }
+
+    .suggestions a:hover {
+        color: var(--primary);
+    }
+
+    .suggestions .dot {
+        color: var(--text-muted);
+    }
+
+    /* Dark Mode Specific */
+    [data-theme="dark"] .error-card {
+        background: var(--surface);
+        border-color: var(--border);
+    }
+
+    [data-theme="dark"] .btn-secondary {
+        background: var(--surface-alt);
+        border-color: var(--border);
+        color: var(--text);
+    }
+
+    [data-theme="dark"] .btn-secondary:hover {
+        background: var(--primary-light);
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+
+    @media (max-width: 480px) {
+        .error-card {
+            padding: 32px 20px;
+        }
+        .error-code {
+            font-size: 56px;
+        }
+        .error-icon {
+            font-size: 60px;
+        }
+        .error-title {
+            font-size: 22px;
+        }
+        .error-actions {
+            flex-direction: column;
+        }
+        .btn-primary,
+        .btn-secondary {
+            justify-content: center;
+        }
+        .suggestions {
+            flex-direction: column;
+            gap: 8px;
+        }
+        .suggestions .dot {
+            display: none;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <div class="error-card">
+        <span class="error-icon">🔍</span>
+        <div class="error-code">404</div>
+        <h1 class="error-title">Page Not Found</h1>
+        <p class="error-description">
+            Oops! The page you're looking for doesn't exist or has been moved.
+        </p>
+        <p class="error-sub">
+            It might have been removed, renamed, or is temporarily unavailable.
+        </p>
+
+        <div class="error-actions">
+            <a href="{{ url_for('dashboard.home') if session.get('user_id') else url_for('auth.login') }}" class="btn-primary">
+                <i class="fas fa-home"></i> Go Home
+            </a>
+            <a href="javascript:history.back()" class="btn-secondary">
+                <i class="fas fa-arrow-left"></i> Go Back
+            </a>
+        </div>
+
+        <div class="suggestions">
+            <a href="{{ url_for('quiz.index') }}">📝 Quizzes</a>
+            <span class="dot">•</span>
+            <a href="{{ url_for('groups.list_groups') }}">👥 Groups</a>
+            <span class="dot">•</span>
+            <a href="{{ url_for('pdfs.list_pdfs') }}">📄 PDFs</a>
+            <span class="dot">•</span>
+            <a href="{{ url_for('live_quiz.index') }}">⚡ Live Quiz</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

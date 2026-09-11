@@ -1,0 +1,101 @@
+{% extends "pdf_admin/base.html" %}
+
+{% block title %}Edit Bot PDF - PDF Admin{% endblock %}
+
+{% block content %}
+<div class="pdf-admin-page">
+    <div class="pdf-page-header">
+        <h1><i class="fas fa-edit"></i> Edit Bot PDF</h1>
+        <a href="{{ url_for('pdf_admin.bot_pdf_list') }}" class="pdf-btn pdf-btn-secondary pdf-btn-sm">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+    </div>
+
+    <div class="pdf-process-container">
+        <div class="pdf-process-info">
+            <div class="pdf-info-card">
+                <h3><i class="fas fa-info-circle"></i> PDF Information</h3>
+                <div class="pdf-info-item"><span class="label">Code:</span> <span><strong>{{ bot_pdf.code }}</strong></span></div>
+                <div class="pdf-info-item"><span class="label">File Unique ID:</span> <span class="mono">{{ bot_pdf.file_unique_id[:12] }}...</span></div>
+                <div class="pdf-info-item"><span class="label">Uploaded By:</span> <span>#{{ bot_pdf.uploaded_by }}</span></div>
+                <div class="pdf-info-item"><span class="label">Uploaded At:</span> <span>{{ bot_pdf.uploaded_at|replace('T', ' ')|truncate(16, True, '') }}</span></div>
+            </div>
+        </div>
+
+        <div class="pdf-process-form">
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="pdf-form-card">
+                    <h3><i class="fas fa-pen"></i> Edit Metadata</h3>
+
+                    <div class="pdf-form-group">
+                        <label for="title">Title <span class="required">*</span></label>
+                        <input type="text" id="title" name="title" value="{{ bot_pdf.title }}" required>
+                    </div>
+
+                    <div class="pdf-form-group">
+                        <label for="description">Description</label>
+                        <textarea id="description" name="description" rows="3">{{ bot_pdf.description }}</textarea>
+                    </div>
+
+                    <div class="pdf-form-row">
+                        <div class="pdf-form-group half">
+                            <label for="curriculum">Curriculum <span class="required">*</span></label>
+                            <select id="curriculum" name="curriculum" required>
+                                {% for cur in curricula %}
+                                <option value="{{ cur }}" {% if bot_pdf.curriculum == cur %}selected{% endif %}>{{ cur }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="pdf-form-group half">
+                            <label for="class">Class</label>
+                            <select id="class" name="class">
+                                <option value="">None</option>
+                                {% for cls in classes %}
+                                <option value="{{ cls }}" {% if bot_pdf.class == cls %}selected{% endif %}>{{ cls }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="pdf-form-row">
+                        <div class="pdf-form-group half">
+                            <label for="subject">Subject <span class="required">*</span></label>
+                            <select id="subject" name="subject" required>
+                                {% for sub in subjects %}
+                                <option value="{{ sub.code }}" {% if bot_pdf.subject == sub.code %}selected{% endif %}>{{ sub.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="pdf-form-group half">
+                            <label for="chapter">Chapter</label>
+                            <input type="text" id="chapter" name="chapter" value="{{ bot_pdf.chapter }}" placeholder="e.g., Chapter 5">
+                        </div>
+                    </div>
+
+                    <div class="pdf-form-group">
+                        <label for="tags">Tags (comma separated)</label>
+                        <input type="text" id="tags" name="tags" value="{{ bot_pdf.tags }}" placeholder="e.g., biology, exam, revision">
+                    </div>
+
+                    <div class="pdf-form-group pdf-toggle-group">
+                        <label class="pdf-toggle-label">
+                            <span>Premium Content</span>
+                            <div class="pdf-toggle-switch">
+                                <input type="checkbox" id="is_premium" name="is_premium" value="1" {% if bot_pdf.is_premium %}checked{% endif %}>
+                                <span class="pdf-slider"></span>
+                            </div>
+                        </label>
+                    </div>
+/
+                    <div class="pdf-form-actions">
+                        <button type="submit" class="pdf-btn pdf-btn-primary pdf-btn-block">
+                            <i class="fas fa-save"></i> Update PDF
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,334 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Bulk Import Questions - Admin{% endblock %}
+
+{% block page_title %}Bulk Import Questions{% endblock %}
+
+<!-- No custom CSS needed; all form and card styles come from dashboard.css -->
+
+{% block dashboard_content %}
+<div style="max-width: 100%;">
+
+    <div class="breadcrumb">
+        <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
+        <span class="separator">/</span>
+        <a href="{{ url_for('admin.admin_questions') }}">Manage Questions</a>
+        <span class="separator">/</span>
+        <span class="current">Bulk Import</span>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <div>
+            <h2 style="font-size: 20px; font-weight: 700; color: var(--text);">
+                <i class="fas fa-upload" style="color: var(--primary);"></i> Bulk Import Questions
+            </h2>
+            <p style="color: var(--text-secondary); font-size: 14px;">Import multiple single-choice questions at once using JSON format</p>
+        </div>
+        <a href="{{ url_for('admin.admin_questions') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back to Questions</a>
+    </div>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="flash-message flash-{{ category }}" data-toast>
+                    <i class="fas {% if category == 'success' %}fa-check-circle{% elif category == 'error' %}fa-exclamation-circle{% elif category == 'info' %}fa-info-circle{% else %}fa-bell{% endif %}"></i>
+                    {{ message }}
+                    <button class="flash-close" onclick="this.parentElement.remove()">&times;</button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- Format Guide -->
+    <div class="card" style="margin-bottom: 24px;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <span style="font-size: 24px;">📋</span>
+            <h3 style="font-size: 16px; font-weight: 600; color: var(--text);">JSON Format Guide</h3>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 12px;">
+            <div>
+                <h4 style="font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">Required Fields</h4>
+                <ul style="list-style: none; padding: 0; font-size: 13px; color: var(--text-secondary);">
+                    <li style="padding: 4px 0;">📌 <strong>subject_code</strong> - Subject code (e.g., "geography")</li>
+                    <li style="padding: 4px 0;">❓ <strong>question</strong> - Question text</li>
+                    <li style="padding: 4px 0;">🔘 <strong>options</strong> - Array of options (3-6)</li>
+                    <li style="padding: 4px 0;">✅ <strong>correct</strong> - Index of correct option (1-based)</li>
+                    <li style="padding: 4px 0;">📊 <strong>difficulty</strong> - 1 to 5</li>
+                </ul>
+            </div>
+            <div>
+                <h4 style="font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">Optional Fields</h4>
+                <ul style="list-style: none; padding: 0; font-size: 13px; color: var(--text-secondary);">
+                    <li style="padding: 4px 0;">📖 <strong>chapter</strong> - Chapter name</li>
+                    <li style="padding: 4px 0;">🏷️ <strong>tags</strong> - Array of tags</li>
+                    <li style="padding: 4px 0;">💡 <strong>explanation</strong> - Answer explanation</li>
+                </ul>
+            </div>
+        </div>
+
+        <div style="background: var(--background); border-radius: var(--radius-sm); padding: 16px; margin-top: 12px; border: 1px solid var(--border);">
+            <div style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">📄 Example JSON:</div>
+            <pre style="font-size: 12px; color: var(--text-secondary); overflow-x: auto; margin: 0; white-space: pre-wrap; word-break: break-word;">
+{
+    "metadata": {
+        "subject_code": "geography",
+        "chapter": "Chapter 1: Introduction"
+    },
+    "questions": [
+        {
+            "tags": ["geography", "africa", "capitals"],
+            "difficulty": 2,
+            "question": "What is the capital of Somalia?",
+            "options": ["Mogadishu", "Hargeisa", "Kismayo", "Garowe"],
+            "correct": 1,
+            "explanation": "Mogadishu has been the capital since 1960."
+        }
+    ]
+}</pre>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;">
+            <a href="{{ url_for('admin.bulk_template') }}" class="btn btn-primary"><i class="fas fa-download"></i> Download Template</a>
+        </div>
+    </div>
+
+    <!-- Import Form -->
+    <div class="card" style="margin-bottom: 24px;">
+        <form method="POST" action="{{ url_for('admin.bulk_import') }}" enctype="multipart/form-data" id="bulkImportForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <!-- Method Selection -->
+            <div style="display: flex; gap: 16px; margin-bottom: 20px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="radio" name="input_method" value="paste" checked onchange="toggleInputMethod()">
+                    <span style="font-weight: 500;">📝 Paste JSON</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="radio" name="input_method" value="file" onchange="toggleInputMethod()">
+                    <span style="font-weight: 500;">📁 Upload File</span>
+                </label>
+            </div>
+
+            <!-- Paste JSON Area -->
+            <div id="pasteArea" style="margin-bottom: 16px;">
+                <div class="form-group">
+                    <label class="form-label">📋 Paste JSON Data</label>
+                    <textarea name="json_data" id="jsonData" rows="15" class="form-control" style="font-family: 'Courier New', monospace; tab-size: 2;" placeholder='{
+    "metadata": {
+        "subject_code": "geography",
+        "chapter": "Chapter 1"
+    },
+    "questions": [
+        {
+            "tags": ["tag1", "tag2"],
+            "difficulty": 2,
+            "question": "Your question here?",
+            "options": ["Option A", "Option B", "Option C", "Option D"],
+            "correct": 1,
+            "explanation": "Your explanation here."
+        }
+    ]
+}'></textarea>
+                </div>
+            </div>
+
+            <!-- File Upload Area -->
+            <div id="fileArea" style="display: none; margin-bottom: 16px;">
+                <div class="form-group">
+                    <label class="form-label">📁 Upload JSON File</label>
+                    <div style="border: 2px dashed var(--border); border-radius: var(--radius-sm); padding: 40px 20px; text-align: center; background: var(--background); transition: var(--transition);" id="dropZone">
+                        <div style="font-size: 48px; margin-bottom: 8px; opacity: 0.4;">📤</div>
+                        <p style="color: var(--text-secondary); font-size: 14px;">Drag & drop your JSON file here, or click to browse</p>
+                        <p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">Supported: .json | Max size: 5MB</p>
+                        <input type="file" name="json_file" id="jsonFile" accept=".json" style="display: none;" onchange="handleFileSelect(this)">
+                        <button type="button" onclick="document.getElementById('jsonFile').click()" class="btn btn-secondary" style="margin-top: 12px;">Browse Files</button>
+                        <div id="fileName" style="margin-top: 8px; font-size: 13px; color: var(--primary); font-weight: 500; display: none;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Import Questions</button>
+                <button type="button" onclick="validateJSON()" class="btn btn-secondary"><i class="fas fa-check"></i> Validate</button>
+                <button type="reset" class="btn btn-danger"><i class="fas fa-times"></i> Clear</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Validation Results -->
+    <div id="validationResults" style="display: none; margin-top: 24px;">
+        <div class="card">
+            <h3 style="font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 16px;">
+                <i class="fas fa-check-circle" style="color: #10B981;"></i> Validation Results
+            </h3>
+            <div id="validationContent"></div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+function toggleInputMethod() {
+    const pasteRadio = document.querySelector('input[name="input_method"][value="paste"]');
+    const fileRadio = document.querySelector('input[name="input_method"][value="file"]');
+    
+    document.getElementById('pasteArea').style.display = pasteRadio.checked ? 'block' : 'none';
+    document.getElementById('fileArea').style.display = fileRadio.checked ? 'block' : 'none';
+    
+    if (fileRadio.checked) {
+        document.getElementById('jsonData').value = '';
+    } else {
+        document.getElementById('jsonFile').value = '';
+        document.getElementById('fileName').style.display = 'none';
+    }
+}
+
+function handleFileSelect(input) {
+    const file = input.files[0];
+    if (file) {
+        document.getElementById('fileName').textContent = '📄 ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+        document.getElementById('fileName').style.display = 'block';
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('jsonData').value = e.target.result;
+        };
+        reader.readAsText(file);
+    }
+}
+
+// Drag and drop support
+const dropZone = document.getElementById('dropZone');
+if (dropZone) {
+    dropZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.style.borderColor = 'var(--primary)';
+        this.style.background = 'var(--primary-light)';
+    });
+    
+    dropZone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        this.style.borderColor = 'var(--border)';
+        this.style.background = 'var(--background)';
+    });
+    
+    dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.style.borderColor = 'var(--border)';
+        this.style.background = 'var(--background)';
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            const file = files[0];
+            if (file.name.endsWith('.json')) {
+                document.getElementById('jsonFile').files = files;
+                handleFileSelect(document.getElementById('jsonFile'));
+            } else {
+                showToast('Please upload a JSON file.', 'error');
+            }
+        }
+    });
+}
+
+function validateJSON() {
+    const jsonData = document.getElementById('jsonData').value;
+    if (!jsonData) {
+        showToast('Please paste JSON data or upload a file first.', 'error');
+        return;
+    }
+    
+    fetch('{{ url_for("admin.bulk_preview") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRF-Token': '{{ csrf_token }}'
+        },
+        body: 'json_data=' + encodeURIComponent(jsonData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            showToast('❌ ' + data.error, 'error');
+            document.getElementById('validationResults').style.display = 'none';
+            return;
+        }
+        
+        const container = document.getElementById('validationContent');
+        container.innerHTML = `
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                <div style="background: #ECFDF5; padding: 12px; border-radius: var(--radius-sm); text-align: center; border: 1px solid #A7F3D0;">
+                    <div style="font-size: 24px; font-weight: 700; color: #065F46;">${data.total}</div>
+                    <div style="font-size: 12px; color: #065F46;">Total Questions</div>
+                </div>
+                <div style="background: var(--background); padding: 12px; border-radius: var(--radius-sm); text-align: center; border: 1px solid var(--border);">
+                    <div style="font-size: 24px; font-weight: 700; color: var(--text);">${data.subject_code || '—'}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">Subject Code</div>
+                </div>
+                <div style="background: var(--background); padding: 12px; border-radius: var(--radius-sm); text-align: center; border: 1px solid var(--border);">
+                    <div style="font-size: 24px; font-weight: 700; color: var(--text);">${data.chapter || '—'}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">Chapter</div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 12px;">
+                <h4 style="font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">📋 Question Preview (first 10)</h4>
+                <div style="overflow-x: auto;">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Question</th>
+                                <th style="text-align: center;">Difficulty</th>
+                                <th style="text-align: center;">Options</th>
+                                <th style="text-align: center;">Tags</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.preview.map(q => `
+                                <tr>
+                                    <td>${q.index}</td>
+                                    <td>${q.question}</td>
+                                    <td style="text-align: center;">
+                                        <span class="badge ${q.difficulty <= 2 ? 'badge-success' : q.difficulty <= 4 ? 'badge-warning' : 'badge-danger'}">
+                                            ${'⭐'.repeat(q.difficulty)}${'☆'.repeat(5 - q.difficulty)}
+                                        </span>
+                                    </td>
+                                    <td style="text-align: center;">${q.options_count}</td>
+                                    <td style="text-align: center; font-size: 11px;">${q.tags || '—'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                ${data.total > 10 ? `<p style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 8px;">Showing first 10 of ${data.total} questions</p>` : ''}
+            </div>
+        `;
+        
+        document.getElementById('validationResults').style.display = 'block';
+        showToast('✅ Validation complete! ' + data.total + ' questions found.', 'success');
+    })
+    .catch(error => {
+        showToast('❌ Error validating JSON: ' + error.message, 'error');
+    });
+}
+
+function showToast(message, type) {
+    if (typeof window.showToast === 'function') {
+        window.showToast(message, type);
+    } else {
+        alert(message);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const fileInput = document.getElementById('jsonFile');
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            setTimeout(validateJSON, 500);
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Account - NuunPlatform{% endblock %}</title>
+
+    <!-- ANTI-FLASH: apply theme before first paint -->
+    <script>
+        (function() {
+            try {
+                var theme = localStorage.getItem('preferred-theme') || 'system';
+                var resolved;
+                if (theme === 'system') {
+                    resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                } else {
+                    resolved = theme;
+                }
+                document.documentElement.setAttribute('data-theme', resolved);
+
+                var accent = localStorage.getItem('preferred-accent') || 'red';
+                var ACCENTS = {
+                    red:    { hex: '#FF3138', hover: '#E62B32', light: '#FFEBE8', light_dark: '#3A1A20' },
+                    blue:   { hex: '#3B82F6', hover: '#2563EB', light: '#E8F0FE', light_dark: '#1A2A4A' },
+                    green:  { hex: '#10B981', hover: '#059669', light: '#D1FAE5', light_dark: '#1A3A2E' },
+                    purple: { hex: '#8B5CF6', hover: '#7C3AED', light: '#EDE9FE', light_dark: '#2A1A4A' },
+                    orange: { hex: '#F59E0B', hover: '#D97706', light: '#FEF3C7', light_dark: '#3A2E1A' }
+                };
+                var a = ACCENTS[accent] || ACCENTS.red;
+                var isDark = resolved === 'dark';
+                var root = document.documentElement;
+                root.style.setProperty('--primary', a.hex);
+                root.style.setProperty('--primary-hover', a.hover);
+                root.style.setProperty('--primary-light', isDark ? a.light_dark : a.light);
+
+                var fontSize = localStorage.getItem('preferred-font-size') || 'medium';
+                var sizes = { small: '14px', medium: '16px', large: '18px' };
+                root.style.setProperty('--base-font-size', sizes[fontSize] || '16px');
+            } catch (e) { /* silent */ }
+        })();
+    </script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/register.css') }}" />
+
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="auth-page">
+    <div class="auth-container">
+        <div class="auth-card">
+
+            <div class="auth-logo">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" />
+            </div>
+
+            {% block auth_body %}{% endblock %}
+
+        </div>
+    </div>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

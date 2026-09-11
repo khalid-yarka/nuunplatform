@@ -1,0 +1,1074 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Manage Groups - Admin{% endblock %}
+
+{% block page_title %}Manage Groups{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/groups.css') }}" />
+<style>
+    .admin-groups-container {
+        max-width: 100%;
+    }
+
+    .admin-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 14px;
+        margin-bottom: 24px;
+    }
+
+    .admin-stat-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 14px 16px;
+        text-align: center;
+        box-shadow: var(--shadow-sm);
+        transition: var(--transition);
+    }
+
+    .admin-stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+    }
+
+    .admin-stat-card .stat-number {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.2;
+    }
+
+    .admin-stat-card .stat-number.primary { color: var(--primary); }
+    .admin-stat-card .stat-number.green { color: #10B981; }
+    .admin-stat-card .stat-number.red { color: #EF4444; }
+    .admin-stat-card .stat-number.gold { color: #F59E0B; }
+
+    .admin-stat-card .stat-label {
+        font-size: 12px;
+        color: var(--text-secondary);
+        font-weight: 500;
+        margin-top: 2px;
+    }
+
+    .admin-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 20px;
+        align-items: center;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 12px 16px;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .admin-toolbar .search-wrapper {
+        flex: 1;
+        min-width: 180px;
+        position: relative;
+    }
+
+    .admin-toolbar .search-wrapper input {
+        width: 100%;
+        padding: 8px 14px 8px 36px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 14px;
+        background: var(--surface);
+        color: var(--text);
+        transition: var(--transition);
+    }
+
+    .admin-toolbar .search-wrapper input:focus {
+        border-color: var(--primary);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.08);
+    }
+
+    .admin-toolbar .search-wrapper i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+    }
+
+    .admin-toolbar select {
+        padding: 8px 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 14px;
+        background: var(--surface);
+        color: var(--text);
+        min-width: 120px;
+        cursor: pointer;
+        transition: var(--transition);
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239CA3AF' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 32px;
+    }
+
+    .admin-toolbar select:focus {
+        border-color: var(--primary);
+        outline: none;
+    }
+
+    .admin-toolbar .btn {
+        padding: 8px 16px;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    .admin-toolbar .btn-success {
+        background: #10B981;
+        color: white;
+        border: none;
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .admin-toolbar .btn-success:hover {
+        background: #059669;
+        transform: translateY(-2px);
+    }
+
+    .admin-toolbar .btn-primary {
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .admin-toolbar .btn-primary:hover {
+        background: var(--primary-hover);
+        transform: translateY(-2px);
+    }
+
+    .admin-toolbar .btn-danger {
+        background: #EF4444;
+        color: white;
+        border: none;
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .admin-toolbar .btn-danger:hover {
+        background: #DC2626;
+        transform: translateY(-2px);
+    }
+
+    .admin-toolbar .btn-secondary {
+        background: var(--surface);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .admin-toolbar .btn-secondary:hover {
+        background: var(--background);
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+
+    .admin-table-wrap {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .admin-table-wrap .table-header {
+        padding: 12px 20px;
+        background: var(--background);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+
+    .admin-table-wrap .table-header strong {
+        color: var(--text);
+    }
+
+    .admin-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+
+    .admin-table th {
+        padding: 10px 14px;
+        text-align: left;
+        background: var(--background);
+        color: var(--text-secondary);
+        font-weight: 600;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 2px solid var(--border);
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .admin-table td {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border-light);
+        color: var(--text);
+        vertical-align: middle;
+    }
+
+    .admin-table tr:hover td {
+        background: var(--primary-light);
+    }
+
+    .admin-table .status-badge {
+        display: inline-block;
+        padding: 2px 12px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    .admin-table .status-badge.active {
+        background: #ECFDF5;
+        color: #10B981;
+    }
+
+    .admin-table .status-badge.inactive {
+        background: #FEF2F2;
+        color: #EF4444;
+    }
+
+    .admin-table .featured-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        background: #FEF3C7;
+        color: #92400E;
+    }
+
+    .admin-table .action-buttons {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+    }
+
+    .admin-table .action-buttons .btn-sm {
+        padding: 4px 10px;
+        font-size: 12px;
+        border-radius: var(--radius-sm);
+        border: none;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .admin-table .action-buttons .btn-sm.edit {
+        background: #EFF6FF;
+        color: #3B82F6;
+    }
+
+    .admin-table .action-buttons .btn-sm.edit:hover {
+        background: #3B82F6;
+        color: white;
+    }
+
+    .admin-table .action-buttons .btn-sm.toggle {
+        background: #FFFBEB;
+        color: #F59E0B;
+    }
+
+    .admin-table .action-buttons .btn-sm.toggle:hover {
+        background: #F59E0B;
+        color: white;
+    }
+
+    .admin-table .action-buttons .btn-sm.feature {
+        background: #FEF3C7;
+        color: #92400E;
+    }
+
+    .admin-table .action-buttons .btn-sm.feature:hover {
+        background: #F59E0B;
+        color: white;
+    }
+
+    .admin-table .action-buttons .btn-sm.delete {
+        background: #FEF2F2;
+        color: #EF4444;
+    }
+
+    .admin-table .action-buttons .btn-sm.delete:hover {
+        background: #EF4444;
+        color: white;
+    }
+
+    .admin-table input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+        accent-color: var(--primary);
+    }
+
+    .admin-table .click-count {
+        font-weight: 600;
+        color: var(--primary);
+    }
+
+    .bulk-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding: 10px 16px;
+        background: var(--background);
+        border-top: 1px solid var(--border);
+        align-items: center;
+    }
+
+    .bulk-actions .bulk-label {
+        font-size: 13px;
+        color: var(--text-secondary);
+        font-weight: 500;
+    }
+
+    .bulk-actions .btn-sm {
+        padding: 4px 12px;
+        font-size: 12px;
+        border-radius: var(--radius-sm);
+        border: none;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .bulk-actions .btn-sm.bulk-delete {
+        background: #FEF2F2;
+        color: #EF4444;
+    }
+
+    .bulk-actions .btn-sm.bulk-delete:hover {
+        background: #EF4444;
+        color: white;
+    }
+
+    .bulk-actions .btn-sm.bulk-activate {
+        background: #ECFDF5;
+        color: #10B981;
+    }
+
+    .bulk-actions .btn-sm.bulk-activate:hover {
+        background: #10B981;
+        color: white;
+    }
+
+    .bulk-actions .btn-sm.bulk-deactivate {
+        background: #FFFBEB;
+        color: #F59E0B;
+    }
+
+    .bulk-actions .btn-sm.bulk-deactivate:hover {
+        background: #F59E0B;
+        color: white;
+    }
+
+    .bulk-actions .btn-sm.bulk-feature {
+        background: #FEF3C7;
+        color: #92400E;
+    }
+
+    .bulk-actions .btn-sm.bulk-feature:hover {
+        background: #F59E0B;
+        color: white;
+    }
+
+    .bulk-actions .bulk-count {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-left: auto;
+    }
+
+    @media (max-width: 992px) {
+        .admin-table .hide-tablet {
+            display: none;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .admin-stats-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .admin-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .admin-toolbar .search-wrapper {
+            min-width: unset;
+        }
+
+        .admin-toolbar select {
+            width: 100%;
+        }
+
+        .admin-table .hide-mobile {
+            display: none;
+        }
+
+        .admin-table th,
+        .admin-table td {
+            padding: 6px 8px;
+            font-size: 12px;
+        }
+
+        .bulk-actions {
+            flex-wrap: wrap;
+        }
+
+        .bulk-actions .bulk-count {
+            margin-left: 0;
+            width: 100%;
+            text-align: center;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .admin-stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .admin-stat-card .stat-number {
+            font-size: 20px;
+        }
+
+        .admin-table .action-buttons .btn-sm {
+            padding: 2px 6px;
+            font-size: 10px;
+        }
+
+        .admin-table td {
+            padding: 4px 6px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="admin-groups-container">
+
+    <!-- Stats Cards -->
+    <div class="admin-stats-grid">
+        <div class="admin-stat-card">
+            <div class="stat-number primary">{{ stats.total_groups|default(0) }}</div>
+            <div class="stat-label">Total Groups</div>
+        </div>
+        <div class="admin-stat-card">
+            <div class="stat-number green">{{ stats.active_groups|default(0) }}</div>
+            <div class="stat-label">Active</div>
+        </div>
+        <div class="admin-stat-card">
+            <div class="stat-number red">{{ stats.inactive_groups|default(0) }}</div>
+            <div class="stat-label">Inactive</div>
+        </div>
+        <div class="admin-stat-card">
+            <div class="stat-number gold">{{ stats.featured_groups|default(0) }}</div>
+            <div class="stat-label">Featured</div>
+        </div>
+        <div class="admin-stat-card">
+            <div class="stat-number">{{ stats.total_clicks|default(0) }}</div>
+            <div class="stat-label">Total Clicks</div>
+        </div>
+        <div class="admin-stat-card">
+            <!-- FIXED: use (stats.avg_clicks or 0) to handle None -->
+            <div class="stat-number">{{ (stats.avg_clicks or 0)|round(0) }}</div>
+            <div class="stat-label">Avg Clicks/Group</div>
+        </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="admin-toolbar">
+        <div class="search-wrapper">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchGroups" placeholder="Search groups..." value="{{ search }}">
+        </div>
+
+        <select id="platformFilter">
+            <option value="">All Platforms</option>
+            <option value="whatsapp" {% if platform == 'whatsapp' %}selected{% endif %}>WhatsApp</option>
+            <option value="telegram" {% if platform == 'telegram' %}selected{% endif %}>Telegram</option>
+        </select>
+
+        <select id="categoryFilter">
+            <option value="">All Categories</option>
+            {% for cat in categories %}
+                <option value="{{ cat }}" {% if category == cat %}selected{% endif %}>{{ cat }}</option>
+            {% endfor %}
+        </select>
+
+        <select id="statusFilter">
+            <option value="">All Status</option>
+            <option value="active" {% if status == 'active' %}selected{% endif %}>Active</option>
+            <option value="inactive" {% if status == 'inactive' %}selected{% endif %}>Inactive</option>
+        </select>
+
+        <button class="btn btn-primary" onclick="openAddModal()">
+            <i class="fas fa-plus"></i> Add Group
+        </button>
+
+        <a href="{{ url_for('admin.groups_analytics') }}" class="btn btn-secondary">
+            <i class="fas fa-chart-bar"></i> Analytics
+        </a>
+
+        <a href="{{ url_for('admin.groups_audit') }}" class="btn btn-secondary">
+            <i class="fas fa-history"></i> Audit Log
+        </a>
+    </div>
+
+    <!-- Groups Table -->
+    <div class="admin-table-wrap">
+        <div class="table-header">
+            <span><strong>{{ groups|length }}</strong> groups found</span>
+            <span>Page {{ page }} of {{ total_pages }}</span>
+        </div>
+
+        <form id="bulkForm" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th style="width:30px;">
+                            <input type="checkbox" id="selectAll" onchange="toggleAllCheckboxes(this)">
+                        </th>
+                        <th class="hide-mobile">Icon</th>
+                        <th>Name</th>
+                        <th class="hide-tablet hide-mobile">Platform</th>
+                        <th class="hide-mobile">Category</th>
+                        <th class="hide-tablet hide-mobile">Curriculum</th>
+                        <th style="text-align:center;">Clicks</th>
+                        <th class="hide-mobile" style="text-align:center;">Status</th>
+                        <th style="text-align:center;">Featured</th>
+                        <th style="text-align:center;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for group in groups %}
+                    <tr>
+                        <td><input type="checkbox" name="group_ids" value="{{ group.id }}" class="group-checkbox"></td>
+                        <td class="hide-mobile" style="font-size:24px;">{{ group.icon or '📚' }}</td>
+                        <td>
+                            <strong>{{ group.name }}</strong>
+                            <div style="font-size:11px; color:var(--text-muted);">{{ group.description|truncate(30) }}</div>
+                        </td>
+                        <td class="hide-tablet hide-mobile">
+                            <span class="platform-tag {{ group.platform }}">
+                                <i class="fab fa-{% if group.platform == 'whatsapp' %}whatsapp{% else %}telegram-plane{% endif %}"></i>
+                                {{ group.platform|capitalize }}
+                            </span>
+                        </td>
+                        <td class="hide-mobile">{{ group.category or '-' }}</td>
+                        <td class="hide-tablet hide-mobile">{{ group.curriculum or 'All' }}</td>
+                        <td style="text-align:center; font-weight:600; color:var(--primary);">{{ group.click_count or 0 }}</td>
+                        <td class="hide-mobile" style="text-align:center;">
+                            <span class="status-badge {% if group.is_active %}active{% else %}inactive{% endif %}">
+                                {{ 'Active' if group.is_active else 'Inactive' }}
+                            </span>
+                        </td>
+                        <td style="text-align:center;">
+                            {% if group.is_featured %}
+                                <span class="featured-badge">⭐</span>
+                            {% else %}
+                                <span style="color:var(--text-muted);">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn-sm edit" onclick="openEditModal({{ group.id }})" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn-sm toggle" onclick="toggleGroupActive({{ group.id }})" title="Toggle Active">
+                                    <i class="fas fa-{% if group.is_active %}pause{% else %}play{% endif %}"></i>
+                                </button>
+                                <button class="btn-sm feature" onclick="toggleGroupFeatured({{ group.id }})" title="Toggle Featured">
+                                    <i class="fas fa-star"></i>
+                                </button>
+                                <button class="btn-sm delete" onclick="deleteGroup({{ group.id }}, {{ group.name|tojson }})" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Bulk Actions -->
+            <div class="bulk-actions">
+                <span class="bulk-label">Bulk Actions:</span>
+                <button type="button" class="btn-sm bulk-activate" onclick="bulkAction('activate')">
+                    <i class="fas fa-play"></i> Activate
+                </button>
+                <button type="button" class="btn-sm bulk-deactivate" onclick="bulkAction('deactivate')">
+                    <i class="fas fa-pause"></i> Deactivate
+                </button>
+                <button type="button" class="btn-sm bulk-feature" onclick="bulkAction('feature')">
+                    <i class="fas fa-star"></i> Feature
+                </button>
+                <button type="button" class="btn-sm bulk-delete" onclick="bulkAction('delete')">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+                <span class="bulk-count" id="selectedCount">0 selected</span>
+            </div>
+        </form>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+        <div class="pagination">
+            <a href="?page=1&search={{ search }}&platform={{ platform }}&category={{ category }}&status={{ status }}" class="page-link {% if page == 1 %}disabled{% endif %}">First</a>
+            <a href="?page={{ page - 1 }}&search={{ search }}&platform={{ platform }}&category={{ category }}&status={{ status }}" class="page-link {% if page == 1 %}disabled{% endif %}">Previous</a>
+            {% for p in range(1, total_pages + 1) %}
+                {% if p == page %}
+                    <span class="page-link active">{{ p }}</span>
+                {% elif p <= page + 2 and p >= page - 2 %}
+                    <a href="?page={{ p }}&search={{ search }}&platform={{ platform }}&category={{ category }}&status={{ status }}" class="page-link">{{ p }}</a>
+                {% endif %}
+            {% endfor %}
+            <a href="?page={{ page + 1 }}&search={{ search }}&platform={{ platform }}&category={{ category }}&status={{ status }}" class="page-link {% if page == total_pages %}disabled{% endif %}">Next</a>
+            <a href="?page={{ total_pages }}&search={{ search }}&platform={{ platform }}&category={{ category }}&status={{ status }}" class="page-link {% if page == total_pages %}disabled{% endif %}">Last</a>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="groupModal">
+    <div class="modal-content" style="max-width: 560px;">
+        <h3 class="modal-title" id="modalTitle">Add New Group</h3>
+        <p class="modal-body" id="modalSubtitle">Fill in the group details below.</p>
+
+        <form id="groupForm" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="group_id" id="groupId">
+
+            <div class="form-group">
+                <label class="form-label">Group Icon</label>
+                <input type="text" name="icon" id="groupIcon" placeholder="📚" class="form-control" value="📚" maxlength="2">
+                <span class="form-hint">Emoji or short symbol for the group</span>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Group Name <span class="required">*</span></label>
+                <input type="text" name="name" id="groupName" placeholder="e.g., Mathematics Study Group" class="form-control" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Platform <span class="required">*</span></label>
+                <select name="platform" id="groupPlatform" class="form-control" required>
+                    <option value="">Select Platform</option>
+                    <option value="whatsapp">💬 WhatsApp</option>
+                    <option value="telegram">✈️ Telegram</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Invite Link <span class="required">*</span></label>
+                <input type="url" name="invite_link" id="groupInviteLink" placeholder="https://..." class="form-control" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Category</label>
+                <input type="text" name="category" id="groupCategory" placeholder="e.g., Mathematics" class="form-control">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Curriculum</label>
+                <select name="curriculum" id="groupCurriculum" class="form-control">
+                    <option value="">All Curricula</option>
+                    <option value="PL">🇸🇴 Puntland (PL)</option>
+                    <option value="SO">🇸🇴 Somalia (SO)</option>
+                    <option value="SL">🇸🇴 Somaliland (SL)</option>
+                </select>
+                <span class="form-hint">Only users with this curriculum will see this group. Leave empty for all.</span>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Subjects (comma separated)</label>
+                <input type="text" name="subjects" id="groupSubjects" placeholder="e.g., Mathematics, Physics" class="form-control">
+                <span class="form-hint">Subjects covered by this group.</span>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Required Tier</label>
+                <select name="tier_required" id="groupTier" class="form-control">
+                    <option value="danbe">🔓 Danbe (Free)</option>
+                    <option value="dhexe">🔑 Dhexe (Advanced)</option>
+                    <option value="hore">⭐ Hore (Premium)</option>
+                </select>
+                <span class="form-hint">Minimum tier required to view and join this group.</span>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Group Type</label>
+                <select name="group_type" id="groupType" class="form-control">
+                    <option value="community">Community</option>
+                    <option value="official">Official</option>
+                    <option value="private">Private</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea name="description" id="groupDescription" rows="3" placeholder="Brief description of the group..." class="form-control"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Display Order</label>
+                <input type="number" name="display_order" id="groupOrder" value="0" min="0" class="form-control">
+                <span class="form-hint">Lower numbers appear first.</span>
+            </div>
+
+            <div style="display: flex; gap: 16px; margin-bottom: 16px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" name="is_active" id="groupActive" checked>
+                    Active
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" name="is_featured" id="groupFeatured">
+                    Featured
+                </label>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" onclick="closeGroupModal()" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="submitGroupBtn">
+                    <i class="fas fa-save"></i> Save Group
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // ============================================
+    // CSRF TOKEN
+    // ============================================
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
+    // ============================================
+    // FILTERS & SEARCH
+    // ============================================
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInput = document.getElementById('searchGroups');
+        const platformFilter = document.getElementById('platformFilter');
+        const categoryFilter = document.getElementById('categoryFilter');
+        const statusFilter = document.getElementById('statusFilter');
+
+        let filterTimer;
+
+        function applyFilters() {
+            clearTimeout(filterTimer);
+            filterTimer = setTimeout(function() {
+                const params = new URLSearchParams();
+                if (searchInput.value) params.set('search', searchInput.value);
+                if (platformFilter.value) params.set('platform', platformFilter.value);
+                if (categoryFilter.value) params.set('category', categoryFilter.value);
+                if (statusFilter.value) params.set('status', statusFilter.value);
+                window.location.search = params.toString();
+            }, 500);
+        }
+
+        searchInput.addEventListener('input', applyFilters);
+        platformFilter.addEventListener('change', applyFilters);
+        categoryFilter.addEventListener('change', applyFilters);
+        statusFilter.addEventListener('change', applyFilters);
+
+        // ============================================
+        // CHECKBOX SELECT ALL
+        // ============================================
+        window.toggleAllCheckboxes = function(source) {
+            document.querySelectorAll('.group-checkbox').forEach(cb => {
+                cb.checked = source.checked;
+            });
+            updateSelectedCount();
+        };
+
+        document.querySelectorAll('.group-checkbox').forEach(cb => {
+            cb.addEventListener('change', updateSelectedCount);
+        });
+
+        function updateSelectedCount() {
+            const selected = document.querySelectorAll('.group-checkbox:checked').length;
+            document.getElementById('selectedCount').textContent = selected + ' selected';
+        }
+
+        // ============================================
+        // OPEN ADD MODAL
+        // ============================================
+        window.openAddModal = function() {
+            document.getElementById('modalTitle').textContent = 'Add New Group';
+            document.getElementById('modalSubtitle').textContent = 'Fill in the group details below.';
+            document.getElementById('groupId').value = '';
+            document.getElementById('groupForm').reset();
+            document.getElementById('groupIcon').value = '📚';
+            document.getElementById('groupActive').checked = true;
+            document.getElementById('groupFeatured').checked = false;
+            document.getElementById('groupOrder').value = '0';
+            document.getElementById('submitGroupBtn').innerHTML = '<i class="fas fa-save"></i> Save Group';
+            document.getElementById('groupModal').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        };
+
+        // ============================================
+        // OPEN EDIT MODAL
+        // ============================================
+        window.openEditModal = function(groupId) {
+            fetch('/admin/groups/api/' + groupId)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showToast(data.error, 'error');
+                        return;
+                    }
+
+                    document.getElementById('modalTitle').textContent = 'Edit Group';
+                    document.getElementById('modalSubtitle').textContent = 'Update the group details below.';
+                    document.getElementById('groupId').value = data.id;
+                    document.getElementById('groupIcon').value = data.icon || '📚';
+                    document.getElementById('groupName').value = data.name;
+                    document.getElementById('groupPlatform').value = data.platform;
+                    document.getElementById('groupInviteLink').value = data.invite_link;
+                    document.getElementById('groupCategory').value = data.category || '';
+                    document.getElementById('groupCurriculum').value = data.curriculum || '';
+                    document.getElementById('groupSubjects').value = data.subjects || '';
+                    document.getElementById('groupTier').value = data.tier_required || 'danbe';
+                    document.getElementById('groupType').value = data.group_type || 'community';
+                    document.getElementById('groupDescription').value = data.description || '';
+                    document.getElementById('groupOrder').value = data.display_order || 0;
+                    document.getElementById('groupActive').checked = data.is_active == 1;
+                    document.getElementById('groupFeatured').checked = data.is_featured == 1;
+                    document.getElementById('submitGroupBtn').innerHTML = '<i class="fas fa-save"></i> Update Group';
+
+                    document.getElementById('groupModal').classList.add('active');
+                    document.body.style.overflow = 'hidden';
+                })
+                .catch(() => {
+                    showToast('Error loading group data.', 'error');
+                });
+        };
+
+        // ============================================
+        // CLOSE MODAL
+        // ============================================
+        window.closeGroupModal = function() {
+            document.getElementById('groupModal').classList.remove('active');
+            document.body.style.overflow = '';
+        };
+
+        document.getElementById('groupModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeGroupModal();
+            }
+        });
+
+        // ============================================
+        // SUBMIT FORM (Add/Edit)
+        // ============================================
+        document.getElementById('groupForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const groupId = document.getElementById('groupId').value;
+            const isEdit = groupId !== '';
+            const url = isEdit ? '/admin/groups/api/' + groupId : '/admin/groups/api';
+
+            const data = {
+                name: formData.get('name'),
+                platform: formData.get('platform'),
+                invite_link: formData.get('invite_link'),
+                icon: formData.get('icon'),
+                category: formData.get('category'),
+                curriculum: formData.get('curriculum'),
+                subjects: formData.get('subjects'),
+                tier_required: formData.get('tier_required'),
+                group_type: formData.get('group_type'),
+                description: formData.get('description'),
+                display_order: parseInt(formData.get('display_order')) || 0,
+                is_active: formData.get('is_active') === 'on' ? 1 : 0,
+                is_featured: formData.get('is_featured') === 'on' ? 1 : 0
+            };
+
+            const submitBtn = document.getElementById('submitGroupBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+            fetch(url, {
+                method: isEdit ? 'PUT' : 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showToast(result.message || (isEdit ? 'Group updated!' : 'Group added!'), 'success');
+                    closeGroupModal();
+                    setTimeout(() => location.reload(), 800);
+                } else {
+                    showToast(result.error || 'Failed to save group.', 'error');
+                }
+            })
+            .catch(() => {
+                showToast('Network error. Please try again.', 'error');
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = isEdit ? '<i class="fas fa-save"></i> Update Group' : '<i class="fas fa-save"></i> Save Group';
+            });
+        });
+
+        // ============================================
+        // TOGGLE GROUP ACTIVE
+        // ============================================
+        window.toggleGroupActive = function(groupId) {
+            if (!confirm('Toggle active status for this group?')) return;
+
+            fetch('/admin/groups/api/' + groupId + '/toggle-active', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                }
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showToast(result.message || 'Status toggled.', 'success');
+                    setTimeout(() => location.reload(), 600);
+                } else {
+                    showToast(result.error || 'Failed to toggle.', 'error');
+                }
+            })
+            .catch(() => showToast('Network error.', 'error'));
+        };
+
+        // ============================================
+        // TOGGLE GROUP FEATURED
+        // ============================================
+        window.toggleGroupFeatured = function(groupId) {
+            fetch('/admin/groups/api/' + groupId + '/toggle-featured', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                }
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showToast(result.message || 'Featured status toggled.', 'success');
+                    setTimeout(() => location.reload(), 600);
+                } else {
+                    showToast(result.error || 'Failed to toggle.', 'error');
+                }
+            })
+            .catch(() => showToast('Network error.', 'error'));
+        };
+
+        // ============================================
+        // DELETE GROUP
+        // ============================================
+        window.deleteGroup = function(groupId, name) {
+            if (!confirm('Delete group "' + name + '"? This action cannot be undone.')) return;
+
+            fetch('/admin/groups/api/' + groupId, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                }
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showToast(result.message || 'Group deleted.', 'success');
+                    setTimeout(() => location.reload(), 600);
+                } else {
+                    showToast(result.error || 'Failed to delete.', 'error');
+                }
+            })
+            .catch(() => showToast('Network error.', 'error'));
+        };
+
+        // ============================================
+        // BULK ACTIONS
+        // ============================================
+        window.bulkAction = function(action) {
+            const selected = document.querySelectorAll('.group-checkbox:checked');
+            if (selected.length === 0) {
+                showToast('Please select at least one group.', 'warning');
+                return;
+            }
+
+            const ids = Array.from(selected).map(cb => cb.value);
+            const confirmMsg = {
+                'activate': 'Activate selected groups?',
+                'deactivate': 'Deactivate selected groups?',
+                'feature': 'Feature selected groups?',
+                'delete': 'Delete selected groups? This cannot be undone.'
+            };
+
+            if (!confirm(confirmMsg[action])) return;
+
+            fetch('/admin/groups/api/bulk', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                body: JSON.stringify({ action: action, group_ids: ids })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showToast(result.message || 'Bulk action completed.', 'success');
+                    setTimeout(() => location.reload(), 600);
+                } else {
+                    showToast(result.error || 'Bulk action failed.', 'error');
+                }
+            })
+            .catch(() => showToast('Network error.', 'error'));
+        };
+
+        // ============================================
+        // TOAST HELPER
+        // ============================================
+        function showToast(message, type) {
+            if (typeof window.showToast === 'function') {
+                window.showToast(message, type);
+            } else {
+                alert(message);
+            }
+        }
+    });
+</script>
+{% endblock %}

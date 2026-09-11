@@ -1,0 +1,921 @@
+/* ============================================
+   SAFKA SHEET — ADVANCED UPGRADE WIZARD
+   Frontend only. Element IDs preserved.
+   ============================================ */
+
+/* ----- Backdrop ----- */
+.safka-sheet__backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 99999;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+.safka-sheet__backdrop.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* ----- Sheet container ----- */
+.safka-sheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border-radius: 24px 24px 0 0;
+    box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.28);
+    z-index: 100000;
+    max-height: 92vh;
+    max-width: 720px;
+    margin: 0 auto;
+    transform: translateY(100%);
+    transition: transform 0.42s cubic-bezier(0.22, 0.61, 0.36, 1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    will-change: transform;
+}
+.safka-sheet.active { transform: translateY(0); }
+.safka-sheet.dragging { transition: none; }
+
+/* Drag handle */
+.safka-sheet__handle {
+    width: 44px;
+    height: 4px;
+    border-radius: 4px;
+    background: var(--text-muted);
+    margin: 12px auto 6px;
+    flex-shrink: 0;
+    cursor: grab;
+    opacity: 0.4;
+    transition: opacity 0.2s ease;
+    touch-action: none;
+}
+.safka-sheet__handle:hover { opacity: 0.75; }
+.safka-sheet__handle:active { cursor: grabbing; }
+
+/* Close button */
+.safka-sheet__close {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    background: var(--background);
+    border: none;
+    font-size: 20px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    z-index: 5;
+    line-height: 1;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.safka-sheet__close:hover {
+    background: var(--primary-light);
+    color: var(--primary);
+    transform: rotate(90deg);
+}
+.safka-sheet__close:active { transform: scale(0.9) rotate(90deg); }
+
+/* Scrollable content */
+.safka-sheet__content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 0;
+    position: relative;
+}
+.safka-sheet__content::-webkit-scrollbar { width: 4px; }
+.safka-sheet__content::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 10px;
+}
+
+/* The original carousel wraps the content — hide it and use our container directly */
+.safka-carousel {
+    position: relative;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+}
+.safka-carousel__track {
+    display: block;
+    transition: none;
+    will-change: auto;
+}
+
+/* ============================================
+   STEP LAYOUT
+   ============================================ */
+.sf-step {
+    padding: 8px 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-height: 420px;
+    animation: sf-slide-in 0.35s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+@keyframes sf-slide-in {
+    from { opacity: 0; transform: translateX(24px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Head */
+.sf-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-bottom: 4px;
+    position: relative;
+}
+.sf-head-title { flex: 1; min-width: 0; }
+.sf-head-title h2 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+    line-height: 1.25;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.sf-head-title p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 2px 0 0;
+    line-height: 1.4;
+}
+
+/* Back button */
+.sf-back {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+    font-size: 14px;
+}
+.sf-back:hover {
+    background: var(--primary-light);
+    color: var(--primary);
+    border-color: var(--primary);
+}
+.sf-back:active { transform: scale(0.92); }
+
+/* Step dots */
+.sf-steps {
+    display: flex;
+    gap: 5px;
+    flex-shrink: 0;
+}
+.sf-steps .sf-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: all 0.3s ease;
+}
+.sf-steps .sf-dot.active {
+    background: var(--primary);
+    width: 22px;
+    border-radius: 5px;
+}
+
+/* Context banner (from locked feature) */
+.sf-context {
+    background: var(--primary-light);
+    color: var(--text);
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    border-left: 3px solid var(--primary);
+}
+
+/* ============================================
+   STEP 1 — PLAN CARDS
+   ============================================ */
+.sf-plan-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+}
+@media (min-width: 640px) {
+    .sf-plan-grid { grid-template-columns: 1fr 1fr; }
+}
+
+.sf-plan {
+    text-align: left;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 16px;
+    padding: 18px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.22, 0.61, 0.36, 1);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+    color: var(--text);
+    font-family: inherit;
+    width: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+.sf-plan:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
+}
+.sf-plan:active { transform: translateY(0) scale(0.99); }
+.sf-plan.selected {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(255, 49, 56, 0.10);
+}
+
+/* Accent top bar */
+.sf-plan::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: var(--border);
+}
+.sf-plan.pink::before {
+    background: linear-gradient(90deg, var(--primary), #FF6B6B);
+}
+.sf-plan.gold::before {
+    background: linear-gradient(90deg, #F59E0B, #D97706);
+}
+.sf-plan.selected.pink {
+    border-color: var(--primary);
+}
+.sf-plan.selected.gold {
+    border-color: #F59E0B;
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.15);
+}
+
+/* Plan head */
+.sf-plan-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+.sf-plan-badge {
+    font-size: 26px;
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: var(--background);
+}
+.sf-plan.pink .sf-plan-badge { background: var(--primary-light); }
+.sf-plan.gold .sf-plan-badge { background: #FEF3C7; }
+
+.sf-plan-title {
+    flex: 1;
+    min-width: 0;
+}
+.sf-plan-name {
+    display: block;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.2;
+}
+.sf-plan-tag {
+    display: block;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+    line-height: 1.35;
+}
+.sf-plan-price {
+    text-align: right;
+    flex-shrink: 0;
+    line-height: 1.1;
+}
+.sf-plan-price .sf-from {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+.sf-plan-price .sf-amount {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--primary);
+}
+.sf-plan.gold .sf-plan-price .sf-amount { color: #D97706; }
+.sf-plan-price .sf-per {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* Plan features */
+.sf-plan-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+}
+.sf-plan-list li {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    padding-left: 20px;
+    position: relative;
+}
+.sf-plan-list li::before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: var(--primary);
+    font-weight: 700;
+    font-size: 13px;
+}
+.sf-plan.gold .sf-plan-list li::before { color: #D97706; }
+
+/* Plan CTA */
+.sf-plan-cta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-light);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primary);
+}
+.sf-plan.gold .sf-plan-cta { color: #D97706; }
+.sf-plan-cta i { transition: transform 0.2s ease; }
+.sf-plan:hover .sf-plan-cta i { transform: translateX(4px); }
+
+/* Reassurance */
+.sf-note {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    padding-top: 6px;
+}
+
+/* ============================================
+   STEP 2 — DURATION + FEATURES
+   ============================================ */
+.sf-dur-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+@media (max-width: 480px) {
+    .sf-dur-grid { grid-template-columns: 1fr; }
+}
+
+.sf-dur {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+    font-family: inherit;
+    color: var(--text);
+    position: relative;
+    -webkit-tap-highlight-color: transparent;
+}
+.sf-dur:hover {
+    border-color: var(--primary);
+    background: var(--primary-light);
+}
+.sf-dur.active {
+    border-color: var(--primary);
+    background: var(--primary-light);
+    box-shadow: 0 0 0 4px rgba(255, 49, 56, 0.10);
+}
+.sf-dur-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.sf-dur.active .sf-dur-label { color: var(--primary); }
+.sf-dur-price {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1.1;
+}
+.sf-dur.active .sf-dur-price { color: var(--primary); }
+.sf-save {
+    font-size: 10px;
+    font-weight: 700;
+    color: #065F46;
+    background: #D1FAE5;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-top: 2px;
+    letter-spacing: 0.3px;
+}
+
+/* Feature list */
+.sf-features {
+    background: var(--background);
+    border-radius: 12px;
+    padding: 16px 18px;
+    border: 1px solid var(--border-light);
+}
+.sf-features-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+}
+.sf-features ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+}
+@media (min-width: 560px) {
+    .sf-features ul { grid-template-columns: 1fr 1fr; }
+}
+.sf-features li {
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.45;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+.sf-features li i {
+    color: #10B981;
+    font-size: 11px;
+    margin-top: 3px;
+    flex-shrink: 0;
+}
+
+/* ============================================
+   STEP 3 — SUMMARY
+   ============================================ */
+.sf-summary {
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.sf-summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+.sf-summary-row strong { color: var(--text); font-weight: 600; }
+.sf-total-row {
+    padding-top: 12px;
+    margin-top: 4px;
+    border-top: 1px dashed var(--border);
+    font-weight: 700;
+}
+.sf-total-row span:last-child {
+    font-size: 20px;
+    color: var(--primary);
+    font-weight: 800;
+}
+
+/* Discount */
+.sf-discount {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--surface);
+}
+.sf-discount-toggle {
+    width: 100%;
+    background: transparent;
+    border: none;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    transition: background 0.2s ease;
+}
+.sf-discount-toggle:hover { background: var(--background); }
+.sf-discount-toggle i:first-child { color: var(--primary); }
+.sf-discount-toggle span { flex: 1; text-align: left; }
+.sf-discount-toggle i:last-child {
+    transition: transform 0.25s ease;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+.sf-discount-toggle.open i:last-child { transform: rotate(180deg); }
+
+.sf-discount-body {
+    padding: 0 18px 16px;
+    border-top: 1px solid var(--border-light);
+    animation: sf-fade 0.25s ease;
+}
+@keyframes sf-fade {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.sf-discount-input {
+    display: flex;
+    gap: 8px;
+    padding-top: 12px;
+}
+.sf-discount-input input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-size: 14px;
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.sf-discount-input input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.10);
+}
+.sf-discount-input button {
+    padding: 10px 20px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    white-space: nowrap;
+}
+.sf-discount-input button:hover:not(:disabled) {
+    background: var(--primary-hover);
+    transform: translateY(-1px);
+}
+.sf-discount-input button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.sf-discount-feedback {
+    font-size: 12px;
+    margin-top: 8px;
+    min-height: 16px;
+    color: var(--text-muted);
+}
+.sf-discount-feedback.ok  { color: #10B981; font-weight: 600; }
+.sf-discount-feedback.err { color: #EF4444; font-weight: 600; }
+
+/* Info box */
+.sf-note-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: #FFFBEB;
+    border: 1px solid #FDE68A;
+    color: #92400E;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.sf-note-box i {
+    color: #F59E0B;
+    font-size: 16px;
+    margin-top: 1px;
+    flex-shrink: 0;
+}
+
+/* ============================================
+   STICKY FOOTER (steps 2 & 3)
+   ============================================ */
+.sf-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px 22px calc(14px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+.sf-footer-price {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+    min-width: 0;
+}
+.sf-footer-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+.sf-footer-amount {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--primary);
+}
+.sf-cta {
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 12px 22px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.22s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: inherit;
+    box-shadow: 0 4px 14px rgba(255, 49, 56, 0.28);
+    white-space: nowrap;
+}
+.sf-cta:hover:not(:disabled) {
+    background: var(--primary-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 49, 56, 0.38);
+}
+.sf-cta:active:not(:disabled) { transform: translateY(0); }
+.sf-cta:disabled { opacity: 0.55; cursor: not-allowed; transform: none !important; }
+.sf-cta i { font-size: 13px; }
+
+/* ============================================
+   STEP 4 — SUCCESS
+   ============================================ */
+.sf-step-success {
+    text-align: center;
+    align-items: center;
+    padding-top: 20px;
+}
+.sf-success-icon {
+    margin: 4px auto 4px;
+}
+.sf-success-ring {
+    transition: stroke-dashoffset 0.9s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.sf-success-check {
+    transition: stroke-dashoffset 0.5s ease 0.5s;
+}
+.sf-success-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 4px 0 2px;
+}
+.sf-success-sub {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0 0 12px;
+}
+
+.sf-success-card {
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 18px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-align: left;
+}
+.sf-success-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.sf-success-row strong { color: var(--text); }
+.sf-success-total {
+    padding-top: 10px;
+    margin-top: 4px;
+    border-top: 1px dashed var(--border);
+    font-weight: 700;
+}
+.sf-success-total span:last-child {
+    font-size: 18px;
+    color: var(--primary);
+    font-weight: 800;
+}
+
+.sf-id-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px 4px 3px 10px;
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    color: var(--primary);
+    font-size: 13px;
+    letter-spacing: 0.5px;
+}
+.sf-copy {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    font-size: 12px;
+}
+.sf-copy:hover { background: var(--primary-light); color: var(--primary); }
+.sf-copy.copied { color: #10B981; }
+
+.sf-wa {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: #25D366;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 14px;
+    text-decoration: none;
+    width: 100%;
+    box-shadow: 0 4px 14px rgba(37, 211, 102, 0.3);
+    transition: all 0.22s ease;
+    margin-top: 8px;
+}
+.sf-wa:hover {
+    background: #1DA851;
+    transform: translateY(-2px);
+    color: white;
+    text-decoration: none;
+    box-shadow: 0 6px 20px rgba(37, 211, 102, 0.4);
+}
+
+.sf-close-btn {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    padding: 10px 24px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    width: 100%;
+    margin-top: 4px;
+}
+.sf-close-btn:hover {
+    background: var(--background);
+    color: var(--text);
+    border-color: var(--text-muted);
+}
+
+/* ============================================
+   DARK MODE
+   ============================================ */
+[data-theme="dark"] .safka-sheet {
+    background: var(--surface);
+    border-color: var(--border);
+}
+[data-theme="dark"] .safka-sheet__backdrop {
+    background: rgba(0, 0, 0, 0.75);
+}
+[data-theme="dark"] .sf-plan {
+    background: var(--surface-alt);
+}
+[data-theme="dark"] .sf-plan.selected {
+    box-shadow: 0 0 0 4px rgba(255, 107, 112, 0.15);
+}
+[data-theme="dark"] .sf-plan-price .sf-amount { color: #FF6B70; }
+[data-theme="dark"] .sf-plan.gold .sf-plan-price .sf-amount { color: #FBBF24; }
+[data-theme="dark"] .sf-plan-cta { color: #FF6B70; }
+[data-theme="dark"] .sf-plan.gold .sf-plan-cta { color: #FBBF24; }
+[data-theme="dark"] .sf-dur.active {
+    background: rgba(255, 107, 112, 0.12);
+}
+[data-theme="dark"] .sf-features {
+    background: var(--surface-alt);
+}
+[data-theme="dark"] .sf-summary {
+    background: var(--surface-alt);
+}
+[data-theme="dark"] .sf-discount {
+    background: var(--surface-alt);
+}
+[data-theme="dark"] .sf-discount-input input {
+    background: var(--surface);
+}
+[data-theme="dark"] .sf-note-box {
+    background: #3A2E1A;
+    border-color: #92400E;
+    color: #FCD34D;
+}
+[data-theme="dark"] .sf-id-chip {
+    background: var(--surface-alt);
+}
+[data-theme="dark"] .sf-footer {
+    background: var(--surface);
+    border-color: var(--border);
+}
+[data-theme="dark"] .sf-context {
+    background: rgba(255, 107, 112, 0.12);
+    border-left-color: #FF6B70;
+}
+
+/* ============================================
+   RESPONSIVE / DESKTOP
+   ============================================ */
+@media (min-width: 640px) {
+    .safka-sheet {
+        border-radius: 20px 20px 0 0;
+        max-height: 88vh;
+    }
+    .sf-step { padding: 8px 28px 28px; }
+    .sf-footer { padding: 16px 28px; }
+    .sf-plan-name { font-size: 19px; }
+    .sf-head-title h2 { font-size: 22px; }
+}
+
+@media (min-width: 1024px) {
+    .safka-sheet {
+        border-radius: 24px;
+        bottom: 20px;
+        max-height: 88vh;
+    }
+    .sf-step { padding: 12px 32px 32px; min-height: 460px; }
+    .sf-footer { padding: 18px 32px; border-radius: 0 0 24px 24px; }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .safka-sheet,
+    .safka-sheet__backdrop,
+    .sf-step,
+    .sf-success-ring,
+    .sf-success-check {
+        transition: none !important;
+        animation: none !important;
+    }
+    .sf-success-ring { stroke-dashoffset: 0 !important; }
+    .sf-success-check { stroke-dashoffset: 0 !important; }
+}

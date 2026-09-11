@@ -1,0 +1,64 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}{{ 'Edit' if discount else 'New' }} Discount Code - Admin{% endblock %}
+{% block page_title %}{{ 'Edit' if discount else 'New' }} Discount Code{% endblock %}
+
+{% block dashboard_content %}
+<div style="max-width: 600px; margin: 0 auto;">
+    <div class="breadcrumb">
+        <a href="{{ url_for('upgrade.admin_discounts') }}">Discount Codes</a>
+        <span class="separator">/</span>
+        <span class="current">{{ 'Edit' if discount else 'New' }}</span>
+    </div>
+
+    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow-sm);">
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="form-group">
+                <label class="form-label">Code <span class="required">*</span></label>
+                <input type="text" name="code" class="form-control" value="{{ discount.code if discount else '' }}" required>
+                <span class="form-hint">Unique, uppercase letters/numbers.</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Discount Type <span class="required">*</span></label>
+                <select name="discount_type" class="form-control" required>
+                    <option value="percentage" {% if discount and discount.discount_type == 'percentage' %}selected{% endif %}>Percentage (%)</option>
+                    <option value="fixed" {% if discount and discount.discount_type == 'fixed' %}selected{% endif %}>Fixed Amount ($)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Discount Value <span class="required">*</span></label>
+                <input type="number" name="discount_value" class="form-control" value="{{ discount.discount_value if discount else '' }}" required min="1" step="1">
+                <span class="form-hint">For percentage: 20 = 20%. For fixed: amount in cents (e.g., 200 = $2.00).</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Applies To <span class="required">*</span></label>
+                <select name="applies_to" class="form-control" required>
+                    <option value="all" {% if discount and discount.applies_to == 'all' %}selected{% endif %}>All Tiers</option>
+                    <option value="dhexe" {% if discount and discount.applies_to == 'dhexe' %}selected{% endif %}>Dhexe Only</option>
+                    <option value="hore" {% if discount and discount.applies_to == 'hore' %}selected{% endif %}>Hore Only</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Max Uses (optional)</label>
+                <input type="number" name="max_uses" class="form-control" value="{{ discount.max_uses if discount else '' }}" min="1">
+                <span class="form-hint">Leave blank for unlimited.</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Expires At (optional)</label>
+                <input type="date" name="expires_at" class="form-control" value="{{ discount.expires_at[:10] if discount and discount.expires_at else '' }}">
+            </div>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" name="is_active" {% if not discount or discount.is_active %}checked{% endif %}>
+                    Active
+                </label>
+            </div>
+            <div style="display: flex; gap: 12px; margin-top: 16px;">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save</button>
+                <a href="{{ url_for('upgrade.admin_discounts') }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

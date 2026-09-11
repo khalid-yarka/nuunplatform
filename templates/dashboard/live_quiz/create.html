@@ -1,0 +1,376 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Create Live Quiz - Student Platform{% endblock %}
+
+{% block page_title %}Create Live Quiz{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz.css') }}" />
+<style>
+    .privacy-option {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 16px;
+        border: 2px solid var(--border);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: var(--transition);
+        background: var(--surface);
+        text-align: center;
+    }
+    .privacy-option:hover {
+        border-color: var(--text-muted);
+        background: var(--background);
+    }
+    .privacy-option.selected {
+        border-color: var(--primary);
+        background: var(--primary-light);
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.1);
+    }
+    .privacy-option .privacy-icon { font-size: 32px; margin-bottom: 4px; }
+    .privacy-option .privacy-label { font-weight: 700; color: var(--text); font-size: 16px; }
+    .privacy-option .privacy-desc { font-size: 12px; color: var(--text-secondary); text-align: center; }
+    .privacy-option .privacy-badge { margin-top: 6px; font-size: 11px; font-weight: 600; }
+    .privacy-option .privacy-badge.recommended { color: var(--primary); }
+    .privacy-option .privacy-badge.private { color: var(--text-muted); }
+
+    .question-count-options {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 8px;
+    }
+    .question-count-options label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px;
+        border: 2px solid var(--border);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: var(--transition);
+        font-weight: 600;
+        font-size: 15px;
+        color: var(--text);
+    }
+    .question-count-options label:hover {
+        border-color: var(--primary);
+        background: var(--primary-light);
+    }
+    .question-count-options label.selected {
+        border-color: var(--primary);
+        background: var(--primary-light);
+    }
+    .question-count-options input[type="radio"] { display: none; }
+
+    .schedule-options {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    .schedule-options label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        color: var(--text);
+        cursor: pointer;
+        padding: 6px 12px;
+        border: 2px solid var(--border);
+        border-radius: var(--radius-sm);
+        transition: var(--transition);
+    }
+    .schedule-options label:hover {
+        border-color: var(--primary);
+        background: var(--primary-light);
+    }
+    .schedule-options label.selected {
+        border-color: var(--primary);
+        background: var(--primary-light);
+    }
+    .schedule-options input[type="radio"] { display: none; }
+
+    [data-theme="dark"] .question-count-options label.selected {
+        border-color: #FF6B70 !important;
+        background: rgba(255, 107, 112, 0.15) !important;
+        color: #FFFFFF !important;
+    }
+    [data-theme="dark"] .question-count-options label:hover {
+        border-color: #FF6B70 !important;
+        background: rgba(255, 107, 112, 0.1) !important;
+        color: #FFFFFF !important;
+    }
+    [data-theme="dark"] .privacy-option { background: var(--surface); border-color: var(--border); }
+    [data-theme="dark"] .privacy-option:hover { background: var(--surface-alt); }
+    [data-theme="dark"] .privacy-option.selected { border-color: var(--primary); background: var(--primary-light); }
+    [data-theme="dark"] .schedule-options label { border-color: var(--border); }
+    [data-theme="dark"] .schedule-options label:hover { border-color: #FF6B70; background: rgba(255, 107, 112, 0.1); }
+    [data-theme="dark"] .schedule-options label.selected { border-color: #FF6B70; background: rgba(255, 107, 112, 0.15); }
+
+    @media (max-width: 480px) {
+        .privacy-option .privacy-icon { font-size: 24px; }
+        .privacy-option .privacy-label { font-size: 14px; }
+        .privacy-option .privacy-desc { font-size: 11px; }
+        .question-count-options { grid-template-columns: repeat(3, 1fr); }
+        .schedule-options label { font-size: 12px; padding: 4px 10px; }
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div style="max-width: 640px; margin: 0 auto;">
+
+    <div class="breadcrumb">
+        <a href="{{ url_for('live_quiz.lobby') }}">Live Quiz Lobby</a>
+        <span class="separator">/</span>
+        <span class="current">Create</span>
+    </div>
+
+    {% if not_enough %}
+    <div style="background: #FEF3C7; border: 2px solid #F59E0B; border-radius: var(--radius); padding: 24px; margin-bottom: 24px;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <span style="font-size: 28px;">⚠️</span>
+            <div>
+                <h3 style="font-size: 18px; font-weight: 700; color: #92400E;">Not Enough Questions</h3>
+                <p style="color: #92400E; font-size: 14px;">Only {{ available }} questions available for this subject. You requested {{ requested }}.</p>
+            </div>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
+            <form method="POST" action="{{ url_for('live_quiz.create_with_available') }}" style="display: inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="subject_code" value="{{ subject_code }}">
+                <input type="hidden" name="question_count" value="{{ available }}">
+                <input type="hidden" name="title" value="{{ title }}">
+                <input type="hidden" name="is_public" value="{{ is_public or 1 }}">
+                <button type="submit" style="padding: 8px 20px; background: #F59E0B; color: white; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: var(--transition);">
+                    Proceed with {{ available }} Questions
+                </button>
+            </form>
+            <a href="{{ url_for('live_quiz.create') }}" style="padding: 8px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); text-decoration: none; color: var(--text); font-weight: 500; transition: var(--transition);">
+                Select Another Subject
+            </a>
+            <a href="{{ url_for('live_quiz.lobby') }}" style="padding: 8px 20px; background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; border-radius: var(--radius-sm); text-decoration: none; font-weight: 500; transition: var(--transition);">
+                Cancel
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px; box-shadow: var(--shadow-sm);">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <div style="font-size: 48px; margin-bottom: 8px;">🎯</div>
+            <h2 style="font-size: 22px; font-weight: 700; color: var(--text);">Create Live Quiz</h2>
+            <p style="color: var(--text-secondary); font-size: 14px; margin-top: 2px;">Host a real-time quiz competition</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('live_quiz.create') }}" id="createForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            
+            <!-- Subject -->
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
+                    📚 Subject <span style="color: var(--primary);">*</span>
+                </label>
+                <select name="subject_code" required style="width: 100%; padding: 12px 16px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: 15px; background: var(--surface); color: var(--text); transition: var(--transition);">
+                    <option value="">Select Subject</option>
+                    {% for subject in subjects %}
+                        <option value="{{ subject.code }}" {% if subject_code == subject.code %}selected{% endif %}>
+                            {{ subject.icon or '📚' }} {{ subject.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Question Count -->
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
+                    📝 Number of Questions <span style="color: var(--primary);">*</span>
+                </label>
+                <div class="question-count-options">
+                    {% for n in [10, 15, 20, 25, 30] %}
+                        <label class="{% if n == 10 %}selected{% endif %}">
+                            <input type="radio" name="question_count" value="{{ n }}" {% if n == 10 %}checked{% endif %}>
+                            <span>{{ n }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Title -->
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
+                    🏷️ Quiz Title <span style="color: var(--primary);">*</span>
+                </label>
+                <input type="text"
+                       name="title"
+                       id="quizTitleInput"
+                       placeholder="e.g., Friday Challenge"
+                       value="{{ title or '' }}"
+                       required
+                       minlength="3"
+                       maxlength="100"
+                       style="width: 100%; padding: 12px 16px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: 15px; background: var(--surface); color: var(--text); transition: var(--transition);">
+                <div id="titleError"
+                     style="display: none; color: #EF4444; font-size: 12px; margin-top: 6px; font-weight: 500;">
+                    ⚠️ Please give your quiz a title (at least 3 characters).
+                </div>
+            </div>
+
+            <!-- Privacy Settings -->
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 8px;">
+                    🔒 Privacy Settings
+                </label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <label class="privacy-option {% if default_privacy != 0 %}selected{% endif %}" id="publicLabel">
+                        <input type="radio" name="is_public" value="1" {% if default_privacy != 0 %}checked{% endif %}>
+                        <span class="privacy-icon">🌐</span>
+                        <span class="privacy-label">Public</span>
+                        <span class="privacy-desc">Visible in lobby, anyone can join</span>
+                        <span class="privacy-badge recommended">✓ Recommended</span>
+                    </label>
+                    <label class="privacy-option {% if default_privacy == 0 %}selected{% endif %}" id="privateLabel">
+                        <input type="radio" name="is_public" value="0" {% if default_privacy == 0 %}checked{% endif %}>
+                        <span class="privacy-icon">🔒</span>
+                        <span class="privacy-label">Private</span>
+                        <span class="privacy-desc">Only accessible via join code</span>
+                        <span class="privacy-badge private">Not in lobby</span>
+                    </label>
+                </div>
+                <div style="margin-top: 8px; font-size: 12px; color: var(--text-muted); text-align: center;">
+                    💡 Public quizzes help build community and attract more participants.
+                </div>
+            </div>
+
+            <!-- Scheduling -->
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
+                    ⏰ Schedule Start
+                </label>
+                <div class="schedule-options" id="scheduleOptions">
+                    <label class="selected">
+                        <input type="radio" name="schedule_minutes" value="0" checked>
+                        <span>▶️ Start When Ready (Manual)</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="schedule_minutes" value="5">
+                        <span>⏳ +5 min</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="schedule_minutes" value="10">
+                        <span>⏳ +10 min</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="schedule_minutes" value="15">
+                        <span>⏳ +15 min</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="schedule_minutes" value="30">
+                        <span>⏳ +30 min</span>
+                    </label>
+                </div>
+                <div style="margin-top: 6px; font-size: 12px; color: var(--text-muted);">
+                    <i class="fas fa-info-circle"></i> 
+                    Manual: You click 'Start' in the waiting room. Scheduled: Auto-starts when timer hits zero. Minimum 2 participants required.
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div style="display: flex; gap: 12px;">
+                <button type="submit" style="flex: 1; padding: 12px; background: var(--primary); color: white; border: none; border-radius: var(--radius-sm); font-weight: 600; font-size: 16px; cursor: pointer; transition: var(--transition);">
+                    <i class="fas fa-rocket"></i> Create Quiz
+                </button>
+                <a href="{{ url_for('live_quiz.lobby') }}" style="flex: 1; padding: 12px; background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-sm); text-decoration: none; color: var(--text); font-weight: 500; text-align: center; transition: var(--transition);">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <div style="margin-top: 16px; padding: 16px; background: var(--background); border-radius: var(--radius-sm); text-align: center; color: var(--text-secondary); font-size: 13px;">
+        <i class="fas fa-info-circle"></i> 
+        Questions are randomly selected from the subject. Participants join via a unique code.
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // ============================================
+    // Title validation
+    // ============================================
+    var titleInput = document.getElementById('quizTitleInput');
+    var titleError = document.getElementById('titleError');
+    var submitBtn = document.querySelector('#createForm button[type="submit"]');
+    
+    function validateTitle() {
+        if (!titleInput) return true;
+        var v = (titleInput.value || '').trim();
+        var ok = v.length >= 3 && v.length <= 100;
+        if (titleError) titleError.style.display = ok ? 'none' : 'block';
+        titleInput.style.borderColor = ok ? 'var(--border)' : '#EF4444';
+        if (submitBtn) submitBtn.disabled = !ok;
+        return ok;
+    }
+    
+    if (titleInput) {
+        titleInput.addEventListener('input', validateTitle);
+        titleInput.addEventListener('blur', validateTitle);
+        // Initial check (in case the field was pre-filled)
+        validateTitle();
+    }
+    
+    // Guard against form submission if invalid
+    var createForm = document.getElementById('createForm');
+    if (createForm) {
+        createForm.addEventListener('submit', function(e) {
+            if (!validateTitle()) {
+                e.preventDefault();
+                if (titleInput) titleInput.focus();
+            }
+        });
+    }
+    // Question count selection
+    document.querySelectorAll('.question-count-options label').forEach(function(label) {
+        label.addEventListener('click', function() {
+            const siblings = this.parentElement.querySelectorAll('label');
+            siblings.forEach(function(s) { s.classList.remove('selected'); });
+            this.classList.add('selected');
+            const radio = this.querySelector('input[type="radio"]');
+            if (radio) radio.checked = true;
+        });
+    });
+
+    // Privacy toggle
+    const publicLabel = document.getElementById('publicLabel');
+    const privateLabel = document.getElementById('privateLabel');
+    const publicRadio = document.querySelector('input[name="is_public"][value="1"]');
+    const privateRadio = document.querySelector('input[name="is_public"][value="0"]');
+
+    function updatePrivacySelection() {
+        if (publicRadio.checked) {
+            publicLabel.classList.add('selected');
+            privateLabel.classList.remove('selected');
+        } else {
+            privateLabel.classList.add('selected');
+            publicLabel.classList.remove('selected');
+        }
+    }
+    publicLabel.addEventListener('click', function() { publicRadio.checked = true; updatePrivacySelection(); });
+    privateLabel.addEventListener('click', function() { privateRadio.checked = true; updatePrivacySelection(); });
+    updatePrivacySelection();
+
+    // Schedule options toggle
+    const scheduleLabels = document.querySelectorAll('#scheduleOptions label');
+    scheduleLabels.forEach(function(label) {
+        label.addEventListener('click', function() {
+            scheduleLabels.forEach(function(l) { l.classList.remove('selected'); });
+            this.classList.add('selected');
+            const radio = this.querySelector('input[type="radio"]');
+            if (radio) radio.checked = true;
+        });
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,296 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Error Logs - Admin{% endblock %}
+
+{% block page_title %}Error Logs{% endblock %}
+
+{% block dashboard_css %}
+<style>
+    /* ============================================
+       ERROR LIST – MINIMAL PAGE-SPECIFIC STYLES
+       ============================================ */
+
+    .severity-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+    .severity-badge.critical { background: #FEF2F2; color: #DC2626; }
+    .severity-badge.error { background: #FFFBEB; color: #D97706; }
+    .severity-badge.warning { background: #EFF6FF; color: #2563EB; }
+
+    .status-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+    .status-badge.unresolved { background: #FEF2F2; color: #DC2626; }
+    .status-badge.resolved { background: #ECFDF5; color: #10B981; }
+    .status-badge.dismissed { background: #F3F4F6; color: #6B7280; }
+
+    .action-btn {
+        padding: 2px 10px;
+        border-radius: var(--radius-sm);
+        font-size: 11px;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        display: inline-block;
+    }
+    .action-btn.view {
+        background: var(--primary-light);
+        color: var(--primary);
+    }
+    .action-btn.view:hover {
+        background: var(--primary);
+        color: white;
+    }
+    .action-btn.resolve {
+        background: #ECFDF5;
+        color: #10B981;
+    }
+    .action-btn.resolve:hover {
+        background: #10B981;
+        color: white;
+    }
+    .action-btn.dismiss {
+        background: #F3F4F6;
+        color: #6B7280;
+    }
+    .action-btn.dismiss:hover {
+        background: #6B7280;
+        color: white;
+    }
+
+    .stat-card.accent-critical .stat-icon { color: #EF4444; background: #FEF2F2; }
+    .stat-card.accent-error .stat-icon { color: #F59E0B; background: #FFFBEB; }
+    .stat-card.accent-warning .stat-icon { color: #3B82F6; background: #EFF6FF; }
+    .stat-card.accent-resolved .stat-icon { color: #10B981; background: #ECFDF5; }
+
+    @media (max-width: 768px) {
+        .error-table .hide-mobile {
+            display: none;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div style="max-width: 100%;">
+
+    <div class="breadcrumb">
+        <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
+        <span class="separator">/</span>
+        <span class="current">Error Logs</span>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <div>
+            <h2 style="font-size: 20px; font-weight: 700; color: var(--text);">
+                <i class="fas fa-exclamation-triangle" style="color: #EF4444;"></i> Error Logs
+            </h2>
+            <p style="color: var(--text-secondary); font-size: 14px;">View and manage system errors</p>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <span class="badge badge-danger">{{ stats.unresolved or 0 }} unresolved</span>
+            <span class="badge" style="background: var(--background); color: var(--text-secondary);">Total: {{ stats.total or 0 }}</span>
+        </div>
+    </div>
+
+    <!-- Stats Mini Grid -->
+    <div class="stats-grid" style="margin-bottom: 20px;">
+        <div class="stat-card accent-critical">
+            <span class="stat-icon">🔴</span>
+            <div class="stat-number" style="color: #EF4444;">{{ stats.critical or 0 }}</div>
+            <div class="stat-label">Critical</div>
+        </div>
+        <div class="stat-card accent-error">
+            <span class="stat-icon">🟠</span>
+            <div class="stat-number" style="color: #F59E0B;">{{ stats.error or 0 }}</div>
+            <div class="stat-label">Errors</div>
+        </div>
+        <div class="stat-card accent-warning">
+            <span class="stat-icon">🔵</span>
+            <div class="stat-number" style="color: #3B82F6;">{{ stats.warning or 0 }}</div>
+            <div class="stat-label">Warnings</div>
+        </div>
+        <div class="stat-card accent-resolved">
+            <span class="stat-icon">✅</span>
+            <div class="stat-number" style="color: #10B981;">{{ stats.resolved or 0 }}</div>
+            <div class="stat-label">Resolved</div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <form method="GET" id="filterForm" class="filter-bar">
+        <select name="severity" class="form-control" onchange="this.form.submit()">
+            <option value="">All Severities</option>
+            <option value="CRITICAL" {% if severity == 'CRITICAL' %}selected{% endif %}>Critical</option>
+            <option value="ERROR" {% if severity == 'ERROR' %}selected{% endif %}>Error</option>
+            <option value="WARNING" {% if severity == 'WARNING' %}selected{% endif %}>Warning</option>
+        </select>
+
+        <select name="resolved" class="form-control" onchange="this.form.submit()">
+            <option value="">All Status</option>
+            <option value="0" {% if resolved == '0' %}selected{% endif %}>Unresolved</option>
+            <option value="1" {% if resolved == '1' %}selected{% endif %}>Resolved</option>
+        </select>
+
+        <div class="search-wrapper">
+            <input type="text" name="search" placeholder="Search errors..." value="{{ search or '' }}" class="form-control">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i></button>
+        </div>
+
+        {% if search or severity or resolved %}
+            <a href="{{ url_for('admin_errors.index') }}" class="btn btn-secondary">Clear</a>
+        {% endif %}
+
+        <button type="button" class="btn btn-danger" onclick="clearResolved()">
+            <i class="fas fa-trash"></i> Clear Resolved
+        </button>
+    </form>
+
+    <!-- Table -->
+    <div class="table-container">
+        <div class="table-header">
+            <span><strong>{{ total }}</strong> errors found</span>
+            <span>Page {{ page }} of {{ total_pages }}</span>
+        </div>
+
+        {% if errors %}
+            <div style="overflow-x: auto;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Severity</th>
+                            <th>Request ID</th>
+                            <th>Error Type</th>
+                            <th>Message</th>
+                            <th>URL</th>
+                            <th>Status</th>
+                            <th class="hide-mobile" style="text-align: center;">#</th>
+                            <th style="text-align: center;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for error in errors %}
+                            <tr class="{% if error.resolved %}resolved{% endif %}">
+                                <td>
+                                    <span class="severity-badge {{ error.severity|lower }}">{{ error.severity }}</span>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('admin_errors.by_request', request_id=error.request_id) }}" style="color: var(--primary); text-decoration: none; font-family: monospace; font-size: 12px;">
+                                        {{ error.request_id[:8] }}
+                                    </a>
+                                </td>
+                                <td>{{ error.error_type[:30] }}</td>
+                                <td style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    {{ error.error_message[:50] }}{% if error.error_message|length > 50 %}...{% endif %}
+                                </td>
+                                <td style="max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary);">
+                                    {{ error.url[:40] }}{% if error.url|length > 40 %}...{% endif %}
+                                </td>
+                                <td>
+                                    <span class="status-badge {% if error.resolved %}resolved{% elif error.dismissed %}dismissed{% else %}unresolved{% endif %}">
+                                        {% if error.resolved %}Resolved{% elif error.dismissed %}Dismissed{% else %}Active{% endif %}
+                                    </span>
+                                </td>
+                                <td class="hide-mobile" style="text-align: center; color: var(--text-secondary);">{{ error.occurrence_count }}</td>
+                                <td style="display: flex; gap: 4px; flex-wrap: wrap; justify-content: center;">
+                                    <a href="{{ url_for('admin_errors.detail', error_id=error.id) }}" class="action-btn view">View</a>
+                                    {% if not error.resolved %}
+                                        <button onclick="resolveError({{ error.id }})" class="action-btn resolve">Resolve</button>
+                                    {% endif %}
+                                    {% if not error.dismissed %}
+                                        <button onclick="dismissError({{ error.id }})" class="action-btn dismiss">Dismiss</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if total_pages > 1 %}
+                <div class="pagination">
+                    <a href="?page=1&severity={{ severity }}&resolved={{ resolved }}&search={{ search }}" class="page-link {% if page == 1 %}disabled{% endif %}">First</a>
+                    <a href="?page={{ page - 1 }}&severity={{ severity }}&resolved={{ resolved }}&search={{ search }}" class="page-link {% if page == 1 %}disabled{% endif %}">Previous</a>
+                    {% for p in range(1, total_pages + 1) %}
+                        {% if p == page %}
+                            <span class="page-link active">{{ p }}</span>
+                        {% elif p <= page + 2 and p >= page - 2 %}
+                            <a href="?page={{ p }}&severity={{ severity }}&resolved={{ resolved }}&search={{ search }}" class="page-link">{{ p }}</a>
+                        {% endif %}
+                    {% endfor %}
+                    <a href="?page={{ page + 1 }}&severity={{ severity }}&resolved={{ resolved }}&search={{ search }}" class="page-link {% if page == total_pages %}disabled{% endif %}">Next</a>
+                    <a href="?page={{ total_pages }}&severity={{ severity }}&resolved={{ resolved }}&search={{ search }}" class="page-link {% if page == total_pages %}disabled{% endif %}">Last</a>
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="empty-state">
+                <span class="empty-icon">🎉</span>
+                <div class="empty-title">No errors found</div>
+                <p style="font-size: 14px;">Everything is running smoothly!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function resolveError(id) {
+    if (!confirm('Mark this error as resolved?')) return;
+    fetch('/admin/errors/resolve/' + id, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'csrf_token={{ csrf_token }}'
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) location.reload();
+        else alert('Failed to resolve error: ' + data.error);
+    })
+    .catch(() => alert('Network error.'));
+}
+
+function dismissError(id) {
+    if (!confirm('Dismiss this error from the list?')) return;
+    fetch('/admin/errors/dismiss/' + id, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'csrf_token={{ csrf_token }}'
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) location.reload();
+        else alert('Failed to dismiss error: ' + data.error);
+    })
+    .catch(() => alert('Network error.'));
+}
+
+function clearResolved() {
+    if (!confirm('Delete all resolved errors? This cannot be undone.')) return;
+    fetch('/admin/errors/clear-resolved', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'csrf_token={{ csrf_token }}'
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('Cleared ' + data.deleted + ' resolved errors.');
+            location.reload();
+        } else {
+            alert('Failed to clear resolved errors.');
+        }
+    })
+    .catch(() => alert('Network error.'));
+}
+</script>
+{% endblock %}

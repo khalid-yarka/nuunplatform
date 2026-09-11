@@ -1,0 +1,74 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Quiz Results{% endblock %}
+
+{% block page_title %}Results{% endblock %}
+
+{% block dashboard_content %}
+<div style="max-width: 640px; margin: 0 auto; text-align: center;">
+    <!-- Result Icon -->
+    <div style="font-size: 80px; margin-bottom: 16px;">
+        {% if percentage >= 70 %}🎉{% elif percentage >= 50 %}😊{% else %}💪{% endif %}
+    </div>
+
+    <!-- Score -->
+    <h2 style="font-size: 28px; font-weight: 700; color: var(--text);">
+        {{ score }}/{{ total }}
+    </h2>
+    <p style="font-size: 18px; color: var(--text-secondary); margin-top: 4px;">
+        {{ percentage }}% correct
+    </p>
+
+    <!-- Progress Ring -->
+    <div style="width: 120px; height: 120px; border-radius: 50%; background: conic-gradient(var(--primary) 0deg {{ percentage * 3.6 }}deg, var(--border) {{ percentage * 3.6 }}deg 360deg); display: flex; align-items: center; justify-content: center; margin: 20px auto;">
+        <div style="width: 90px; height: 90px; border-radius: 50%; background: var(--surface); display: flex; align-items: center; justify-content: center; flex-direction: column;">
+            <span style="font-size: 28px; font-weight: 700; color: var(--primary);">{{ percentage }}%</span>
+            <span style="font-size: 11px; color: var(--text-secondary);">Score</span>
+        </div>
+    </div>
+
+    <!-- Message -->
+    <p style="color: var(--text-secondary); font-size: 15px; margin-bottom: 24px;">
+        {% if percentage >= 70 %}
+            Excellent work! Keep it up! 🌟
+        {% elif percentage >= 50 %}
+            Good effort! Review and try again. 📚
+        {% else %}
+            Don't give up! Practice makes perfect. 💪
+        {% endif %}
+    </p>
+
+    <!-- Reactions Summary -->
+    {% if reactions %}
+    <div style="background: var(--background); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 20px; text-align: left; border: 1px solid var(--border);">
+        <h4 style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 8px;">Your Reactions</h4>
+        {% if reactions.likes %}
+            <div style="font-size: 14px; color: var(--text-secondary);">❤️ Liked questions: {{ reactions.likes|join(', ') }}</div>
+        {% endif %}
+        {% if reactions.saves %}
+            <div style="font-size: 14px; color: var(--text-secondary);">📑 Saved questions: {{ reactions.saves|join(', ') }}</div>
+        {% endif %}
+        {% if reactions.reports %}
+            <div style="font-size: 14px; color: var(--text-secondary);">⚠️ Reported questions: 
+                {% for qid, details in reactions.reports.items() %}
+                    <span>#{{ qid }} ({{ details.reason }})</span>{% if not loop.last %}, {% endif %}
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Actions -->
+    <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
+        <a href="{{ url_for('quiz.index') }}" style="padding: 12px 28px; background: var(--primary); color: white; border: none; border-radius: var(--radius-sm); font-weight: 600; text-decoration: none; transition: var(--transition);">
+            <i class="fas fa-redo"></i> Try Again
+        </a>
+        <a href="{{ url_for('quiz.leaderboard') }}" style="padding: 12px 28px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); font-weight: 600; text-decoration: none; transition: var(--transition);">
+            <i class="fas fa-trophy"></i> Leaderboard
+        </a>
+        <a href="{{ url_for('dashboard.home') }}" style="padding: 12px 28px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); font-weight: 600; text-decoration: none; transition: var(--transition);">
+            <i class="fas fa-home"></i> Home
+        </a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Student Platform{% endblock %}</title>
+
+    <!-- ============================================ -->
+    <!-- ANTI-FLASH: apply theme before first paint  -->
+    <!-- ============================================ -->
+    <script>
+        (function() {
+            try {
+                // Priority 1: Server-rendered setting (most authoritative)
+                var serverTheme = "{{ settings.get('appearance.theme', '') if settings is defined else '' }}";
+                var theme = serverTheme || localStorage.getItem('preferred-theme') || 'system';
+
+                var resolved;
+                if (theme === 'system') {
+                    resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                } else {
+                    resolved = theme;
+                }
+                document.documentElement.setAttribute('data-theme', resolved);
+
+                // Apply accent colour too (prevents colour flash)
+                var serverAccent = "{{ settings.get('appearance.accent', '') if settings is defined else '' }}";
+                var accent = serverAccent || localStorage.getItem('preferred-accent') || 'red';
+
+                var ACCENTS = {
+                    red:    { hex: '#FF3138', hover: '#E62B32', light: '#FFEBE8', light_dark: '#3A1A20' },
+                    blue:   { hex: '#3B82F6', hover: '#2563EB', light: '#E8F0FE', light_dark: '#1A2A4A' },
+                    green:  { hex: '#10B981', hover: '#059669', light: '#D1FAE5', light_dark: '#1A3A2E' },
+                    purple: { hex: '#8B5CF6', hover: '#7C3AED', light: '#EDE9FE', light_dark: '#2A1A4A' },
+                    orange: { hex: '#F59E0B', hover: '#D97706', light: '#FEF3C7', light_dark: '#3A2E1A' }
+                };
+                var a = ACCENTS[accent] || ACCENTS.red;
+                var isDark = resolved === 'dark';
+                var root = document.documentElement;
+                root.style.setProperty('--primary', a.hex);
+                root.style.setProperty('--primary-hover', a.hover);
+                root.style.setProperty('--primary-light', isDark ? a.light_dark : a.light);
+
+                // Apply font size (prevents size flash)
+                var serverFont = "{{ settings.get('appearance.font_size', '') if settings is defined else '' }}";
+                var fontSize = serverFont || localStorage.getItem('preferred-font-size') || 'medium';
+                var sizes = { small: '14px', medium: '16px', large: '18px' };
+                root.style.setProperty('--base-font-size', sizes[fontSize] || '16px');
+
+                // Compact mode
+                var serverCompact = "{{ settings.get('appearance.compact_mode', '') if settings is defined else '' }}";
+                var compact = serverCompact === 'True' || serverCompact === 'true' || serverCompact === '1'
+                              || localStorage.getItem('preferred-compact') === '1';
+                if (compact) root.classList.add('compact-mode');
+
+                // Reduced motion
+                var serverMotion = "{{ settings.get('appearance.reduced_motion', '') if settings is defined else '' }}";
+                var reduced = serverMotion === 'True' || serverMotion === 'true' || serverMotion === '1'
+                              || localStorage.getItem('preferred-reduced-motion') === '1';
+                if (reduced) root.classList.add('reduced-motion');
+            } catch (e) { /* silent — fallback to defaults */ }
+        })();
+    </script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+    <!-- ============================================ -->
+    <!-- MAIN CSS – loads first                       -->
+    <!-- ============================================ -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+
+    <!-- ============================================ -->
+    <!-- SERVER-SIDE ACCENT COLOURS – OVERRIDES       -->
+    <!-- ============================================ -->
+    {% if accent_colours %}
+    <style id="accent-style">
+        :root {
+            --primary: {{ accent_colours.hex }};
+            --primary-hover: {{ accent_colours.hover }};
+            --primary-light: {{ accent_colours.light }};
+        }
+    </style>
+    {% endif %}
+
+    <!-- Page specific CSS -->
+    {% block extra_css %}{% endblock %}
+
+    <!-- Additional head content -->
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <!-- ============================================ -->
+    <!-- TOAST NOTIFICATIONS -->
+    <!-- ============================================ -->
+    <div id="toast-container"></div>
+
+    <!-- ============================================ -->
+    <!-- FLASH MESSAGES -->
+    <!-- ============================================ -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-container" id="flashContainer">
+                {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}" data-toast>
+                        <i class="fas {% if category == 'success' %}fa-check-circle{% elif category == 'error' %}fa-exclamation-circle{% elif category == 'info' %}fa-info-circle{% else %}fa-bell{% endif %}"></i>
+                        {{ message }}
+                        <button class="flash-close" onclick="this.parentElement.remove()">&times;</button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    {% block content %}{% endblock %}
+
+    <!-- Main JavaScript -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    <!-- Page specific JS -->
+    {% block extra_js %}{% endblock %}
+
+    <!-- ============================================ -->
+    <!-- FLOATING THEME TOGGLE (Login/Register only)  -->
+    <!-- ============================================ -->
+    <div class="floating-theme-toggle" id="floatingThemeToggle" style="display: none; position: fixed; bottom: 24px; right: 24px; z-index: 10000;">
+        <button class="fab-theme" id="fabThemeBtn" style="width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 4px 20px rgba(0,0,0,0.15); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--text); transition: transform 0.2s ease, box-shadow 0.2s ease;">
+            <i class="fas fa-moon" id="fabThemeIcon"></i>
+        </button>
+        <div class="fab-popover" id="fabPopover" style="display: none; position: absolute; bottom: 60px; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; box-shadow: var(--shadow-lg); min-width: 160px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
+            <div class="popover-title" style="font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Choose theme</div>
+            <div class="theme-option" data-theme="light" style="display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition); font-size: 14px; color: var(--text);">
+                <i class="fas fa-sun"></i> <span>Light</span>
+            </div>
+            <div class="theme-option" data-theme="dark" style="display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition); font-size: 14px; color: var(--text);">
+                <i class="fas fa-moon"></i> <span>Dark</span>
+            </div>
+            <div class="theme-option" data-theme="system" style="display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition); font-size: 14px; color: var(--text);">
+                <i class="fas fa-desktop"></i> <span>System</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const isAuthPage = window.location.pathname === '/login' || window.location.pathname === '/register';
+            const toggle = document.getElementById('floatingThemeToggle');
+            if (!isAuthPage) {
+                if (toggle) toggle.style.display = 'none';
+                return;
+            }
+            if (toggle) toggle.style.display = 'block';
+
+            const btn = document.getElementById('fabThemeBtn');
+            const popover = document.getElementById('fabPopover');
+            const icon = document.getElementById('fabThemeIcon');
+            const options = document.querySelectorAll('.theme-option');
+
+            const savedTheme = localStorage.getItem('preferred-theme') || 'system';
+
+            function applyTheme(theme) {
+                let resolved;
+                if (theme === 'system') {
+                    resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                    icon.className = 'fas fa-desktop';
+                } else if (theme === 'dark') {
+                    resolved = 'dark';
+                    icon.className = 'fas fa-moon';
+                } else {
+                    resolved = 'light';
+                    icon.className = 'fas fa-sun';
+                }
+                document.documentElement.setAttribute('data-theme', resolved);
+                options.forEach(opt => {
+                    const val = opt.dataset.theme;
+                    if (val === theme) {
+                        opt.style.background = 'var(--primary-light)';
+                        opt.style.color = 'var(--primary)';
+                    } else {
+                        opt.style.background = 'transparent';
+                        opt.style.color = 'var(--text)';
+                    }
+                });
+                localStorage.setItem('preferred-theme', theme);
+            }
+
+            applyTheme(savedTheme);
+
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const isOpen = popover.style.display === 'block';
+                popover.style.display = isOpen ? 'none' : 'block';
+            });
+
+            document.addEventListener('click', function() {
+                popover.style.display = 'none';
+            });
+            popover.addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
+
+            options.forEach(opt => {
+                opt.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const theme = this.dataset.theme;
+                    applyTheme(theme);
+                    popover.style.display = 'none';
+                });
+            });
+
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+                const current = localStorage.getItem('preferred-theme') || 'system';
+                if (current === 'system') {
+                    document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

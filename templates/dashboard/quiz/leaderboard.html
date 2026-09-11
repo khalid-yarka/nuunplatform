@@ -1,0 +1,549 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Leaderboard{% endblock %}
+
+{% block page_title %}Leaderboard{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<style>
+    .leaderboard-container {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .leaderboard-header {
+        text-align: center;
+        margin-bottom: 28px;
+    }
+
+    .leaderboard-header h2 {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--text);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+    }
+
+    .leaderboard-header h2 .trophy {
+        font-size: 32px;
+    }
+
+    .leaderboard-header p {
+        color: var(--text-secondary);
+        font-size: 14px;
+        margin-top: 4px;
+    }
+
+    /* User Rank Badge */
+    .user-rank-badge {
+        background: var(--primary);
+        color: white;
+        border-radius: 30px;
+        padding: 10px 24px;
+        margin-bottom: 24px;
+        text-align: center;
+        font-size: 15px;
+        font-weight: 600;
+        box-shadow: 0 4px 14px rgba(255, 49, 56, 0.25);
+        display: inline-block;
+        width: 100%;
+        max-width: 300px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .user-rank-badge .rank-number {
+        font-size: 28px;
+        font-weight: 800;
+        color: #FCD34D;
+    }
+
+    /* Top 3 Podium */
+    .podium {
+        display: flex;
+        justify-content: center;
+        align-items: flex-end;
+        gap: 16px;
+        margin-bottom: 32px;
+        padding: 20px 0;
+    }
+
+    .podium-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: var(--surface);
+        border-radius: var(--radius);
+        padding: 16px 20px 20px;
+        box-shadow: var(--shadow-md);
+        border: 1px solid var(--border);
+        transition: var(--transition);
+        min-width: 100px;
+        flex: 1;
+        max-width: 180px;
+    }
+
+    .podium-item:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .podium-item .medal {
+        font-size: 40px;
+        margin-bottom: 4px;
+        display: block;
+    }
+
+    .podium-item .podium-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+        text-align: center;
+        line-height: 1.3;
+        margin-top: 4px;
+    }
+
+    .podium-item .podium-school {
+        font-size: 11px;
+        color: var(--text-muted);
+        text-align: center;
+        margin-top: 2px;
+    }
+
+    .podium-item .podium-points {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--primary);
+        margin-top: 6px;
+    }
+
+    .podium-item.first {
+        order: 2;
+        padding-top: 24px;
+        border-color: #F59E0B;
+        background: linear-gradient(180deg, #FFFBEB 0%, var(--surface) 60%);
+    }
+
+    .podium-item.second {
+        order: 1;
+        border-color: #9CA3AF;
+        background: linear-gradient(180deg, #F9FAFB 0%, var(--surface) 60%);
+    }
+
+    .podium-item.third {
+        order: 3;
+        border-color: #D97706;
+        background: linear-gradient(180deg, #FFFBEB 0%, var(--surface) 60%);
+    }
+
+    [data-theme="dark"] .podium-item.first {
+        background: linear-gradient(180deg, #3A2E1A 0%, var(--surface) 60%);
+        border-color: #FBBF24;
+    }
+
+    [data-theme="dark"] .podium-item.second {
+        background: linear-gradient(180deg, #2A2A3A 0%, var(--surface) 60%);
+        border-color: #9CA3AF;
+    }
+
+    [data-theme="dark"] .podium-item.third {
+        background: linear-gradient(180deg, #3A2A1A 0%, var(--surface) 60%);
+        border-color: #D97706;
+    }
+
+    /* Full Leaderboard Table */
+    .leaderboard-table-wrap {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .leaderboard-table-wrap .table-header {
+        padding: 14px 20px;
+        background: var(--background);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+
+    .leaderboard-table-wrap .table-header strong {
+        color: var(--text);
+    }
+
+    .leaderboard-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+
+    .leaderboard-table th {
+        padding: 12px 16px;
+        text-align: left;
+        background: var(--background);
+        color: var(--text-secondary);
+        font-weight: 600;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 2px solid var(--border);
+    }
+
+    .leaderboard-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-light);
+        color: var(--text);
+        vertical-align: middle;
+    }
+
+    .leaderboard-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .leaderboard-table tr:hover td {
+        background: var(--primary-light);
+    }
+
+    .leaderboard-table tr.you td {
+        background: var(--primary-light) !important;
+        border-left: 3px solid var(--primary);
+        font-weight: 600;
+    }
+
+    [data-theme="dark"] .leaderboard-table tr.you td {
+        background: var(--highlight-bg, #4A2A40) !important;
+        color: var(--highlight-text, #FFFFFF) !important;
+        border-left-color: #FF6B70;
+    }
+
+    .leaderboard-table .rank-cell {
+        font-weight: 700;
+        color: var(--text-secondary);
+        font-size: 13px;
+        text-align: center;
+        width: 48px;
+    }
+
+    .leaderboard-table .rank-cell .medal-small {
+        font-size: 18px;
+        display: inline-block;
+    }
+
+    .leaderboard-table .rank-cell.gold {
+        color: #F59E0B;
+    }
+    .leaderboard-table .rank-cell.silver {
+        color: #9CA3AF;
+    }
+    .leaderboard-table .rank-cell.bronze {
+        color: #D97706;
+    }
+
+    .leaderboard-table .name-cell {
+        font-weight: 500;
+        color: var(--text);
+    }
+
+    .leaderboard-table .name-cell .you-tag {
+        font-size: 10px;
+        font-weight: 600;
+        background: var(--primary);
+        color: white;
+        padding: 1px 10px;
+        border-radius: 10px;
+        margin-left: 8px;
+        display: inline-block;
+    }
+
+    [data-theme="dark"] .leaderboard-table .name-cell .you-tag {
+        background: #FF6B70;
+        color: #1A1A2E;
+    }
+
+    .leaderboard-table .school-cell {
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+
+    .leaderboard-table .points-cell {
+        font-weight: 700;
+        color: var(--primary);
+        text-align: right;
+        font-size: 15px;
+    }
+
+    [data-theme="dark"] .leaderboard-table .points-cell {
+        color: #FF6B70;
+    }
+
+    .leaderboard-table .public-id-cell {
+        font-size: 11px;
+        font-family: monospace;
+        color: var(--text-muted);
+        text-align: center;
+    }
+
+    .leaderboard-empty {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--text-secondary);
+    }
+
+    .leaderboard-empty .empty-icon {
+        font-size: 64px;
+        opacity: 0.3;
+        margin-bottom: 16px;
+        display: block;
+    }
+
+    .leaderboard-empty h3 {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text);
+        margin: 0 0 4px 0;
+    }
+
+    .leaderboard-empty p {
+        font-size: 14px;
+        margin: 0;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .podium {
+            gap: 10px;
+        }
+
+        .podium-item {
+            min-width: 70px;
+            padding: 12px 12px 16px;
+        }
+
+        .podium-item .medal {
+            font-size: 28px;
+        }
+
+        .podium-item .podium-name {
+            font-size: 12px;
+        }
+
+        .podium-item .podium-points {
+            font-size: 15px;
+        }
+
+        .leaderboard-table th,
+        .leaderboard-table td {
+            padding: 8px 10px;
+            font-size: 13px;
+        }
+
+        .leaderboard-table .school-cell {
+            display: none;
+        }
+
+        .leaderboard-table .public-id-cell {
+            display: none;
+        }
+
+        .leaderboard-table .rank-cell {
+            width: 32px;
+            font-size: 12px;
+        }
+
+        .user-rank-badge {
+            font-size: 13px;
+            padding: 8px 16px;
+            max-width: 100%;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .leaderboard-container {
+            padding: 0 8px;
+        }
+
+        .podium {
+            gap: 6px;
+        }
+
+        .podium-item {
+            min-width: 60px;
+            padding: 8px 6px 12px;
+        }
+
+        .podium-item .medal {
+            font-size: 22px;
+        }
+
+        .podium-item .podium-name {
+            font-size: 10px;
+        }
+
+        .podium-item .podium-points {
+            font-size: 13px;
+        }
+
+        .leaderboard-table th,
+        .leaderboard-table td {
+            padding: 6px 8px;
+            font-size: 12px;
+        }
+
+        .leaderboard-table .points-cell {
+            font-size: 13px;
+        }
+
+        .leaderboard-table .rank-cell {
+            width: 28px;
+            font-size: 11px;
+        }
+
+        .leaderboard-header h2 {
+            font-size: 22px;
+        }
+
+        .user-rank-badge {
+            font-size: 12px;
+            padding: 6px 12px;
+        }
+
+        .user-rank-badge .rank-number {
+            font-size: 20px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="leaderboard-container">
+
+    <!-- Header -->
+    <div class="leaderboard-header">
+        <h2>
+            <span class="trophy">🏆</span>
+            Leaderboard
+        </h2>
+        <p>Top performers on the platform</p>
+    </div>
+
+    <!-- User Rank -->
+    {% if user_rank %}
+        <div style="text-align: center;">
+            <div class="user-rank-badge">
+                Your Rank: <span class="rank-number">#{{ user_rank }}</span>
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Podium: Top 3 -->
+    {% if leaders and leaders|length >= 3 %}
+        <div class="podium">
+            <div class="podium-item second">
+                <span class="medal">🥈</span>
+                <div class="podium-name">
+                    {{ leaders[1].first_name }} 
+                    {% if leaders[1].middle_name %}{{ leaders[1].middle_name }} {% endif %}
+                    {{ leaders[1].last_name or '' }}
+                </div>
+                {% if leaders[1].school %}
+                    <div class="podium-school">{{ leaders[1].school }}</div>
+                {% endif %}
+                <div class="podium-points">{{ leaders[1].total_points or 0 }}</div>
+            </div>
+            <div class="podium-item first">
+                <span class="medal">🥇</span>
+                <div class="podium-name">
+                    {{ leaders[0].first_name }} 
+                    {% if leaders[0].middle_name %}{{ leaders[0].middle_name }} {% endif %}
+                    {{ leaders[0].last_name or '' }}
+                </div>
+                {% if leaders[0].school %}
+                    <div class="podium-school">{{ leaders[0].school }}</div>
+                {% endif %}
+                <div class="podium-points">{{ leaders[0].total_points or 0 }}</div>
+            </div>
+            <div class="podium-item third">
+                <span class="medal">🥉</span>
+                <div class="podium-name">
+                    {{ leaders[2].first_name }} 
+                    {% if leaders[2].middle_name %}{{ leaders[2].middle_name }} {% endif %}
+                    {{ leaders[2].last_name or '' }}
+                </div>
+                {% if leaders[2].school %}
+                    <div class="podium-school">{{ leaders[2].school }}</div>
+                {% endif %}
+                <div class="podium-points">{{ leaders[2].total_points or 0 }}</div>
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Full Leaderboard Table (Top 50) -->
+    <div class="leaderboard-table-wrap">
+        <div class="table-header">
+            <span><strong>{{ leaders|length }}</strong> top performers</span>
+            <span>🏅 Top 50</span>
+        </div>
+
+        {% if leaders %}
+            <table class="leaderboard-table">
+                <thead>
+                    <tr>
+                        <th style="text-align:center; width:48px;">#</th>
+                        <th>Student</th>
+                        <th class="school-cell">School</th>
+                        <th class="public-id-cell" style="text-align:center;">ID</th>
+                        <th style="text-align:right; width:80px;">Points</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in leaders %}
+                        {% set is_you = student.public_id == session.public_id %}
+                        {% set loop_index = loop.index %}
+                        <tr class="{% if is_you %}you{% endif %}">
+                            <td class="rank-cell 
+                                {% if loop_index == 1 %}gold{% elif loop_index == 2 %}silver{% elif loop_index == 3 %}bronze{% endif %}"
+                                style="text-align:center;">
+                                {% if loop_index == 1 %}
+                                    <span class="medal-small">🥇</span>
+                                {% elif loop_index == 2 %}
+                                    <span class="medal-small">🥈</span>
+                                {% elif loop_index == 3 %}
+                                    <span class="medal-small">🥉</span>
+                                {% else %}
+                                    {{ loop_index }}
+                                {% endif %}
+                            </td>
+                            <td class="name-cell">
+                                {{ student.first_name }} 
+                                {% if student.middle_name %}{{ student.middle_name }} {% endif %}
+                                {{ student.last_name or '' }}
+                                {% if is_you %}
+                                    <span class="you-tag">You</span>
+                                {% endif %}
+                            </td>
+                            <td class="school-cell">{{ student.school or '—' }}</td>
+                            <td class="public-id-cell">#{{ student.public_id or '----' }}</td>
+                            <td class="points-cell">{{ student.total_points or 0 }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="leaderboard-empty">
+                <span class="empty-icon">🏆</span>
+                <h3>No scores yet</h3>
+                <p>Be the first to play and claim the top spot!</p>
+            </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

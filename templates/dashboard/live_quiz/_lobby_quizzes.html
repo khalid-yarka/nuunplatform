@@ -1,0 +1,132 @@
+<!-- dashboard/live_quiz/_lobby_quizzes.html -->
+{% if quizzes %}
+    {% for quiz in quizzes %}
+        <div class="quiz-card" data-id="{{ quiz.id }}">
+            <div class="status-indicator {{ quiz.status }}"></div>
+
+            <div class="card-body">
+                <div class="title">
+                    <span class="subject-icon">{{ quiz.subject_icon or '📚' }}</span>
+                    {{ quiz.title or 'Untitled Quiz' }}
+                    <span class="status-tag {{ quiz.status }}">{{ quiz.status|upper }}</span>
+                    {% if not quiz.is_public %}
+                        <span class="status-tag" style="background:#FEF3C7;color:#92400E;">🔒 PRIVATE</span>
+                    {% endif %}
+                    {% if quiz.is_creator %}
+                        <span class="badge-creator">You (Creator)</span>
+                    {% elif quiz.is_participant %}
+                        <span class="badge-you">You</span>
+                    {% endif %}
+                </div>
+                <div class="meta">
+                    <span><i class="fas fa-book"></i> {{ quiz.subject_name or 'Unknown Subject' }}</span>
+                    <span><i class="fas fa-question-circle"></i> {{ quiz.question_count }} questions</span>
+                    <span><i class="fas fa-clock"></i> {{ quiz.time_per_question }}s each</span>
+                    {% if quiz.status == 'finished' %}
+                        <span><i class="fas fa-flag-checkered"></i> Finished</span>
+                    {% endif %}
+                    <span class="time-ago">
+                        <i class="fas fa-calendar-alt"></i>
+                        {% if quiz.status == 'finished' and quiz.ended_at %}
+                            {{ quiz.ended_at|time_ago }}
+                        {% elif quiz.created_at %}
+                            {{ quiz.created_at|time_ago }}
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="creator">
+                    👤 By <strong>{{ quiz.creator_first_name or 'Unknown' }} {{ quiz.creator_last_name or '' }}</strong>
+                </div>
+            </div>
+
+            <div class="card-actions">
+                <span class="participant-count">
+                    <i class="fas fa-users"></i> <strong>{{ quiz.participant_count or 0 }}</strong> / {{ quiz.max_participants or 50 }}
+                </span>
+
+                {% if quiz.status == 'scheduled' or quiz.status == 'waiting' %}
+                    {% if quiz.is_participant %}
+                        <a href="{{ url_for('live_quiz.waiting_room', quiz_id=quiz.id) }}" class="btn-sm success">
+                            <i class="fas fa-door-open"></i> Waiting Room
+                        </a>
+                    {% else %}
+                        <button class="btn-sm success" onclick="joinQuiz('{{ quiz.id }}')">
+                            <i class="fas fa-arrow-right"></i> Join
+                        </button>
+                    {% endif %}
+                {% elif quiz.status == 'active' %}
+                    {% if quiz.is_participant %}
+                        <a href="{{ url_for('live_quiz.play', quiz_id=quiz.id) }}" class="btn-sm primary">
+                            <i class="fas fa-play"></i> Continue
+                        </a>
+                    {% else %}
+                        <span class="btn-sm secondary" style="opacity:0.7; cursor:default;">
+                            <i class="fas fa-clock"></i> In Progress
+                        </span>
+                    {% endif %}
+                {% else %}
+                    <a href="{{ url_for('live_quiz.results', quiz_id=quiz.id) }}" class="btn-sm primary">
+                        <i class="fas fa-chart-bar"></i> Results
+                    </a>
+                {% endif %}
+
+                {% if (quiz.is_creator or session.is_admin) and quiz.status != 'active' %}
+                    <button class="btn-sm danger" onclick="deleteQuiz('{{ quiz.id }}', '{{ quiz.title or 'Untitled Quiz' }}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+    {% endfor %}
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+        {% set start_item = (page - 1) * 20 + 1 %}
+        {% set end_item = page * 20 %}
+        {% if end_item > total %}{% set end_item = total %}{% endif %}
+        <div class="lobby-pagination-wrap">
+            <div class="lobby-pagination-info">
+                Showing <strong>{{ start_item }}–{{ end_item }}</strong> of <strong>{{ total }}</strong> quizzes
+            </div>
+            <div class="lobby-pagination">
+                <button type="button"
+                        class="lobby-page-btn {% if page == 1 %}disabled{% endif %}"
+                        data-page="{{ page - 1 }}"
+                        {% if page == 1 %}disabled{% endif %}
+                        aria-label="Previous page">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <span class="lobby-page-status">
+                    Page <strong>{{ page }}</strong> / {{ total_pages }}
+                </span>
+                <button type="button"
+                        class="lobby-page-btn {% if page == total_pages %}disabled{% endif %}"
+                        data-page="{{ page + 1 }}"
+                        {% if page == total_pages %}disabled{% endif %}
+                        aria-label="Next page">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    {% endif %}
+
+{% else %}
+    <!-- Empty State -->
+    <div class="lobby-empty">
+        <div class="icon">🎯</div>
+        <h3>No quizzes found</h3>
+        <p>
+            {% if search or status_filter or subject_filter %}
+                Try adjusting your filters or search terms.
+            {% else %}
+                There are no public quizzes available right now. Be the first to create one!
+            {% endif %}
+        </p>
+        <div class="actions">
+            <a href="{{ url_for('live_quiz.create') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Create a Quiz
+            </a>
+            <a href="{{ url_for('live_quiz.lobby') }}" class="btn btn-secondary">Clear Filters</a>
+        </div>
+    </div>
+{% endif %}

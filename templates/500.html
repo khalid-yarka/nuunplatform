@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}Server Error - NuunPlatform{% endblock %}
+
+{% block extra_css %}
+<style>
+    .error-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: var(--background);
+    }
+
+    .error-card {
+        max-width: 560px;
+        width: 100%;
+        background: var(--surface);
+        border-radius: var(--radius);
+        padding: 48px 40px;
+        text-align: center;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-lg);
+        animation: fadeInUp 0.6s ease;
+    }
+
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .error-icon {
+        font-size: 80px;
+        margin-bottom: 8px;
+        display: block;
+        animation: shake 2s ease-in-out infinite;
+    }
+
+    @keyframes shake {
+        0%, 100% { transform: rotate(0deg); }
+        5% { transform: rotate(-5deg); }
+        10% { transform: rotate(5deg); }
+        15% { transform: rotate(0deg); }
+    }
+
+    .error-code {
+        font-size: 80px;
+        font-weight: 800;
+        color: #DC2626;
+        line-height: 1;
+        letter-spacing: -4px;
+        margin-bottom: 4px;
+    }
+
+    .error-title {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 8px;
+    }
+
+    .error-description {
+        color: var(--text-secondary);
+        font-size: 16px;
+        line-height: 1.6;
+        margin-bottom: 6px;
+    }
+
+    .error-sub {
+        color: var(--text-muted);
+        font-size: 14px;
+        margin-bottom: 6px;
+    }
+
+    .error-support {
+        background: var(--background);
+        border-radius: var(--radius-sm);
+        padding: 14px 20px;
+        margin: 20px 0 24px;
+        text-align: left;
+        border: 1px solid var(--border);
+    }
+
+    .error-support .label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        display: block;
+        margin-bottom: 4px;
+    }
+
+    .error-support .code {
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        color: var(--text-secondary);
+        word-break: break-all;
+    }
+
+    .error-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 28px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        font-size: 15px;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 14px rgba(255, 49, 56, 0.25);
+    }
+
+    .btn-primary:hover {
+        background: var(--primary-hover);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(255, 49, 56, 0.35);
+    }
+
+    .btn-secondary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 28px;
+        background: var(--surface);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        font-size: 15px;
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+
+    .btn-secondary:hover {
+        background: var(--background);
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+
+    .btn-report {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        background: transparent;
+        color: var(--text-muted);
+        border: none;
+        font-size: 13px;
+        text-decoration: none;
+        cursor: pointer;
+        transition: color 0.3s ease;
+        margin-top: 16px;
+    }
+
+    .btn-report:hover {
+        color: var(--primary);
+    }
+
+    /* Dark Mode Specific */
+    [data-theme="dark"] .error-card {
+        background: var(--surface);
+        border-color: var(--border);
+    }
+
+    [data-theme="dark"] .error-support {
+        background: var(--surface-alt);
+        border-color: var(--border);
+    }
+
+    [data-theme="dark"] .btn-secondary {
+        background: var(--surface-alt);
+        border-color: var(--border);
+        color: var(--text);
+    }
+
+    [data-theme="dark"] .btn-secondary:hover {
+        background: var(--primary-light);
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+
+    @media (max-width: 480px) {
+        .error-card {
+            padding: 32px 20px;
+        }
+        .error-code {
+            font-size: 56px;
+        }
+        .error-icon {
+            font-size: 60px;
+        }
+        .error-title {
+            font-size: 22px;
+        }
+        .error-actions {
+            flex-direction: column;
+        }
+        .btn-primary,
+        .btn-secondary {
+            justify-content: center;
+        }
+        .error-support .code {
+            font-size: 11px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <div class="error-card">
+        <span class="error-icon">⚡</span>
+        <div class="error-code">500</div>
+        <h1 class="error-title">Something Went Wrong</h1>
+        <p class="error-description">
+            We're experiencing technical difficulties on our end.
+        </p>
+        <p class="error-sub">
+            Our team has been notified and is working to fix the issue.
+        </p>
+
+        <div class="error-support">
+            <span class="label">🛠️ Error Reference</span>
+            <span class="code">#ERR-{{ request.headers.get('X-Request-ID', '0000') }}-{{ range(1000, 9999)|random }}</span>
+        </div>
+
+        <div class="error-actions">
+            <a href="{{ url_for('dashboard.home') if session.get('user_id') else url_for('auth.login') }}" class="btn-primary">
+                <i class="fas fa-home"></i> Go Home
+            </a>
+            <a href="javascript:location.reload()" class="btn-secondary">
+                <i class="fas fa-redo"></i> Try Again
+            </a>
+        </div>
+
+        <button class="btn-report" onclick="reportError()">
+            <i class="fas fa-bug"></i> Report this error
+        </button>
+    </div>
+</div>
+
+<script>
+function reportError() {
+    // Simple report function
+    const errorRef = document.querySelector('.error-support .code');
+    const ref = errorRef ? errorRef.textContent.trim() : 'unknown';
+    
+    if (confirm('Report this error to support? This will help us fix the issue faster.')) {
+        // In production, you'd send this to your backend
+        const email = 'support@nuunplatform.com';
+        const subject = 'Error Report: ' + ref;
+        const body = 'Please describe what you were doing when this error occurred:\n\n' +
+                     'Error Reference: ' + ref + '\n' +
+                     'Time: ' + new Date().toLocaleString() + '\n' +
+                     'Page: ' + window.location.href;
+        
+        window.location.href = 'mailto:' + email + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+        
+        // Fallback: show toast
+        if (typeof window.showToast === 'function') {
+            window.showToast('✅ Thank you! Our team will look into this.', 'success');
+        }
+    }
+}
+</script>
+{% endblock %}

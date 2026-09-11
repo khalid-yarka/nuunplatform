@@ -1,0 +1,116 @@
+{% extends "pdf_admin/base.html" %}
+
+{% block title %}Bot PDFs - PDF Admin{% endblock %}
+
+{% block content %}
+<div class="pdf-admin-page">
+    <div class="pdf-page-header">
+        <h1><i class="fas fa-check-circle"></i> Fulfilled Bot PDFs</h1>
+        <a href="{{ url_for('pdf_admin.dashboard') }}" class="pdf-btn pdf-btn-secondary pdf-btn-sm">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+    </div>
+
+    <form method="GET" id="filterForm" style="margin-bottom: 20px;">
+        <div class="pdf-table-toolbar">
+            <div class="pdf-search-wrapper">
+                <i class="fas fa-search"></i>
+                <input type="text" name="search" value="{{ search }}" placeholder="Search by title, code, subject..." class="pdf-search-input">
+            </div>
+            <select name="subject" class="pdf-search-input" style="width:auto; min-width:120px;">
+                <option value="">All Subjects</option>
+                {% for sub in subjects %}
+                <option value="{{ sub.code }}" {% if subject == sub.code %}selected{% endif %}>{{ sub.name }}</option>
+                {% endfor %}
+            </select>
+            <select name="curriculum" class="pdf-search-input" style="width:auto; min-width:100px;">
+                <option value="">All Curricula</option>
+                {% for cur in curricula %}
+                <option value="{{ cur }}" {% if curriculum == cur %}selected{% endif %}>{{ cur }}</option>
+                {% endfor %}
+            </select>
+            <select name="class" class="pdf-search-input" style="width:auto; min-width:100px;">
+                <option value="">All Classes</option>
+                {% for cls in classes %}
+                <option value="{{ cls }}" {% if class_filter == cls %}selected{% endif %}>{{ cls }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="pdf-btn pdf-btn-primary pdf-btn-sm">Filter</button>
+            <a href="{{ url_for('pdf_admin.bot_pdf_list') }}" class="pdf-btn pdf-btn-secondary pdf-btn-sm">Clear</a>
+        </div>
+    </form>
+
+    <form method="POST" action="{{ url_for('pdf_admin.publish_bot_pdfs') }}" id="publishForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="pdf-table-container">
+            <div class="pdf-table-toolbar">
+                <span><strong>{{ bot_pdfs|length }}</strong> PDFs found</span>
+                <div>
+                    <button type="submit" class="pdf-btn pdf-btn-success pdf-btn-sm">
+                        <i class="fas fa-upload"></i> Publish Selected
+                    </button>
+                    <button type="button" onclick="if(confirm('Publish ALL bot PDFs?')){document.getElementById('publishAllForm').submit();}" class="pdf-btn pdf-btn-primary pdf-btn-sm">
+                        <i class="fas fa-upload"></i> Publish All
+                    </button>
+                </div>
+            </div>
+            <div class="pdf-table-wrap">
+                <table class="pdf-table">
+                    <thead>
+                        <tr>
+                            <th style="width:30px;"><input type="checkbox" id="selectAll" onchange="toggleAll(this)"></th>
+                            <th>Code</th>
+                            <th>Title</th>
+                            <th>Subject</th>
+                            <th>Curriculum</th>
+                            <th>Class</th>
+                            <th>Uploaded</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pdf in bot_pdfs %}
+                        <tr>
+                            <td><input type="checkbox" name="pdf_ids" value="{{ pdf.id }}"></td>
+                            <td><code>{{ pdf.code }}</code></td>
+                            <td>{{ pdf.title }}</td>
+                            <td>{{ pdf.subject }}</td>
+                            <td>{{ pdf.curriculum }}</td>
+                            <td>{{ pdf.class or '-' }}</td>
+                            <td>{{ pdf.uploaded_at|replace('T', ' ')|truncate(16, True, '') }}</td>
+                            <td>
+                                <a href="{{ url_for('pdf_admin.edit_bot_pdf', pdf_id=pdf.id) }}" class="pdf-btn pdf-btn-secondary pdf-btn-sm">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </form>
+
+    <form method="POST" action="{{ url_for('pdf_admin.publish_all_bot_pdfs') }}" id="publishAllForm" style="display:none;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    </form>
+
+    {% if total_pages > 1 %}
+    <div class="pdf-pagination">
+        {% if page > 1 %}
+        <a href="{{ url_for('pdf_admin.bot_pdf_list', page=page-1, search=search, subject=subject, curriculum=curriculum, class=class_filter) }}" class="pdf-btn pdf-btn-secondary pdf-btn-sm">&laquo; Previous</a>
+        {% endif %}
+        <span>Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="{{ url_for('pdf_admin.bot_pdf_list', page=page+1, search=search, subject=subject, curriculum=curriculum, class=class_filter) }}" class="pdf-btn pdf-btn-secondary pdf-btn-sm">Next &raquo;</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function toggleAll(source) {
+    document.querySelectorAll('input[name="pdf_ids"]').forEach(chk => chk.checked = source.checked);
+}
+</script>
+{% endblock %}

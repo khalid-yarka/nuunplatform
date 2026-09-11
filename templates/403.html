@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Access Denied - NuunPlatform{% endblock %}
+
+{% block extra_css %}
+<style>
+    .error-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: var(--background);
+    }
+
+    .error-card {
+        max-width: 500px;
+        width: 100%;
+        background: var(--surface);
+        border-radius: var(--radius);
+        padding: 48px 40px;
+        text-align: center;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-lg);
+        animation: fadeInUp 0.6s ease;
+    }
+
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .error-icon {
+        font-size: 72px;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .error-code {
+        font-size: 60px;
+        font-weight: 800;
+        color: #F59E0B;
+        line-height: 1;
+        letter-spacing: -4px;
+        margin-bottom: 4px;
+    }
+
+    .error-title {
+        font-size: 26px;
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 8px;
+    }
+
+    .error-description {
+        color: var(--text-secondary);
+        font-size: 16px;
+        line-height: 1.6;
+        margin-bottom: 24px;
+    }
+
+    .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 32px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        font-size: 15px;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 14px rgba(255, 49, 56, 0.25);
+    }
+
+    .btn-primary:hover {
+        background: var(--primary-hover);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(255, 49, 56, 0.35);
+    }
+
+    @media (max-width: 480px) {
+        .error-card {
+            padding: 28px 16px;
+        }
+        .error-code {
+            font-size: 44px;
+        }
+        .error-icon {
+            font-size: 54px;
+        }
+        .error-title {
+            font-size: 20px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <div class="error-card">
+        <span class="error-icon">🚫</span>
+        <div class="error-code">403</div>
+        <h1 class="error-title">Access Denied</h1>
+        <p class="error-description">
+            You don't have permission to access this page.
+            Please contact support if you believe this is an error.
+        </p>
+        <a href="{{ url_for('dashboard.home') if session.get('user_id') else url_for('auth.login') }}" class="btn-primary">
+            <i class="fas fa-home"></i> Go Home
+        </a>
+    </div>
+</div>
+{% endblock %}

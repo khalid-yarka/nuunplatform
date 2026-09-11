@@ -1,0 +1,1157 @@
+{% extends "settings/base.html" %}
+
+{% block settings_content %}
+<div class="settings-landing" id="landing">
+    <div class="settings-landing-header">
+        <h2>Customize Your Experience</h2>
+        <p>Choose a category below to adjust your preferences.</p>
+    </div>
+    <div class="settings-grid">
+        <a href="#appearance" class="settings-category-card" data-section="appearance">
+            <div class="card-icon"><i class="fas fa-palette"></i></div>
+            <div class="card-content"><h3>Appearance</h3><p>Theme, colours, and layout</p></div>
+            <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
+        </a>
+        <a href="#quiz" class="settings-category-card" data-section="quiz">
+            <div class="card-icon"><i class="fas fa-pencil-alt"></i></div>
+            <div class="card-content"><h3>Quiz</h3><p>Defaults and behaviour</p></div>
+            <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
+        </a>
+        <a href="#notifications" class="settings-category-card" data-section="notifications">
+            <div class="card-icon"><i class="fas fa-bell"></i></div>
+            <div class="card-content"><h3>Notifications</h3><p>What and how you're notified</p></div>
+            <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
+        </a>
+        <a href="#privacy" class="settings-category-card" data-section="privacy">
+            <div class="card-icon"><i class="fas fa-lock"></i></div>
+            <div class="card-content"><h3>Privacy</h3><p>Visibility and data sharing</p></div>
+            <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
+        </a>
+        {% if can_create_live %}
+        <a href="#live_quiz" class="settings-category-card" data-section="live_quiz">
+            <div class="card-icon"><i class="fas fa-bolt"></i></div>
+            <div class="card-content"><h3>Live Quiz</h3><p>Defaults for hosting</p></div>
+            <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
+        </a>
+        {% endif %}
+        <a href="#security" class="settings-category-card" data-section="security">
+            <div class="card-icon"><i class="fas fa-shield-alt"></i></div>
+            <div class="card-content"><h3>Security</h3><p>Password and account safety</p></div>
+            <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
+        </a>
+        <a href="#tier" class="settings-category-card" data-section="tier">
+            <div class="card-icon"><i class="fas fa-crown"></i></div>
+            <div class="card-content"><h3>Plan & Features</h3><p>Your current tier and benefits</p></div>
+            <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
+        </a>
+        <a href="#data" class="settings-category-card" data-section="data">
+            <div class="card-icon"><i class="fas fa-database"></i></div>
+            <div class="card-content"><h3>Data</h3><p>History, export, and deletion</p></div>
+            <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
+        </a>
+        <a href="#accessibility" class="settings-category-card" data-section="accessibility">
+            <div class="card-icon"><i class="fas fa-universal-access"></i></div>
+            <div class="card-content"><h3>Accessibility</h3><p>Motion, contrast, and readability</p></div>
+            <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
+        </a>
+        <a href="#logout" class="settings-category-card" data-section="logout" style="border-color: #FCA5A5;">
+            <div class="card-icon"><i class="fas fa-sign-out-alt" style="color: #DC2626;"></i></div>
+            <div class="card-content"><h3 style="color: #DC2626;">Logout</h3><p>Sign out of your account</p></div>
+            <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
+        </a>
+    </div>
+</div>
+
+<!-- ============================================ -->
+<!-- APPEARANCE SECTION                           -->
+<!-- ============================================ -->
+<section id="appearance" class="settings-section">
+    <div class="settings-card">
+        <div class="card-header">
+            <h3><i class="fas fa-palette"></i> Appearance</h3>
+            <p>Customize the look and feel of the platform.</p>
+        </div>
+        <form id="appearance-form" class="settings-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Theme</label>
+                    <div class="theme-selector" id="theme-selector">
+                        <div class="theme-option" data-theme="light"><div class="theme-preview light"><div class="theme-header">☀️ Light</div><div class="theme-body">Clean and bright.</div></div><div class="theme-check"></div></div>
+                        <div class="theme-option" data-theme="dark"><div class="theme-preview dark"><div class="theme-header">🌙 Dark</div><div class="theme-body">Easy on the eyes.</div></div><div class="theme-check"></div></div>
+                        <div class="theme-option" data-theme="system"><div class="theme-preview system"><div class="theme-header">🖥️ System</div><div class="theme-body">Follows your device.</div></div><div class="theme-check"></div></div>
+                    </div>
+                </div>
+            </div>
+            <div class="form-row two-col">
+                <div class="form-group">
+                    <label>Accent Colour</label>
+                    <div class="accent-selector">
+                        <button type="button" class="accent-option red" data-accent="red" style="background:#FF3138;"></button>
+                        <button type="button" class="accent-option blue" data-accent="blue" style="background:#3B82F6;"></button>
+                        <button type="button" class="accent-option green" data-accent="green" style="background:#10B981;"></button>
+                        <button type="button" class="accent-option purple" data-accent="purple" style="background:#8B5CF6;"></button>
+                        <button type="button" class="accent-option orange" data-accent="orange" style="background:#F59E0B;"></button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Font Size</label>
+                    <select id="font_size" name="font_size">
+                        <option value="small" {% if settings['appearance.font_size'] == 'small' %}selected{% endif %}>Small</option>
+                        <option value="medium" {% if settings['appearance.font_size'] == 'medium' or not settings['appearance.font_size'] %}selected{% endif %}>Medium</option>
+                        <option value="large" {% if settings['appearance.font_size'] == 'large' %}selected{% endif %}>Large</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row toggle-group">
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Compact Mode</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="compact_mode" {% if settings['appearance.compact_mode'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                    <p class="toggle-desc">Reduce padding and margins for a denser layout.</p>
+                </div>
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Appearance</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- QUIZ SECTION                                -->
+<!-- ============================================ -->
+<section id="quiz" class="settings-section">
+    <div class="settings-card">
+        <div class="card-header">
+            <h3><i class="fas fa-pencil-alt"></i> Quiz Preferences</h3>
+            <p>Customise your default quiz settings.</p>
+        </div>
+        <form id="quiz-prefs-form" class="settings-form">
+            <div class="form-row two-col">
+                <div class="form-group">
+                    <label>Default Question Count</label>
+                    <select id="default_question_count" name="default_question_count">
+                        {% for count in [5,10,15,20,25,30] %}
+                            <option value="{{ count }}" {% if settings['quiz.default_question_count'] == count %}selected{% endif %}>{{ count }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Default Difficulty</label>
+                    <select id="default_difficulty" name="default_difficulty">
+                        {% for i in range(1,6) %}
+                            <option value="{{ i }}" {% if settings['quiz.default_difficulty'] == i %}selected{% endif %}>
+                                {{ '⭐' * i }}{{ '☆' * (5-i) }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Default Subject</label>
+                    <select id="default_subject" name="default_subject">
+                        <option value="">None</option>
+                        {% for subject in user_subjects %}
+                            <option value="{{ subject.code }}" {% if settings['quiz.default_subject'] == subject.code %}selected{% endif %}>{{ subject.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="form-row toggle-group">
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Show correct answer immediately</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="show_correct_immediately" {% if settings['quiz.show_correct_immediately'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                    <p class="toggle-desc">If off, you'll see the correct answer only at the end.</p>
+                </div>
+            </div>
+            <div class="form-row toggle-group">
+                <div class="toggle-item {% if tier == 'danbe' %}locked{% endif %}">
+                    <label class="toggle-label">
+                        <span class="toggle-text">🚀 Auto‑advance after answering</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="auto_skip_enabled" {% if settings['quiz.auto_skip_enabled'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                    <p class="toggle-desc">
+                        {% if tier == 'danbe' %}
+                            <span class="locked-hint"><i class="fas fa-lock"></i> Upgrade to Dhexe or Hore to enable.</span>
+                        {% else %}
+                            Smoothly move to the next question after answering.
+                        {% endif %}
+                    </p>
+                    {% if tier == 'danbe' %}
+                        <button class="btn btn-sm btn-secondary upgrade-btn" data-feature="auto_skip" data-required-tier="dhexe">Upgrade</button>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Preferences</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- NOTIFICATIONS SECTION                       -->
+<!-- ============================================ -->
+<section id="notifications" class="settings-section">
+    <div class="settings-card">
+        <div class="card-header">
+            <h3><i class="fas fa-bell"></i> Notification Preferences</h3>
+            <p>Choose which notifications you want to receive.</p>
+        </div>
+        <form id="notif-form" class="settings-form">
+            <div class="form-row toggle-group">
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Quiz Complete</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="notify_quiz_complete" {% if settings['notifications.quiz_complete'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                </div>
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">New PDF Uploaded</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="notify_new_pdf" {% if settings['notifications.new_pdf'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+            <div class="form-row toggle-group">
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Live Quiz Starts</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="notify_live_quiz_start" {% if settings['notifications.live_quiz_start'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                </div>
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Live Quiz Results</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="notify_live_quiz_result" {% if settings['notifications.live_quiz_result'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+            <div class="form-row toggle-group">
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Participant Joined Your Quiz</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="notify_participant_joined" {% if settings['notifications.participant_joined'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                </div>
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Admin Announcements</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="notify_admin_announcement" {% if settings['notifications.admin_announcement'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+            <div class="form-row toggle-group tier-locked" data-tier="dhexe">
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Daily Digest</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="notify_daily_digest" {% if settings['notifications.daily_digest'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                    <p class="toggle-desc">Receive a daily summary of platform activity.</p>
+                </div>
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Achievement Unlock</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="notify_achievement_unlock" {% if settings['notifications.achievement_unlock'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                    <p class="toggle-desc">Get notified when you earn a new badge.</p>
+                </div>
+            </div>
+            <div class="form-row toggle-group tier-locked" data-tier="dhexe">
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Live Quiz Reminder</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="notify_live_quiz_reminder" {% if settings['notifications.live_quiz_reminder'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                    <p class="toggle-desc">5‑minute reminder before a scheduled live quiz.</p>
+                </div>
+            </div>
+            <div class="form-row toggle-group tier-locked" data-tier="hore">
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Weekly Summary</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="notify_weekly_summary" {% if settings['notifications.weekly_summary'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                    <p class="toggle-desc">Get a weekly wrap‑up of your progress.</p>
+                </div>
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Notification Settings</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- PRIVACY SECTION                             -->
+<!-- ============================================ -->
+<section id="privacy" class="settings-section">
+    <div class="settings-card">
+        <div class="card-header">
+            <h3><i class="fas fa-lock"></i> Privacy</h3>
+            <p>Control your visibility and data sharing.</p>
+        </div>
+        <form id="privacy-form" class="settings-form">
+            <div class="form-row toggle-group">
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Show on Leaderboard</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="show_on_leaderboard" {% if settings['privacy.show_on_leaderboard'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                    <p class="toggle-desc">If off, your name appears as "Anonymous".</p>
+                </div>
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Show Public ID</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="show_public_id" {% if settings['privacy.show_public_id'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                    <p class="toggle-desc">If off, your public ID is hidden on your profile.</p>
+                </div>
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Privacy Settings</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- LIVE QUIZ SECTION (conditional)              -->
+<!-- ============================================ -->
+{% if can_create_live %}
+<section id="live_quiz" class="settings-section">
+    <div class="settings-card">
+        <div class="card-header">
+            <h3><i class="fas fa-bolt"></i> Live Quiz Defaults</h3>
+            <p>Preset values for creating new live quizzes.</p>
+        </div>
+        <form id="livequiz-form" class="settings-form">
+            <div class="form-row two-col">
+                <div class="form-group">
+                    <label>Default Time per Question (seconds)</label>
+                    <select id="default_time_per_question" name="default_time_per_question">
+                        <option value="30" {% if settings['live_quiz.default_time_per_question'] == 30 %}selected{% endif %}>30</option>
+                        <option value="45" {% if settings['live_quiz.default_time_per_question'] == 45 %}selected{% endif %}>45</option>
+                        <option value="60" {% if settings['live_quiz.default_time_per_question'] == 60 %}selected{% endif %}>60</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Default Max Participants</label>
+                    <select id="default_max_participants" name="default_max_participants">
+                        <option value="20" {% if settings['live_quiz.default_max_participants'] == 20 %}selected{% endif %}>20</option>
+                        <option value="50" {% if settings['live_quiz.default_max_participants'] == 50 %}selected{% endif %}>50</option>
+                        <option value="100" {% if settings['live_quiz.default_max_participants'] == 100 %}selected{% endif %}>100</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Default Privacy</label>
+                    <div style="display:flex; gap:16px;">
+                        <label><input type="radio" name="default_privacy" value="1" {% if settings['live_quiz.default_privacy'] != 0 %}checked{% endif %}> Public</label>
+                        <label><input type="radio" name="default_privacy" value="0" {% if settings['live_quiz.default_privacy'] == 0 %}checked{% endif %}> Private</label>
+                    </div>
+                </div>
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Live Quiz Defaults</button>
+            </div>
+        </form>
+    </div>
+</section>
+{% endif %}
+
+<!-- ============================================ -->
+<!-- SECURITY SECTION                             -->
+<!-- ============================================ -->
+<section id="security" class="settings-section">
+    <div class="settings-card">
+        <div class="card-header">
+            <h3><i class="fas fa-shield-alt"></i> Security</h3>
+            <p>Change your password.</p>
+        </div>
+        <form id="password-form" class="settings-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Current Password <span class="required">*</span></label>
+                    <input type="password" id="current_password" placeholder="Enter current password" required>
+                </div>
+            </div>
+            <div class="form-row two-col">
+                <div class="form-group">
+                    <label>New Password <span class="required">*</span></label>
+                    <input type="password" id="new_password" placeholder="Min 8 characters" required>
+                    <div class="password-strength" id="password-strength"></div>
+                </div>
+                <div class="form-group">
+                    <label>Confirm New Password <span class="required">*</span></label>
+                    <input type="password" id="confirm_password" placeholder="Confirm new password" required>
+                    <div class="password-match" id="password-match"></div>
+                </div>
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-danger"><i class="fas fa-key"></i> Change Password</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- TIER SECTION                                 -->
+<!-- ============================================ -->
+<section id="tier" class="settings-section">
+    <div class="settings-card">
+        <div class="card-header">
+            <h3><i class="fas fa-crown"></i> Your Plan & Features</h3>
+            <p>Current tier: <strong class="tier-badge {{ tier }}">{{ tier|capitalize }}</strong></p>
+        </div>
+
+        <div class="tier-summary">
+            <div class="tier-info-box">
+                <div class="tier-icon">{% if tier == 'danbe' %}🔓{% elif tier == 'dhexe' %}🔑{% else %}⭐{% endif %}</div>
+                <div>
+                    <h4>{{ tier|capitalize }}</h4>
+                    <p class="tier-desc">
+                        {% if tier == 'danbe' %}Basic access with essential features.{% elif tier == 'dhexe' %}Advanced features, more quotas, and live quiz hosting.{% else %}Complete access with unlimited features and premium resources.{% endif %}
+                    </p>
+                </div>
+            </div>
+            {% if tier != 'hore' %}
+                <div class="upgrade-prompt">
+                    <button class="btn btn-primary upgrade-btn" data-feature="upgrade" data-required-tier="hore">Upgrade Now</button>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="features-grid">
+            {% for feature in tier_features %}
+                <div class="feature-card {% if not feature.available %}locked{% endif %}" 
+                     data-feature="{{ feature.key }}"
+                     data-required-tier="{{ feature.tier_required or 'danbe' }}"
+                     onclick="toggleFeatureInfo(this)">
+                    <div class="feature-icon">{{ feature.icon or '⚙️' }}</div>
+                    <div class="feature-content">
+                        <div class="feature-name">{{ feature.label }}</div>
+                        <div class="feature-desc">{{ feature.description }}</div>
+                    </div>
+                    <div class="feature-status">
+                        {% if feature.available %}
+                            <span class="status-badge available">✅</span>
+                        {% else %}
+                            <span class="status-badge locked">🔒</span>
+                        {% endif %}
+                    </div>
+                    <div class="feature-popup">
+                        <div class="popup-content">
+                            <strong>{{ feature.label }}</strong>
+                            <p>{{ feature.description }}</p>
+                            {% if not feature.available %}
+                                <p class="upgrade-hint">Requires <strong>{{ feature.tier_required|capitalize }}</strong></p>
+                                <button class="btn btn-sm btn-primary upgrade-btn" data-feature="{{ feature.key }}" data-required-tier="{{ feature.tier_required or 'dhexe' }}">Upgrade</button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- DATA SECTION                                 -->
+<!-- ============================================ -->
+<section id="data" class="settings-section">
+    <div class="settings-card">
+        <div class="card-header">
+            <h3><i class="fas fa-database"></i> Data Management</h3>
+            <p>Manage your history and personal data.</p>
+        </div>
+        <div class="data-actions">
+            <p><a href="{{ url_for('history.index') }}" class="btn btn-secondary"><i class="fas fa-history"></i> View Full History</a></p>
+            <p><button class="btn btn-secondary" id="exportDataBtn"><i class="fas fa-download"></i> Export My Data</button></p>
+            <p><button class="btn btn-danger" id="deleteAccountBtn"><i class="fas fa-trash"></i> Delete Account</button></p>
+            <p class="text-muted" style="font-size:12px;">Deleting your account is permanent and cannot be undone.</p>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- ACCESSIBILITY SECTION                        -->
+<!-- ============================================ -->
+<section id="accessibility" class="settings-section">
+    <div class="settings-card">
+        <div class="card-header">
+            <h3><i class="fas fa-universal-access"></i> Accessibility</h3>
+            <p>Adjust settings for a better experience.</p>
+        </div>
+        <form id="accessibility-form" class="settings-form">
+            <div class="form-row toggle-group">
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Reduced Motion</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="reduced_motion" {% if settings['appearance.reduced_motion'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                    <p class="toggle-desc">Minimise animations and transitions.</p>
+                </div>
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Accessibility Settings</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- LOGOUT SECTION WITH MODAL TRIGGER            -->
+<!-- ============================================ -->
+<section id="logout" class="settings-section">
+    <div class="settings-card">
+        <div class="card-header">
+            <h3><i class="fas fa-sign-out-alt" style="color: #DC2626;"></i> Logout</h3>
+            <p>Sign out of your account securely.</p>
+        </div>
+        <div class="logout-section">
+            <button class="btn btn-danger btn-block" id="openLogoutModalBtn">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- LOGOUT CONFIRMATION MODAL                    -->
+<!-- ============================================ -->
+<div class="modal-overlay" id="logoutModal">
+    <div class="modal-content" style="max-width: 560px;">
+        <div style="text-align: center; margin-bottom: 16px;">
+            <div style="font-size: 48px; margin-bottom: 4px;">🚪</div>
+            <h3 class="modal-title" style="color: #DC2626;">Confirm Logout</h3>
+            <p class="modal-body">You are about to log out. The following unsaved data will be permanently lost:</p>
+        </div>
+
+        <div style="background: var(--surface-alt); border-radius: var(--radius-sm); padding: 16px 20px; margin-bottom: 16px; border: 1px solid var(--border);">
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text);">
+                    <span style="font-size: 18px;">⚙️</span>
+                    <span><strong>Unsaved settings</strong> – Any changes you made in settings that haven't been saved.</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text);">
+                    <span style="font-size: 18px;">📝</span>
+                    <span><strong>In-progress quizzes</strong> – Any quiz you started but didn't complete or submit.</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text);">
+                    <span style="font-size: 18px;">⚡</span>
+                    <span><strong>Live quiz session</strong> – If you are currently in a live quiz, your progress will be lost.</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text);">
+                    <span style="font-size: 18px;">📋</span>
+                    <span><strong>Unsaved form data</strong> – Any text or selections you entered on the current page.</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-muted);">
+                    <span style="font-size: 18px;">🔒</span>
+                    <span><em>Other temporary data not specified above.</em></span>
+                </div>
+            </div>
+        </div>
+
+        <div style="background: #FEF2F2; border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 16px; border: 1px solid #FCA5A5; font-size: 13px; color: #991B1B; display: flex; align-items: center; gap: 10px;">
+            <i class="fas fa-exclamation-triangle" style="font-size: 18px;"></i>
+            <span>This action cannot be undone. You will need to log in again.</span>
+        </div>
+
+        <div class="modal-actions">
+            <button onclick="closeLogoutModal()" class="btn btn-secondary">Cancel</button>
+            <a href="{{ url_for('auth.logout') }}" id="confirmLogoutBtn" class="btn btn-danger">
+                <i class="fas fa-sign-out-alt"></i> Logout Anyway
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================ -->
+<!-- UNSAVED CHANGES INDICATOR                    -->
+<!-- ============================================ -->
+<div id="unsavedIndicator" class="unsaved-indicator">
+    <span class="indicator-icon">⚠️</span>
+    <span class="indicator-text">You have unsaved changes in your settings.</span>
+    <button id="unsavedSaveNow" class="btn-save-now"><i class="fas fa-save"></i> Save Now</button>
+    <button id="unsavedDiscard" class="btn-discard"><i class="fas fa-times"></i> Discard</button>
+</div>
+
+<!-- ============================================ -->
+<!-- STYLES & SCRIPTS                             -->
+<!-- ============================================ -->
+<style>
+    /* ... (existing styles) ... */
+    .logout-section {
+        margin-top: 24px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+    }
+
+    .btn-danger {
+        background: #DC2626;
+        color: white;
+        border: none;
+        border-radius: var(--radius-sm);
+        padding: 12px 20px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .btn-danger:hover {
+        background: #B91C1C;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35);
+    }
+
+    .settings-category-card[data-section="logout"]:hover {
+        border-color: #DC2626;
+    }
+
+    /* Additional modal styles */
+    .modal-content .modal-body {
+        color: var(--text-secondary);
+        font-size: 14px;
+        margin-bottom: 16px;
+        line-height: 1.6;
+    }
+</style>
+
+<script>
+    // ============================================
+    // LOGOUT MODAL CONTROL
+    // ============================================
+    function openLogoutModal() {
+        document.getElementById('logoutModal').classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeLogoutModal() {
+        document.getElementById('logoutModal').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    document.getElementById('openLogoutModalBtn').addEventListener('click', openLogoutModal);
+
+    document.getElementById('logoutModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeLogoutModal();
+        }
+    });
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && document.getElementById('logoutModal').classList.contains('active')) {
+            closeLogoutModal();
+        }
+    });
+
+    // ============================================
+    // UNSAVED CHANGES INDICATOR
+    // ============================================
+    let unsavedChanges = false;
+    const indicator = document.getElementById('unsavedIndicator');
+    const saveNowBtn = document.getElementById('unsavedSaveNow');
+    const discardBtn = document.getElementById('unsavedDiscard');
+
+    function showUnsavedIndicator() {
+        if (indicator) indicator.classList.add('show');
+        unsavedChanges = true;
+    }
+
+    function hideUnsavedIndicator() {
+        if (indicator) indicator.classList.remove('show');
+        unsavedChanges = false;
+    }
+
+    document.querySelectorAll('.settings-form').forEach(form => {
+        const inputs = form.querySelectorAll('input, select, textarea');
+        inputs.forEach(input => {
+            input.addEventListener('change', function() {
+                showUnsavedIndicator();
+            });
+        });
+        form.addEventListener('submit', function() {
+            hideUnsavedIndicator();
+        });
+    });
+
+    if (saveNowBtn) {
+        saveNowBtn.addEventListener('click', function() {
+            const form = document.querySelector('.settings-form:not([style*="display: none"])');
+            if (form) form.dispatchEvent(new Event('submit'));
+        });
+    }
+
+    if (discardBtn) {
+        discardBtn.addEventListener('click', function() {
+            if (confirm('Discard all unsaved changes?')) {
+                location.reload();
+            }
+        });
+    }
+
+    window.addEventListener('beforeunload', function(e) {
+        if (unsavedChanges) {
+            e.preventDefault();
+            e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+            return e.returnValue;
+        }
+    });
+
+    // ============================================
+    // CSRF TOKEN HELPER
+    // ============================================
+    function getCsrfToken() {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        if (meta) return meta.content;
+        const input = document.querySelector('input[name="csrf_token"]');
+        if (input) return input.value;
+        console.warn('⚠️ CSRF token not found!');
+        return '';
+    }
+
+    // ============================================
+    // TOAST HELPER
+    // ============================================
+    function showToast(message, type) {
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, type);
+        } else {
+            alert(message);
+        }
+    }
+
+    // ============================================
+    // SUBMIT FORM
+    // ============================================
+    function submitForm(url, data, successMsg) {
+        const csrfToken = getCsrfToken();
+        if (!csrfToken) {
+            showToast('❌ CSRF token missing. Please refresh the page.', 'error');
+            return Promise.reject('No CSRF token');
+        }
+
+        return fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => {
+                    let errorMsg = `Server error (${response.status})`;
+                    try {
+                        const json = JSON.parse(text);
+                        if (json.error) errorMsg = json.error;
+                    } catch (e) {
+                        if (text.length < 200) errorMsg = text;
+                    }
+                    throw new Error(errorMsg);
+                });
+            }
+            return response.json();
+        })
+        .then(result => {
+            if (result.success) {
+                showToast(result.message || successMsg || '✅ Saved!', 'success');
+                if (result.settings) {
+                    if (typeof NuunSettings !== 'undefined') {
+                        NuunSettings.settings = result.settings;
+                        NuunSettings.applyAll();
+                    }
+                }
+                return result;
+            } else {
+                throw new Error(result.error || 'Unknown error');
+            }
+        })
+        .catch(err => {
+            showToast('❌ ' + err.message, 'error');
+            throw err;
+        });
+    }
+
+    // ============================================
+    // NAVIGATION
+    // ============================================
+    document.addEventListener('DOMContentLoaded', function() {
+        const landing = document.getElementById('landing');
+        const sections = document.querySelectorAll('.settings-section');
+        const navItems = document.querySelectorAll('.settings-nav-item');
+        const sidebar = document.getElementById('settingsSidebar');
+        const breadcrumb = document.getElementById('settingsBreadcrumb');
+
+        function showLanding() {
+            landing.style.display = 'block';
+            sections.forEach(sec => sec.classList.remove('active'));
+            sidebar.style.display = 'none';
+            if (breadcrumb) {
+                breadcrumb.innerHTML = `<a href="#" class="breadcrumb-link" id="breadcrumbHome">Settings</a>`;
+            }
+            const title = document.querySelector('.settings-page-title');
+            if (title) title.textContent = 'Settings';
+            navItems.forEach(item => item.classList.remove('active'));
+            history.pushState(null, '', '#');
+        }
+
+        function showSection(id) {
+            landing.style.display = 'none';
+            sections.forEach(sec => sec.classList.remove('active'));
+            const target = document.getElementById(id);
+            if (target) target.classList.add('active');
+            sidebar.style.display = 'block';
+            const label = document.querySelector(`.settings-nav-item[data-section="${id}"]`)?.textContent.trim() || id;
+            if (breadcrumb) {
+                breadcrumb.innerHTML = `
+                    <a href="#" class="breadcrumb-link" id="breadcrumbHome">Settings</a>
+                    <span class="separator">/</span>
+                    <span class="current">${label}</span>
+                `;
+            }
+            const title = document.querySelector('.settings-page-title');
+            if (title) {
+                const nav = document.querySelector(`.settings-nav-item[data-section="${id}"]`);
+                title.textContent = nav ? nav.textContent.trim() : 'Settings';
+            }
+            navItems.forEach(item => item.classList.remove('active'));
+            const nav = document.querySelector(`.settings-nav-item[data-section="${id}"]`);
+            if (nav) nav.classList.add('active');
+            history.pushState(null, '', '#' + id);
+        }
+
+        if (breadcrumb) {
+            breadcrumb.addEventListener('click', function(e) {
+                if (e.target.id === 'breadcrumbHome' || e.target.closest('#breadcrumbHome')) {
+                    e.preventDefault();
+                    showLanding();
+                }
+            });
+        }
+
+        document.querySelectorAll('.settings-category-card').forEach(card => {
+            card.addEventListener('click', function(e) {
+                e.preventDefault();
+                const section = this.dataset.section;
+                if (section) showSection(section);
+            });
+        });
+
+        navItems.forEach(item => {
+            item.addEventListener('click', function(e) {
+                const section = this.dataset.section;
+                e.preventDefault();
+                if (section === 'landing') {
+                    showLanding();
+                } else if (section) {
+                    showSection(section);
+                }
+            });
+        });
+
+        let initialHash = window.location.hash.replace('#', '');
+        if (initialHash && document.getElementById(initialHash)) {
+            showSection(initialHash);
+        } else {
+            showLanding();
+        }
+    });
+
+    // ============================================
+    // FORM SUBMISSIONS (only the critical ones)
+    // ============================================
+    document.addEventListener('DOMContentLoaded', function() {
+        // Appearance
+        const appearanceForm = document.getElementById('appearance-form');
+        if (appearanceForm) {
+            appearanceForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const activeTheme = document.querySelector('.theme-option.active');
+                const theme = activeTheme ? activeTheme.dataset.theme : 'system';
+                const activeAccent = document.querySelector('.accent-option.active');
+                const accent = activeAccent ? activeAccent.dataset.accent : 'red';
+                const fontSize = document.getElementById('font_size')?.value || 'medium';
+                const compactMode = document.getElementById('compact_mode')?.checked || false;
+                submitForm('/settings/api', {
+                    'appearance.theme': theme,
+                    'appearance.accent': accent,
+                    'appearance.font_size': fontSize,
+                    'appearance.compact_mode': compactMode
+                }, 'Appearance updated!');
+            });
+        }
+
+        // Quiz
+        const quizForm = document.getElementById('quiz-prefs-form');
+        if (quizForm) {
+            quizForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                submitForm('/settings/api', {
+                    'quiz.default_question_count': parseInt(document.getElementById('default_question_count').value),
+                    'quiz.default_difficulty': parseInt(document.getElementById('default_difficulty').value),
+                    'quiz.default_subject': document.getElementById('default_subject').value,
+                    'quiz.show_correct_immediately': document.getElementById('show_correct_immediately').checked,
+                    'quiz.auto_skip_enabled': document.getElementById('auto_skip_enabled').checked
+                }, 'Quiz preferences saved!');
+            });
+        }
+
+        // Notifications
+        const notifForm = document.getElementById('notif-form');
+        if (notifForm) {
+            notifForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const toggles = notifForm.querySelectorAll('.toggle-switch input');
+                const data = {};
+                toggles.forEach(t => {
+                    data[t.id.replace('notify_', 'notifications.')] = t.checked;
+                });
+                submitForm('/settings/api', data, 'Notification preferences saved!');
+            });
+        }
+
+        // Privacy
+        const privacyForm = document.getElementById('privacy-form');
+        if (privacyForm) {
+            privacyForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                submitForm('/settings/api', {
+                    'privacy.show_on_leaderboard': document.getElementById('show_on_leaderboard').checked,
+                    'privacy.show_public_id': document.getElementById('show_public_id').checked
+                }, 'Privacy settings saved!');
+            });
+        }
+
+        // Live Quiz
+        const liveQuizForm = document.getElementById('livequiz-form');
+        if (liveQuizForm) {
+            liveQuizForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                submitForm('/settings/api', {
+                    'live_quiz.default_time_per_question': parseInt(document.getElementById('default_time_per_question').value),
+                    'live_quiz.default_max_participants': parseInt(document.getElementById('default_max_participants').value),
+                    'live_quiz.default_privacy': parseInt(document.querySelector('input[name="default_privacy"]:checked').value)
+                }, 'Live quiz defaults saved!');
+            });
+        }
+
+        // Accessibility
+        const accessibilityForm = document.getElementById('accessibility-form');
+        if (accessibilityForm) {
+            accessibilityForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                submitForm('/settings/api', {
+                    'appearance.reduced_motion': document.getElementById('reduced_motion').checked
+                }, 'Accessibility settings saved!');
+            });
+        }
+
+        // Password
+        const passwordForm = document.getElementById('password-form');
+        if (passwordForm) {
+            passwordForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const current = document.getElementById('current_password').value;
+                const newPw = document.getElementById('new_password').value;
+                const confirm = document.getElementById('confirm_password').value;
+                if (newPw !== confirm) {
+                    showToast('Passwords do not match.', 'error');
+                    return;
+                }
+                if (newPw.length < 8) {
+                    showToast('New password must be at least 8 characters.', 'error');
+                    return;
+                }
+                if (!confirm('Change your password? You will be logged out.')) return;
+                fetch('/settings/api/password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': getCsrfToken()
+                    },
+                    body: JSON.stringify({ current_password: current, new_password: newPw, confirm_password: confirm })
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        showToast('Password changed. Please log in again.', 'success');
+                        setTimeout(() => window.location.href = '/logout', 2000);
+                    } else {
+                        showToast(result.error || 'Error changing password.', 'error');
+                    }
+                })
+                .catch(() => showToast('Network error.', 'error'));
+            });
+        }
+
+        // Theme selector preview
+        document.querySelectorAll('.theme-option').forEach(opt => {
+            opt.addEventListener('click', function() {
+                document.querySelectorAll('.theme-option').forEach(o => o.classList.remove('active'));
+                this.classList.add('active');
+                const theme = this.dataset.theme;
+                if (typeof NuunSettings !== 'undefined') {
+                    NuunSettings.applyTheme(theme);
+                }
+            });
+        });
+
+        // Accent selector preview
+        document.querySelectorAll('.accent-option:not(.locked)').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.accent-option').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                const accent = this.dataset.accent;
+                if (typeof NuunSettings !== 'undefined') {
+                    NuunSettings.applyAccent(accent);
+                }
+            });
+        });
+
+        // Compact mode preview
+        document.getElementById('compact_mode')?.addEventListener('change', function() {
+            if (typeof NuunSettings !== 'undefined') {
+                NuunSettings.applyCompactMode(this.checked);
+            }
+        });
+
+        // Reduced motion preview
+        document.getElementById('reduced_motion')?.addEventListener('change', function() {
+            if (typeof NuunSettings !== 'undefined') {
+                NuunSettings.applyReducedMotion(this.checked);
+            }
+        });
+
+        // Password strength
+        document.getElementById('new_password').addEventListener('input', function() {
+            const val = this.value;
+            let strength = 'weak';
+            if (val.length >= 8 && /[A-Z]/.test(val) && /[a-z]/.test(val) && /\d/.test(val) && /[^A-Za-z0-9]/.test(val)) {
+                strength = 'strong';
+            } else if (val.length >= 8) {
+                strength = 'medium';
+            }
+            const bar = document.getElementById('password-strength');
+            if (bar) {
+                bar.innerHTML = `<div class="fill ${strength}"></div>`;
+            }
+            checkPasswordMatch();
+        });
+
+        document.getElementById('confirm_password').addEventListener('input', checkPasswordMatch);
+        function checkPasswordMatch() {
+            const newPw = document.getElementById('new_password').value;
+            const confirmPw = document.getElementById('confirm_password').value;
+            const match = document.getElementById('password-match');
+            if (!match) return;
+            if (!confirmPw) {
+                match.textContent = '';
+                match.className = 'password-match';
+                return;
+            }
+            if (newPw === confirmPw) {
+                match.textContent = '✅ Passwords match';
+                match.className = 'password-match match';
+            } else {
+                match.textContent = '❌ Passwords do not match';
+                match.className = 'password-match no-match';
+            }
+        }
+
+        // Upgrade buttons
+        document.querySelectorAll('.upgrade-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const feature = this.dataset.feature;
+                const requiredTier = this.dataset.requiredTier || 'dhexe';
+                if (typeof window.openSafkaPreview === 'function') {
+                    window.openSafkaPreview({ feature: feature, requiredTier: requiredTier });
+                }
+            });
+        });
+
+        // Locked toggles
+        document.querySelectorAll('.toggle-item.locked input[type="checkbox"]').forEach(cb => {
+            cb.disabled = true;
+            cb.closest('.toggle-item').addEventListener('click', function(e) {
+                if (e.target.tagName !== 'INPUT') {
+                    const upgradeBtn = this.querySelector('.upgrade-btn');
+                    if (upgradeBtn) upgradeBtn.click();
+                }
+            });
+        });
+
+        // Export/Delete buttons
+        document.getElementById('exportDataBtn')?.addEventListener('click', function() {
+            showToast('Data export will be available soon.', 'info');
+        });
+        document.getElementById('deleteAccountBtn')?.addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete your account? This action is permanent.')) {
+                showToast('Account deletion is not implemented yet.', 'error');
+            }
+        });
+    });
+</script>
+{% endblock %}

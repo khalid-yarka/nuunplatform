@@ -1,0 +1,1008 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}{{ pdf.title }} - Reading{% endblock %}
+
+{% block extra_css %}
+<!-- Override dashboard layout for clean reading mode -->
+<style>
+    /* ============================================
+       HIDE SIDEBAR & TOP NAVBAR
+       ============================================ */
+    .sidebar,
+    .top-navbar,
+    .sidebar-overlay {
+        display: none !important;
+    }
+
+    .main-content {
+        margin-left: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+        min-height: 100vh !important;
+    }
+
+    .page-content {
+        padding: 0 !important;
+        max-width: 100% !important;
+        min-height: 100vh !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    /* Remove footer */
+    footer {
+        display: none !important;
+    }
+
+    /* ============================================
+       PDF READER - FULL SCREEN LAYOUT
+       ============================================ */
+
+    .pdf-reader-wrapper {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        background: #f5f3f0;
+        position: relative;
+    }
+
+    /* Minimal Top Bar */
+    .pdf-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 20px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+        gap: 12px;
+        flex-wrap: wrap;
+        min-height: 48px;
+        z-index: 10;
+        position: sticky;
+        top: 0;
+    }
+
+    .pdf-topbar .left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+    }
+
+    .pdf-topbar .left .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 500;
+        padding: 4px 8px;
+        border-radius: var(--radius-sm);
+        transition: var(--transition);
+        white-space: nowrap;
+    }
+
+    .pdf-topbar .left .back-link:hover {
+        background: var(--primary-light);
+        color: var(--primary);
+    }
+
+    .pdf-topbar .left .title {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 300px;
+    }
+
+    .pdf-topbar .right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-shrink: 0;
+    }
+
+    .pdf-topbar .right .views {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+
+    .pdf-topbar .right .btn-telegram {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        background: #0088CC;
+        color: white;
+        border: none;
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        font-size: 13px;
+        text-decoration: none;
+        transition: var(--transition);
+        cursor: pointer;
+    }
+
+    .pdf-topbar .right .btn-telegram:hover {
+        background: #006699;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 136, 204, 0.30);
+    }
+
+    /* PDF Container */
+    .pdf-container {
+        flex: 1;
+        background: #e8e6e4;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 20px 24px 80px 24px;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        touch-action: pan-y pinch-zoom;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        position: relative;
+        height: calc(100vh - 110px);
+        scroll-behavior: smooth;
+    }
+
+    .pdf-container .page-wrapper {
+        margin: 0 auto 20px auto;
+        max-width: 100%;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        box-shadow: 0 2px 16px rgba(0, 0, 0, 0.10);
+        border-radius: 4px;
+        background: white;
+        position: relative;
+        touch-action: pan-y pinch-zoom;
+        max-width: 100%;
+    }
+
+    .pdf-container .page-wrapper:last-child {
+        margin-bottom: 0;
+    }
+
+    .pdf-container canvas {
+        display: block;
+        width: 100%;
+        height: auto;
+        max-width: 100%;
+        border-radius: 4px;
+        touch-action: pan-y pinch-zoom;
+    }
+
+    /* Loading State */
+    .pdf-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        color: var(--text-secondary);
+        z-index: 10;
+    }
+
+    .pdf-loading .spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid var(--border);
+        border-top: 4px solid var(--primary);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin: 0 auto 12px;
+    }
+
+    .pdf-loading p {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-secondary);
+    }
+
+    .pdf-loading .loader-bar {
+        width: 180px;
+        height: 4px;
+        background: var(--border);
+        border-radius: 4px;
+        margin: 8px auto 0;
+        overflow: hidden;
+    }
+
+    .pdf-loading .loader-bar .fill {
+        height: 100%;
+        width: 0%;
+        background: var(--primary);
+        border-radius: 4px;
+        animation: loadProgress 1.5s ease-in-out infinite;
+    }
+
+    @keyframes loadProgress {
+        0% { width: 0%; }
+        50% { width: 70%; }
+        100% { width: 100%; }
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    /* ============================================
+       CONTROLS - FIXED AT BOTTOM
+       ============================================ */
+
+    .pdf-controls {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 16px;
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        flex-shrink: 0;
+        flex-wrap: wrap;
+        z-index: 100;
+        box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06);
+        min-height: 56px;
+    }
+
+    .pdf-controls .group {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .pdf-controls .group .divider {
+        width: 1px;
+        height: 24px;
+        background: var(--border);
+        margin: 0 6px;
+    }
+
+    .pdf-controls button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 10px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: var(--transition);
+        font-size: 13px;
+        color: var(--text);
+        font-weight: 500;
+        min-width: 30px;
+        height: 30px;
+    }
+
+    .pdf-controls button:hover:not(:disabled) {
+        background: var(--primary-light);
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+
+    .pdf-controls button:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+    }
+
+    .pdf-controls .page-info {
+        font-size: 13px;
+        color: var(--text-secondary);
+        min-width: 60px;
+        text-align: center;
+        font-weight: 500;
+    }
+
+    .pdf-controls .zoom-level {
+        font-size: 13px;
+        color: var(--text-secondary);
+        min-width: 44px;
+        text-align: center;
+        font-weight: 600;
+    }
+
+    .pdf-controls .page-input {
+        width: 40px;
+        padding: 2px 2px;
+        text-align: center;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        background: var(--surface);
+        outline: none;
+        transition: var(--transition);
+        height: 30px;
+    }
+
+    .pdf-controls .page-input:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.10);
+    }
+
+    .pdf-controls .page-input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+    }
+
+    /* ============================================
+       RESPONSIVE
+       ============================================ */
+
+    @media (max-width: 768px) {
+        .pdf-topbar {
+            padding: 8px 12px;
+            min-height: 40px;
+        }
+
+        .pdf-topbar .left .title {
+            font-size: 13px;
+            max-width: 150px;
+        }
+
+        .pdf-topbar .right .views {
+            font-size: 12px;
+        }
+
+        .pdf-topbar .right .btn-telegram {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+
+        .pdf-container {
+            padding: 12px 12px 70px 12px;
+            height: calc(100vh - 95px);
+        }
+
+        .pdf-container .page-wrapper {
+            margin-bottom: 12px;
+        }
+
+        .pdf-controls {
+            padding: 8px 10px;
+            gap: 4px;
+            min-height: 48px;
+        }
+
+        .pdf-controls button {
+            padding: 3px 8px;
+            font-size: 12px;
+            height: 28px;
+            min-width: 26px;
+        }
+
+        .pdf-controls .page-info {
+            font-size: 12px;
+            min-width: 50px;
+        }
+
+        .pdf-controls .page-input {
+            width: 34px;
+            font-size: 12px;
+            height: 28px;
+        }
+
+        .pdf-controls .zoom-level {
+            font-size: 12px;
+            min-width: 36px;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .pdf-topbar .left .title {
+            font-size: 12px;
+            max-width: 100px;
+        }
+
+        .pdf-topbar .left .back-link {
+            font-size: 12px;
+            padding: 2px 6px;
+        }
+
+        .pdf-container {
+            padding: 8px 8px 60px 8px;
+            height: calc(100vh - 85px);
+        }
+
+        .pdf-container .page-wrapper {
+            margin-bottom: 8px;
+        }
+
+        .pdf-controls {
+            padding: 6px 6px;
+            gap: 2px;
+            min-height: 42px;
+        }
+
+        .pdf-controls button {
+            padding: 2px 6px;
+            font-size: 11px;
+            height: 26px;
+            min-width: 22px;
+        }
+
+        .pdf-controls .page-info {
+            font-size: 11px;
+            min-width: 40px;
+        }
+
+        .pdf-controls .page-input {
+            width: 30px;
+            font-size: 11px;
+            height: 26px;
+        }
+
+        .pdf-controls .zoom-level {
+            font-size: 11px;
+            min-width: 30px;
+        }
+
+        .pdf-controls .group .divider {
+            height: 18px;
+            margin: 0 3px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<!-- Clean PDF Viewer - No Sidebar, No Navbar -->
+<div class="pdf-reader-wrapper">
+
+    <!-- Minimal Top Bar -->
+    <div class="pdf-topbar">
+        <div class="left">
+            <a href="{{ url_for('pdfs.list_pdfs') }}" class="back-link">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
+            <span class="title">{{ pdf.title }}</span>
+        </div>
+        <div class="right">
+            <span class="views">
+                <i class="fas fa-eye" style="color: var(--text-muted);"></i> {{ pdf.view_count or 0 }}
+            </span>
+            <a href="{{ url_for('pdfs.telegram_download', code=pdf.code) }}" target="_blank" class="btn-telegram">
+                <i class="fab fa-telegram-plane"></i>
+                Get PDF
+            </a>
+        </div>
+    </div>
+
+    <!-- PDF Container -->
+    <div class="pdf-container" id="pdfContainer">
+        <!-- Loading State -->
+        <div class="pdf-loading" id="pdfLoading">
+            <div class="spinner"></div>
+            <p>Loading document...</p>
+            <div class="loader-bar">
+                <div class="fill"></div>
+            </div>
+        </div>
+        <!-- Pages will be inserted here -->
+        <div id="pdfPagesContainer" style="width:100%;"></div>
+    </div>
+
+    <!-- Controls - FIXED AT BOTTOM -->
+    <div class="pdf-controls" id="pdfControls" style="display: none;">
+        <div class="group">
+            <button id="prevPageBtn" disabled><i class="fas fa-chevron-left"></i></button>
+            <input type="number" class="page-input" id="pageInput" min="1" value="1">
+            <span class="page-info" id="pageInfoDisplay">1 / 1</span>
+            <button id="nextPageBtn" disabled><i class="fas fa-chevron-right"></i></button>
+        </div>
+
+        <span class="divider"></span>
+
+        <div class="group">
+            <button id="zoomOutBtn"><i class="fas fa-search-minus"></i></button>
+            <span class="zoom-level" id="zoomLevelDisplay">100%</span>
+            <button id="zoomInBtn"><i class="fas fa-search-plus"></i></button>
+            <button id="resetZoomBtn"><i class="fas fa-undo"></i></button>
+        </div>
+
+        <span class="divider"></span>
+
+        <div class="group">
+            <button id="fullscreenBtn"><i class="fas fa-expand"></i></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- PDF.js CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // ============================================
+    // PDF.JS VIEWER - VERTICAL SCROLLING + PINCH ZOOM
+    // ============================================
+
+    // Determine which URL to use
+    // If file_url exists, use it directly; otherwise stream from Telegram
+    let PDF_URL = null;
+    {% if pdf.file_url %}
+        PDF_URL = "{{ pdf.file_url }}";
+    {% else %}
+        PDF_URL = "{{ url_for('pdfs.stream_pdf', code=pdf.code) }}";
+    {% endif %}
+
+    // If PDF_URL is still null, fallback to Telegram link
+    if (!PDF_URL) {
+        document.getElementById('pdfLoading').innerHTML = `
+            <div style="font-size: 48px; opacity:0.3;">📲</div>
+            <h3 style="font-size:18px; color:var(--text);">PDF not available</h3>
+            <p style="font-size:14px; color:var(--text-secondary);">
+                This document is available via Telegram.
+            </p>
+            <a href="{{ url_for('pdfs.telegram_download', code=pdf.code) }}" target="_blank"
+               style="display:inline-block; margin-top:16px; padding:10px 24px; background:#0088CC; color:white; border-radius:8px; text-decoration:none; font-weight:600;">
+                <i class="fab fa-telegram-plane"></i> Get PDF via Telegram
+            </a>
+        `;
+        document.getElementById('pdfControls').style.display = 'none';
+        return;
+    }
+
+    // Set worker source
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    // DOM Elements
+    const container = document.getElementById('pdfContainer');
+    const pagesContainer = document.getElementById('pdfPagesContainer');
+    const loading = document.getElementById('pdfLoading');
+    const controls = document.getElementById('pdfControls');
+
+    const prevBtn = document.getElementById('prevPageBtn');
+    const nextBtn = document.getElementById('nextPageBtn');
+    const pageInput = document.getElementById('pageInput');
+    const pageInfoDisplay = document.getElementById('pageInfoDisplay');
+    const zoomInBtn = document.getElementById('zoomInBtn');
+    const zoomOutBtn = document.getElementById('zoomOutBtn');
+    const resetZoomBtn = document.getElementById('resetZoomBtn');
+    const zoomLevelDisplay = document.getElementById('zoomLevelDisplay');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+    // State
+    let pdfDoc = null;
+    let totalPages = 0;
+    let scale = 1.0;
+    const MIN_SCALE = 0.3;
+    const MAX_SCALE = 3.0;
+    const SCALE_STEP = 0.1;
+    let currentPage = 1;
+    let isRendering = false;
+
+    // ============================================
+    // PINCH-TO-ZOOM STATE
+    // ============================================
+
+    let lastPinchDistance = 0;
+    let isPinching = false;
+    let pinchStartScale = 1.0;
+
+    function getPinchDistance(e) {
+        if (e.touches.length < 2) return 0;
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+    }
+
+    // ============================================
+    // SECURITY MEASURES
+    // ============================================
+
+    document.querySelector('.pdf-reader-wrapper')?.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        return false;
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && (e.key === 's' || e.key === 'p')) {
+            e.preventDefault();
+            showToast('Saving/Printing is disabled.');
+            return false;
+        }
+        if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I') || (e.ctrlKey && e.key === 'u')) {
+            e.preventDefault();
+            return false;
+        }
+    });
+
+    // ============================================
+    // TOAST
+    // ============================================
+
+    function showToast(message) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+            background: #1A1A2E; color: white; padding: 8px 18px; border-radius: 8px;
+            font-size: 13px; font-weight: 500; z-index: 9999;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+            max-width: 90%; text-align: center;
+        `;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(function() {
+            toast.style.opacity = '0';
+            toast.style.transition = 'opacity 0.3s ease';
+            setTimeout(function() { toast.remove(); }, 400);
+        }, 2000);
+    }
+
+    // ============================================
+    // PDF LOADING
+    // ============================================
+
+    function loadPDF(url) {
+        if (!url) {
+            loading.innerHTML = `
+                <div style="font-size: 48px; opacity:0.3;">⚠️</div>
+                <p>Failed to load PDF.</p>
+            `;
+            controls.style.display = 'none';
+            return;
+        }
+
+        loading.style.display = 'block';
+        controls.style.display = 'none';
+
+        pdfjsLib.getDocument(url).promise
+            .then(function(pdf) {
+                pdfDoc = pdf;
+                totalPages = pdf.numPages;
+                scale = 1.0;
+                currentPage = 1;
+                controls.style.display = 'flex';
+                renderAllPages();
+                updateControls();
+                loading.style.display = 'none';
+            })
+            .catch(function(error) {
+                loading.innerHTML = `
+                    <div style="font-size: 48px; opacity:0.3;">⚠️</div>
+                    <h3 style="font-size:18px; color:var(--text);">Failed to load PDF</h3>
+                    <p style="font-size:14px; color:var(--text-secondary);">${error.message}</p>
+                    <a href="{{ url_for('pdfs.telegram_download', code=pdf.code) }}" target="_blank"
+                       style="display:inline-block; margin-top:12px; padding:8px 20px; background:#0088CC; color:white; border-radius:8px; text-decoration:none; font-weight:600;">
+                        <i class="fab fa-telegram-plane"></i> Get PDF via Telegram
+                    </a>
+                `;
+                controls.style.display = 'none';
+                console.error('PDF Error:', error);
+            });
+    }
+
+    // ============================================
+    // RENDER ALL PAGES (Vertical Scrolling)
+    // ============================================
+
+    function renderAllPages() {
+        if (!pdfDoc || isRendering) return;
+        isRendering = true;
+
+        pagesContainer.innerHTML = '';
+
+        const promises = [];
+        for (let i = 1; i <= totalPages; i++) {
+            promises.push(renderPage(i));
+        }
+
+        Promise.all(promises).then(function() {
+            isRendering = false;
+            updateControls();
+            // Scroll to first page after render
+            setTimeout(function() {
+                const wrapper = document.getElementById('page-1');
+                if (wrapper) {
+                    wrapper.scrollIntoView({ block: 'start' });
+                }
+            }, 100);
+        });
+    }
+
+    function renderPage(pageNum) {
+        return new Promise(function(resolve) {
+            pdfDoc.getPage(pageNum).then(function(page) {
+                const viewport = page.getViewport({ scale: scale });
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'page-wrapper';
+                wrapper.id = 'page-' + pageNum;
+
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                canvas.style.width = viewport.width + 'px';
+                canvas.style.height = viewport.height + 'px';
+                canvas.dataset.page = pageNum;
+
+                const ctx = canvas.getContext('2d');
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+
+                page.render(renderContext).promise.then(function() {
+                    wrapper.appendChild(canvas);
+                    pagesContainer.appendChild(wrapper);
+                    resolve();
+                });
+            });
+        });
+    }
+
+    function reRenderAllPages() {
+        if (!pdfDoc || isRendering) return;
+        isRendering = true;
+
+        const wrappers = pagesContainer.querySelectorAll('.page-wrapper');
+        const promises = [];
+
+        wrappers.forEach(function(wrapper) {
+            const canvas = wrapper.querySelector('canvas');
+            const pageNum = parseInt(canvas.dataset.page);
+            promises.push(
+                pdfDoc.getPage(pageNum).then(function(page) {
+                    const viewport = page.getViewport({ scale: scale });
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    canvas.style.width = viewport.width + 'px';
+                    canvas.style.height = viewport.height + 'px';
+                    const ctx = canvas.getContext('2d');
+                    const renderContext = {
+                        canvasContext: ctx,
+                        viewport: viewport
+                    };
+                    return page.render(renderContext).promise;
+                })
+            );
+        });
+
+        Promise.all(promises).then(function() {
+            isRendering = false;
+            updateControls();
+        });
+    }
+
+    // ============================================
+    // SCROLL TO PAGE - SIMPLE & RELIABLE
+    // ============================================
+
+    function scrollToPage(pageNum) {
+        if (pageNum < 1 || pageNum > totalPages) return;
+        if (!pdfDoc) return;
+
+        currentPage = pageNum;
+
+        // Find the page wrapper
+        const wrapper = document.getElementById('page-' + pageNum);
+        if (wrapper) {
+            wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        updateControls();
+    }
+
+    // ============================================
+    // CONTROLS
+    // ============================================
+
+    function updateControls() {
+        if (pageInfoDisplay) {
+            pageInfoDisplay.textContent = currentPage + ' / ' + totalPages;
+        }
+        if (prevBtn) prevBtn.disabled = currentPage <= 1;
+        if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+        if (pageInput) {
+            pageInput.value = currentPage;
+            pageInput.max = totalPages || 1;
+        }
+        if (zoomLevelDisplay) {
+            zoomLevelDisplay.textContent = Math.round(scale * 100) + '%';
+        }
+        if (zoomInBtn) zoomInBtn.disabled = scale >= MAX_SCALE;
+        if (zoomOutBtn) zoomOutBtn.disabled = scale <= MIN_SCALE;
+        if (resetZoomBtn) resetZoomBtn.disabled = scale === 1.0;
+    }
+
+    function changeZoom(delta) {
+        let newScale = scale + delta;
+        newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
+        if (newScale !== scale) {
+            scale = newScale;
+            reRenderAllPages();
+        }
+    }
+
+    function resetZoom() {
+        if (scale !== 1.0) {
+            scale = 1.0;
+            reRenderAllPages();
+        }
+    }
+
+    // ============================================
+    // EVENT LISTENERS
+    // ============================================
+
+    // Page navigation buttons
+    if (prevBtn) {
+        prevBtn.addEventListener('click', function() {
+            if (currentPage > 1) {
+                scrollToPage(currentPage - 1);
+            }
+        });
+    }
+
+    if (nextBtn) {
+        nextBtn.addEventListener('click', function() {
+            if (currentPage < totalPages) {
+                scrollToPage(currentPage + 1);
+            }
+        });
+    }
+
+    // Page input
+    if (pageInput) {
+        pageInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                let val = parseInt(this.value);
+                if (isNaN(val) || val < 1) val = 1;
+                if (val > totalPages) val = totalPages;
+                scrollToPage(val);
+                this.blur();
+            }
+        });
+        pageInput.addEventListener('blur', function() {
+            let val = parseInt(this.value);
+            if (isNaN(val) || val < 1) val = 1;
+            if (val > totalPages) val = totalPages;
+            this.value = val;
+            if (val !== currentPage) {
+                scrollToPage(val);
+            }
+        });
+    }
+
+    // Keyboard arrows
+    document.addEventListener('keydown', function(e) {
+        if (e.target.tagName === 'INPUT') return;
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (currentPage > 1) scrollToPage(currentPage - 1);
+        } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (currentPage < totalPages) scrollToPage(currentPage + 1);
+        } else if (e.key === 'Escape' && document.fullscreenElement) {
+            document.exitFullscreen();
+        }
+    });
+
+    // Zoom
+    if (zoomInBtn) zoomInBtn.addEventListener('click', function() { changeZoom(SCALE_STEP); });
+    if (zoomOutBtn) zoomOutBtn.addEventListener('click', function() { changeZoom(-SCALE_STEP); });
+    if (resetZoomBtn) resetZoomBtn.addEventListener('click', resetZoom);
+
+    // Fullscreen
+    if (fullscreenBtn) {
+        fullscreenBtn.addEventListener('click', function() {
+            const wrapper = document.querySelector('.pdf-reader-wrapper');
+            if (!document.fullscreenElement) {
+                wrapper.requestFullscreen().catch(function() {
+                    showToast('Fullscreen not supported.');
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        });
+        document.addEventListener('fullscreenchange', function() {
+            fullscreenBtn.innerHTML = document.fullscreenElement ?
+                '<i class="fas fa-compress"></i>' :
+                '<i class="fas fa-expand"></i>';
+        });
+    }
+
+    // Mouse wheel zoom (Ctrl + Scroll)
+    container.addEventListener('wheel', function(e) {
+        if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -SCALE_STEP : SCALE_STEP;
+            changeZoom(delta);
+        }
+    }, { passive: false });
+
+    // ============================================
+    // PINCH-TO-ZOOM (Two-Finger)
+    // ============================================
+
+    container.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 2) {
+            isPinching = true;
+            lastPinchDistance = getPinchDistance(e);
+            pinchStartScale = scale;
+        }
+    }, { passive: true });
+
+    container.addEventListener('touchmove', function(e) {
+        if (isPinching && e.touches.length === 2) {
+            e.preventDefault();
+            const distance = getPinchDistance(e);
+            const delta = (distance - lastPinchDistance) / 100;
+            let newScale = pinchStartScale + delta;
+            newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
+            if (newScale !== scale) {
+                scale = newScale;
+                reRenderAllPages();
+                updateControls();
+            }
+        }
+    }, { passive: false });
+
+    container.addEventListener('touchend', function(e) {
+        isPinching = false;
+    }, { passive: true });
+
+    // ============================================
+    // DETECT VISIBLE PAGE FOR UPDATING CONTROLS
+    // ============================================
+
+    let scrollTimeout;
+    container.addEventListener('scroll', function() {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(function() {
+            const wrappers = pagesContainer.querySelectorAll('.page-wrapper');
+            let bestPage = 1;
+            let bestVisibility = 0;
+            const containerRect = container.getBoundingClientRect();
+
+            wrappers.forEach(function(wrapper) {
+                const rect = wrapper.getBoundingClientRect();
+                const visibleTop = Math.max(rect.top, containerRect.top);
+                const visibleBottom = Math.min(rect.bottom, containerRect.bottom);
+                const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+                const totalHeight = rect.height;
+                const ratio = visibleHeight / totalHeight;
+                if (ratio > bestVisibility) {
+                    bestVisibility = ratio;
+                    bestPage = parseInt(wrapper.id.split('-')[1]);
+                }
+            });
+
+            if (bestPage !== currentPage && bestVisibility > 0.1) {
+                currentPage = bestPage;
+                updateControls();
+            }
+        }, 150);
+    }, { passive: true });
+
+    // ============================================
+    // INITIALIZE
+    // ============================================
+
+    loadPDF(PDF_URL);
+});
+</script>
+{% endblock %}

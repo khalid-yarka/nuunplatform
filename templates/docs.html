@@ -1,0 +1,235 @@
+{% extends "docs_base.html" %}
+
+{% block title %}Dokumentiyo – NuunPlatform{% endblock %}
+
+{% block content %}
+<div class="docs-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+            <div class="docs-search">
+                <input type="text" id="docsSearch" placeholder="Raadi dokumentiyada..." />
+                <i class="fas fa-search"></i>
+            </div>
+            <nav class="docs-nav">
+                <ul>
+                    <li><a href="#bilow" class="active"><i class="fas fa-rocket"></i> Bilow</a></li>
+                    <li><a href="#dashboard"><i class="fas fa-home"></i> Dashboard</a></li>
+                    <li><a href="#imtixaan"><i class="fas fa-pencil-alt"></i> Imtixaan qaado</a></li>
+                    <li><a href="#taariikh"><i class="fas fa-chart-line"></i> Taariikh & Liiska</a></li>
+                    <li><a href="#live"><i class="fas fa-bolt"></i> Imtixaan toos ah</a></li>
+                    <li><a href="#kooxo"><i class="fas fa-users"></i> Kooxo waxbarasho</a></li>
+                    <li><a href="#pdf"><i class="fas fa-file-pdf"></i> Qoraallo PDF</a></li>
+                    <li><a href="#ogeysiis"><i class="fas fa-bell"></i> Ogeysiis & Profayl</a></li>
+                    <li><a href="#su'aalo"><i class="fas fa-question-circle"></i> Su'aalo badan</a></li>
+                </ul>
+            </nav>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="docs-content">
+        <!-- Hero -->
+        <section class="docs-hero">
+            <h1>Ku soo dhowow NuunPlatform</h1>
+            <p>Bartaada waxbarasho ee dhammaystiran. Wax baro, ku tartam, oo kor u qaad aqoontaada iyada oo loo marayo imtixaanado is-dhexgal ah, tartan toos ah, iyo qoraallo waxbarasho.</p>
+            <div class="docs-hero-actions">
+                <a href="{{ url_for('auth.register') }}" class="docs-btn docs-btn-primary">Bilow</a>
+                <a href="#bilow" class="docs-btn docs-btn-secondary">Akri dokumentiyada</a>
+            </div>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- SECTION: BILOW                               -->
+        <!-- ============================================ -->
+        <section id="bilow" class="docs-section">
+            <h2><i class="fas fa-rocket"></i> Bilow</h2>
+            <p>Ku cusub NuunPlatform? Tallaabooyinkan raac si aad u abuurto akoon oo aad u bilaasho waxbarashada.</p>
+
+            <div class="docs-step">
+                <span class="step-number">1</span>
+                <div>
+                    <h4>Akoon samee (Is diwaan geli)</h4>
+                    <p>Riix badhanka <strong>Is diwaan geli</strong> ee korka midig. Buuxi lambarka taleefankaaga (waxa uu ku bilaabmayaa <code>+252</code>), dooro erayga sirta ah (password) oo adag, kadibna buuxi magacaaga, goobta, magaalada, dugsiga, iyo fasalka. <strong>Public ID</strong>-gaaga waxa uu si toos ah u soo baxayaa.</p>
+                </div>
+            </div>
+
+            <div class="docs-step">
+                <span class="step-number">2</span>
+                <div>
+                    <h4>Gal (Login)</h4>
+                    <p>Kadib markaad is diwaan geliso, gal lambarka taleefanka iyo erayga sirta ah. Waxaad loo diri doonaa <strong>Dashboard</strong>-ka – taas oo ah xarunta koontoroolka ee waxbarashadaada.</p>
+                </div>
+            </div>
+
+            <div class="docs-step">
+                <span class="step-number">3</span>
+                <div>
+                    <h4>Baadh</h4>
+                    <p>Laga soo bilaabo Dashboard-ka, waxaad bilowgi kartaa imtixaan, daawasho profaylkaaga, hubin liiska guusha, ama baadh kooxaha iyo qoraallada PDF. Isticmaal shabaqyada (sidebar) si aad ugu dhaqaaqdo qaybaha kala duwan.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- SECTION: DASHBOARD                           -->
+        <!-- ============================================ -->
+        <section id="dashboard" class="docs-section">
+            <h2><i class="fas fa-home"></i> Dashboard – Gurigaaga Dijitaalka ah</h2>
+            <p>Dashboard-kaagu wuxuu ku siinayaa aragti kooban oo ku saabsan horumarkaaga iyo marin degdeg ah oo loo maro astaamaha muhiimka ah.</p>
+            <ul>
+                <li><strong>Kaararka Tirakoobka:</strong> Waxaad ku aragtaa inta imtixaan ee aad qaadatay, dhibcaha guud, heerka guusha, iyo xiriirka joogtada ah (streak).</li>
+                <li><strong>Ficillo Degdeg ah:</strong> Ku bood imtixaan, profaylkaaga, ama liiska guusha.</li>
+                <li><strong>Dhaqdhaqaaq dhow:</strong> Waxaad ku aragtaa imtixaannadii ugu dambeeyay oo leh dhibcahooda.</li>
+            </ul>
+            <p>Isticmaal shabaqyada (sidebar) si aad ugu wareegto qaybaha kale.</p>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- SECTION: IMTIXAAN QAADO                      -->
+        <!-- ============================================ -->
+        <section id="imtixaan" class="docs-section">
+            <h2><i class="fas fa-pencil-alt"></i> Imtixaan qaado</h2>
+            <p>Isku day maadooyinka kala duwan ee imtixaannada. Imtixaan kastaa wuxuu leeyahay 10 su'aalood.</p>
+            <ol>
+                <li><strong>Maado dooro:</strong> Laga bilaabo bogga imtixaanka, dooro maado (tusaale, Juqraafiga, Xisaabta).</li>
+                <li><strong>Su'aalaha ka jawaab:</strong> Waxaad arki doontaa hal su'aal oo leh 3–5 jawaabood. Riix jawaabta aad dooratay.</li>
+                <li><strong>Jawaab celin degdeg ah:</strong> Waxaad isla markiiba ogaan doontaa inaad saxday iyo in kale, iyo sidoo kale sharaxaad ku saabsan jawaabta saxda ah.</li>
+                <li><strong>Qiimee su'aasha:</strong> Kadib su'aal kasta, qiimee <strong>HAA</strong> (waan fahmay) ama <strong>MAY</strong> (ma fahmin). Taas waxay naga caawinaysaa inaan horumarino su'aalaha.</li>
+                <li><strong>Natiijooyinka eeg:</strong> Kadib dhammaystirka 10-ka su'aalood, waxaad arki doontaa dhibcahaaga, boqolkiiba, iyo farriin dhiirigelin leh. Dhibcahaaga waxay ku biiraan wadarta guud.</li>
+            </ol>
+            <div class="docs-tip">
+                <i class="fas fa-lightbulb"></i>
+                <span>Talo: Akhri sharaxaadaha si fiican – waxay kaa caawinayaan inaad wax ka barato xataa su'aalaha aad ka qaldantay!</span>
+            </div>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- SECTION: TAARIIKH & LIISKA GUUSHA            -->
+        <!-- ============================================ -->
+        <section id="taariikh" class="docs-section">
+            <h2><i class="fas fa-chart-line"></i> Taariikhda Imtixaannada & Liiska Guusha</h2>
+            <div class="docs-two-col">
+                <div>
+                    <h4>📊 Taariikhda</h4>
+                    <p>Bogga <strong>Taariikhda</strong> (waxaad ka heli kartaa dashboard-ka ama liiska imtixaanka) wuxuu muujinayaa imtixaannadii hore oo dhan, oo leh maadada, taariikhda, iyo dhibcaha.</p>
+                </div>
+                <div>
+                    <h4>🏆 Liiska Guusha (Leaderboard)</h4>
+                    <p>Eeg meesha aad ka joogto marka loo eego dadka kale. Liiska guusha waxaa lagu kala horreeyaa dhibcaha guud. Rank-gaaga waa la iftiimiyay si aad u ogaato booskaaga.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- SECTION: IMTIXAAN TOOS AH (LIVE)             -->
+        <!-- ============================================ -->
+        <section id="live" class="docs-section">
+            <h2><i class="fas fa-bolt"></i> Imtixaan Toos ah (Live Quiz)</h2>
+            <p>Imtixaannada tooska ah waxay ku siinayaan khibrad tartan oo dhab ah. Waxaad <strong>ku biiri</strong> kartaa imtixaan uu qof kale martigeliyayo, ama <strong>adigu</strong> martigeli.</p>
+
+            <div class="docs-two-col">
+                <div>
+                    <h4>🔑 Ku biir (Join)</h4>
+                    <ol>
+                        <li>Hel <strong>koodka</strong> (tusaale: <code>A3B9-X7K2</code>) laga bilaabo martigeliyaha.</li>
+                        <li>Tag bogga <strong>Ku biir</strong> oo geli koodka.</li>
+                        <li>Waxaad galaysaa <strong>qolka sugitaanka</strong> – sug ilaa uu martigeliyuhu imtixaanka ku bilaabo.</li>
+                        <li>Marka la bilaabo, ka jawaab su'aalaha waqtiga la cayimay. Eeg liiska guusha oo si toos ah u cusboonaysanaya.</li>
+                        <li>Kadib imtixaanka, eeg natiijooyinka faahfaahsan iyo rank-gaaga.</li>
+                    </ol>
+                </div>
+                <div>
+                    <h4>🎯 Martigeli (Host)</h4>
+                    <ol>
+                        <li>Bogga imtixaanka tooska ah, riix <strong>Abuur imtixaan</strong>.</li>
+                        <li>Dooro maado iyo tirada su'aalaha (10–30). Waxaad sidoo kale ku dari kartaa cinwaan.</li>
+                        <li>Kood <strong>gaar ah</strong> ayaa la soo saarayaa – la wadaag asxaabtaada.</li>
+                        <li>Qolka sugitaanka, waxaad arki doontaa dadka soo biiray. Marka ay ugu yaraan 2 qof diyaar yihiin, riix <strong>Bilow Imtixaan</strong>.</li>
+                        <li>Dhammaan waxay ciyaaraan isku waqti. Kadib imtixaanka, waxaad arki kartaa <strong>falanqaynta su'aalaha</strong> (kuwa ugu saxnaa/kuwa ugu qaldanaa) oo aad soo dejisan kartaa natiijooyinka CSV.</li>
+                    </ol>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- SECTION: KOOXO WAXBARASHO                    -->
+        <!-- ============================================ -->
+        <section id="kooxo" class="docs-section">
+            <h2><i class="fas fa-users"></i> Kooxo Waxbarasho</h2>
+            <p>Ku biir kooxo ay dad kale sameeyeen si aad u wada wadaagtaan waxbarashada.</p>
+            <ul>
+                <li>Bogga <strong>Kooxaha</strong> wuxuu muujinayaa dhammaan kooxaha firfircoon (WhatsApp iyo Telegram).</li>
+                <li>Waxaad ku shaandhayn kartaa iyadoo loo eegayo <strong>nooca kooxda</strong> ama <strong>qaybta</strong>.</li>
+                <li>Riix <strong>Ku biir</strong> si aad ugu booddo xiriiriyaha kooxda.</li>
+            </ul>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- SECTION: QORAALLO PDF                        -->
+        <!-- ============================================ -->
+        <section id="pdf" class="docs-section">
+            <h2><i class="fas fa-file-pdf"></i> Qoraallo PDF</h2>
+            <p>Hel qoraallo waxbarasho oo PDF ah.</p>
+            <ul>
+                <li>Bogga <strong>PDF-yada</strong> wuxuu kuu ogolaanayaa inaad ku shaandhayso maadada ama fasalka.</li>
+                <li>Riix <strong>Daawo</strong> si aad ugu furto <strong>akhriveedhaha PDF</strong> ee ku dhisan (waxaad ku weyneysaa zoom, fuul buuxa, iyo qeybaha bogagga).</li>
+                <li>Riix <strong>Ka soo dejiso Telegram</strong> si aad ugu dejiso faylka kanaalka Telegram.</li>
+            </ul>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- SECTION: OGEEYSIIS & PROFAYL                 -->
+        <!-- ============================================ -->
+        <section id="ogeysiis" class="docs-section">
+            <h2><i class="fas fa-bell"></i> Ogeysiis & Profayl</h2>
+            <div class="docs-two-col">
+                <div>
+                    <h4>🔔 Ogeysiis</h4>
+                    <p>Badhanka <strong>firfircoonida</strong> (bell) wuxuu muujinayaa inta ogeysiis ee aan la akhriyin. Guji si aad u furto liiska ogeysiisyada; waxaad kaloo ku calaamadin kartaa in la akhriyey.</p>
+                </div>
+                <div>
+                    <h4>👤 Profayl</h4>
+                    <p>Bogga <strong>Profayl</strong> wuxuu muujinayaa magacaaga, lambarka taleefanka, dugsiga, fasalka, iyo dhibcaha guud. (Wax-ka-beddelka profaylka hadda lama heli karo, laakiin waxaa la soo dari doonaa dhowaan.)</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- SECTION: SU'AALO BADAN (FAQ)                 -->
+        <!-- ============================================ -->
+        <section id="su'aalo" class="docs-section">
+            <h2><i class="fas fa-question-circle"></i> Su'aalo Badan (FAQ)</h2>
+
+            <div class="docs-faq-item">
+                <h4><i class="fas fa-id-card"></i> Sidee u helaa Public ID?</h4>
+                <p>Public ID waxa uu si toos ah loogu sameeyaa markaad is diwaan geliso. Waxaad ku arki kartaa profaylkaaga.</p>
+            </div>
+
+            <div class="docs-faq-item">
+                <h4><i class="fas fa-school"></i> Ma bedeli karaa dugsigayga ama fasalkayga?</h4>
+                <p>Hadda lama beddeli karo, laakiin waxaan qorsheyneynaa inaan ku soo darro wax-ka-beddelka profaylka.</p>
+            </div>
+
+            <div class="docs-faq-item">
+                <h4><i class="fas fa-star"></i> Maxaa dhibcaha loo isticmaalaa?</h4>
+                <p>Dhibcaha waxay kaa caawiyaan inaad ku soo baxdo liiska guusha (leaderboard) oo ay ku muujiyaan horumarkaaga.</p>
+            </div>
+
+            <div class="docs-faq-item">
+                <h4><i class="fas fa-bug"></i> Sidee u soo sheegaa dhibaato?</h4>
+                <p>Haddii aad la kulanto khalad, bogga qaladka waxaad ka heli doontaa badhan <strong>Soo sheeg dhibaatadan</strong> oo aad ku soo sheegi karto waxa dhacay.</p>
+            </div>
+
+            <div class="docs-faq-item">
+                <h4><i class="fas fa-users"></i> Ma ku biiri karaa kooxo badan?</h4>
+                <p>Haa, waxaad ku biiri kartaa intaad doonto oo kooxo ah oo firfircoon.</p>
+            </div>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- FOOTER (already in docs_base)               -->
+        <!-- ============================================ -->
+    </div>
+</div>
+{% endblock %}

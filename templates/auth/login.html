@@ -1,0 +1,142 @@
+{% extends "auth/_base.html" %}
+
+{% block title %}Login - NuunPlatform{% endblock %}
+
+{% block auth_body %}
+<h1 class="auth-title">Welcome <span>Back</span></h1>
+<p class="auth-subtitle">Login to your account</p>
+
+<hr class="divider" />
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        <div class="auth-alerts" id="authAlerts">
+            {% for category, message in messages %}
+                <div class="auth-alert auth-alert-{{ category }}"
+                     data-auto-dismiss="6000"
+                     role="alert">
+                    <div class="auth-alert-icon">
+                        <i class="fas {% if category == 'success' %}fa-check
+                                     {% elif category == 'error' %}fa-xmark
+                                     {% elif category == 'warning' %}fa-exclamation
+                                     {% else %}fa-info{% endif %}"></i>
+                    </div>
+                    <div class="auth-alert-content">
+                        <div class="auth-alert-title">
+                            {% if category == 'success' %}Account created
+                            {% elif category == 'error' %}Error
+                            {% elif category == 'warning' %}Notice
+                            {% else %}Information{% endif %}
+                        </div>
+                        <div class="auth-alert-message">{{ message }}</div>
+                    </div>
+                    <button type="button"
+                            class="auth-alert-close"
+                            aria-label="Dismiss"
+                            data-dismiss>
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <div class="auth-alert-progress"></div>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+{% endwith %}
+
+<form method="POST" action="{{ url_for('auth.login') }}" class="auth-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <div class="form-group">
+        <label>📞 Phone Number <span class="required">*</span></label>
+        <div class="input-wrapper">
+            <span class="phone-prefix">+252</span>
+            <input type="tel" name="phone" placeholder="90 650 0599"
+                   maxlength="9" required autofocus />
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>🔒 Password <span class="required">*</span></label>
+        <div class="input-wrapper">
+            <span class="input-icon"><i class="fas fa-lock"></i></span>
+            <input type="password" name="password"
+                   placeholder="Enter your password" required />
+            <button type="button" class="toggle-password" onclick="togglePassword(this)">
+                <i class="fas fa-eye"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="form-options">
+        <a href="{{ url_for('auth.help') }}" class="forgot-link">
+            Forgot Password?
+        </a>
+    </div>
+
+    <button type="submit" class="btn-submit">
+        <i class="fas fa-lock"></i> Login
+    </button>
+</form>
+
+<div class="auth-footer">
+    <p>Don't have an account?
+        <a href="{{ url_for('auth.register') }}">Create Account</a>
+    </p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function togglePassword(btn) {
+        const input = btn.parentElement.querySelector('input');
+        const icon = btn.querySelector('i');
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.className = 'fas fa-eye-slash';
+        } else {
+            input.type = 'password';
+            icon.className = 'fas fa-eye';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.auth-alert').forEach(function (alert) {
+            const dismissAfter = parseInt(alert.dataset.autoDismiss, 10) || 0;
+            const closeBtn = alert.querySelector('[data-dismiss]');
+            let timer = null;
+
+            function dismiss() {
+                if (alert.classList.contains('dismissing')) return;
+                alert.classList.add('dismissing');
+                setTimeout(function () {
+                    alert.remove();
+                    const wrap = document.getElementById('authAlerts');
+                    if (wrap && wrap.children.length === 0) wrap.remove();
+                }, 400);
+            }
+
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function () {
+                    if (timer) clearTimeout(timer);
+                    dismiss();
+                });
+            }
+
+            if (dismissAfter > 0) {
+                timer = setTimeout(dismiss, dismissAfter);
+            }
+
+            alert.addEventListener('mouseenter', function () {
+                if (timer) clearTimeout(timer);
+                const progress = alert.querySelector('.auth-alert-progress');
+                if (progress) progress.style.animationPlayState = 'paused';
+            });
+            alert.addEventListener('mouseleave', function () {
+                if (dismissAfter > 0) timer = setTimeout(dismiss, dismissAfter);
+                const progress = alert.querySelector('.auth-alert-progress');
+                if (progress) progress.style.animationPlayState = 'running';
+            });
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,858 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Platform Overview - Admin{% endblock %}
+{% block page_title %}Platform Overview{% endblock %}
+
+{% block dashboard_css %}
+<style>
+    .pf-page { max-width: 100%; }
+
+    /* Header */
+    .pf-header {
+        display: flex; justify-content: space-between;
+        align-items: flex-start; flex-wrap: wrap;
+        gap: 16px; margin-bottom: 20px;
+    }
+    .pf-header .title-block h2 {
+        font-size: 22px; font-weight: 700; color: var(--text);
+        margin: 0; display: flex; align-items: center; gap: 10px;
+    }
+    .pf-header .title-block p {
+        color: var(--text-secondary); font-size: 14px; margin: 4px 0 0 0;
+    }
+    .pf-header .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+    /* Range selector */
+    .pf-range {
+        display: flex; background: var(--surface);
+        border: 1px solid var(--border); border-radius: var(--radius-sm);
+        padding: 3px; gap: 2px;
+    }
+    .pf-range a {
+        padding: 6px 14px; border-radius: 6px;
+        font-size: 12px; font-weight: 600;
+        color: var(--text-secondary); text-decoration: none;
+        transition: var(--transition);
+    }
+    .pf-range a:hover { color: var(--primary); text-decoration: none; }
+    .pf-range a.active {
+        background: var(--primary); color: white;
+    }
+
+    /* Live pulse badge */
+    .pf-live-badge {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 4px 12px; border-radius: 12px;
+        background: #ECFDF5; color: #065F46;
+        font-size: 11px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .pf-live-badge .pulse {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #10B981; animation: pf-pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pf-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50%      { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    /* Stats grid */
+    .pf-stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px; margin-bottom: 24px;
+    }
+    .pf-stat {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 18px 20px;
+        box-shadow: var(--shadow-sm); transition: var(--transition);
+        display: flex; flex-direction: column; gap: 6px;
+        position: relative; overflow: hidden;
+    }
+    .pf-stat:hover {
+        transform: translateY(-2px); box-shadow: var(--shadow-md);
+        border-color: var(--primary);
+    }
+    .pf-stat .row1 {
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .pf-stat .icon {
+        width: 36px; height: 36px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px; flex-shrink: 0;
+    }
+    .pf-stat .icon.primary { background: var(--primary-light); color: var(--primary); }
+    .pf-stat .icon.blue    { background: #EFF6FF; color: #1E40AF; }
+    .pf-stat .icon.green   { background: #ECFDF5; color: #065F46; }
+    .pf-stat .icon.amber   { background: #FFFBEB; color: #92400E; }
+    .pf-stat .icon.red     { background: #FEF2F2; color: #991B1B; }
+    .pf-stat .icon.purple  { background: #F3E8FF; color: #6B21A8; }
+
+    .pf-stat .trend {
+        font-size: 11px; font-weight: 700;
+        padding: 2px 8px; border-radius: 10px;
+    }
+    .pf-stat .trend.up   { background: #ECFDF5; color: #059669; }
+    .pf-stat .trend.down { background: #FEF2F2; color: #DC2626; }
+    .pf-stat .trend.flat { background: var(--background); color: var(--text-muted); }
+
+    .pf-stat .num {
+        font-size: 28px; font-weight: 700; color: var(--text);
+        line-height: 1.1; letter-spacing: -0.5px;
+    }
+    .pf-stat .label {
+        font-size: 11px; font-weight: 600; color: var(--text-secondary);
+        text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .pf-stat .sub {
+        font-size: 11px; color: var(--text-muted);
+        margin-top: 2px;
+    }
+
+    /* Two-column layout */
+    .pf-grid-2 {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 20px; margin-bottom: 24px;
+    }
+    @media (max-width: 900px) { .pf-grid-2 { grid-template-columns: 1fr; } }
+
+    /* Card */
+    .pf-card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); box-shadow: var(--shadow-sm);
+        overflow: hidden;
+    }
+    .pf-card-head {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 14px 20px; border-bottom: 1px solid var(--border);
+        background: var(--background);
+    }
+    .pf-card-head h3 {
+        font-size: 14px; font-weight: 700; color: var(--text);
+        margin: 0; display: flex; align-items: center; gap: 8px;
+    }
+    .pf-card-head h3 i { color: var(--primary); }
+    .pf-card-body { padding: 18px 20px; }
+
+    /* Chart canvas */
+    .pf-chart-canvas {
+        width: 100%; max-height: 220px;
+    }
+
+    /* Distributions */
+    .pf-dist-bar {
+        display: flex; height: 12px; border-radius: 8px;
+        overflow: hidden; margin: 10px 0 12px;
+        background: var(--background);
+    }
+    .pf-dist-bar .seg { transition: width 0.4s ease; }
+    .pf-dist-bar .seg.danbe { background: #9CA3AF; }
+    .pf-dist-bar .seg.dhexe { background: var(--primary); }
+    .pf-dist-bar .seg.hore  { background: linear-gradient(90deg, var(--primary), #B91C1C); }
+
+    .pf-dist-legend {
+        display: flex; gap: 16px; flex-wrap: wrap;
+        font-size: 12px; color: var(--text-secondary);
+    }
+    .pf-dist-legend .li {
+        display: flex; align-items: center; gap: 6px;
+    }
+    .pf-dist-legend .dot {
+        width: 10px; height: 10px; border-radius: 50%;
+    }
+    .pf-dist-legend .dot.danbe { background: #9CA3AF; }
+    .pf-dist-legend .dot.dhexe { background: var(--primary); }
+    .pf-dist-legend .dot.hore  { background: #B91C1C; }
+    .pf-dist-legend .li strong { color: var(--text); }
+
+    /* Top list */
+    .pf-list {
+        display: flex; flex-direction: column;
+    }
+    .pf-list-item {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 0; border-bottom: 1px solid var(--border-light);
+        font-size: 13px;
+    }
+    .pf-list-item:last-child { border-bottom: none; }
+    .pf-list-item .rank {
+        width: 24px; height: 24px; border-radius: 6px;
+        background: var(--background); color: var(--text-secondary);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 700; flex-shrink: 0;
+    }
+    .pf-list-item .rank.gold   { background: linear-gradient(135deg, #F59E0B, #D97706); color: white; }
+    .pf-list-item .rank.silver { background: #9CA3AF; color: white; }
+    .pf-list-item .rank.bronze { background: #D97706; color: white; }
+    .pf-list-item .name {
+        flex: 1; min-width: 0; color: var(--text); font-weight: 500;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .pf-list-item .value {
+        font-weight: 700; color: var(--primary); flex-shrink: 0;
+    }
+    .pf-list-item .value.muted { color: var(--text-muted); font-weight: 500; }
+    .pf-list-item .sub {
+        font-size: 11px; color: var(--text-muted); margin-left: 4px;
+    }
+
+    /* Activity feed */
+    .pf-feed {
+        max-height: 560px; overflow-y: auto;
+    }
+    .pf-feed::-webkit-scrollbar { width: 6px; }
+    .pf-feed::-webkit-scrollbar-thumb {
+        background: var(--border); border-radius: 4px;
+    }
+    .pf-feed-item {
+        display: flex; gap: 12px; padding: 12px 20px;
+        border-bottom: 1px solid var(--border-light);
+        transition: background 0.15s ease;
+    }
+    .pf-feed-item:last-child { border-bottom: none; }
+    .pf-feed-item:hover { background: var(--primary-light); }
+    .pf-feed-item .fi {
+        width: 34px; height: 34px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 16px; flex-shrink: 0;
+        background: var(--background);
+    }
+    .pf-feed-item .fb { flex: 1; min-width: 0; }
+    .pf-feed-item .fb-title {
+        font-size: 13px; color: var(--text); line-height: 1.4;
+        word-wrap: break-word;
+    }
+    .pf-feed-item .fb-title strong { font-weight: 700; }
+    .pf-feed-item .fb-sub {
+        font-size: 11px; color: var(--text-secondary); margin-top: 2px;
+    }
+    .pf-feed-item .ft {
+        font-size: 11px; color: var(--text-muted);
+        white-space: nowrap; flex-shrink: 0; align-self: flex-start;
+        padding-top: 4px;
+    }
+    .pf-feed-empty {
+        text-align: center; padding: 40px 20px;
+        color: var(--text-muted); font-size: 13px;
+    }
+    .pf-feed-empty i {
+        font-size: 32px; opacity: 0.3; display: block; margin-bottom: 8px;
+    }
+
+    /* Broadcast modal styles handled by base.css */
+
+    /* Range filters on charts */
+    .pf-chart-toggle {
+        display: flex; gap: 6px;
+        background: var(--background); border-radius: 6px;
+        padding: 3px; font-size: 11px;
+    }
+    .pf-chart-toggle button {
+        padding: 4px 10px; border: none; background: transparent;
+        color: var(--text-secondary); cursor: pointer;
+        border-radius: 4px; font-weight: 600; font-size: 11px;
+        transition: var(--transition);
+    }
+    .pf-chart-toggle button.active {
+        background: var(--surface); color: var(--primary);
+        box-shadow: var(--shadow-sm);
+    }
+    .pf-chart-toggle button:hover:not(.active) {
+        color: var(--primary);
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+        .pf-stats { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 640px) {
+        .pf-stats { grid-template-columns: repeat(2, 1fr); }
+        .pf-stat { padding: 14px; }
+        .pf-stat .num { font-size: 22px; }
+        .pf-header { flex-direction: column; align-items: stretch; }
+        .pf-header .actions { width: 100%; }
+        .pf-header .actions > * { flex: 1; }
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="pf-page">
+
+    <!-- BREADCRUMB -->
+    <div class="breadcrumb">
+        <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
+        <span class="separator">/</span>
+        <span class="current">Platform Overview</span>
+    </div>
+
+    <!-- HEADER -->
+    <div class="pf-header">
+        <div class="title-block">
+            <h2>
+                <i class="fas fa-satellite-dish" style="color: var(--primary);"></i>
+                Platform Overview
+                <span class="pf-live-badge">
+                    <span class="pulse"></span> Live
+                </span>
+            </h2>
+            <p>Every meaningful movement on the platform — refreshed every 30 seconds.</p>
+        </div>
+        <div class="actions">
+            <div class="pf-range">
+                <a href="?days=7"  class="{% if days == 7  %}active{% endif %}">7d</a>
+                <a href="?days=14" class="{% if days == 14 %}active{% endif %}">14d</a>
+                <a href="?days=30" class="{% if days == 30 %}active{% endif %}">30d</a>
+                <a href="?days=90" class="{% if days == 90 %}active{% endif %}">90d</a>
+            </div>
+            <button type="button" class="btn btn-primary" onclick="openBroadcastModal()">
+                <i class="fas fa-bullhorn"></i> Notify Admins
+            </button>
+        </div>
+    </div>
+
+    <!-- STATS GRID -->
+    <div class="pf-stats">
+        <div class="pf-stat">
+            <div class="row1">
+                <span class="icon primary">👥</span>
+                <span class="trend up" data-trend="users">
+                    +{{ stats.users_today }} today
+                </span>
+            </div>
+            <div class="num" data-stat="users_total">{{ stats.users_total }}</div>
+            <div class="label">Total Users</div>
+            <div class="sub">{{ stats.users_week }} this week · {{ stats.users_month }} this month</div>
+        </div>
+
+        <div class="pf-stat">
+            <div class="row1">
+                <span class="icon green">📝</span>
+                <span class="trend up">{{ stats.quizzes_today }} today</span>
+            </div>
+            <div class="num" data-stat="quizzes_month">{{ stats.quizzes_month }}</div>
+            <div class="label">Quizzes Taken</div>
+            <div class="sub">{{ stats.quizzes_week }} this week</div>
+        </div>
+
+        <div class="pf-stat">
+            <div class="row1">
+                <span class="icon purple">⚡</span>
+                <span class="trend {% if stats.live_quizzes_active > 0 %}up{% else %}flat{% endif %}">
+                    {{ stats.live_quizzes_active }} live now
+                </span>
+            </div>
+            <div class="num" data-stat="live_quizzes">{{ stats.live_quizzes_finished_week }}</div>
+            <div class="label">Live Quizzes (7d)</div>
+            <div class="sub">{{ stats.live_quizzes_active }} active</div>
+        </div>
+
+        <div class="pf-stat">
+            <div class="row1">
+                <span class="icon amber">🚀</span>
+                <span class="trend {% if stats.upgrades_pending > 0 %}down{% else %}flat{% endif %}">
+                    {{ stats.upgrades_pending }} pending
+                </span>
+            </div>
+            <div class="num" data-stat="upgrades">{{ stats.upgrades_approved_month }}</div>
+            <div class="label">Upgrades (30d)</div>
+            <div class="sub">{{ stats.upgrades_pending }} awaiting review</div>
+        </div>
+
+        <div class="pf-stat">
+            <div class="row1">
+                <span class="icon blue">📄</span>
+                <span class="trend flat">Total</span>
+            </div>
+            <div class="num" data-stat="pdfs">{{ stats.pdfs_total }}</div>
+            <div class="label">PDF Resources</div>
+            <div class="sub">All categories</div>
+        </div>
+
+        <div class="pf-stat">
+            <div class="row1">
+                <span class="icon teal" style="background:#F0FDFA;color:#0F766E;">👥</span>
+                <span class="trend flat">Active</span>
+            </div>
+            <div class="num" data-stat="groups">{{ stats.groups_total }}</div>
+            <div class="label">Study Groups</div>
+            <div class="sub">Currently visible</div>
+        </div>
+
+        <div class="pf-stat">
+            <div class="row1">
+                <span class="icon red">⚠️</span>
+                <span class="trend {% if stats.errors_today > 0 %}down{% else %}up{% endif %}">
+                    {{ stats.errors_today }} today
+                </span>
+            </div>
+            <div class="num" data-stat="errors">{{ stats.errors_open }}</div>
+            <div class="label">Open Errors</div>
+            <div class="sub">{{ stats.errors_today }} logged today</div>
+        </div>
+
+        <div class="pf-stat">
+            <div class="row1">
+                <span class="icon amber">⭐</span>
+                <span class="trend flat">Staff</span>
+            </div>
+            <div class="num" data-stat="admins">{{ stats.admins_total }}</div>
+            <div class="label">Admins</div>
+            <div class="sub">Full access</div>
+        </div>
+    </div>
+
+    <!-- CHART + TIER DISTRIBUTION -->
+    <div class="pf-grid-2">
+        <!-- Trend chart -->
+        <div class="pf-card">
+            <div class="pf-card-head">
+                <h3><i class="fas fa-chart-line"></i> Activity Trend</h3>
+                <div class="pf-chart-toggle" id="chartToggle">
+                    <button type="button" class="active" data-series="signups">Signups</button>
+                    <button type="button" data-series="quizzes">Quizzes</button>
+                    <button type="button" data-series="live">Live Quizzes</button>
+                </div>
+            </div>
+            <div class="pf-card-body">
+                <canvas id="pfChart" class="pf-chart-canvas" height="200"></canvas>
+            </div>
+        </div>
+
+        <!-- Tier distribution -->
+        <div class="pf-card">
+            <div class="pf-card-head">
+                <h3><i class="fas fa-layer-group"></i> Tier Distribution</h3>
+            </div>
+            <div class="pf-card-body">
+                {% set total_tier = (tier_dist.danbe or 0) + (tier_dist.dhexe or 0) + (tier_dist.hore or 0) %}
+                {% set pct_danbe = ((tier_dist.danbe or 0) / total_tier * 100) if total_tier else 0 %}
+                {% set pct_dhexe = ((tier_dist.dhexe or 0) / total_tier * 100) if total_tier else 0 %}
+                {% set pct_hore  = ((tier_dist.hore  or 0) / total_tier * 100) if total_tier else 0 %}
+
+                <div class="pf-dist-bar">
+                    <div class="seg danbe" style="width: {{ pct_danbe }}%;"></div>
+                    <div class="seg dhexe" style="width: {{ pct_dhexe }}%;"></div>
+                    <div class="seg hore"  style="width: {{ pct_hore  }}%;"></div>
+                </div>
+                <div class="pf-dist-legend">
+                    <div class="li"><span class="dot danbe"></span> Danbe <strong>{{ tier_dist.danbe or 0 }}</strong></div>
+                    <div class="li"><span class="dot dhexe"></span> Dhexe <strong>{{ tier_dist.dhexe or 0 }}</strong></div>
+                    <div class="li"><span class="dot hore"></span> Hore <strong>{{ tier_dist.hore or 0 }}</strong></div>
+                </div>
+
+                <!-- Locations -->
+                <div style="margin-top: 22px;">
+                    <h4 style="font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 10px 0;">
+                        🌍 By Location
+                    </h4>
+                    {% for loc, count in location_dist.items() %}
+                        <div class="pf-list-item" style="padding: 6px 0;">
+                            <span style="font-size: 14px; flex:1;">
+                                {% if loc == 'SO' %}🇸🇴 Somalia
+                                {% elif loc == 'PL' %}🇸🇴 Puntland
+                                {% elif loc == 'SL' %}🇸🇴 Somaliland
+                                {% else %}— {{ loc }}{% endif %}
+                            </span>
+                            <span class="value">{{ count }}</span>
+                        </div>
+                    {% else %}
+                        <div style="color: var(--text-muted); font-size: 12px;">No location data</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOP LISTS -->
+    <div class="pf-grid-2">
+        <div class="pf-card">
+            <div class="pf-card-head">
+                <h3><i class="fas fa-fire"></i> Top Subjects (30 days)</h3>
+            </div>
+            <div class="pf-card-body">
+                <div class="pf-list">
+                    {% for s in top_subjects %}
+                        <div class="pf-list-item">
+                            <span class="rank {% if loop.index == 1 %}gold{% elif loop.index == 2 %}silver{% elif loop.index == 3 %}bronze{% endif %}">
+                                {{ loop.index }}
+                            </span>
+                            <span class="name">{{ s.subject }}</span>
+                            <span class="value">{{ s.attempts }} <span class="sub">attempts</span></span>
+                        </div>
+                    {% else %}
+                        <div style="padding: 20px 0; text-align: center; color: var(--text-muted); font-size: 13px;">
+                            No quiz activity yet.
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="pf-card">
+            <div class="pf-card-head">
+                <h3><i class="fas fa-crown"></i> Most Active Users (30 days)</h3>
+            </div>
+            <div class="pf-card-body">
+                <div class="pf-list">
+                    {% for u in top_performers %}
+                        <div class="pf-list-item">
+                            <span class="rank {% if loop.index == 1 %}gold{% elif loop.index == 2 %}silver{% elif loop.index == 3 %}bronze{% endif %}">
+                                {{ loop.index }}
+                            </span>
+                            <span class="name">
+                                <a href="{{ url_for('admin.admin_user_detail', user_id=u.id) }}"
+                                   style="color: inherit; text-decoration: none;">
+                                    {{ u.name }}
+                                </a>
+                                <span class="sub">#{{ u.public_id }}</span>
+                            </span>
+                            <span class="value">{{ u.attempts }} <span class="sub">quizzes</span></span>
+                        </div>
+                    {% else %}
+                        <div style="padding: 20px 0; text-align: center; color: var(--text-muted); font-size: 13px;">
+                            No active users yet.
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ACTIVITY FEED -->
+    <div class="pf-card" style="margin-bottom: 24px;">
+        <div class="pf-card-head">
+            <h3><i class="fas fa-stream"></i> Live Activity Feed</h3>
+            <span style="font-size: 12px; color: var(--text-secondary);" id="feedCount">
+                {{ feed|length }} recent events
+            </span>
+        </div>
+        <div class="pf-feed" id="activityFeed">
+            {% for ev in feed %}
+                <div class="pf-feed-item" data-kind="{{ ev.kind }}">
+                    <span class="fi">{{ ev.icon }}</span>
+                    <div class="fb">
+                        <div class="fb-title">
+                            {% if ev.link %}
+                                <a href="{{ ev.link }}" style="color: inherit; text-decoration: none;">
+                                    {{ ev.title|safe }}
+                                </a>
+                            {% else %}
+                                {{ ev.title|safe }}
+                            {% endif %}
+                        </div>
+                        <div class="fb-sub">{{ ev.subtitle }}</div>
+                    </div>
+                    <span class="ft" data-ts="{{ ev.timestamp or '' }}">
+                        {{ (ev.timestamp or '')[:16] }}
+                    </span>
+                </div>
+            {% else %}
+                <div class="pf-feed-empty">
+                    <i class="fas fa-inbox"></i>
+                    No activity yet. Once users start interacting, events appear here.
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+
+<!-- ============================================ -->
+<!-- BROADCAST MODAL -->
+<!-- ============================================ -->
+<div class="modal-overlay" id="broadcastModal">
+    <div class="modal-content" style="max-width: 540px;">
+        <h3 class="modal-title">📡 Notify All Admins</h3>
+        <p class="modal-body">
+            Send an in-app notification to every admin. Useful for alerts about
+            platform movements, issues, or coordination.
+        </p>
+
+        <form method="POST" action="{{ url_for('admin_platform.broadcast') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+            <div class="form-group">
+                <label class="form-label">Icon</label>
+                <input type="text" name="icon" value="📡" maxlength="4"
+                       class="form-control" style="width: 80px; text-align: center; font-size: 18px;">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Title <span style="color: var(--primary);">*</span></label>
+                <input type="text" name="title" maxlength="100" required
+                       class="form-control" placeholder="e.g. High server load detected">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Message <span style="color: var(--primary);">*</span></label>
+                <textarea name="body" rows="4" maxlength="500" required
+                          class="form-control"
+                          placeholder="What should other admins know?"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Link (optional)</label>
+                <input type="text" name="link" maxlength="200"
+                       class="form-control" value="/admin/platform"
+                       placeholder="/admin/platform">
+                <span class="form-hint">Where should the notification click take the admin?</span>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeBroadcastModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-paper-plane"></i> Send to All Admins
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================ -->
+<!-- Chart data injected by server -->
+<!-- ============================================ -->
+<script id="pfChartData" type="application/json">
+{
+  "days": {{ days|tojson }},
+  "series": {
+    "signups": {{ signups|tojson }},
+    "quizzes": {{ quizzes|tojson }},
+    "live":    {{ live_quizzes|tojson }}
+  }
+}
+</script>
+
+<!-- Chart.js from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+(function() {
+    // ============================================
+    // CHART
+    // ============================================
+    const dataEl = document.getElementById('pfChartData');
+    const chartEl = document.getElementById('pfChart');
+    let chartInstance = null;
+    let currentSeries = 'signups';
+
+    const chartData = dataEl ? JSON.parse(dataEl.textContent) : { series: {} };
+
+    function buildLabels(series) {
+        return series.map(p => {
+            const d = new Date(p.date + 'T00:00:00');
+            return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        });
+    }
+
+    function buildValues(series) {
+        return series.map(p => p.value);
+    }
+
+    function makeChart(key) {
+        if (!chartEl) return;
+        const series = chartData.series[key] || [];
+        const labels = buildLabels(series);
+        const values = buildValues(series);
+
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const textColor = isDark ? '#94A3B8' : '#64748B';
+        const gridColor = isDark ? '#1E293B' : '#E2E8F0';
+
+        if (chartInstance) chartInstance.destroy();
+
+        chartInstance = new Chart(chartEl.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: key.charAt(0).toUpperCase() + key.slice(1),
+                    data: values,
+                    borderColor: '#FF3138',
+                    backgroundColor: 'rgba(255, 49, 56, 0.08)',
+                    fill: true,
+                    tension: 0.35,
+                    pointBackgroundColor: '#FF3138',
+                    pointBorderColor: '#FFFFFF',
+                    pointBorderWidth: 2,
+                    pointRadius: values.length > 30 ? 0 : 3,
+                    pointHoverRadius: 5,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1A1A2E',
+                        titleColor: '#FFFFFF',
+                        bodyColor: '#E5E7EB',
+                        padding: 10,
+                        cornerRadius: 6,
+                        displayColors: false,
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            color: textColor,
+                            font: { size: 10 },
+                            precision: 0,
+                        },
+                        grid: { color: gridColor, drawBorder: false }
+                    },
+                    x: {
+                        ticks: {
+                            color: textColor,
+                            font: { size: 9 },
+                            maxRotation: 45,
+                            minRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 8,
+                        },
+                        grid: { display: false }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                }
+            }
+        });
+    }
+
+    if (chartEl && window.Chart) {
+        makeChart('signups');
+
+        document.querySelectorAll('#chartToggle button').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('#chartToggle button')
+                    .forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                currentSeries = this.dataset.series;
+                makeChart(currentSeries);
+            });
+        });
+    }
+
+    // ============================================
+    // BROADCAST MODAL
+    // ============================================
+    window.openBroadcastModal = function() {
+        const m = document.getElementById('broadcastModal');
+        if (m) {
+            m.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+    };
+    window.closeBroadcastModal = function() {
+        const m = document.getElementById('broadcastModal');
+        if (m) {
+            m.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+    };
+
+    const bm = document.getElementById('broadcastModal');
+    if (bm) {
+        bm.addEventListener('click', function(e) {
+            if (e.target === this) closeBroadcastModal();
+        });
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeBroadcastModal();
+    });
+
+    // ============================================
+    // RELATIVE TIME FOR FEED
+    // ============================================
+    function relativeTime(isoStr) {
+        if (!isoStr) return '';
+        try {
+            const d = new Date(isoStr.replace(' ', 'T'));
+            if (isNaN(d.getTime())) return isoStr;
+            const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+            if (diff < 60) return 'Just now';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+            return d.toLocaleDateString();
+        } catch (e) { return isoStr; }
+    }
+
+    document.querySelectorAll('.pf-feed-item .ft[data-ts]').forEach(el => {
+        const ts = el.getAttribute('data-ts');
+        const rel = relativeTime(ts);
+        if (rel) {
+            el.title = ts;
+            el.textContent = rel;
+        }
+    });
+
+    // ============================================
+    // AUTO REFRESH STATS + FEED (every 30s)
+    // ============================================
+    function refreshStats() {
+        fetch('/admin/platform/api/stats', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data) return;
+            Object.keys(data).forEach(key => {
+                const el = document.querySelector('[data-stat="' + key + '"]');
+                if (el) el.textContent = data[key];
+            });
+        })
+        .catch(() => {});
+    }
+
+    function refreshFeed() {
+        fetch('/admin/platform/api/feed?limit=40', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data || !data.events) return;
+            const container = document.getElementById('activityFeed');
+            const countEl = document.getElementById('feedCount');
+            if (!container) return;
+
+            if (data.events.length === 0) {
+                container.innerHTML = '<div class="pf-feed-empty">' +
+                    '<i class="fas fa-inbox"></i>' +
+                    'No activity yet.</div>';
+                return;
+            }
+
+            let html = '';
+            data.events.forEach(ev => {
+                const time = relativeTime(ev.timestamp);
+                const titleHtml = ev.link
+                    ? '<a href="' + ev.link + '" style="color: inherit; text-decoration: none;">' + ev.title + '</a>'
+                    : ev.title;
+                html += '<div class="pf-feed-item" data-kind="' + ev.kind + '">' +
+                    '<span class="fi">' + ev.icon + '</span>' +
+                    '<div class="fb">' +
+                        '<div class="fb-title">' + titleHtml + '</div>' +
+                        '<div class="fb-sub">' + (ev.subtitle || '') + '</div>' +
+                    '</div>' +
+                    '<span class="ft" title="' + (ev.timestamp || '') + '">' + time + '</span>' +
+                '</div>';
+            });
+            container.innerHTML = html;
+
+            if (countEl) countEl.textContent = data.events.length + ' recent events';
+        })
+        .catch(() => {});
+    }
+
+    setInterval(refreshStats, 30000);
+    setInterval(refreshFeed, 30000);
+})();
+</script>
+{% endblock %}

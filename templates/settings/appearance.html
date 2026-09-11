@@ -1,0 +1,59 @@
+{% extends "settings/base.html" %}
+
+{% block settings_content %}
+<section id="appearance" class="settings-section active">
+    <div class="settings-card">
+        <div class="card-header">
+            <h3><i class="fas fa-palette"></i> Appearance</h3>
+            <p>Customize the look and feel of the platform.</p>
+        </div>
+        <form id="appearance-form" class="settings-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Theme</label>
+                    <div class="theme-selector" id="theme-selector">
+                        <div class="theme-option" data-theme="light"><div class="theme-preview light"><div class="theme-header">☀️ Light</div><div class="theme-body">Clean and bright.</div></div><div class="theme-check"></div></div>
+                        <div class="theme-option" data-theme="dark"><div class="theme-preview dark"><div class="theme-header">🌙 Dark</div><div class="theme-body">Easy on the eyes.</div></div><div class="theme-check"></div></div>
+                        <div class="theme-option" data-theme="system"><div class="theme-preview system"><div class="theme-header">🖥️ System</div><div class="theme-body">Follows your device.</div></div><div class="theme-check"></div></div>
+                    </div>
+                </div>
+            </div>
+            <div class="form-row two-col">
+                <div class="form-group">
+                    <label>Accent Colour</label>
+                    <div class="accent-selector">
+                        <button type="button" class="accent-option red" data-accent="red" style="background:#FF3138;"></button>
+                        <button type="button" class="accent-option blue" data-accent="blue" style="background:#3B82F6;"></button>
+                        <button type="button" class="accent-option green" data-accent="green" style="background:#10B981;"></button>
+                        <button type="button" class="accent-option purple" data-accent="purple" style="background:#8B5CF6;"></button>
+                        <button type="button" class="accent-option orange" data-accent="orange" style="background:#F59E0B;"></button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Font Size</label>
+                    <select id="font_size" name="font_size">
+                        <option value="small" {% if settings['appearance.font_size'] == 'small' %}selected{% endif %}>Small</option>
+                        <option value="medium" {% if settings['appearance.font_size'] == 'medium' or not settings['appearance.font_size'] %}selected{% endif %}>Medium</option>
+                        <option value="large" {% if settings['appearance.font_size'] == 'large' %}selected{% endif %}>Large</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row toggle-group">
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Compact Mode</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="compact_mode" {% if settings['appearance.compact_mode'] %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                    <p class="toggle-desc">Reduce padding and margins for a denser layout.</p>
+                </div>
+            </div>
+            <div class="form-row">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Appearance</button>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %}

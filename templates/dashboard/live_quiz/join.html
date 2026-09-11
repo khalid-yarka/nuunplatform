@@ -1,0 +1,75 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}Join Live Quiz - Student Platform{% endblock %}
+
+{% block page_title %}Join Live Quiz{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz.css') }}" />
+{% endblock %}
+
+{% block dashboard_content %}
+<div style="max-width: 480px; margin: 0 auto;">
+    <!-- Breadcrumb -->
+    <div class="breadcrumb">
+        <a href="{{ url_for('live_quiz.lobby') }}">Live Quiz Lobby</a>
+        <span class="separator">/</span>
+        <span class="current">Join with Code</span>
+    </div>
+
+    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px; box-shadow: var(--shadow-sm);">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <div style="font-size: 48px; margin-bottom: 8px;">🔑</div>
+            <h2 style="font-size: 22px; font-weight: 700; color: var(--text);">Join with Code</h2>
+            <p style="color: var(--text-secondary); font-size: 14px; margin-top: 2px;">Enter the join code to participate</p>
+            <p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">
+                <i class="fas fa-info-circle"></i> 
+                For public quizzes, you can also join directly from the 
+                <a href="{{ url_for('live_quiz.lobby') }}" style="color: var(--primary); text-decoration: none;">Lobby</a>.
+            </p>
+        </div>
+
+        <form method="POST" action="{{ url_for('live_quiz.join') }}">
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
+                    📌 Join Code <span style="color: var(--primary);">*</span>
+                </label>
+                <input type="text" name="join_code" placeholder="e.g., A3B9-X7K2" 
+                       style="width: 100%; padding: 14px 16px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: 18px; font-weight: 600; text-align: center; letter-spacing: 2px; background: var(--surface); color: var(--text); transition: var(--transition); text-transform: uppercase;"
+                       maxlength="9" required autofocus>
+                <div style="margin-top: 6px; font-size: 12px; color: var(--text-muted); text-align: center;">
+                    Format: 4 letters + hyphen + 4 numbers (e.g., A3B9-X7K2)
+                </div>
+            </div>
+
+            <button type="submit" style="width: 100%; padding: 14px; background: #10B981; color: white; border: none; border-radius: var(--radius-sm); font-weight: 600; font-size: 16px; cursor: pointer; transition: var(--transition);">
+                <i class="fas fa-arrow-right"></i> Join Quiz
+            </button>
+        </form>
+
+        <div style="margin-top: 16px; text-align: center;">
+            <a href="{{ url_for('live_quiz.lobby') }}" style="color: var(--text-secondary); text-decoration: none; font-size: 14px; transition: var(--transition);">
+                <i class="fas fa-arrow-left"></i> Browse Lobby
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const input = document.querySelector('input[name="join_code"]');
+    if (input) {
+        input.addEventListener('input', function() {
+            this.value = this.value.toUpperCase();
+            if (this.value.length === 4 && !this.value.includes('-')) {
+                this.value = this.value + '-';
+            }
+        });
+        input.addEventListener('blur', function() {
+            this.value = this.value.replace(/\s/g, '');
+        });
+    }
+});
+</script>
+{% endblock %}

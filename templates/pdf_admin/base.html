@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}PDF Admin{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pdf_admin.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="pdf-admin-app">
+        <header class="pdf-admin-header">
+            <div class="pdf-header-left">
+                <i class="fas fa-file-pdf pdf-header-icon"></i>
+                <span class="pdf-header-title">PDF Management</span>
+            </div>
+            <div class="pdf-header-right">
+                <span class="pdf-header-user"><i class="fas fa-user-circle"></i> {{ session.pdf_admin_username }}</span>
+                <a href="{{ url_for('pdf_admin.logout') }}" class="pdf-btn pdf-btn-danger pdf-btn-sm">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </div>
+        </header>
+        <main class="pdf-admin-main">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    <script src="{{ url_for('static', filename='js/pdf_admin.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

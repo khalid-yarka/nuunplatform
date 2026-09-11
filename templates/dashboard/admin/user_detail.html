@@ -1,0 +1,761 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}{{ user.first_name }} {{ user.last_name }} - Admin{% endblock %}
+{% block page_title %}User Profile{% endblock %}
+
+{% block dashboard_css %}
+<style>
+    .ud-page { max-width: 1100px; margin: 0 auto; }
+
+    /* Header card */
+    .ud-hero {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 24px 28px;
+        box-shadow: var(--shadow-sm);
+        margin-bottom: 20px;
+    }
+    .ud-hero-top {
+        display: flex;
+        align-items: flex-start;
+        gap: 20px;
+        flex-wrap: wrap;
+    }
+    .ud-avatar {
+        width: 84px;
+        height: 84px;
+        border-radius: 50%;
+        background: var(--primary);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 32px;
+        font-weight: 700;
+        flex-shrink: 0;
+        text-transform: uppercase;
+        box-shadow: 0 4px 14px rgba(255, 49, 56, 0.25);
+    }
+    .ud-hero-info {
+        flex: 1;
+        min-width: 240px;
+    }
+    .ud-hero-info h2 {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--text);
+        margin: 0 0 6px 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .ud-hero-info .admin-star {
+        color: #F59E0B;
+        font-size: 16px;
+    }
+    .ud-hero-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+    .ud-hero-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+    }
+
+    /* Pills */
+    .ud-pill {
+        display: inline-block;
+        padding: 3px 12px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .ud-pill.tier.danbe { background: #F3F4F6; color: #4B5563; }
+    .ud-pill.tier.dhexe { background: var(--primary-light); color: var(--primary); }
+    .ud-pill.tier.hore  { background: linear-gradient(135deg, var(--primary), #B91C1C); color: white; }
+    .ud-pill.pubid {
+        background: var(--primary-light); color: var(--primary);
+        font-family: 'Courier New', monospace; font-size: 12px;
+    }
+    .ud-pill.pending {
+        background: #FEF3C7; color: #92400E;
+    }
+    .ud-pill.admin {
+        background: linear-gradient(135deg, #F59E0B, #D97706); color: white;
+    }
+
+    /* Tabs */
+    .ud-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--border);
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .ud-tabs::-webkit-scrollbar { display: none; }
+    .ud-tab {
+        padding: 12px 18px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        border: none;
+        background: none;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+        white-space: nowrap;
+        transition: var(--transition);
+        font-family: inherit;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .ud-tab:hover { color: var(--primary); }
+    .ud-tab.active {
+        color: var(--primary);
+        border-bottom-color: var(--primary);
+    }
+
+    /* Tab panels */
+    .ud-panel { display: none; }
+    .ud-panel.active { display: block; animation: fadeUp 0.25s ease; }
+    @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Info cards */
+    .ud-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 20px 24px;
+        box-shadow: var(--shadow-sm);
+        margin-bottom: 16px;
+    }
+    .ud-card h3 {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin: 0 0 14px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .ud-card h3 i { color: var(--primary); }
+
+    .ud-kv {
+        display: flex;
+        justify-content: space-between;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--border-light);
+        font-size: 14px;
+        gap: 12px;
+    }
+    .ud-kv:last-child { border-bottom: none; }
+    .ud-kv .k { color: var(--text-secondary); }
+    .ud-kv .v { color: var(--text); font-weight: 600; text-align: right; word-break: break-all; }
+
+    /* Stat tiles */
+    .ud-stat-tiles {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .ud-stat-tile {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 16px;
+        text-align: center;
+        box-shadow: var(--shadow-sm);
+    }
+    .ud-stat-tile .num {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--primary);
+        line-height: 1.1;
+    }
+    .ud-stat-tile .lbl {
+        font-size: 11px;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 4px;
+        font-weight: 600;
+    }
+
+    /* Simple table for activity */
+    .ud-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    .ud-table th {
+        text-align: left;
+        padding: 10px 12px;
+        background: var(--background);
+        color: var(--text-secondary);
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--border);
+    }
+    .ud-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border-light);
+        color: var(--text);
+    }
+    .ud-table tr:last-child td { border-bottom: none; }
+    .ud-table tr:hover td { background: var(--primary-light); }
+
+    .ud-empty {
+        padding: 40px 20px;
+        text-align: center;
+        color: var(--text-secondary);
+    }
+    .ud-empty i { font-size: 40px; opacity: 0.3; display: block; margin-bottom: 10px; }
+    .ud-empty p { margin: 0; font-size: 14px; }
+
+    /* Activity badges */
+    .ud-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+    .ud-badge.good { background: #ECFDF5; color: #065F46; }
+    .ud-badge.mid  { background: #FFFBEB; color: #92400E; }
+    .ud-badge.low  { background: #FEF2F2; color: #991B1B; }
+    .ud-badge.info { background: #EFF6FF; color: #1E40AF; }
+
+    /* Danger zone */
+    .ud-danger {
+        border-color: #FCA5A5;
+        background: #FEF2F2;
+    }
+    .ud-danger h3 { color: #991B1B; }
+    .ud-danger h3 i { color: #DC2626; }
+
+    /* Timeline */
+    .ud-timeline {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .ud-timeline-item {
+        display: flex;
+        gap: 12px;
+        padding: 12px 14px;
+        background: var(--background);
+        border-radius: var(--radius-sm);
+        border-left: 3px solid var(--primary);
+    }
+    .ud-timeline-item .when {
+        font-size: 11px;
+        color: var(--text-muted);
+        white-space: nowrap;
+    }
+    .ud-timeline-item .what {
+        font-size: 13px;
+        color: var(--text);
+        flex: 1;
+    }
+
+    /* Form */
+    .ud-form-group {
+        margin-bottom: 14px;
+    }
+    .ud-form-group label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 6px;
+    }
+    .ud-form-group input,
+    .ud-form-group textarea,
+    .ud-form-group select {
+        width: 100%;
+        padding: 10px 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 14px;
+        font-family: inherit;
+        background: var(--surface);
+        color: var(--text);
+        transition: var(--transition);
+    }
+    .ud-form-group input:focus,
+    .ud-form-group textarea:focus,
+    .ud-form-group select:focus {
+        border-color: var(--primary);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.10);
+    }
+
+    @media (max-width: 600px) {
+        .ud-hero { padding: 18px 16px; }
+        .ud-avatar { width: 64px; height: 64px; font-size: 24px; }
+        .ud-hero-info h2 { font-size: 20px; }
+        .ud-card { padding: 16px; }
+    }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="ud-page">
+
+    <!-- BREADCRUMB -->
+    <div class="breadcrumb">
+        <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
+        <span class="separator">/</span>
+        <a href="{{ url_for('admin.admin_users') }}">Manage Users</a>
+        <span class="separator">/</span>
+        <span class="current">{{ user.first_name }} {{ user.last_name or '' }}</span>
+    </div>
+
+    <!-- HERO -->
+    <div class="ud-hero">
+        <div class="ud-hero-top">
+            <div class="ud-avatar">
+                {{ (user.first_name or '?')[0] }}{{ (user.last_name or '')[0] if user.last_name else '' }}
+            </div>
+            <div class="ud-hero-info">
+                <h2>
+                    {{ user.first_name }} {{ user.last_name or '' }}
+                    {% if user.is_admin %}
+                        <span class="admin-star" title="Administrator">⭐</span>
+                    {% endif %}
+                </h2>
+                <div class="ud-hero-badges">
+                    {% if user.public_id and user.public_id != '----' %}
+                        <span class="ud-pill pubid">#{{ user.public_id }}</span>
+                    {% else %}
+                        <span class="ud-pill pending">⏳ Pending ID</span>
+                    {% endif %}
+                    <span class="ud-pill tier {{ user.tier }}">{{ user.tier }}</span>
+                    {% if user.is_admin %}
+                        <span class="ud-pill admin">⭐ Admin</span>
+                    {% endif %}
+                </div>
+                <div style="font-size: 13px; color: var(--text-secondary);">
+                    {{ user.phone_number or '—' }}
+                    {% if user.location %}
+                        · {{ user.location }}
+                    {% endif %}
+                    {% if user.school %}
+                        · {{ user.school }}
+                    {% endif %}
+                </div>
+            </div>
+            <div class="ud-hero-actions">
+                <a href="{{ url_for('admin.admin_users') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back
+                </a>
+                {% if user.phone_number %}
+                    <a href="https://wa.me/{{ user.phone_number|replace('+','')|replace(' ','') }}"
+                       target="_blank" rel="noopener"
+                       class="btn" style="background:#25D366; color:white;">
+                        <i class="fab fa-whatsapp"></i> WhatsApp
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="ud-tabs">
+        <button class="ud-tab active" onclick="showTab('overview', this)">
+            <i class="fas fa-user"></i> Overview
+        </button>
+        <button class="ud-tab" onclick="showTab('activity', this)">
+            <i class="fas fa-chart-line"></i> Activity
+        </button>
+        <button class="ud-tab" onclick="showTab('notes', this)">
+            <i class="fas fa-sticky-note"></i> Admin Notes
+        </button>
+        <button class="ud-tab" onclick="showTab('history', this)">
+            <i class="fas fa-history"></i> History
+        </button>
+        <button class="ud-tab" onclick="showTab('actions', this)">
+            <i class="fas fa-bolt"></i> Actions
+        </button>
+        <button class="ud-tab" onclick="showTab('danger', this)" style="color:#DC2626;">
+            <i class="fas fa-exclamation-triangle"></i> Danger Zone
+        </button>
+    </div>
+
+    <!-- OVERVIEW -->
+    <div class="ud-panel active" id="panel-overview">
+        <div class="ud-stat-tiles">
+            <div class="ud-stat-tile">
+                <div class="num">{{ user.total_points or 0 }}</div>
+                <div class="lbl">Total Points</div>
+            </div>
+            <div class="ud-stat-tile">
+                <div class="num">{{ total_quizzes }}</div>
+                <div class="lbl">Recent Quizzes</div>
+            </div>
+            <div class="ud-stat-tile">
+                <div class="num">{{ avg_score }}%</div>
+                <div class="lbl">Avg Score</div>
+            </div>
+            <div class="ud-stat-tile">
+                <div class="num">{{ live_quizzes|length }}</div>
+                <div class="lbl">Live Quizzes</div>
+            </div>
+        </div>
+
+        <div class="ud-card">
+            <h3><i class="fas fa-id-card"></i> Profile Information</h3>
+            <div class="ud-kv"><span class="k">First Name</span><span class="v">{{ user.first_name or '—' }}</span></div>
+            <div class="ud-kv"><span class="k">Middle Name</span><span class="v">{{ user.middle_name or '—' }}</span></div>
+            <div class="ud-kv"><span class="k">Last Name</span><span class="v">{{ user.last_name or '—' }}</span></div>
+            <div class="ud-kv"><span class="k">Public ID</span>
+                <span class="v">{% if user.public_id and user.public_id != '----' %}#{{ user.public_id }}{% else %}Not assigned{% endif %}</span>
+            </div>
+            <div class="ud-kv"><span class="k">Phone</span><span class="v">{{ user.phone_number or '—' }}</span></div>
+            <div class="ud-kv"><span class="k">Location</span><span class="v">{{ user.location or '—' }}</span></div>
+            <div class="ud-kv"><span class="k">City</span><span class="v">{{ user.city or '—' }}</span></div>
+            <div class="ud-kv"><span class="k">School</span><span class="v">{{ user.school or '—' }}</span></div>
+            <div class="ud-kv"><span class="k">Grade</span><span class="v">{{ user.grade or '—' }}</span></div>
+            <div class="ud-kv"><span class="k">Curriculum</span><span class="v">{{ user.curriculum or '—' }}</span></div>
+            <div class="ud-kv"><span class="k">Tier</span><span class="v">{{ user.tier|upper }}</span></div>
+            <div class="ud-kv"><span class="k">Admin</span><span class="v">{{ 'Yes' if user.is_admin else 'No' }}</span></div>
+            <div class="ud-kv"><span class="k">Joined</span><span class="v">{{ (user.created_at or '')[:16] }}</span></div>
+            <div class="ud-kv"><span class="k">Last Login</span><span class="v">{{ (user.last_login_at or 'Never')[:16] }}</span></div>
+        </div>
+    </div>
+
+    <!-- ACTIVITY -->
+    <div class="ud-panel" id="panel-activity">
+        <div class="ud-card">
+            <h3><i class="fas fa-pencil-alt"></i> Recent Quiz Attempts ({{ quizzes|length }})</h3>
+            {% if quizzes %}
+                <div style="overflow-x: auto;">
+                    <table class="ud-table">
+                        <thead>
+                            <tr>
+                                <th>Subject</th>
+                                <th>Score</th>
+                                <th>Percent</th>
+                                <th>Completed</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for q in quizzes %}
+                                <tr>
+                                    <td>{{ q.subject_icon }} {{ q.subject_name }}</td>
+                                    <td><strong>{{ q.score }}</strong> / {{ q.total_questions }}</td>
+                                    <td>
+                                        {% set cls = 'good' if q.percentage >= 70 else 'mid' if q.percentage >= 40 else 'low' %}
+                                        <span class="ud-badge {{ cls }}">{{ q.percentage }}%</span>
+                                    </td>
+                                    <td style="font-size: 12px; color: var(--text-secondary);">
+                                        {{ (q.completed_at or '')[:16] }}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="ud-empty">
+                    <i class="fas fa-inbox"></i>
+                    <p>No quiz attempts yet.</p>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="ud-card">
+            <h3><i class="fas fa-bolt"></i> Recent Live Quizzes ({{ live_quizzes|length }})</h3>
+            {% if live_quizzes %}
+                <div style="overflow-x: auto;">
+                    <table class="ud-table">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Subject</th>
+                                <th>Score</th>
+                                <th>Rank</th>
+                                <th>Status</th>
+                                <th>Joined</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for lq in live_quizzes %}
+                                <tr>
+                                    <td>{{ lq.title or 'Untitled' }}</td>
+                                    <td>{{ lq.subject_icon }} {{ lq.subject_name }}</td>
+                                    <td><strong>{{ lq.score or 0 }}</strong></td>
+                                    <td>{{ ('#' ~ lq.ranking) if lq.ranking else '—' }}</td>
+                                    <td>
+                                        <span class="ud-badge info">{{ lq.quiz_status|capitalize }}</span>
+                                    </td>
+                                    <td style="font-size: 12px; color: var(--text-secondary);">
+                                        {{ (lq.joined_at or '')[:16] }}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="ud-empty">
+                    <i class="fas fa-bolt"></i>
+                    <p>No live quiz activity yet.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ADMIN NOTES -->
+    <div class="ud-panel" id="panel-notes">
+        <div class="ud-card">
+            <h3><i class="fas fa-sticky-note"></i> Admin Note</h3>
+            <p style="font-size: 13px; color: var(--text-secondary); margin-top: 0;">
+                This note is private — visible only to admins.
+            </p>
+            <form method="POST" action="{{ url_for('admin.admin_user_set_note', user_id=user.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="ud-form-group">
+                    <textarea name="note" rows="5" placeholder="Type any internal note about this user...">{{ user.admin_note or '' }}</textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Note
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="ud-panel" id="panel-history">
+        <div class="ud-card">
+            <h3><i class="fas fa-history"></i> Admin Actions ({{ history|length }})</h3>
+            {% if history %}
+                <div class="ud-timeline">
+                    {% for h in history %}
+                        <div class="ud-timeline-item">
+                            <div class="when">{{ (h.created_at or '')[:16] }}</div>
+                            <div class="what">
+                                <strong>{{ h.admin_name }}</strong>
+                                {% if h.action == 'set_tier' %}
+                                    changed tier from <em>{{ h.old_value }}</em> to <em>{{ h.new_value }}</em>
+                                {% elif h.action == 'toggle_admin' %}
+                                    {% if h.new_value == '1' %}granted admin privileges{% else %}revoked admin privileges{% endif %}
+                                {% elif h.action == 'set_note' %}
+                                    updated the admin note
+                                {% elif h.action == 'reset_password' %}
+                                    reset the user's password
+                                {% elif h.action == 'force_logout' %}
+                                    forced a logout
+                                {% elif h.action == 'delete' %}
+                                    deleted this user
+                                {% elif h.action == 'set_public_id' %}
+                                    changed public ID from <em>{{ h.old_value }}</em> to <em>{{ h.new_value }}</em>
+                                {% elif h.action == 'notify' %}
+                                    sent a notification: "{{ h.new_value }}"
+                                {% else %}
+                                    performed: {{ h.action }}
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="ud-empty">
+                    <i class="fas fa-history"></i>
+                    <p>No admin actions recorded yet.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ACTIONS -->
+    <div class="ud-panel" id="panel-actions">
+        <div class="ud-card">
+            <h3><i class="fas fa-layer-group"></i> Change Tier</h3>
+            <form method="POST" action="{{ url_for('admin.admin_user_set_tier', user_id=user.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="ud-form-group">
+                    <select name="tier">
+                        <option value="danbe" {% if user.tier == 'danbe' %}selected{% endif %}>🔓 Danbe</option>
+                        <option value="dhexe" {% if user.tier == 'dhexe' %}selected{% endif %}>🔑 Dhexe</option>
+                        <option value="hore"  {% if user.tier == 'hore'  %}selected{% endif %}>⭐ Hore</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary" onclick="return confirm('Change this user\'s tier?');">
+                    <i class="fas fa-save"></i> Update Tier
+                </button>
+            </form>
+        </div>
+
+        {% if user.id != session.user_id %}
+        <div class="ud-card">
+            <h3><i class="fas fa-user-shield"></i> Admin Privileges</h3>
+            <form method="POST" action="{{ url_for('admin.admin_user_toggle_admin', user_id=user.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <p style="font-size: 13px; color: var(--text-secondary); margin-top: 0;">
+                    {% if user.is_admin %}
+                        This user currently has admin privileges.
+                    {% else %}
+                        This user is a regular user.
+                    {% endif %}
+                </p>
+                <button type="submit" class="btn {{ 'btn-danger' if user.is_admin else 'btn-success' }}"
+                        onclick="return confirm('{{ 'Remove admin privileges?' if user.is_admin else 'Grant admin privileges?' }}');">
+                    {% if user.is_admin %}
+                        <i class="fas fa-user-minus"></i> Remove Admin
+                    {% else %}
+                        <i class="fas fa-user-shield"></i> Make Admin
+                    {% endif %}
+                </button>
+            </form>
+        </div>
+        {% endif %}
+
+        <div class="ud-card">
+            <h3><i class="fas fa-paper-plane"></i> Send Notification</h3>
+            <form method="POST" action="{{ url_for('admin.admin_user_notify', user_id=user.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="ud-form-group">
+                    <label>Title</label>
+                    <input type="text" name="title" placeholder="e.g. Welcome!" maxlength="100" required>
+                </div>
+                <div class="ud-form-group">
+                    <label>Message</label>
+                    <textarea name="body" rows="3" placeholder="Type your message..." maxlength="500" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-paper-plane"></i> Send
+                </button>
+            </form>
+        </div>
+
+        <div class="ud-card">
+            <h3><i class="fas fa-id-badge"></i> Public ID</h3>
+            <form method="POST" action="{{ url_for('admin.admin_user_set_public_id', user_id=user.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="ud-form-group">
+                    <label>Set Public ID (4 uppercase letters/digits)</label>
+                    <input type="text" name="public_id"
+                           value="{{ user.public_id if user.public_id and user.public_id != '----' else '' }}"
+                           maxlength="4" placeholder="e.g. A3B9"
+                           style="text-transform: uppercase; font-family: monospace; letter-spacing: 2px; font-weight: 700;">
+                </div>
+                <button type="submit" class="btn btn-primary"
+                        onclick="return confirm('Change this user\'s public ID?');">
+                    <i class="fas fa-save"></i> Save Public ID
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- DANGER ZONE -->
+    <div class="ud-panel" id="panel-danger">
+        {% if user.id == session.user_id %}
+            <div class="ud-card">
+                <p style="color: var(--text-secondary); font-size: 14px; margin: 0;">
+                    <i class="fas fa-info-circle"></i>
+                    This is your own account. You cannot reset your own password, force logout, or delete yourself from here.
+                </p>
+            </div>
+        {% else %}
+            <div class="ud-card">
+                <h3><i class="fas fa-key"></i> Reset Password</h3>
+                <p style="font-size: 13px; color: var(--text-secondary); margin-top: 0;">
+                    Set a new password for this user. They'll be able to log in with the new one immediately.
+                </p>
+                <form method="POST" action="{{ url_for('admin.admin_user_reset_password', user_id=user.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <div class="ud-form-group">
+                        <label>New Password (min 8 chars)</label>
+                        <input type="text" name="new_password" minlength="8" required placeholder="New password">
+                    </div>
+                    <button type="submit" class="btn btn-primary"
+                            onclick="return confirm('Reset this user\'s password?');">
+                        <i class="fas fa-key"></i> Reset Password
+                    </button>
+                </form>
+            </div>
+
+            <div class="ud-card">
+                <h3><i class="fas fa-sign-out-alt"></i> Force Logout</h3>
+                <p style="font-size: 13px; color: var(--text-secondary); margin-top: 0;">
+                    Invalidate all current sessions. The user will need to log in again.
+                </p>
+                <form method="POST" action="{{ url_for('admin.admin_user_force_logout', user_id=user.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-danger"
+                            onclick="return confirm('Force logout for this user?');">
+                        <i class="fas fa-sign-out-alt"></i> Force Logout
+                    </button>
+                </form>
+            </div>
+
+            <div class="ud-card ud-danger">
+                <h3><i class="fas fa-trash"></i> Delete User</h3>
+                <p style="font-size: 13px; color: #991B1B; margin-top: 0;">
+                    The user will be moved to <strong>Deleted Users</strong>, where you can restore them later.
+                    Quiz attempts will be deleted unless you uncheck that option.
+                </p>
+                <form method="POST" action="{{ url_for('admin.admin_user_delete', user_id=user.id) }}"
+                      onsubmit="return confirmDeleteUser(event);">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; font-size: 13px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" name="keep_ratings" checked>
+                            <span>Keep ratings (HAA/MAY) in the system</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" name="delete_attempts" checked>
+                            <span>Delete quiz attempts and scores</span>
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Delete User
+                    </button>
+                </form>
+            </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<script>
+function showTab(name, btn) {
+    document.querySelectorAll('.ud-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.ud-tab').forEach(t => t.classList.remove('active'));
+    const panel = document.getElementById('panel-' + name);
+    if (panel) panel.classList.add('active');
+    if (btn) btn.classList.add('active');
+}
+
+function confirmDeleteUser(e) {
+    const first = "{{ user.first_name|e }}";
+    const last = "{{ user.last_name|e }}";
+    const publicId = "{{ user.public_id|e }}";
+    return confirm(
+        'Delete user ' + first + ' ' + last + ' (#' + publicId + ')?\n\n' +
+        'This user will be moved to Deleted Users where they can be restored.'
+    );
+}
+</script>
+{% endblock %}

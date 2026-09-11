@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Admin Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pdf_admin.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        /* Login page specific styles - these override pdf_admin.css for login */
+        .pdf-admin-wrapper {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pdf-admin-wrapper::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(231, 76, 60, 0.05) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .pdf-admin-wrapper::after {
+            content: '';
+            position: absolute;
+            bottom: -50%;
+            left: -50%;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(231, 76, 60, 0.03) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .pdf-admin-login {
+            width: 100%;
+            max-width: 400px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .pdf-admin-login-card {
+            background: #ffffff;
+            border-radius: 24px;
+            padding: 48px 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease;
+        }
+
+        .pdf-admin-login-card:hover {
+            transform: translateY(-4px);
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .login-header .icon-wrapper {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            box-shadow: 0 8px 32px rgba(231, 76, 60, 0.35);
+            position: relative;
+        }
+
+        .login-header .icon-wrapper::after {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 2px solid rgba(231, 76, 60, 0.2);
+            animation: pulse-ring 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-ring {
+            0%, 100% { transform: scale(1); opacity: 0.6; }
+            50% { transform: scale(1.1); opacity: 0.2; }
+        }
+
+        .login-header .icon-wrapper i {
+            font-size: 32px;
+            color: white;
+            position: relative;
+            z-index: 1;
+        }
+
+        .login-header h1 {
+            font-size: 26px;
+            font-weight: 700;
+            color: #1a1a2e;
+            margin: 0 0 4px;
+            letter-spacing: -0.5px;
+        }
+
+        .login-header h1 span {
+            color: #e74c3c;
+        }
+
+        .login-header p {
+            color: #7f8c8d;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .login-header .access-hint {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 4px 18px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #f8f9fa;
+            color: #7f8c8d;
+            border: 1px solid #e5e7eb;
+        }
+
+        .login-header .access-hint i {
+            margin-right: 4px;
+            color: #e74c3c;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 6px;
+        }
+
+        .form-group label i {
+            margin-right: 6px;
+            color: #e74c3c;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            background: #f8f9fa;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .input-wrapper:focus-within {
+            border-color: #e74c3c;
+            background: #ffffff;
+            box-shadow: 0 0 0 4px rgba(231, 76, 60, 0.10);
+        }
+
+        .input-wrapper .input-icon {
+            padding: 0 0 0 16px;
+            color: #95a5a6;
+            font-size: 16px;
+            transition: color 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .input-wrapper:focus-within .input-icon {
+            color: #e74c3c;
+        }
+
+        .input-wrapper input {
+            width: 100%;
+            padding: 14px 14px 14px 10px;
+            border: none;
+            background: transparent;
+            font-size: 15px;
+            color: #1a1a2e;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .input-wrapper input::placeholder {
+            color: #95a5a6;
+        }
+
+        .input-wrapper .toggle-password {
+            padding: 0 14px 0 0;
+            cursor: pointer;
+            color: #95a5a6;
+            font-size: 16px;
+            transition: color 0.3s ease;
+            background: none;
+            border: none;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+        }
+
+        .input-wrapper .toggle-password:hover {
+            color: #2c3e50;
+        }
+
+        .input-wrapper .toggle-password:focus {
+            outline: none;
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 14px rgba(231, 76, 60, 0.30);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-submit::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .btn-submit:hover::after {
+            left: 100%;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(231, 76, 60, 0.40);
+        }
+
+        .btn-submit:active {
+            transform: translateY(0);
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .login-footer {
+            text-align: center;
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid #ecf0f1;
+            font-size: 13px;
+            color: #95a5a6;
+        }
+
+        .login-footer i {
+            color: #e74c3c;
+        }
+
+        .login-footer .role-info {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-top: 10px;
+            font-size: 12px;
+            flex-wrap: wrap;
+        }
+
+        .login-footer .role-info span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            background: #f8f9fa;
+        }
+
+        .login-footer .role-info .dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .dot-admin {
+            background: #3b82f6;
+        }
+        .dot-super {
+            background: #dc2626;
+        }
+
+        .login-footer .hint {
+            margin-top: 6px;
+            font-size: 11px;
+            color: #b0b0c0;
+        }
+
+        .pdf-alert {
+            padding: 12px 16px;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideDown 0.4s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .pdf-alert-success {
+            background: #ecfdf5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+        .pdf-alert-error {
+            background: #fef2f2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+        .pdf-alert-info {
+            background: #eff6ff;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
+        }
+
+        .pdf-alert i {
+            font-size: 18px;
+        }
+        .pdf-alert-success i {
+            color: #10b981;
+        }
+        .pdf-alert-error i {
+            color: #ef4444;
+        }
+        .pdf-alert-info i {
+            color: #3b82f6;
+        }
+
+        /* Dark mode */
+        @media (prefers-color-scheme: dark) {
+            .pdf-admin-login-card {
+                background: #252540;
+                border-color: #3a3a5a;
+            }
+
+            .login-header h1 {
+                color: #f1f1f1;
+            }
+
+            .login-header h1 span {
+                color: #ff6b70;
+            }
+
+            .login-header p {
+                color: #b0b0c8;
+            }
+
+            .login-header .access-hint {
+                background: #2d2d4a;
+                color: #b0b0c8;
+                border-color: #3a3a5a;
+            }
+
+            .form-group label {
+                color: #d1d1e0;
+            }
+
+            .input-wrapper {
+                background: #2d2d4a;
+                border-color: #3a3a5a;
+            }
+
+            .input-wrapper:focus-within {
+                border-color: #ff6b70;
+                background: #2d2d4a;
+                box-shadow: 0 0 0 4px rgba(255, 107, 112, 0.15);
+            }
+
+            .input-wrapper input {
+                color: #f1f1f1;
+            }
+
+            .input-wrapper input::placeholder {
+                color: #7a7a9a;
+            }
+
+            .input-wrapper .input-icon {
+                color: #7a7a9a;
+            }
+
+            .input-wrapper:focus-within .input-icon {
+                color: #ff6b70;
+            }
+
+            .input-wrapper .toggle-password {
+                color: #7a7a9a;
+            }
+
+            .input-wrapper .toggle-password:hover {
+                color: #d1d1e0;
+            }
+
+            .btn-submit {
+                background: linear-gradient(135deg, #ff6b70, #dc2626);
+            }
+
+            .login-footer {
+                border-top-color: #3a3a5a;
+                color: #7a7a9a;
+            }
+
+            .login-footer i {
+                color: #ff6b70;
+            }
+
+            .login-footer .role-info span {
+                background: #2d2d4a;
+                color: #b0b0c8;
+            }
+
+            .pdf-alert-success {
+                background: #1a3a2e;
+                color: #d1fae5;
+                border-color: #10b981;
+            }
+
+            .pdf-alert-error {
+                background: #3a1a1a;
+                color: #fecaca;
+                border-color: #ef4444;
+            }
+
+            .pdf-alert-info {
+                background: #1a2a4a;
+                color: #bfdbfe;
+                border-color: #3b82f6;
+            }
+
+            .pdf-alert-success i {
+                color: #34d399;
+            }
+            .pdf-alert-error i {
+                color: #f87171;
+            }
+            .pdf-alert-info i {
+                color: #60a5fa;
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .pdf-admin-login-card {
+                padding: 32px 20px;
+            }
+
+            .login-header h1 {
+                font-size: 20px;
+            }
+
+            .login-header .icon-wrapper {
+                width: 60px;
+                height: 60px;
+            }
+
+            .login-header .icon-wrapper i {
+                font-size: 28px;
+            }
+
+            .btn-submit {
+                font-size: 15px;
+                padding: 14px;
+            }
+
+            .login-footer .role-info {
+                flex-direction: column;
+                gap: 6px;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="pdf-admin-wrapper">
+        <div class="pdf-admin-login">
+            <div class="pdf-admin-login-card">
+                <div class="login-header">
+                    <div class="icon-wrapper">
+                        <i class="fas fa-file-pdf"></i>
+                    </div>
+                    <h1>PDF <span>Management</span></h1>
+                    <p>Sign in to manage PDFs</p>
+                    <span class="access-hint">
+                        <i class="fas fa-lock"></i> Password Protected
+                    </span>
+                </div>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="pdf-alert pdf-alert-{{ category }}">
+                                <i class="fas {% if category == 'success' %}fa-check-circle{% elif category == 'error' %}fa-exclamation-circle{% else %}fa-info-circle{% endif %}"></i>
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <form method="POST" action="{{ url_for('pdf_admin.login') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+                    <div class="form-group">
+                        <label><i class="fas fa-key"></i> Password</label>
+                        <div class="input-wrapper">
+                            <span class="input-icon"><i class="fas fa-lock"></i></span>
+                            <input type="password" id="password" name="password" placeholder="Enter your password" required autofocus>
+                            <button type="button" class="toggle-password" onclick="togglePassword()" aria-label="Toggle password visibility">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                        <div style="margin-top: 8px; font-size: 12px; color: #95a5a6;">
+                            <i class="fas fa-info-circle"></i> 
+                            Use your admin or super admin password from .env
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-submit" id="loginBtn">
+                        <i class="fas fa-sign-in-alt"></i> Sign In
+                    </button>
+                </form>
+
+                <div class="login-footer">
+                    <i class="fas fa-shield-alt"></i> Secure admin access
+                    <div class="role-info">
+                        <span><span class="dot dot-admin"></span> Admin</span>
+                        <span><span class="dot dot-super"></span> Super Admin</span>
+                    </div>
+                    <div class="hint">
+                        <i class="fas fa-info-circle"></i> Role is auto-detected from your password
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function togglePassword() {
+            const input = document.getElementById('password');
+            const icon = document.querySelector('.toggle-password i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'fas fa-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'fas fa-eye';
+            }
+        }
+
+        // Auto-focus on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('password').focus();
+        });
+
+        // Show loading state on submit
+        document.querySelector('form').addEventListener('submit', function() {
+            const btn = document.getElementById('loginBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in...';
+        });
+    </script>
+</body>
+</html>
