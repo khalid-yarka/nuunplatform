@@ -1,6 +1,8 @@
 # admin_users_db.py
 # Advanced user management helpers for the admin panel.
 # Auto-adds missing columns/tables on first use — no manual migration.
+#
+# PHASE 2: Tier vocabulary normalized to canonical free/premium/pro.
 
 import csv
 import io
@@ -14,6 +16,7 @@ from db import (
     delete_user as db_delete_user, now,
 )
 from subjects_config import get_subject
+from tier_config import normalize_tier
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +38,6 @@ def ensure_admin_user_schema() -> bool:
         conn = get_db()
         cursor = conn.cursor()
 
-        # 1. Add columns to students if missing
         cursor.execute("PRAGMA table_info(students)")
         existing_cols = {row[1] for row in cursor.fetchall()}
 
@@ -53,7 +55,6 @@ def ensure_admin_user_schema() -> bool:
                 except sqlite3.OperationalError as e:
                     logger.warning(f"Could not add students.{col_name}: {e}")
 
-        # 2. Create admin_user_actions table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS admin_user_actions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,7 +76,6 @@ def ensure_admin_user_schema() -> bool:
             ON admin_user_actions(admin_id, created_at DESC)
         """)
 
-        # 3. Helpful indexes on students
         for idx_sql in [
             "CREATE INDEX IF NOT EXISTS idx_students_created ON students(created_at DESC)",
             "CREATE INDEX IF NOT EXISTS idx_students_points ON students(total_points DESC)",
@@ -135,7 +135,8 @@ SORT_MAP = {
     'name_za': 'first_name DESC, last_name DESC',
     'points_high': 'total_points DESC',
     'points_low': 'total_points ASC',
-    'tier_high': "CASE tier WHEN 'hore' THEN 3 WHEN 'dhexe' THEN 2 ELSE 1 END DESC, total_points DESC",
+    # PHASE 2: canonical vocabulary
+    'tier_high': "CASE tier WHEN 'pro' THEN 3 WHEN 'premium' THEN 2 ELSE 1 END DESC, total_points DESC",
 }
 
 
@@ -159,9 +160,12 @@ def _build_user_filter_sql(
         )
         params.extend([like] * 7)
 
-    if tier_filter in ('danbe', 'dhexe', 'hore'):
-        where.append("tier = ?")
-        params.append(tier_filter)
+    # PHASE 2: accept canonical or legacy input; compare against canonical.
+    if tier_filter:
+        canonical = normalize_tier(tier_filter)
+        if canonical in ('free', 'premium', 'pro'):
+            where.append("tier = ?")
+            params.append(canonical)
 
     if location_filter in ('SO', 'PL', 'SL'):
         where.append("location = ?")
@@ -206,13 +210,11 @@ def get_users_admin(
     )
     order_sql = SORT_MAP.get(sort, SORT_MAP['newest'])
 
-    # Count
     count_cursor = execute_with_retry(
         f"SELECT COUNT(*) AS c FROM students WHERE {where_sql}", params
     )
     total = count_cursor.fetchone()['c']
 
-    # Page
     offset = max(0, (page - 1) * per_page)
     cursor = execute_with_retry(
         f"""
@@ -284,7 +286,7 @@ def users_to_csv(users: List[Dict]) -> str:
             u.get('school') or '',
             u.get('grade') or '',
             u.get('curriculum') or '',
-            (u.get('tier') or 'danbe').upper(),
+            normalize_tier(u.get('tier') or 'free').upper(),
             u.get('total_points') or 0,
             'YES' if u.get('is_admin') else 'NO',
             u.get('created_at') or '',
@@ -298,16 +300,16 @@ def users_to_csv(users: List[Dict]) -> str:
 # ============================================
 
 def get_users_admin_stats() -> Dict[str, int]:
-    """Top-of-page stats for the admin user list."""
+    """Top-of-page stats for the admin user list (canonical tier keys)."""
     ensure_admin_user_schema()
     try:
         cursor = execute_with_retry("""
             SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN is_admin = 1 THEN 1 ELSE 0 END) AS admins,
-                SUM(CASE WHEN tier = 'danbe' THEN 1 ELSE 0 END) AS danbe,
-                SUM(CASE WHEN tier = 'dhexe' THEN 1 ELSE 0 END) AS dhexe,
-                SUM(CASE WHEN tier = 'hore'  THEN 1 ELSE 0 END) AS hore,
+                SUM(CASE WHEN tier = 'free'    THEN 1 ELSE 0 END) AS free,
+                SUM(CASE WHEN tier = 'premium' THEN 1 ELSE 0 END) AS premium,
+                SUM(CASE WHEN tier = 'pro'     THEN 1 ELSE 0 END) AS pro,
                 SUM(CASE WHEN created_at >= datetime('now', '-7 days') THEN 1 ELSE 0 END) AS this_week,
                 SUM(CASE WHEN created_at >= datetime('now', '-1 day')  THEN 1 ELSE 0 END) AS today
             FROM students
@@ -318,7 +320,8 @@ def get_users_admin_stats() -> Dict[str, int]:
     except Exception as e:
         logger.error(f"get_users_admin_stats failed: {e}")
     return {
-        'total': 0, 'admins': 0, 'danbe': 0, 'dhexe': 0, 'hore': 0,
+        'total': 0, 'admins': 0,
+        'free': 0, 'premium': 0, 'pro': 0,
         'this_week': 0, 'today': 0,
     }
 
@@ -426,19 +429,34 @@ def set_user_admin_note(user_id: int, note: str, admin_id: int) -> bool:
 
 
 def set_user_tier_admin(user_id: int, new_tier: str, admin_id: int) -> bool:
+    """Set a user's tier. Accepts canonical or legacy input; stores canonical."""
     ensure_admin_user_schema()
-    if new_tier not in ('danbe', 'dhexe', 'hore'):
+
+    new_tier = normalize_tier(new_tier)
+    if new_tier not in ('free', 'premium', 'pro'):
         return False
+
     try:
         user = get_student_by_id(user_id)
         if not user:
             return False
-        old = user.get('tier', 'danbe')
+
+        old = normalize_tier(user.get('tier') or 'free')
+        if old == new_tier:
+            return True
+
         execute_with_retry(
             "UPDATE students SET tier = ?, tier_updated_at = ? WHERE id = ?",
             (new_tier, now(), user_id), commit=True
         )
         log_admin_user_action(admin_id, user_id, 'set_tier', old, new_tier)
+
+        try:
+            from services.entitlement_service import refresh_user
+            refresh_user(user_id)
+        except Exception as e:
+            logger.warning(f"refresh_user failed after tier change: {e}")
+
         return True
     except Exception as e:
         logger.error(f"set_user_tier_admin failed: {e}")
@@ -488,7 +506,7 @@ def reset_user_password(user_id: int, new_password: str, admin_id: int) -> bool:
 
 
 def force_user_logout(user_id: int, admin_id: int) -> bool:
-    """Bump session_version so all existing sessions become invalid (if app checks it)."""
+    """Bump session_version so all existing sessions become invalid."""
     ensure_admin_user_schema()
     try:
         execute_with_retry("""
@@ -562,17 +580,16 @@ def bulk_user_action(
                 failed += 1
                 continue
 
-            # Self-protection
             if uid == admin_id and action in ('delete', 'demote_admin'):
                 failed += 1
                 continue
 
             if action == 'set_tier':
-                new_tier = extra.get('tier')
-                if new_tier not in ('danbe', 'dhexe', 'hore'):
+                new_tier = normalize_tier(extra.get('tier') or '')
+                if new_tier not in ('free', 'premium', 'pro'):
                     failed += 1
                     continue
-                old = user.get('tier', 'danbe')
+                old = normalize_tier(user.get('tier') or 'free')
                 if old == new_tier:
                     failed += 1
                     continue
@@ -581,6 +598,11 @@ def bulk_user_action(
                     (new_tier, now(), uid), commit=True
                 )
                 log_admin_user_action(admin_id, uid, 'set_tier', old, new_tier)
+                try:
+                    from services.entitlement_service import refresh_user
+                    refresh_user(uid)
+                except Exception:
+                    pass
                 succeeded += 1
 
             elif action == 'promote_admin':

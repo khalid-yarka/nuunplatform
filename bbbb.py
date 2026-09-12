@@ -41,8 +41,7 @@ from config import Config
 
 
 # ---------------------------------------------------------------
-# Mapping table: which column in which table needs renaming,
-# and what the old → new mapping is.
+# Mapping table: which column in which table needs renaming.
 # ---------------------------------------------------------------
 MIGRATIONS = [
     {
@@ -99,16 +98,13 @@ def count_legacy(conn, table: str, column: str) -> dict:
         for row in cursor.fetchall():
             counts[row[0]] = row[1]
     except sqlite3.OperationalError as e:
-        # Table or column missing — not fatal, just report
         counts['__error__'] = str(e)
     return counts
 
 
 def run_migration(conn, table: str, column: str, dry_run: bool = False) -> int:
-    """
-    Run the CASE UPDATE for a single table.column.
-    Returns the number of rows that were updated.
-    """
+    """Run the CASE UPDATE for a single table.column.
+    Returns the number of rows that were updated."""
     sql = f"""
         UPDATE {table}
         SET {column} = CASE {column}
@@ -120,7 +116,6 @@ def run_migration(conn, table: str, column: str, dry_run: bool = False) -> int:
         WHERE {column} IN ('danbe', 'dhexe', 'hore')
     """
     if dry_run:
-        # Just count what would change
         cursor = conn.execute(
             f"SELECT COUNT(*) FROM {table} WHERE {column} IN (?, ?, ?)",
             LEGACY_VALUES
@@ -223,8 +218,7 @@ def main():
             if remaining > 0:
                 all_clean = False
 
-        # ---- Check CHECK constraint compatibility ----
-        # After UPDATE, tier values must be valid new names.
+        # ---- Show final tier values ----
         print()
         print("VALID VALUES IN students.tier (should only be free/premium/pro):")
         cursor = conn.execute(

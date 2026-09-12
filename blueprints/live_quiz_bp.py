@@ -309,7 +309,7 @@ def create():
         return redirect(url_for('dashboard.profile'))
 
     if not can_create_live_quiz():
-        flash('Upgrade to Safka Dhexe or Safka Hore to create live quizzes.', 'error')
+        flash('Upgrade to Premium or Pro to create live quizzes.', 'error')
         return redirect(url_for('live_quiz.lobby'))
 
     # Load defaults from settings
@@ -407,7 +407,7 @@ def create():
             privacy = 1
 
         if privacy == 0 and not can_create_private_live_quiz():
-            flash('Upgrade to Safka Dhexe or Safka Hore to create private live quizzes.', 'error')
+            flash('Upgrade to Premium or Pro to create private live quizzes.', 'error')
             return render_template('dashboard/live_quiz/create.html', subjects=user_subjects,
                                    subject_code=subject_code, title=title, is_public=1,
                                    default_time=default_time, default_max_participants=default_max_participants,
@@ -421,7 +421,7 @@ def create():
             schedule_minutes = 0
 
         if schedule_minutes > 0 and not can_schedule_live_quiz():
-            flash('Upgrade to Safka Dhexe or Safka Hore to schedule live quizzes.', 'error')
+            flash('Upgrade to Premium or Pro to schedule live quizzes.', 'error')
             return render_template('dashboard/live_quiz/create.html', subjects=user_subjects,
                                    subject_code=subject_code, title=title, is_public=privacy,
                                    default_time=default_time, default_max_participants=default_max_participants,
@@ -521,7 +521,7 @@ def create_with_available():
         return redirect(url_for('live_quiz.create'))
 
     if not can_create_live_quiz():
-        flash('Upgrade to Safka Dhexe or Safka Hore to create live quizzes.', 'error')
+        flash('Upgrade to Premium or Pro to create live quizzes.', 'error')
         return redirect(url_for('live_quiz.lobby'))
 
     user_id = session['user_id']
@@ -550,7 +550,7 @@ def create_with_available():
         is_public = 1
 
     if is_public == 0 and not can_create_private_live_quiz():
-        flash('Upgrade to Safka Dhexe or Safka Hore to create private live quizzes.', 'error')
+        flash('Upgrade to Premium or Pro to create private live quizzes.', 'error')
         return redirect(url_for('live_quiz.create'))
 
     user_subjects = get_user_subject_list(user_id)
@@ -1314,7 +1314,7 @@ def analysis(quiz_id):
         return jsonify({'error': 'Only the creator can view analysis'}), 403
 
     if not has_feature("live_quiz_analytics"):
-        return jsonify({'error': 'Upgrade to Safka Dhexe or Safka Hore to access host analytics.'}), 403
+        return jsonify({'error': 'Upgrade to Premium or Pro to access host analytics.'}), 403
 
     question_ids = quiz.get('question_ids', [])
     participants = get_live_quiz_participants(quiz_id)

@@ -1,5 +1,6 @@
 # services/group_service.py
-# Updated functions with Hore bypass and lock reason
+# Updated functions with Pro bypass and lock reason.
+# Vocabulary: free / premium / pro (canonical).
 
 import logging
 from typing import Optional, Dict, List, Any
@@ -20,12 +21,12 @@ from db import (
 )
 from services.tier_service import is_tier_at_least, get_current_user_tier
 from subjects_config import get_subject, get_all_subjects
+from tier_config import normalize_tier
 
 logger = logging.getLogger(__name__)
 
 
 def get_curriculum_label(curriculum):
-    """Get display label for curriculum."""
     labels = {
         'PL': '🇸🇴 Puntland',
         'SO': '🇸🇴 Somalia',
@@ -37,30 +38,28 @@ def get_curriculum_label(curriculum):
 def get_user_groups(user_id: Optional[int] = None):
     """
     Get all active groups with join eligibility.
-    - Hore tier can join any group regardless of curriculum/tier.
-    - For others: curriculum and tier must match.
+    - Pro tier bypasses curriculum and tier gates.
+    - All others: curriculum must match and tier must be >= required.
     """
-    from db import get_active_groups, get_student_by_id
-    from services.tier_service import is_tier_at_least
-
     user_curriculum = None
-    user_tier = 'danbe'
+    user_tier = 'free'
 
     if user_id:
         student = get_student_by_id(user_id)
         if student:
             user_curriculum = student.get('curriculum')
-            user_tier = student.get('tier', 'danbe')
+            user_tier = normalize_tier(student.get('tier') or 'free')
+
+    is_pro = (user_tier == 'pro')
 
     all_groups = get_active_groups()
     visible_groups = []
 
     for group in all_groups:
-        group_curriculum = group.get('curriculum', '')
-        required_tier = group.get('tier_required', 'danbe')
+        group_curriculum = group.get('curriculum', '') or ''
+        required_tier = normalize_tier(group.get('tier_required') or 'free')
 
-        # Hore bypass: all groups are joinable
-        if user_tier == 'hore':
+        if is_pro:
             can_join = True
             locked = False
             join_block_reason = None
@@ -91,7 +90,7 @@ def get_user_groups(user_id: Optional[int] = None):
 
 
 def get_featured_for_user(user_id: Optional[int] = None):
-    """Get featured groups with join eligibility (same logic as above)."""
+    """Featured groups with join eligibility (same rules as get_user_groups)."""
     if not user_id:
         return []
     student = get_student_by_id(user_id)
@@ -99,15 +98,17 @@ def get_featured_for_user(user_id: Optional[int] = None):
         return []
 
     user_curriculum = student.get('curriculum')
-    user_tier = student.get('tier', 'danbe')
+    user_tier = normalize_tier(student.get('tier') or 'free')
+    is_pro = (user_tier == 'pro')
 
     all_featured = get_featured_groups(limit=10)
     filtered = []
-    for group in all_featured:
-        group_curriculum = group.get('curriculum', '')
-        required_tier = group.get('tier_required', 'danbe')
 
-        if user_tier == 'hore':
+    for group in all_featured:
+        group_curriculum = group.get('curriculum', '') or ''
+        required_tier = normalize_tier(group.get('tier_required') or 'free')
+
+        if is_pro:
             can_join = True
             locked = False
             join_block_reason = None
@@ -134,7 +135,6 @@ def get_featured_for_user(user_id: Optional[int] = None):
 
 
 def create_group(admin_id: int, data: Dict) -> tuple:
-    """Create a new group with audit logging."""
     try:
         success = create_group_advanced(data)
         if success:
@@ -153,7 +153,6 @@ def create_group(admin_id: int, data: Dict) -> tuple:
 
 
 def update_group(admin_id: int, group_id: int, data: Dict) -> bool:
-    """Update a group with audit logging."""
     try:
         old_group = get_group_by_id(group_id)
         if not old_group:
@@ -166,12 +165,7 @@ def update_group(admin_id: int, group_id: int, data: Dict) -> bool:
 
         success = update_group_advanced(group_id, data)
         if success and changes:
-            log_group_audit(
-                group_id,
-                admin_id,
-                'edit',
-                str(changes)
-            )
+            log_group_audit(group_id, admin_id, 'edit', str(changes))
         elif success:
             log_group_audit(group_id, admin_id, 'edit', None)
 
@@ -182,7 +176,6 @@ def update_group(admin_id: int, group_id: int, data: Dict) -> bool:
 
 
 def delete_group(admin_id: int, group_id: int) -> bool:
-    """Delete a group with audit logging."""
     try:
         log_group_audit(group_id, admin_id, 'delete', None)
         return delete_group_advanced(group_id)
@@ -192,7 +185,6 @@ def delete_group(admin_id: int, group_id: int) -> bool:
 
 
 def toggle_active(admin_id: int, group_id: int) -> bool:
-    """Toggle group active status with audit logging."""
     try:
         group = get_group_by_id(group_id)
         if not group:
@@ -201,8 +193,7 @@ def toggle_active(admin_id: int, group_id: int) -> bool:
         success = toggle_group_active(group_id)
         if success:
             log_group_audit(
-                group_id,
-                admin_id,
+                group_id, admin_id,
                 'activate' if new_status else 'deactivate',
                 None
             )
@@ -213,7 +204,6 @@ def toggle_active(admin_id: int, group_id: int) -> bool:
 
 
 def toggle_featured(admin_id: int, group_id: int) -> bool:
-    """Toggle group featured status with audit logging."""
     try:
         group = get_group_by_id(group_id)
         if not group:
@@ -222,8 +212,7 @@ def toggle_featured(admin_id: int, group_id: int) -> bool:
         success = toggle_group_featured(group_id)
         if success:
             log_group_audit(
-                group_id,
-                admin_id,
+                group_id, admin_id,
                 'feature' if new_status else 'unfeature',
                 None
             )
@@ -241,7 +230,6 @@ def get_admin_group_list(
     page: int = 1,
     per_page: int = 20
 ) -> tuple:
-    """Get groups for admin panel with filters."""
     offset = (page - 1) * per_page
 
     query = "SELECT * FROM groups WHERE 1=1"
@@ -295,13 +283,11 @@ def get_admin_group_list(
 
 
 def get_curriculum_subjects(curriculum):
-    """Get subjects available for a curriculum."""
     from subjects_config import get_subjects_for_user
     return get_subjects_for_user(curriculum)
 
 
 def track_join(group_id: int, user_id: int) -> bool:
-    """Track when a user joins a group."""
     try:
         track_group_click(group_id)
         return True

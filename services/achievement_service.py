@@ -4,12 +4,13 @@ import logging
 from typing import List, Dict, Optional
 from db import execute_with_retry, get_student_by_id
 from services.tier_service import get_achievement_history_level, get_badge_showcase_level
-from history_logger import add_history_entry   # NEW
+from history_logger import add_history_entry
 
 logger = logging.getLogger(__name__)
 
 # -------------------------------------------------------------------
 # Achievements Definition (pre‑populated)
+# Vocabulary: free / premium / pro (canonical)
 # -------------------------------------------------------------------
 
 ACHIEVEMENTS = [
@@ -17,42 +18,42 @@ ACHIEVEMENTS = [
         "name": "First Quiz",
         "description": "Complete your first quiz.",
         "icon": "🏁",
-        "tier_required": "danbe",
+        "tier_required": "free",
         "unlock_condition": "complete_quiz_count >= 1",
     },
     {
         "name": "Quiz Master",
         "description": "Complete 10 quizzes.",
         "icon": "🎓",
-        "tier_required": "danbe",
+        "tier_required": "free",
         "unlock_condition": "complete_quiz_count >= 10",
     },
     {
         "name": "Perfect Score",
         "description": "Get 100% on a quiz.",
         "icon": "💯",
-        "tier_required": "danbe",
+        "tier_required": "free",
         "unlock_condition": "perfect_quiz",
     },
     {
         "name": "Live Participant",
         "description": "Join your first live quiz.",
         "icon": "⚡",
-        "tier_required": "danbe",
+        "tier_required": "free",
         "unlock_condition": "live_quiz_joined",
     },
     {
         "name": "Achievement Hunter",
         "description": "Earn 5 achievements.",
         "icon": "🏆",
-        "tier_required": "dhexe",
+        "tier_required": "premium",
         "unlock_condition": "achievement_count >= 5",
     },
     {
         "name": "Premium Learner",
         "description": "Access premium resources.",
         "icon": "💎",
-        "tier_required": "dhexe",
+        "tier_required": "premium",
         "unlock_condition": "premium_resource_access",
     },
 ]

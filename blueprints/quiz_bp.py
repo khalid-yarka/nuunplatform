@@ -373,10 +373,13 @@ def leaderboard():
     # Privacy filter:
     #   show_on_leaderboard=0 -> user excluded entirely
     #   show_public_id=0     -> user included but public_id blanked
+    #
+    # NOTE: user_settings stores flat dot-keys (e.g. "privacy.show_public_id"),
+    # so json_extract must use a QUOTED path segment: $."privacy.show_public_id"
     query = """
         SELECT
             CASE
-                WHEN json_extract(us.settings, '$.privacy.show_public_id') = 0
+                WHEN json_extract(us.settings, '$."privacy.show_public_id"') = 0
                     THEN '----'
                 ELSE s.public_id
             END AS public_id,
@@ -385,8 +388,8 @@ def leaderboard():
         LEFT JOIN user_settings us ON s.id = us.user_id
         WHERE (
             us.settings IS NULL
-            OR json_extract(us.settings, '$.privacy.show_on_leaderboard') IS NULL
-            OR json_extract(us.settings, '$.privacy.show_on_leaderboard') = 1
+            OR json_extract(us.settings, '$."privacy.show_on_leaderboard"') IS NULL
+            OR json_extract(us.settings, '$."privacy.show_on_leaderboard"') = 1
         )
         ORDER BY s.total_points DESC
         LIMIT 50
@@ -410,8 +413,8 @@ def leaderboard():
             LEFT JOIN user_settings us ON s.id = us.user_id
             WHERE (
                 us.settings IS NULL
-                OR json_extract(us.settings, '$.privacy.show_on_leaderboard') IS NULL
-                OR json_extract(us.settings, '$.privacy.show_on_leaderboard') = 1
+                OR json_extract(us.settings, '$."privacy.show_on_leaderboard"') IS NULL
+                OR json_extract(us.settings, '$."privacy.show_on_leaderboard"') = 1
             )
               AND s.total_points > (
                 SELECT total_points FROM students WHERE id = ?

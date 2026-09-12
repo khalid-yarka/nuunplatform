@@ -2,6 +2,7 @@
 
 {% block settings_content %}
 {% set t = normalize_tier(tier) %}
+
 <div class="settings-landing" id="landing">
     <div class="settings-landing-header">
         <h2>Customize Your Experience</h2>
@@ -63,9 +64,6 @@
     </div>
 </div>
 
-<!-- ============================================ -->
-<!-- APPEARANCE SECTION                           -->
-<!-- ============================================ -->
 <section id="appearance" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
@@ -122,9 +120,6 @@
     </div>
 </section>
 
-<!-- ============================================ -->
-<!-- QUIZ SECTION                                -->
-<!-- ============================================ -->
 <section id="quiz" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
@@ -178,7 +173,7 @@
             <div class="form-row toggle-group">
                 <div class="toggle-item {% if t == 'free' %}locked{% endif %}">
                     <label class="toggle-label">
-                        <span class="toggle-text">🚀 Auto‑advance after answering</span>
+                        <span class="toggle-text">🚀 Auto-advance after answering</span>
                         <span class="toggle-switch">
                             <input type="checkbox" id="auto_skip_enabled" {% if settings['quiz.auto_skip_enabled'] %}checked{% endif %}>
                             <span class="slider"></span>
@@ -186,7 +181,7 @@
                     </label>
                     <p class="toggle-desc">
                         {% if t == 'free' %}
-                            <span class="locked-hint"><i class="fas fa-lock"></i> Upgrade to Dhexe or Hore to enable.</span>
+                            <span class="locked-hint"><i class="fas fa-lock"></i> Upgrade to Premium or Pro to enable.</span>
                         {% else %}
                             Smoothly move to the next question after answering.
                         {% endif %}
@@ -203,9 +198,6 @@
     </div>
 </section>
 
-<!-- ============================================ -->
-<!-- NOTIFICATIONS SECTION                       -->
-<!-- ============================================ -->
 <section id="notifications" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
@@ -304,7 +296,7 @@
                             <span class="slider"></span>
                         </span>
                     </label>
-                    <p class="toggle-desc">5‑minute reminder before a scheduled live quiz.</p>
+                    <p class="toggle-desc">5-minute reminder before a scheduled live quiz.</p>
                 </div>
             </div>
             <div class="form-row toggle-group tier-locked" data-tier="pro">
@@ -316,7 +308,7 @@
                             <span class="slider"></span>
                         </span>
                     </label>
-                    <p class="toggle-desc">Get a weekly wrap‑up of your progress.</p>
+                    <p class="toggle-desc">Get a weekly wrap-up of your progress.</p>
                 </div>
             </div>
             <div class="form-row">
@@ -326,9 +318,6 @@
     </div>
 </section>
 
-<!-- ============================================ -->
-<!-- PRIVACY SECTION                             -->
-<!-- ============================================ -->
 <section id="privacy" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
@@ -365,9 +354,6 @@
     </div>
 </section>
 
-<!-- ============================================ -->
-<!-- LIVE QUIZ SECTION (conditional)              -->
-<!-- ============================================ -->
 {% if can_create_live %}
 <section id="live_quiz" class="settings-section">
     <div class="settings-card">
@@ -411,9 +397,6 @@
 </section>
 {% endif %}
 
-<!-- ============================================ -->
-<!-- SECURITY SECTION                             -->
-<!-- ============================================ -->
 <section id="security" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
@@ -446,23 +429,24 @@
     </div>
 </section>
 
-<!-- ============================================ -->
-<!-- TIER SECTION                                 -->
-<!-- ============================================ -->
 <section id="tier" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
             <h3><i class="fas fa-crown"></i> Your Plan & Features</h3>
-            <p>Current tier: <strong class="tier-badge {{ tier }}">{{ tier|capitalize }}</strong></p>
+            <p>Current tier: <strong class="tier-label {{ t }}">{{ t|capitalize }}</strong></p>
         </div>
 
         <div class="tier-summary">
             <div class="tier-info-box">
-                <div class="tier-icon">{% if t == 'free' %}🔓{% elif t == 'premium' %}🔑{% else %}⭐{% endif %}</div>
+                <div class="tier-icon">
+                    {% if t == 'free' %}🔓{% elif t == 'premium' %}🔑{% else %}⭐{% endif %}
+                </div>
                 <div>
-                    <h4>{{ tier|capitalize }}</h4>
+                    <h4>{{ t|capitalize }}</h4>
                     <p class="tier-desc">
-                        {% if t == 'free' %}Basic access with essential features.{% elif t == 'premium' %}Advanced features, more quotas, and live quiz hosting.{% else %}Complete access with unlimited features and premium resources.{% endif %}
+                        {% if t == 'free' %}Basic access with essential features.
+                        {% elif t == 'premium' %}Advanced features, more quotas, and live quiz hosting.
+                        {% else %}Complete access with unlimited features and premium resources.{% endif %}
                     </p>
                 </div>
             </div>
@@ -475,7 +459,7 @@
 
         <div class="features-grid">
             {% for feature in tier_features %}
-                <div class="feature-card {% if not feature.available %}locked{% endif %}" 
+                <div class="feature-card {% if not feature.available %}locked{% endif %}"
                      data-feature="{{ feature.key }}"
                      data-required-tier="{{ feature.tier_required or 'free' }}"
                      onclick="toggleFeatureInfo(this)">
@@ -507,9 +491,6 @@
     </div>
 </section>
 
-<!-- ============================================ -->
-<!-- DATA SECTION                                 -->
-<!-- ============================================ -->
 <section id="data" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
@@ -525,9 +506,6 @@
     </div>
 </section>
 
-<!-- ============================================ -->
-<!-- ACCESSIBILITY SECTION                        -->
-<!-- ============================================ -->
 <section id="accessibility" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
@@ -554,9 +532,6 @@
     </div>
 </section>
 
-<!-- ============================================ -->
-<!-- LOGOUT SECTION WITH MODAL TRIGGER            -->
-<!-- ============================================ -->
 <section id="logout" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
@@ -571,9 +546,6 @@
     </div>
 </section>
 
-<!-- ============================================ -->
-<!-- LOGOUT CONFIRMATION MODAL                    -->
-<!-- ============================================ -->
 <div class="modal-overlay" id="logoutModal">
     <div class="modal-content" style="max-width: 560px;">
         <div style="text-align: center; margin-bottom: 16px;">
@@ -600,10 +572,6 @@
                     <span style="font-size: 18px;">📋</span>
                     <span><strong>Unsaved form data</strong> – Any text or selections you entered on the current page.</span>
                 </div>
-                <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-muted);">
-                    <span style="font-size: 18px;">🔒</span>
-                    <span><em>Other temporary data not specified above.</em></span>
-                </div>
             </div>
         </div>
 
@@ -621,9 +589,6 @@
     </div>
 </div>
 
-<!-- ============================================ -->
-<!-- UNSAVED CHANGES INDICATOR                    -->
-<!-- ============================================ -->
 <div id="unsavedIndicator" class="unsaved-indicator">
     <span class="indicator-icon">⚠️</span>
     <span class="indicator-text">You have unsaved changes in your settings.</span>
@@ -631,11 +596,7 @@
     <button id="unsavedDiscard" class="btn-discard"><i class="fas fa-times"></i> Discard</button>
 </div>
 
-<!-- ============================================ -->
-<!-- STYLES & SCRIPTS                             -->
-<!-- ============================================ -->
 <style>
-    /* ... (existing styles) ... */
     .logout-section {
         margin-top: 24px;
         padding-top: 24px;
@@ -668,7 +629,6 @@
         border-color: #DC2626;
     }
 
-    /* Additional modal styles */
     .modal-content .modal-body {
         color: var(--text-secondary);
         font-size: 14px;
@@ -678,9 +638,6 @@
 </style>
 
 <script>
-    // ============================================
-    // LOGOUT MODAL CONTROL
-    // ============================================
     function openLogoutModal() {
         document.getElementById('logoutModal').classList.add('active');
         document.body.style.overflow = 'hidden';
@@ -694,21 +651,15 @@
     document.getElementById('openLogoutModalBtn').addEventListener('click', openLogoutModal);
 
     document.getElementById('logoutModal').addEventListener('click', function(e) {
-        if (e.target === this) {
-            closeLogoutModal();
-        }
+        if (e.target === this) closeLogoutModal();
     });
 
-    // Close modal on Escape key
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && document.getElementById('logoutModal').classList.contains('active')) {
             closeLogoutModal();
         }
     });
 
-    // ============================================
-    // UNSAVED CHANGES INDICATOR
-    // ============================================
     let unsavedChanges = false;
     const indicator = document.getElementById('unsavedIndicator');
     const saveNowBtn = document.getElementById('unsavedSaveNow');
@@ -759,9 +710,6 @@
         }
     });
 
-    // ============================================
-    // CSRF TOKEN HELPER
-    // ============================================
     function getCsrfToken() {
         const meta = document.querySelector('meta[name="csrf-token"]');
         if (meta) return meta.content;
@@ -771,9 +719,6 @@
         return '';
     }
 
-    // ============================================
-    // TOAST HELPER
-    // ============================================
     function showToast(message, type) {
         if (typeof window.showToast === 'function') {
             window.showToast(message, type);
@@ -782,9 +727,6 @@
         }
     }
 
-    // ============================================
-    // SUBMIT FORM
-    // ============================================
     function submitForm(url, data, successMsg) {
         const csrfToken = getCsrfToken();
         if (!csrfToken) {
@@ -835,9 +777,6 @@
         });
     }
 
-    // ============================================
-    // NAVIGATION
-    // ============================================
     document.addEventListener('DOMContentLoaded', function() {
         const landing = document.getElementById('landing');
         const sections = document.querySelectorAll('.settings-section');
@@ -920,11 +859,7 @@
         }
     });
 
-    // ============================================
-    // FORM SUBMISSIONS (only the critical ones)
-    // ============================================
     document.addEventListener('DOMContentLoaded', function() {
-        // Appearance
         const appearanceForm = document.getElementById('appearance-form');
         if (appearanceForm) {
             appearanceForm.addEventListener('submit', function(e) {
@@ -944,7 +879,6 @@
             });
         }
 
-        // Quiz
         const quizForm = document.getElementById('quiz-prefs-form');
         if (quizForm) {
             quizForm.addEventListener('submit', function(e) {
@@ -959,7 +893,6 @@
             });
         }
 
-        // Notifications
         const notifForm = document.getElementById('notif-form');
         if (notifForm) {
             notifForm.addEventListener('submit', function(e) {
@@ -973,7 +906,6 @@
             });
         }
 
-        // Privacy
         const privacyForm = document.getElementById('privacy-form');
         if (privacyForm) {
             privacyForm.addEventListener('submit', function(e) {
@@ -985,7 +917,6 @@
             });
         }
 
-        // Live Quiz
         const liveQuizForm = document.getElementById('livequiz-form');
         if (liveQuizForm) {
             liveQuizForm.addEventListener('submit', function(e) {
@@ -998,7 +929,6 @@
             });
         }
 
-        // Accessibility
         const accessibilityForm = document.getElementById('accessibility-form');
         if (accessibilityForm) {
             accessibilityForm.addEventListener('submit', function(e) {
@@ -1009,7 +939,6 @@
             });
         }
 
-        // Password
         const passwordForm = document.getElementById('password-form');
         if (passwordForm) {
             passwordForm.addEventListener('submit', function(e) {
@@ -1047,7 +976,6 @@
             });
         }
 
-        // Theme selector preview
         document.querySelectorAll('.theme-option').forEach(opt => {
             opt.addEventListener('click', function() {
                 document.querySelectorAll('.theme-option').forEach(o => o.classList.remove('active'));
@@ -1059,7 +987,6 @@
             });
         });
 
-        // Accent selector preview
         document.querySelectorAll('.accent-option:not(.locked)').forEach(btn => {
             btn.addEventListener('click', function() {
                 document.querySelectorAll('.accent-option').forEach(b => b.classList.remove('active'));
@@ -1071,21 +998,18 @@
             });
         });
 
-        // Compact mode preview
         document.getElementById('compact_mode')?.addEventListener('change', function() {
             if (typeof NuunSettings !== 'undefined') {
                 NuunSettings.applyCompactMode(this.checked);
             }
         });
 
-        // Reduced motion preview
         document.getElementById('reduced_motion')?.addEventListener('change', function() {
             if (typeof NuunSettings !== 'undefined') {
                 NuunSettings.applyReducedMotion(this.checked);
             }
         });
 
-        // Password strength
         document.getElementById('new_password').addEventListener('input', function() {
             const val = this.value;
             let strength = 'weak';
@@ -1121,7 +1045,6 @@
             }
         }
 
-        // Upgrade buttons
         document.querySelectorAll('.upgrade-btn').forEach(btn => {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -1133,7 +1056,6 @@
             });
         });
 
-        // Locked toggles
         document.querySelectorAll('.toggle-item.locked input[type="checkbox"]').forEach(cb => {
             cb.disabled = true;
             cb.closest('.toggle-item').addEventListener('click', function(e) {
@@ -1144,7 +1066,6 @@
             });
         });
 
-        // Export/Delete buttons
         document.getElementById('exportDataBtn')?.addEventListener('click', function() {
             showToast('Data export will be available soon.', 'info');
         });
@@ -1154,5 +1075,12 @@
             }
         });
     });
+
+    function toggleFeatureInfo(card) {
+        document.querySelectorAll('.feature-card').forEach(c => {
+            if (c !== card) c.classList.remove('active');
+        });
+        card.classList.toggle('active');
+    }
 </script>
 {% endblock %}

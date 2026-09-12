@@ -618,3 +618,70 @@ CREATE TABLE IF NOT EXISTS group_audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_group_audit_log_group
     ON group_audit_log(group_id, created_at DESC);
+
+-- ============================================
+-- ENTITLEMENT SYSTEM (Phase 1c)
+-- ============================================
+
+-- Feature definitions: one row per feature.
+CREATE TABLE IF NOT EXISTS entitlement_features (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    feature_key       TEXT NOT NULL UNIQUE,
+    display_name      TEXT NOT NULL,
+    description       TEXT DEFAULT '',
+    category          TEXT NOT NULL,
+    policy_type       TEXT NOT NULL CHECK (policy_type IN (
+                          'permission','level','quota','content'
+                      )),
+    unit_hint         TEXT,
+    is_global_active  INTEGER NOT NULL DEFAULT 1,
+    sort_order        INTEGER NOT NULL DEFAULT 0,
+    notes             TEXT DEFAULT '',
+    created_at        TEXT DEFAULT (datetime('now','localtime')),
+    updated_at        TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_entitlement_features_category
+    ON entitlement_features(category, sort_order);
+
+-- Per-tier policy: one row per feature × tier.
+CREATE TABLE IF NOT EXISTS entitlement_policies (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    feature_id   INTEGER NOT NULL,
+    tier         TEXT NOT NULL CHECK (tier IN ('free','premium','pro')),
+    is_enabled   INTEGER NOT NULL DEFAULT 1,
+    level_value  INTEGER,
+    limit_value  INTEGER,
+    limit_unit   TEXT,
+    updated_at   TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (feature_id) REFERENCES entitlement_features(id)
+        ON DELETE CASCADE,
+    UNIQUE(feature_id, tier)
+);
+
+CREATE INDEX IF NOT EXISTS idx_entitlement_policies_feature
+    ON entitlement_policies(feature_id);
+
+-- Admin change log for the entitlement system.
+CREATE TABLE IF NOT EXISTS entitlement_audit (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_id     INTEGER NOT NULL,
+    action       TEXT NOT NULL CHECK (action IN (
+                     'feature_create','feature_update','feature_delete',
+                     'policy_create','policy_update','policy_delete',
+                     'bulk_update','import','export','active_toggle'
+                 )),
+    feature_id   INTEGER,
+    feature_key  TEXT,
+    tier         TEXT,
+    old_value    TEXT,
+    new_value    TEXT,
+    reason       TEXT DEFAULT '',
+    created_at   TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (admin_id) REFERENCES students(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_entitlement_audit_feature
+    ON entitlement_audit(feature_key, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_entitlement_audit_admin
+    ON entitlement_audit(admin_id, created_at DESC);

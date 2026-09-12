@@ -10,6 +10,7 @@ from typing import Dict, Any, List
 
 from db import execute_with_retry
 from utils import get_somali_time, SOMALI_TIMEZONE
+from tier_config import normalize_tier
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,6 @@ def _scalar(sql: str, params=()) -> int:
         row = cursor.fetchone()
         if not row:
             return 0
-        # row is a sqlite3.Row — get first column
         return int(list(row)[0] or 0)
     except Exception as e:
         logger.warning(f"platform_activity scalar failed: {e}  SQL={sql[:80]}")
@@ -39,33 +39,27 @@ def _scalar(sql: str, params=()) -> int:
 def get_platform_stats() -> Dict[str, int]:
     """Headline numbers for the platform dashboard."""
     return {
-        # Users
         'users_total':      _scalar("SELECT COUNT(*) FROM students"),
         'users_today':      _scalar("SELECT COUNT(*) FROM students WHERE created_at >= datetime('now', '-1 day')"),
         'users_week':       _scalar("SELECT COUNT(*) FROM students WHERE created_at >= datetime('now', '-7 days')"),
         'users_month':      _scalar("SELECT COUNT(*) FROM students WHERE created_at >= datetime('now', '-30 days')"),
         'admins_total':     _scalar("SELECT COUNT(*) FROM students WHERE is_admin = 1"),
 
-        # Quiz activity
         'quizzes_today':    _scalar("SELECT COUNT(*) FROM quiz_attempts WHERE completed_at >= datetime('now', '-1 day')"),
         'quizzes_week':     _scalar("SELECT COUNT(*) FROM quiz_attempts WHERE completed_at >= datetime('now', '-7 days')"),
         'quizzes_month':    _scalar("SELECT COUNT(*) FROM quiz_attempts WHERE completed_at >= datetime('now', '-30 days')"),
 
-        # Live quiz
         'live_quizzes_active': _scalar("SELECT COUNT(*) FROM live_quizzes WHERE status IN ('waiting','scheduled','active')"),
         'live_quizzes_finished_week': _scalar(
             "SELECT COUNT(*) FROM live_quizzes WHERE status = 'finished' AND ended_at >= datetime('now', '-7 days')"
         ),
 
-        # Content
         'pdfs_total':       _scalar("SELECT COUNT(*) FROM pdfs"),
         'groups_total':     _scalar("SELECT COUNT(*) FROM groups WHERE is_active = 1"),
 
-        # Errors
         'errors_open':      _scalar("SELECT COUNT(*) FROM error_logs WHERE resolved = 0 AND dismissed = 0"),
         'errors_today':     _scalar("SELECT COUNT(*) FROM error_logs WHERE timestamp >= datetime('now', '-1 day')"),
 
-        # Upgrades
         'upgrades_pending': _scalar("SELECT COUNT(*) FROM upgrade_requests WHERE status = 'pending'"),
         'upgrades_approved_month': _scalar(
             "SELECT COUNT(*) FROM upgrade_requests WHERE status = 'approved' AND approved_at >= datetime('now', '-30 days')"
@@ -74,11 +68,10 @@ def get_platform_stats() -> Dict[str, int]:
 
 
 # ============================================
-# TIME-SERIES (last N days)
+# TIME-SERIES
 # ============================================
 
 def get_signups_series(days: int = 30) -> List[Dict[str, Any]]:
-    """Signups per day for the last N days."""
     try:
         cursor = execute_with_retry("""
             SELECT
@@ -96,7 +89,6 @@ def get_signups_series(days: int = 30) -> List[Dict[str, Any]]:
 
 
 def get_quizzes_series(days: int = 30) -> List[Dict[str, Any]]:
-    """Quiz attempts per day for the last N days."""
     try:
         cursor = execute_with_retry("""
             SELECT
@@ -114,7 +106,6 @@ def get_quizzes_series(days: int = 30) -> List[Dict[str, Any]]:
 
 
 def get_live_quizzes_series(days: int = 30) -> List[Dict[str, Any]]:
-    """Live quizzes created per day."""
     try:
         cursor = execute_with_retry("""
             SELECT
@@ -136,25 +127,25 @@ def get_live_quizzes_series(days: int = 30) -> List[Dict[str, Any]]:
 # ============================================
 
 def get_tier_distribution() -> Dict[str, int]:
-    """How many users per tier."""
+    """How many users per tier — canonical vocabulary (free / premium / pro)."""
     try:
         cursor = execute_with_retry("""
             SELECT tier, COUNT(*) AS count
             FROM students
             GROUP BY tier
         """)
-        dist = {'danbe': 0, 'dhexe': 0, 'hore': 0}
+        dist = {'free': 0, 'premium': 0, 'pro': 0}
         for row in cursor.fetchall():
-            t = (row['tier'] or 'danbe').lower()
-            dist[t] = row['count']
+            t = normalize_tier(row['tier'] or 'free')
+            if t in dist:
+                dist[t] += row['count']
         return dist
     except Exception as e:
         logger.error(f"get_tier_distribution: {e}")
-        return {'danbe': 0, 'dhexe': 0, 'hore': 0}
+        return {'free': 0, 'premium': 0, 'pro': 0}
 
 
 def get_location_distribution() -> Dict[str, int]:
-    """How many users per location."""
     try:
         cursor = execute_with_retry("""
             SELECT COALESCE(location, 'unknown') AS loc, COUNT(*) AS count
@@ -171,7 +162,6 @@ def get_location_distribution() -> Dict[str, int]:
 
 
 def get_top_subjects(limit: int = 5) -> List[Dict[str, Any]]:
-    """Top subjects by number of quiz attempts."""
     try:
         cursor = execute_with_retry("""
             SELECT subject_code, COUNT(*) AS attempts
@@ -189,7 +179,6 @@ def get_top_subjects(limit: int = 5) -> List[Dict[str, Any]]:
 
 
 def get_top_performers(limit: int = 5) -> List[Dict[str, Any]]:
-    """Most active users by quiz count (last 30 days)."""
     try:
         cursor = execute_with_retry("""
             SELECT s.id, s.public_id, s.first_name, s.last_name,
@@ -218,23 +207,16 @@ def get_top_performers(limit: int = 5) -> List[Dict[str, Any]]:
 
 
 # ============================================
-# ACTIVITY FEED (unified timeline)
+# ACTIVITY FEED
 # ============================================
 
 def get_activity_feed(limit: int = 40, source: str = 'all') -> List[Dict[str, Any]]:
     """
-    Unified activity stream from multiple sources:
-      - New signups
-      - Quiz completions
-      - Live quiz starts
-      - Tier upgrades
-      - PDF uploads
-    Returns a sorted list of event dicts.
+    Unified activity stream from multiple sources.
     """
     events: List[Dict[str, Any]] = []
 
     try:
-        # Signups
         if source in ('all', 'users'):
             cursor = execute_with_retry("""
                 SELECT id, first_name, last_name, public_id, created_at
@@ -254,7 +236,6 @@ def get_activity_feed(limit: int = 40, source: str = 'all') -> List[Dict[str, An
                     'link': None,
                 })
 
-        # Quiz completions
         if source in ('all', 'quizzes'):
             cursor = execute_with_retry("""
                 SELECT qa.id, qa.subject_code, qa.score, qa.total_questions,
@@ -277,7 +258,6 @@ def get_activity_feed(limit: int = 40, source: str = 'all') -> List[Dict[str, An
                     'link': None,
                 })
 
-        # Live quiz started
         if source in ('all', 'live'):
             cursor = execute_with_retry("""
                 SELECT lq.id, lq.title, lq.subject_code, lq.status,
@@ -300,7 +280,6 @@ def get_activity_feed(limit: int = 40, source: str = 'all') -> List[Dict[str, An
                     'link': f"/live-quiz/results/{row['id']}",
                 })
 
-        # Tier upgrades
         if source in ('all', 'upgrades'):
             cursor = execute_with_retry("""
                 SELECT ur.request_id, ur.requested_tier, ur.duration,
@@ -325,7 +304,6 @@ def get_activity_feed(limit: int = 40, source: str = 'all') -> List[Dict[str, An
                     'link': f"/upgrade/admin/upgrade-requests/{row['request_id']}",
                 })
 
-        # Recent PDFs
         if source in ('all', 'content'):
             cursor = execute_with_retry("""
                 SELECT id, title, subject, curriculum, uploaded_at
@@ -347,7 +325,6 @@ def get_activity_feed(limit: int = 40, source: str = 'all') -> List[Dict[str, An
     except Exception as e:
         logger.error(f"get_activity_feed: {e}", exc_info=True)
 
-    # Sort by timestamp desc (newest first)
     def sort_key(ev):
         return ev.get('timestamp') or ''
 
@@ -356,11 +333,10 @@ def get_activity_feed(limit: int = 40, source: str = 'all') -> List[Dict[str, An
 
 
 # ============================================
-# ADMINS – NOTIFY EVERYONE OR SELECTED
+# ADMINS
 # ============================================
 
 def get_all_admin_ids() -> List[int]:
-    """Return the IDs of every admin user."""
     try:
         cursor = execute_with_retry(
             "SELECT id FROM students WHERE is_admin = 1"
@@ -378,10 +354,6 @@ def broadcast_to_admins(
     icon: str = '📡',
     exclude_admin_id: int = None,
 ) -> int:
-    """
-    Send a notification to every admin user.
-    Returns the number of notifications sent.
-    """
     from db import create_notification
 
     admin_ids = get_all_admin_ids()

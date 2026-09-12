@@ -1,0 +1,616 @@
+{
+  "version": 1,
+  "description": "Initial entitlement seed for NuunPlatform. Applied once on first install (PRAGMA user_version = 0). After seeding, the DB is authoritative — do NOT re-apply this file on subsequent boots.",
+  "features": [
+    {
+      "feature_key": "quiz_attempts",
+      "display_name": "Quiz Attempts",
+      "description": "Number of quizzes you can take per day.",
+      "category": "quiz",
+      "policy_type": "quota",
+      "unit_hint": "/day",
+      "sort_order": 10,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "limit_value": 10,   "limit_unit": "/day" },
+        "premium": { "is_enabled": 1, "limit_value": 30,   "limit_unit": "/day" },
+        "pro":     { "is_enabled": 1, "limit_value": null, "limit_unit": "/day" }
+      }
+    },
+    {
+      "feature_key": "quiz_questions",
+      "display_name": "Questions per Quiz",
+      "description": "Maximum number of questions in a single quiz.",
+      "category": "quiz",
+      "policy_type": "quota",
+      "unit_hint": "per quiz",
+      "sort_order": 20,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "limit_value": 10,   "limit_unit": "per quiz" },
+        "premium": { "is_enabled": 1, "limit_value": 20,   "limit_unit": "per quiz" },
+        "pro":     { "is_enabled": 1, "limit_value": null, "limit_unit": "per quiz" }
+      }
+    },
+    {
+      "feature_key": "answer_review",
+      "display_name": "Answer Review",
+      "description": "See which answers were correct or wrong after each question.",
+      "category": "quiz",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 30,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+    {
+      "feature_key": "correct_answer_explanations",
+      "display_name": "Answer Explanations",
+      "description": "See why an answer is correct after answering.",
+      "category": "quiz",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 40,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+    {
+      "feature_key": "quiz_auto_advance",
+      "display_name": "Auto-advance",
+      "description": "Automatically move to the next question after answering.",
+      "category": "quiz",
+      "policy_type": "permission",
+      "unit_hint": null,
+      "sort_order": 50,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0 },
+        "premium": { "is_enabled": 1 },
+        "pro":     { "is_enabled": 1 }
+      }
+    },
+    {
+      "feature_key": "saved_content",
+      "display_name": "Saved Questions",
+      "description": "Save questions to review them later.",
+      "category": "quiz",
+      "policy_type": "quota",
+      "unit_hint": "total",
+      "sort_order": 60,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "limit_value": 10,   "limit_unit": "total" },
+        "premium": { "is_enabled": 1, "limit_value": 50,   "limit_unit": "total" },
+        "pro":     { "is_enabled": 1, "limit_value": null, "limit_unit": "total" }
+      }
+    },
+
+    {
+      "feature_key": "create_live_quiz",
+      "display_name": "Create Live Quiz",
+      "description": "Host real-time quizzes for other students.",
+      "category": "live_quiz",
+      "policy_type": "permission",
+      "unit_hint": null,
+      "sort_order": 110,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0 },
+        "premium": { "is_enabled": 1 },
+        "pro":     { "is_enabled": 1 }
+      }
+    },
+    {
+      "feature_key": "private_live_quiz",
+      "display_name": "Private Live Quiz",
+      "description": "Create live quizzes only accessible via join code.",
+      "category": "live_quiz",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 120,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+    {
+      "feature_key": "scheduled_live_quiz",
+      "display_name": "Scheduled Live Quiz",
+      "description": "Schedule a live quiz to start at a future time.",
+      "category": "live_quiz",
+      "policy_type": "quota",
+      "unit_hint": "/month",
+      "sort_order": 130,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0, "limit_value": 0,   "limit_unit": "/month" },
+        "premium": { "is_enabled": 1, "limit_value": 1,   "limit_unit": "/month" },
+        "pro":     { "is_enabled": 1, "limit_value": 20,  "limit_unit": "/month" }
+      }
+    },
+    {
+      "feature_key": "live_quiz_analytics",
+      "display_name": "Live Quiz Analytics",
+      "description": "See who answered what during your live quiz.",
+      "category": "live_quiz",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 140,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+
+    {
+      "feature_key": "resource_search",
+      "display_name": "PDF Search",
+      "description": "Search PDFs by subject, class, and curriculum.",
+      "category": "resources",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 210,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+    {
+      "feature_key": "resource_downloads",
+      "display_name": "PDF Downloads",
+      "description": "Download PDFs directly to your device.",
+      "category": "resources",
+      "policy_type": "quota",
+      "unit_hint": "/day",
+      "sort_order": 220,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "limit_value": 3,    "limit_unit": "/day" },
+        "premium": { "is_enabled": 1, "limit_value": 20,   "limit_unit": "/day" },
+        "pro":     { "is_enabled": 1, "limit_value": null, "limit_unit": "/day" }
+      }
+    },
+    {
+      "feature_key": "premium_resources",
+      "display_name": "Premium Resources",
+      "description": "Access PDFs marked as premium.",
+      "category": "resources",
+      "policy_type": "content",
+      "unit_hint": null,
+      "sort_order": 230,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0 },
+        "premium": { "is_enabled": 1 },
+        "pro":     { "is_enabled": 1 }
+      }
+    },
+    {
+      "feature_key": "pdf_telegram_preview",
+      "display_name": "Telegram PDF Preview",
+      "description": "Preview PDFs streamed from Telegram.",
+      "category": "resources",
+      "policy_type": "permission",
+      "unit_hint": null,
+      "sort_order": 240,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0 },
+        "premium": { "is_enabled": 1 },
+        "pro":     { "is_enabled": 1 }
+      }
+    },
+    {
+      "feature_key": "pdf_direct_view",
+      "display_name": "Direct PDF View",
+      "description": "Read premium PDFs directly in the browser.",
+      "category": "resources",
+      "policy_type": "permission",
+      "unit_hint": null,
+      "sort_order": 250,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0 },
+        "premium": { "is_enabled": 0 },
+        "pro":     { "is_enabled": 1 }
+      }
+    },
+    {
+      "feature_key": "pdf_direct_download",
+      "display_name": "Direct PDF Download",
+      "description": "Download premium PDFs without going through Telegram.",
+      "category": "resources",
+      "policy_type": "permission",
+      "unit_hint": null,
+      "sort_order": 260,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0 },
+        "premium": { "is_enabled": 0 },
+        "pro":     { "is_enabled": 1 }
+      }
+    },
+    {
+      "feature_key": "question_pdf_link",
+      "display_name": "Question ↔ PDF Linking",
+      "description": "Reserved for a future feature. Currently disabled for all tiers.",
+      "category": "resources",
+      "policy_type": "permission",
+      "unit_hint": null,
+      "sort_order": 270,
+      "notes": "Feature not shipped yet.",
+      "policies": {
+        "free":    { "is_enabled": 0 },
+        "premium": { "is_enabled": 0 },
+        "pro":     { "is_enabled": 0 }
+      }
+    },
+
+    {
+      "feature_key": "basic_statistics",
+      "display_name": "Basic Statistics",
+      "description": "Overview of your quiz performance.",
+      "category": "dashboard",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 310,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+    {
+      "feature_key": "performance_charts",
+      "display_name": "Performance Charts",
+      "description": "Visual chart of your score over time.",
+      "category": "dashboard",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 320,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+    {
+      "feature_key": "subject_analytics",
+      "display_name": "Subject Analytics",
+      "description": "Deep dive into per-subject performance.",
+      "category": "dashboard",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 330,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+    {
+      "feature_key": "progress_analytics",
+      "display_name": "Progress Analytics",
+      "description": "Track improvement over time.",
+      "category": "dashboard",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 340,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+    {
+      "feature_key": "quiz_analytics",
+      "display_name": "Quiz Analytics",
+      "description": "Detailed analytics per quiz.",
+      "category": "dashboard",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 350,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+    {
+      "feature_key": "personal_learning_insights",
+      "display_name": "Personal Insights",
+      "description": "AI-driven suggestions for what to study next.",
+      "category": "dashboard",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 360,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+
+    {
+      "feature_key": "achievements",
+      "display_name": "Achievements",
+      "description": "Unlock achievements as you learn.",
+      "category": "achievements",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 410,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+    {
+      "feature_key": "badge_showcase",
+      "display_name": "Badge Showcase",
+      "description": "Display your earned badges on your profile.",
+      "category": "achievements",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 420,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+    {
+      "feature_key": "achievement_history",
+      "display_name": "Achievement History",
+      "description": "Timeline of every achievement you've unlocked.",
+      "category": "achievements",
+      "policy_type": "quota",
+      "unit_hint": "total",
+      "sort_order": 430,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "limit_value": 10,   "limit_unit": "total" },
+        "premium": { "is_enabled": 1, "limit_value": null, "limit_unit": "total" },
+        "pro":     { "is_enabled": 1, "limit_value": null, "limit_unit": "total" }
+      }
+    },
+
+    {
+      "feature_key": "detailed_ranking_stats",
+      "display_name": "Detailed Ranking",
+      "description": "See your percentile, trend, and peers.",
+      "category": "leaderboard",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 510,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+
+    {
+      "feature_key": "history_search",
+      "display_name": "History Search",
+      "description": "Search inside your activity history.",
+      "category": "history",
+      "policy_type": "permission",
+      "unit_hint": null,
+      "sort_order": 610,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0 },
+        "premium": { "is_enabled": 0 },
+        "pro":     { "is_enabled": 1 }
+      }
+    },
+    {
+      "feature_key": "history_export",
+      "display_name": "History Export",
+      "description": "Download your history as CSV.",
+      "category": "history",
+      "policy_type": "permission",
+      "unit_hint": null,
+      "sort_order": 620,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0 },
+        "premium": { "is_enabled": 1 },
+        "pro":     { "is_enabled": 1 }
+      }
+    },
+    {
+      "feature_key": "history_trends",
+      "display_name": "History Trends",
+      "description": "Visualize your trends over time.",
+      "category": "history",
+      "policy_type": "permission",
+      "unit_hint": null,
+      "sort_order": 630,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0 },
+        "premium": { "is_enabled": 0 },
+        "pro":     { "is_enabled": 1 }
+      }
+    },
+    {
+      "feature_key": "history_delete",
+      "display_name": "Delete History",
+      "description": "Delete individual history entries.",
+      "category": "history",
+      "policy_type": "permission",
+      "unit_hint": null,
+      "sort_order": 640,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0 },
+        "premium": { "is_enabled": 0 },
+        "pro":     { "is_enabled": 1 }
+      }
+    },
+    {
+      "feature_key": "history_retention",
+      "display_name": "History Retention",
+      "description": "How long your history is kept.",
+      "category": "history",
+      "policy_type": "quota",
+      "unit_hint": "days",
+      "sort_order": 650,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "limit_value": 30,   "limit_unit": "days" },
+        "premium": { "is_enabled": 1, "limit_value": 180,  "limit_unit": "days" },
+        "pro":     { "is_enabled": 1, "limit_value": null, "limit_unit": "days" }
+      }
+    },
+    {
+      "feature_key": "history_entries",
+      "display_name": "History Entries",
+      "description": "Maximum number of history entries stored.",
+      "category": "history",
+      "policy_type": "quota",
+      "unit_hint": "total",
+      "sort_order": 660,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "limit_value": 50,   "limit_unit": "total" },
+        "premium": { "is_enabled": 1, "limit_value": 500,  "limit_unit": "total" },
+        "pro":     { "is_enabled": 1, "limit_value": null, "limit_unit": "total" }
+      }
+    },
+
+    {
+      "feature_key": "profile_customization",
+      "display_name": "Profile Customization",
+      "description": "Customize your public profile.",
+      "category": "profile",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 710,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+    {
+      "feature_key": "public_id_management",
+      "display_name": "Public ID Management",
+      "description": "Regenerate or edit your public ID.",
+      "category": "profile",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 720,
+      "notes": "Premium = regenerate only. Pro = regenerate + edit.",
+      "policies": {
+        "free":    { "is_enabled": 0, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+    {
+      "feature_key": "appearance_customization",
+      "display_name": "Appearance Customization",
+      "description": "Change accent colour, font size, and font family.",
+      "category": "profile",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 730,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+
+    {
+      "feature_key": "notification_settings",
+      "display_name": "Notification Settings",
+      "description": "Configure which notifications you receive.",
+      "category": "settings",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 810,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1, "level_value": 0 },
+        "premium": { "is_enabled": 1, "level_value": 1 },
+        "pro":     { "is_enabled": 1, "level_value": 2 }
+      }
+    },
+
+    {
+      "feature_key": "group_join",
+      "display_name": "Join Groups",
+      "description": "Join WhatsApp and Telegram study groups.",
+      "category": "groups",
+      "policy_type": "permission",
+      "unit_hint": null,
+      "sort_order": 910,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 1 },
+        "premium": { "is_enabled": 1 },
+        "pro":     { "is_enabled": 1 }
+      }
+    },
+    {
+      "feature_key": "curriculum_access",
+      "display_name": "Cross-Curriculum Access",
+      "description": "Access groups and resources from every curriculum.",
+      "category": "groups",
+      "policy_type": "permission",
+      "unit_hint": null,
+      "sort_order": 920,
+      "notes": "",
+      "policies": {
+        "free":    { "is_enabled": 0 },
+        "premium": { "is_enabled": 0 },
+        "pro":     { "is_enabled": 1 }
+      }
+    },
+
+    {
+      "feature_key": "language_somali",
+      "display_name": "Somali Language",
+      "description": "Switch the interface to Somali.",
+      "category": "language",
+      "policy_type": "permission",
+      "unit_hint": null,
+      "sort_order": 1010,
+      "notes": "Language feature. Ships last in the migration.",
+      "policies": {
+        "free":    { "is_enabled": 0 },
+        "premium": { "is_enabled": 0 },
+        "pro":     { "is_enabled": 1 }
+      }
+    }
+  ]
+}

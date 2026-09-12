@@ -375,6 +375,9 @@
     color: var(--text-secondary);
     font-size: 14px;
     margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 /* ---------- Forms ---------- */
@@ -686,7 +689,7 @@
     opacity: 0.7;
 }
 
-/* ---------- Accent Selector – FIXED CONTRAST ---------- */
+/* ---------- Accent Selector ---------- */
 .accent-selector {
     display: flex;
     gap: 10px;
@@ -781,7 +784,60 @@
     color: #EF4444;
 }
 
-/* ---------- Tier Section – FIXED CONTRAST ---------- */
+/* ============================================
+   TIER LABEL
+   Only .tier-label exists in settings.css.
+   .tier-badge is intentionally NOT defined here —
+   that class belongs to dashboard.css (sidebar avatar dot)
+   and must not be overridden.
+   ============================================ */
+.tier-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    line-height: 1.6;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.tier-label.free {
+    background: #F3F4F6;
+    color: #4B5563;
+    border: 1px solid #D1D5DB;
+}
+
+.tier-label.premium {
+    background: var(--primary-light);
+    color: var(--primary);
+    border: 1px solid var(--primary);
+}
+
+.tier-label.pro {
+    background: linear-gradient(135deg, var(--primary), #B91C1C);
+    color: #ffffff;
+    border: 1px solid transparent;
+    box-shadow: 0 2px 8px rgba(255, 49, 56, 0.25);
+}
+
+[data-theme="dark"] .tier-label.free {
+    background: #2A2A3A;
+    color: #B0B0C8;
+    border-color: #3A3A5A;
+}
+
+[data-theme="dark"] .tier-label.premium {
+    background: var(--primary-light);
+    color: #ffffff;
+    border-color: var(--primary);
+}
+
+/* ---------- Tier Section ---------- */
 .tier-summary {
     display: flex;
     justify-content: space-between;
@@ -817,39 +873,11 @@
     margin: 2px 0 0;
 }
 
-.tier-badge {
-    display: inline-block;
-    padding: 2px 14px;
-    border-radius: 20px;
-    font-weight: 600;
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.tier-badge.free {
-    background: var(--background);
-    color: var(--text-secondary);
-    border: 1px solid var(--border);
-}
-
-.tier-badge.premium {
-    background: var(--primary-light);
-    color: var(--text) !important;
-    border: 1px solid var(--primary);
-}
-
-.tier-badge.pro {
-    background: linear-gradient(135deg, var(--primary), #B91C1C);
-    color: #ffffff !important;
-    border: none;
-}
-
 .upgrade-prompt .btn {
     white-space: nowrap;
 }
 
-/* ---------- Feature Cards – FIXED CONTRAST ---------- */
+/* ---------- Feature Cards ---------- */
 .features-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -1207,11 +1235,6 @@
 [data-theme="dark"] .tier-summary {
     background: var(--surface-alt);
     border-color: var(--border);
-}
-
-[data-theme="dark"] .tier-badge.premium {
-    background: var(--primary-light);
-    color: #ffffff !important;
 }
 
 [data-theme="dark"] .settings-breadcrumb .breadcrumb-link {

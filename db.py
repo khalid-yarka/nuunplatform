@@ -21,6 +21,7 @@ from flask import g, current_app
 from config import Config
 from utils import get_somali_time, get_somali_time_db, format_somali_time
 from subjects_config import get_subject, get_subjects_for_user
+from tier_config import normalize_tier  # PHASE 2
 
 # ============================================
 # DATABASE CONFIGURATION
@@ -141,7 +142,6 @@ def close_db(exception=None):
 
 def close_db_connections():
     """Close any open connections at process shutdown."""
-    # App-context connection (should already be closed, but be safe)
     try:
         from flask import has_app_context
         if has_app_context() and hasattr(g, 'db'):
@@ -154,7 +154,6 @@ def close_db_connections():
     except Exception:
         pass
 
-    # Per-thread connection of the *current* thread
     try:
         if hasattr(_thread_local, 'db') and _thread_local.db is not None:
             try:
@@ -905,7 +904,7 @@ def get_leaderboard(limit: int = 50):
         cursor = execute_with_retry("""
             SELECT
                 CASE
-                    WHEN json_extract(us.settings, '$.privacy.show_public_id') = 0
+                    WHEN json_extract(us.settings, '$."privacy.show_public_id"') = 0
                         THEN '----'
                     ELSE s.public_id
                 END AS public_id,
@@ -914,8 +913,8 @@ def get_leaderboard(limit: int = 50):
             LEFT JOIN user_settings us ON s.id = us.user_id
             WHERE (
                 us.settings IS NULL
-                OR json_extract(us.settings, '$.privacy.show_on_leaderboard') IS NULL
-                OR json_extract(us.settings, '$.privacy.show_on_leaderboard') = 1
+                OR json_extract(us.settings, '$."privacy.show_on_leaderboard"') IS NULL
+                OR json_extract(us.settings, '$."privacy.show_on_leaderboard"') = 1
             )
             ORDER BY s.total_points DESC
             LIMIT ?
@@ -1303,8 +1302,6 @@ def get_main_pdf_count(search='', subject='', curriculum='', class_filter=''):
         logger.error(f"Error counting PDFs: {e}")
         return 0
 
-
-# ---- Publishing from bot to main ----
 
 def publish_bot_pdf_to_main(bot_pdf_id):
     """Copy a bot PDF to main database using its code."""
@@ -2086,9 +2083,6 @@ def get_live_quizzes_lobby(
     per_page: int = 20
 ) -> tuple:
     try:
-        # Privacy filter:
-        #   Public quizzes -> visible to everyone.
-        #   Private quizzes -> visible ONLY to their creator or existing participants.
         query = """
             SELECT
                 lq.id,
@@ -2140,9 +2134,7 @@ def get_live_quizzes_lobby(
                 )
             )
         """
-        # 3 placeholders in SELECT subqueries + 2 in the WHERE privacy filter
         params = [user_id or 0, user_id or 0, user_id or 0, user_id or 0, user_id or 0]
-        # 2 placeholders in the count query's privacy filter
         count_params = [user_id or 0, user_id or 0]
 
         if status_filter and status_filter in ['scheduled', 'waiting', 'active', 'finished']:
@@ -2593,7 +2585,7 @@ def create_group_advanced(data):
             data.get('category', ''),
             data.get('curriculum', ''),
             data.get('subjects', ''),
-            data.get('tier_required', 'danbe'),
+            normalize_tier(data.get('tier_required') or 'free'),  # PHASE 2
             data.get('is_active', 1),
             data.get('is_featured', 0),
             data.get('display_order', 0),
@@ -2625,7 +2617,10 @@ def update_group_advanced(group_id, data):
         for key in allowed:
             if key in data:
                 fields.append(f"{key} = ?")
-                params.append(data[key])
+                if key == 'tier_required':
+                    params.append(normalize_tier(data[key] or 'free'))
+                else:
+                    params.append(data[key])
         if not fields:
             return False
         fields.append("updated_at = ?")
