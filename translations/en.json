@@ -723,5 +723,42 @@
 "history.empty.take_quiz": "Take a Quiz",
 "history.empty.join_live": "Join Live Quiz",
 "history.empty.retry": "Retry",
-"history.empty.clear_filters": "Clear Filters"
+"history.empty.clear_filters": "Clear Filters",
+  "nav.focus": "Focus",
+
+"focus.page_title": "Focus",
+"focus.title": "Your Focus",
+"focus.subtitle": "Where to aim next — based on what you missed.",
+"focus.stat_sources": "Sources",
+"focus.stat_analytics_level": "Level",
+
+"focus.locked.title": "Focus is locked",
+"focus.locked.desc": "Upgrade to unlock personalized study suggestions and performance analytics built from your quiz mistakes.",
+"focus.locked.cta": "Upgrade to unlock",
+
+"focus.suggestions.title": "Suggested Sources",
+"focus.suggestions.unlimited": "Unlimited",
+"focus.suggestions.limited": "Showing top {n}",
+"focus.suggestions.open_hint": "Open in PDFs page",
+"focus.suggestions.misses": "missed",
+"focus.suggestions.more_available": "{n} more sources available",
+"focus.suggestions.unlock_more": "Unlock more",
+"focus.suggestions.empty_title": "No suggestions yet",
+"focus.suggestions.empty_desc": "Take quizzes and get questions wrong — sources for your mistakes will appear here as study materials get linked.",
+"focus.suggestions.empty_cta": "Take a quiz",
+
+"focus.analytics.title": "Your Performance",
+"focus.analytics.level": "Level {n}",
+"focus.analytics.subjects": "Subject Strength",
+"focus.analytics.accuracy": "Accuracy Over Time",
+"focus.analytics.misses_by_subject": "Misses by Subject",
+"focus.analytics.difficulty": "Difficulty Breakdown",
+"focus.analytics.misses": "misses",
+
+"focus.tips.title": "Focus Tips",
+
+"admin.questions.pdf_code": "Source PDF Code",
+"admin.questions.pdf_code_hint": "Optional. Format: XXXX-XXXX (e.g. PHYS-CH5-A1B2)",
+"admin.questions.pdf_page": "Source Page",
+"admin.questions.pdf_page_hint": "Optional. Only used if PDF code is set."
 }

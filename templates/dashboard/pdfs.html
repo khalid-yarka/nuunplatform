@@ -60,6 +60,11 @@
         box-shadow: var(--shadow-md);
     }
 
+    .pdf-card.focus-highlight {
+        box-shadow: 0 0 0 4px var(--primary), 0 12px 32px rgba(255,49,56,0.28);
+        transform: translateY(-3px);
+    }
+
     .pdf-actions-row {
         display: flex;
         flex-wrap: wrap;
@@ -267,6 +272,7 @@
         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
             {% for pdf in pdfs %}
                 <div class="{% if pdf.is_premium %}pdf-card-premium{% endif %} {% if not is_logged_in %}login-required{% endif %} pdf-card"
+                     data-code="{{ pdf.code }}"
                      style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow-sm); transition: var(--transition); display: flex; flex-direction: column; position: relative;">
 
                     {% if pdf.is_premium %}
@@ -417,6 +423,23 @@ document.addEventListener('DOMContentLoaded', function() {
         if (subjectFilter) subjectFilter.addEventListener('change', function() { searchForm.submit(); });
         if (classFilter) classFilter.addEventListener('change', function() { searchForm.submit(); });
         if (curriculumFilter) curriculumFilter.addEventListener('change', function() { searchForm.submit(); });
+    }
+
+    // ── Focus-page highlight ──
+    // /pdfs?highlight=XXXX-XXXX — scroll to and pulse the matching card.
+    const params = new URLSearchParams(window.location.search);
+    const highlightCode = params.get('highlight');
+    if (highlightCode) {
+        const card = document.querySelector('.pdf-card[data-code="' + highlightCode + '"]');
+        if (card) {
+            setTimeout(function () {
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                card.classList.add('focus-highlight');
+                setTimeout(function () {
+                    card.classList.remove('focus-highlight');
+                }, 3200);
+            }, 250);
+        }
     }
 });
 </script>

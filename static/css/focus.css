@@ -1,0 +1,508 @@
+/* ============================================
+   FOCUS PAGE — Where wrong answers become next study
+   ============================================ */
+
+.focus-page {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+/* ---------- HERO ---------- */
+.focus-hero {
+    position: relative;
+    border-radius: var(--radius);
+    padding: 26px 28px;
+    margin-bottom: 24px;
+    color: #fff;
+    background:
+        radial-gradient(1000px 400px at 100% -50%, rgba(255,255,255,0.18), transparent 60%),
+        linear-gradient(135deg, var(--primary) 0%, #B91C1C 100%);
+    box-shadow: 0 12px 40px rgba(255, 49, 56, 0.25);
+}
+.focus-hero-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+.focus-hero-text h1 {
+    font-size: 26px;
+    font-weight: 800;
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+.focus-hero-text p {
+    font-size: 14px;
+    opacity: 0.9;
+    margin: 6px 0 0;
+    max-width: 500px;
+    line-height: 1.5;
+}
+.focus-hero-stats {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+.focus-hero-stats .fh-stat {
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255,255,255,0.18);
+    backdrop-filter: blur(6px);
+    border-radius: 12px;
+    padding: 10px 18px;
+    min-width: 90px;
+    text-align: center;
+}
+.focus-hero-stats .fh-num {
+    display: block;
+    font-size: 26px;
+    font-weight: 800;
+    line-height: 1;
+}
+.focus-hero-stats .fh-lbl {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.85;
+    margin-top: 4px;
+    font-weight: 700;
+}
+
+/* ---------- LOCK STATE ---------- */
+.focus-lock-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 60px 30px;
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+}
+.focus-lock-icon {
+    font-size: 64px;
+    margin-bottom: 12px;
+    opacity: 0.85;
+}
+.focus-lock-card h2 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 8px;
+}
+.focus-lock-card p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    max-width: 460px;
+    margin: 0 auto 20px;
+    line-height: 1.6;
+}
+
+/* ---------- SECTIONS ---------- */
+.focus-section {
+    margin-bottom: 28px;
+}
+.focus-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+.focus-section-head h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.focus-section-head h2 i {
+    color: var(--primary);
+}
+.focus-section-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+    background: var(--background);
+    padding: 4px 12px;
+    border-radius: 12px;
+}
+
+/* ---------- SOURCE CARDS ---------- */
+.focus-source-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.focus-source-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--primary);
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    color: var(--text);
+    transition: var(--transition);
+    box-shadow: var(--shadow-sm);
+}
+.focus-source-card:hover {
+    transform: translateX(4px);
+    border-left-color: var(--primary-hover);
+    box-shadow: var(--shadow-md);
+    text-decoration: none;
+    color: var(--text);
+}
+.focus-source-card.premium {
+    border-left-color: #D97706;
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.05), var(--surface) 40%);
+}
+.focus-source-card .fsc-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+    width: 40px;
+    text-align: center;
+}
+.focus-source-card .fsc-body {
+    flex: 1;
+    min-width: 0;
+}
+.focus-source-card .fsc-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.focus-source-card .fsc-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+.focus-source-card .fsc-pages {
+    display: inline-flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+.page-chip {
+    display: inline-block;
+    background: var(--primary-light);
+    color: var(--primary);
+    font-weight: 700;
+    font-size: 11px;
+    padding: 1px 8px;
+    border-radius: 6px;
+    font-family: 'Courier New', monospace;
+}
+.page-chip.more {
+    background: var(--background);
+    color: var(--text-muted);
+}
+.focus-source-card .fsc-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.focus-source-card .fsc-miss strong {
+    color: #DC2626;
+    font-weight: 700;
+}
+.focus-source-card .fsc-arrow {
+    color: var(--text-muted);
+    font-size: 14px;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+.focus-source-card:hover .fsc-arrow {
+    transform: translateX(4px);
+    color: var(--primary);
+}
+
+/* ---------- MORE CTA ---------- */
+.focus-more-cta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+    padding: 12px 18px;
+    background: var(--primary-light);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--text);
+}
+.focus-more-cta span {
+    font-weight: 500;
+}
+
+/* ---------- EMPTY STATE ---------- */
+.focus-empty {
+    text-align: center;
+    padding: 50px 24px;
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+}
+.focus-empty-icon {
+    font-size: 52px;
+    opacity: 0.4;
+    display: block;
+    margin-bottom: 10px;
+}
+.focus-empty h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 6px;
+}
+.focus-empty p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    max-width: 420px;
+    margin: 0 auto 20px;
+    line-height: 1.6;
+}
+
+/* ---------- ANALYTICS CARDS ---------- */
+.focus-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 14px;
+    overflow: hidden;
+}
+.focus-card-head {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--background);
+}
+.focus-card-head h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.focus-card-head h3 i {
+    color: var(--primary);
+}
+.focus-card-body {
+    padding: 18px 20px;
+}
+.focus-chart-wrap {
+    position: relative;
+    height: 220px;
+}
+
+/* ---------- SUBJECT BARS ---------- */
+.focus-bar-row {
+    display: grid;
+    grid-template-columns: 140px 1fr 60px;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.focus-bar-row:last-child {
+    margin-bottom: 0;
+}
+.fbr-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.fbr-bar {
+    height: 8px;
+    background: var(--background);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.fbr-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.6s ease;
+}
+.fbr-fill.high { background: #10B981; }
+.fbr-fill.medium { background: #F59E0B; }
+.fbr-fill.low { background: #EF4444; }
+.fbr-pct {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------- DIFFICULTY GRID ---------- */
+.focus-diff-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+}
+.focus-diff-item {
+    background: var(--background);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    text-align: center;
+}
+.fd-stars {
+    font-size: 14px;
+    display: block;
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+}
+.fd-count {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--primary);
+    display: block;
+    line-height: 1;
+}
+.fd-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: block;
+    margin-top: 4px;
+}
+
+/* ---------- TIPS ---------- */
+.focus-tips {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.focus-tip {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--primary);
+    border-radius: var(--radius-sm);
+    padding: 14px 18px;
+    box-shadow: var(--shadow-sm);
+}
+.focus-tip .ft-icon {
+    font-size: 22px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+.focus-tip .ft-text {
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.55;
+}
+.focus-tip .ft-text strong {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+/* ---------- DARK MODE ---------- */
+[data-theme="dark"] .focus-source-card {
+    background: var(--surface);
+    border-color: var(--border);
+}
+[data-theme="dark"] .focus-source-card:hover {
+    border-color: var(--primary);
+}
+[data-theme="dark"] .focus-source-card.premium {
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.08), var(--surface) 40%);
+}
+[data-theme="dark"] .page-chip {
+    background: var(--primary-light);
+    color: #FF6B70;
+}
+[data-theme="dark"] .focus-more-cta {
+    background: var(--primary-light);
+    color: var(--text);
+}
+[data-theme="dark"] .focus-card-head {
+    background: var(--surface-alt);
+}
+[data-theme="dark"] .focus-diff-item {
+    background: var(--surface-alt);
+}
+[data-theme="dark"] .focus-empty {
+    background: var(--surface);
+    border-color: var(--border);
+}
+[data-theme="dark"] .focus-tip {
+    background: var(--surface);
+    border-color: var(--border);
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 640px) {
+    .focus-hero {
+        padding: 20px;
+    }
+    .focus-hero-text h1 {
+        font-size: 20px;
+    }
+    .focus-hero-stats {
+        width: 100%;
+    }
+    .focus-hero-stats .fh-stat {
+        flex: 1;
+        min-width: 0;
+    }
+    .focus-bar-row {
+        grid-template-columns: 100px 1fr 50px;
+        gap: 8px;
+    }
+    .fbr-name {
+        font-size: 12px;
+    }
+    .focus-source-card {
+        padding: 12px 14px;
+        gap: 12px;
+    }
+    .focus-source-card .fsc-icon {
+        font-size: 22px;
+        width: 32px;
+    }
+    .focus-source-card .fsc-title {
+        font-size: 14px;
+    }
+    .focus-chart-wrap {
+        height: 180px;
+    }
+}
+
+@media (max-width: 480px) {
+    .focus-page {
+        padding: 0;
+    }
+    .focus-section-head h2 {
+        font-size: 16px;
+    }
+    .focus-source-card .fsc-meta {
+        font-size: 11px;
+    }
+    .focus-tip {
+        padding: 12px 14px;
+    }
+    .focus-tip .ft-text {
+        font-size: 13px;
+    }
+}

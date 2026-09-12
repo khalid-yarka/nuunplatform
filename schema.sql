@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS questions (
     tags TEXT DEFAULT '',
     explanation TEXT DEFAULT '',
     pdf_code TEXT DEFAULT NULL,
+    pdf_page INTEGER DEFAULT NULL,
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'archived', 'draft')),
     version INTEGER DEFAULT 1,
     created_by INTEGER,

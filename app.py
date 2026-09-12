@@ -1,4 +1,4 @@
-# app.py – Complete file with auth blueprint + user state refresh + redesigned logging
+# app.py – Complete file with auth blueprint + user state refresh + redesigned logging + Focus
 
 import os
 import sys
@@ -64,6 +64,7 @@ from blueprints.admin_activity_bp import admin_activity_bp
 from blueprints.admin_backup_bp import admin_backup_bp
 from blueprints.upgrade_bp import upgrade_bp
 from blueprints.admin_platform_bp import admin_platform_bp
+from blueprints.focus_bp import focus_bp
 
 # PDF admin + Telegram bot
 from blueprints.pdf_admin_bp import pdf_admin_bp
@@ -428,6 +429,7 @@ app.register_blueprint(admin_activity_bp)
 app.register_blueprint(admin_backup_bp)
 app.register_blueprint(upgrade_bp)
 app.register_blueprint(admin_platform_bp)
+app.register_blueprint(focus_bp)
 
 app.register_blueprint(settings_bp)
 app.register_blueprint(profile_bp)
@@ -701,6 +703,18 @@ def utility_processor():
         except Exception:
             pending_upgrades_count = 0
 
+    # Focus access — used by sidebar to show/hide lock badge
+    has_focus_access = False
+    if 'user_id' in session:
+        try:
+            from services import entitlement_service
+            _uid = session['user_id']
+            _sl = entitlement_service.get_limit(_uid, 'focus_suggestions')
+            _al = entitlement_service.get_level(_uid, 'focus_analytics')
+            has_focus_access = ((_sl is None) or (_sl > 0)) or (_al > 0)
+        except Exception:
+            has_focus_access = False
+
     return {
         'session': session,
         'is_admin': session.get('is_admin', False),
@@ -710,6 +724,7 @@ def utility_processor():
         'accent_colours': accent_colours,
         'pending_upgrades_count': pending_upgrades_count,
         'super_admin_phone': Config.SUPER_ADMIN_PHONE,
+        'has_focus_access': has_focus_access,
     }
 
 

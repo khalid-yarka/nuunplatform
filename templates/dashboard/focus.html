@@ -1,0 +1,256 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}{{ _('focus.page_title') }} - NuunPlatform{% endblock %}
+{% block page_title %}{{ _('focus.page_title') }}{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/focus.css') }}" />
+{% endblock %}
+
+{% block dashboard_content %}
+
+<div class="focus-page">
+
+    <!-- HERO -->
+    <div class="focus-hero">
+        <div class="focus-hero-inner">
+            <div class="focus-hero-text">
+                <h1>🎯 {{ _('focus.title') }}</h1>
+                <p>{{ _('focus.subtitle') }}</p>
+            </div>
+            {% if has_access %}
+                <div class="focus-hero-stats">
+                    {% if has_suggestions %}
+                    <div class="fh-stat">
+                        <span class="fh-num">{{ total_suggestions }}</span>
+                        <span class="fh-lbl">{{ _('focus.stat_sources') }}</span>
+                    </div>
+                    {% endif %}
+                    <div class="fh-stat">
+                        <span class="fh-num">
+                            {% if analytics_level == 1 %}1
+                            {% elif analytics_level == 2 %}2
+                            {% elif analytics_level >= 3 %}3
+                            {% else %}0{% endif %}
+                        </span>
+                        <span class="fh-lbl">{{ _('focus.stat_analytics_level') }}</span>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if not has_access %}
+        <!-- FULL LOCK STATE -->
+        <div class="focus-lock-card">
+            <div class="focus-lock-icon">🔒</div>
+            <h2>{{ _('focus.locked.title') }}</h2>
+            <p>{{ _('focus.locked.desc') }}</p>
+            <button type="button" class="btn btn-primary"
+                    onclick="openUpgradeSheet({ feature: 'focus_analytics', requiredTier: 'premium' })">
+                <i class="fas fa-arrow-up"></i> {{ _('focus.locked.cta') }}
+            </button>
+        </div>
+    {% else %}
+
+        <!-- SECTION 1: SUGGESTED SOURCES -->
+        {% if has_suggestions %}
+        <section class="focus-section">
+            <div class="focus-section-head">
+                <h2><i class="fas fa-book-open"></i> {{ _('focus.suggestions.title') }}</h2>
+                <span class="focus-section-hint">
+                    {% if suggestion_limit is none %}
+                        {{ _('focus.suggestions.unlimited') }}
+                    {% else %}
+                        {{ _('focus.suggestions.limited', n=suggestion_limit) }}
+                    {% endif %}
+                </span>
+            </div>
+
+            {% if suggestions %}
+                <div class="focus-source-list">
+                    {% for s in suggestions %}
+                    <a class="focus-source-card {% if s.is_premium %}premium{% endif %}"
+                       href="{{ url_for('pdfs.list_pdfs') }}?highlight={{ s.pdf_code }}"
+                       title="{{ _('focus.suggestions.open_hint') }}">
+                        <div class="fsc-icon">
+                            {% if s.is_premium %}💎{% else %}📄{% endif %}
+                        </div>
+                        <div class="fsc-body">
+                            <div class="fsc-title">{{ s.title }}</div>
+                            <div class="fsc-meta">
+                                {% if s.subject %}<span>📚 {{ s.subject }}</span>{% endif %}
+                                {% if s.pages %}
+                                    <span class="fsc-pages">
+                                        {% for p in s.pages[:5] %}
+                                            <span class="page-chip">{{ p }}</span>
+                                        {% endfor %}
+                                        {% if s.pages|length > 5 %}
+                                            <span class="page-chip more">+{{ s.pages|length - 5 }}</span>
+                                        {% endif %}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <div class="fsc-stats">
+                                <span class="fsc-miss">
+                                    ❌ <strong>{{ s.miss_count }}</strong>
+                                    {{ _('focus.suggestions.misses') }}
+                                </span>
+                                {% if s.last_miss %}
+                                <span class="fsc-when">
+                                    🕐 {{ s.last_miss[:10] }}
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="fsc-arrow">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+
+                {% if more_available > 0 %}
+                <div class="focus-more-cta">
+                    <span>
+                        {{ _('focus.suggestions.more_available', n=more_available) }}
+                    </span>
+                    <button type="button" class="btn btn-sm btn-primary"
+                            onclick="openUpgradeSheet({ feature: 'focus_suggestions', requiredTier: 'premium' })">
+                        {{ _('focus.suggestions.unlock_more') }}
+                    </button>
+                </div>
+                {% endif %}
+            {% else %}
+                <div class="focus-empty">
+                    <span class="focus-empty-icon">📚</span>
+                    <h3>{{ _('focus.suggestions.empty_title') }}</h3>
+                    <p>{{ _('focus.suggestions.empty_desc') }}</p>
+                    <a href="{{ url_for('quiz.index') }}" class="btn btn-primary">
+                        <i class="fas fa-rocket"></i> {{ _('focus.suggestions.empty_cta') }}
+                    </a>
+                </div>
+            {% endif %}
+        </section>
+        {% endif %}
+
+        <!-- SECTION 2: PERFORMANCE ANALYTICS -->
+        {% if has_analytics %}
+        <section class="focus-section">
+            <div class="focus-section-head">
+                <h2><i class="fas fa-chart-line"></i> {{ _('focus.analytics.title') }}</h2>
+                <span class="focus-section-hint">
+                    {{ _('focus.analytics.level', n=analytics_level) }}
+                </span>
+            </div>
+
+            <!-- Level 1+: Subject bars -->
+            {% if analytics.subject_performance %}
+            <div class="focus-card">
+                <div class="focus-card-head">
+                    <h3><i class="fas fa-bullseye"></i> {{ _('focus.analytics.subjects') }}</h3>
+                </div>
+                <div class="focus-card-body">
+                    {% for s in analytics.subject_performance[:8] %}
+                        {% set pct = s.avg_score|round(0) %}
+                        {% set cls = 'high' if pct >= 70 else 'medium' if pct >= 40 else 'low' %}
+                        <div class="focus-bar-row">
+                            <span class="fbr-name">{{ s.subject_name }}</span>
+                            <div class="fbr-bar">
+                                <div class="fbr-fill {{ cls }}" style="width: {{ pct }}%;"></div>
+                            </div>
+                            <span class="fbr-pct">{{ pct }}%</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Level 2+: Accuracy line -->
+            {% if analytics.accuracy_over_time and analytics.accuracy_over_time.labels %}
+            <div class="focus-card">
+                <div class="focus-card-head">
+                    <h3><i class="fas fa-chart-line"></i> {{ _('focus.analytics.accuracy') }}</h3>
+                </div>
+                <div class="focus-card-body">
+                    <div class="focus-chart-wrap">
+                        <canvas id="focusAccuracyChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Level 2+: Miss count by subject -->
+            {% if analytics.miss_by_subject %}
+            <div class="focus-card">
+                <div class="focus-card-head">
+                    <h3><i class="fas fa-times-circle"></i> {{ _('focus.analytics.misses_by_subject') }}</h3>
+                </div>
+                <div class="focus-card-body">
+                    <div class="focus-chart-wrap">
+                        <canvas id="focusMissChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Level 3: Difficulty breakdown -->
+            {% if analytics.difficulty_breakdown %}
+            <div class="focus-card">
+                <div class="focus-card-head">
+                    <h3><i class="fas fa-signal"></i> {{ _('focus.analytics.difficulty') }}</h3>
+                </div>
+                <div class="focus-card-body">
+                    <div class="focus-diff-grid">
+                        {% for d in analytics.difficulty_breakdown %}
+                        <div class="focus-diff-item">
+                            <span class="fd-stars">
+                                {{ '⭐' * d.difficulty }}{{ '☆' * (5 - d.difficulty) }}
+                            </span>
+                            <span class="fd-count">{{ d.miss_count }}</span>
+                            <span class="fd-label">{{ _('focus.analytics.misses') }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </section>
+        {% endif %}
+
+        <!-- SECTION 3: FOCUS TIPS (level 3) -->
+        {% if analytics_level >= 3 and tips %}
+        <section class="focus-section">
+            <div class="focus-section-head">
+                <h2><i class="fas fa-lightbulb"></i> {{ _('focus.tips.title') }}</h2>
+            </div>
+            <div class="focus-tips">
+                {% for tip in tips %}
+                <div class="focus-tip">
+                    <span class="ft-icon">{{ tip.icon }}</span>
+                    <span class="ft-text">{{ tip.text|safe }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+    {% endif %}
+
+</div>
+
+<!-- Data bridge for JS charts -->
+<script id="focusData" type="application/json">
+{
+  "accuracy": {{ (analytics.accuracy_over_time or {'labels': [], 'values': []})|tojson }},
+  "miss_by_subject": {{ (analytics.miss_by_subject or [])|tojson }}
+}
+</script>
+
+{% endblock %}
+
+{% block dashboard_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/focus.js') }}"></script>
+{% endblock %}

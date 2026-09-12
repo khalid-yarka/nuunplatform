@@ -587,8 +587,9 @@ def create_question(data: dict):
             INSERT INTO questions (
                 subject_code, question_text, options, correct_answer,
                 difficulty, chapter, tags, explanation,
+                pdf_code, pdf_page,
                 created_by, updated_by, status, version, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data['subject_code'],
             data['question_text'],
@@ -598,6 +599,8 @@ def create_question(data: dict):
             data.get('chapter', ''),
             data.get('tags', ''),
             data.get('explanation', ''),
+            data.get('pdf_code'),                 # NEW
+            data.get('pdf_page'),                 # NEW
             data.get('created_by'),
             data.get('updated_by'),
             data.get('status', 'active'),
@@ -685,6 +688,8 @@ def bulk_create_questions(questions_data: list, admin_id: int):
                         q.get('chapter', ''),
                         q.get('tags', ''),
                         q.get('explanation', ''),
+                        q.get('pdf_code'),      # NEW
+                        q.get('pdf_page'),      # NEW
                         admin_id,
                         admin_id,
                         'active',
@@ -2875,3 +2880,205 @@ def get_available_curricula():
     except Exception as e:
         logger.error(f"Error fetching curricula: {e}")
         return []
+
+def update_question(question_id: int, data: dict):
+    """Update an existing question, including PDF linkage fields."""
+    try:
+        execute_with_retry("""
+            UPDATE questions SET
+                subject_code = ?,
+                question_text = ?,
+                options = ?,
+                correct_answer = ?,
+                difficulty = ?,
+                chapter = ?,
+                tags = ?,
+                explanation = ?,
+                pdf_code = ?,
+                pdf_page = ?,
+                status = ?,
+                updated_by = ?,
+                updated_at = ?
+            WHERE id = ?
+        """, (
+            data['subject_code'],
+            data['question_text'],
+            to_json(data['options']),
+            data['correct_answer'],
+            data.get('difficulty', 1),
+            data.get('chapter', ''),
+            data.get('tags', ''),
+            data.get('explanation', ''),
+            data.get('pdf_code'),
+            data.get('pdf_page'),
+            data.get('status', 'active'),
+            data.get('updated_by'),
+            now(),
+            question_id
+        ), commit=True)
+        return True
+    except Exception as e:
+        try:
+            current_app.logger.error(f"Error updating question: {e}")
+        except RuntimeError:
+            logger.error(f"Error updating question: {e}")
+        return False
+
+
+def get_question_stats() -> dict:
+    """Aggregate question stats for the admin dashboard header."""
+    try:
+        cursor = execute_with_retry("""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
+                SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived,
+                SUM(CASE WHEN pdf_code IS NOT NULL AND pdf_code != ''
+                         THEN 1 ELSE 0 END) AS linked
+            FROM questions
+        """)
+        row = cursor.fetchone()
+        if not row:
+            return {'total': 0, 'active': 0, 'archived': 0, 'linked': 0, 'unlinked': 0}
+        d = dict(row)
+        d['unlinked'] = (d.get('total') or 0) - (d.get('linked') or 0)
+        return d
+    except Exception as e:
+        logger.error(f"Error fetching question stats: {e}")
+        return {'total': 0, 'active': 0, 'archived': 0, 'linked': 0, 'unlinked': 0}
+
+
+def get_questions_paginated(
+    search: str = '',
+    subject_code: str = '',
+    pdf_filter: str = '',      # '', 'linked', 'unlinked'
+    status_filter: str = '',   # '', 'active', 'archived', 'draft'
+    sort: str = 'newest',      # newest, oldest, difficulty_high, difficulty_low
+    page: int = 1,
+    per_page: int = 20,
+):
+    """Return (questions, total) with filters and pagination."""
+    where = ["1=1"]
+    params = []
+
+    if search:
+        like = f"%{search}%"
+        where.append("(question_text LIKE ? OR chapter LIKE ? OR tags LIKE ?)")
+        params.extend([like, like, like])
+
+    if subject_code:
+        where.append("subject_code = ?")
+        params.append(subject_code)
+
+    if pdf_filter == 'linked':
+        where.append("pdf_code IS NOT NULL AND pdf_code != ''")
+    elif pdf_filter == 'unlinked':
+        where.append("(pdf_code IS NULL OR pdf_code = '')")
+
+    if status_filter:
+        where.append("status = ?")
+        params.append(status_filter)
+
+    where_sql = " AND ".join(where)
+
+    sort_map = {
+        'newest': 'created_at DESC',
+        'oldest': 'created_at ASC',
+        'difficulty_high': 'difficulty DESC, created_at DESC',
+        'difficulty_low': 'difficulty ASC, created_at DESC',
+    }
+    order_sql = sort_map.get(sort, 'created_at DESC')
+
+    count_cursor = execute_with_retry(
+        f"SELECT COUNT(*) AS c FROM questions WHERE {where_sql}", params
+    )
+    total = count_cursor.fetchone()['c']
+
+    offset = max(0, (page - 1) * per_page)
+    cursor = execute_with_retry(f"""
+        SELECT id, subject_code, question_text, options, correct_answer,
+               difficulty, chapter, tags, explanation, pdf_code, pdf_page,
+               status, created_at, updated_at
+        FROM questions
+        WHERE {where_sql}
+        ORDER BY {order_sql}
+        LIMIT ? OFFSET ?
+    """, params + [per_page, offset])
+
+    questions = []
+    for row in cursor.fetchall():
+        q = dict(row)
+        q['options'] = from_json(q['options'])
+        subj = get_subject(q['subject_code'])
+        q['subject_name'] = subj['name'] if subj else q['subject_code']
+        q['subject_icon'] = subj.get('icon', '📚') if subj else '📚'
+        questions.append(q)
+
+    return questions, total
+
+
+def get_questions_filter_options() -> dict:
+    """Return distinct subjects/chapters currently in use (for filter dropdowns)."""
+    try:
+        subj_cursor = execute_with_retry(
+            "SELECT DISTINCT subject_code FROM questions WHERE status != 'archived' ORDER BY subject_code"
+        )
+        subjects = [row['subject_code'] for row in subj_cursor.fetchall()]
+
+        chap_cursor = execute_with_retry(
+            "SELECT DISTINCT chapter FROM questions WHERE chapter IS NOT NULL AND chapter != '' ORDER BY chapter LIMIT 50"
+        )
+        chapters = [row['chapter'] for row in chap_cursor.fetchall()]
+
+        return {'subjects': subjects, 'chapters': chapters}
+    except Exception as e:
+        logger.error(f"Error fetching filter options: {e}")
+        return {'subjects': [], 'chapters': []}
+
+
+def check_pdf_codes_exist(codes: list) -> dict:
+    """
+    Given a list of PDF codes, return { code: {exists: bool, title: str, source: 'main'|'bot'|None} }.
+    Never raises.
+    """
+    result = {}
+    if not codes:
+        return result
+
+    unique = list({str(c).strip().upper() for c in codes if c})
+
+    for code in unique:
+        result[code] = {'exists': False, 'title': '', 'source': None}
+
+    try:
+        placeholders = ','.join('?' * len(unique))
+        cursor = execute_with_retry(
+            f"SELECT code, title, is_premium FROM pdfs WHERE code IN ({placeholders})",
+            unique
+        )
+        for row in cursor.fetchall():
+            code = row['code']
+            if code in result:
+                result[code]['exists'] = True
+                result[code]['title'] = row['title'] or code
+                result[code]['is_premium'] = bool(row['is_premium'])
+                result[code]['source'] = 'main'
+    except Exception as e:
+        logger.warning(f"check_pdf_codes_exist (main) failed: {e}")
+
+    # Fall back to bot DB for unresolved codes
+    remaining = [c for c, v in result.items() if not v['exists']]
+    if remaining:
+        try:
+            from bot.db import get_bot_pdf_by_code
+            for code in remaining:
+                bot_pdf = get_bot_pdf_by_code(code)
+                if bot_pdf:
+                    result[code]['exists'] = True
+                    result[code]['title'] = bot_pdf.get('title') or code
+                    result[code]['is_premium'] = bool(bot_pdf.get('is_premium', 0))
+                    result[code]['source'] = 'bot'
+        except Exception as e:
+            logger.warning(f"check_pdf_codes_exist (bot) failed: {e}")
+
+    return result

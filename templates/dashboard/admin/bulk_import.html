@@ -1,13 +1,71 @@
 {% extends "dashboard_base.html" %}
 
 {% block title %}Bulk Import Questions - Admin{% endblock %}
-
 {% block page_title %}Bulk Import Questions{% endblock %}
 
-<!-- No custom CSS needed; all form and card styles come from dashboard.css -->
-
 {% block dashboard_content %}
-<div style="max-width: 100%;">
+<style>
+    .bi-layout { display: grid; grid-template-columns: 1fr 400px; gap: 20px; align-items: start; }
+    @media (max-width: 1100px) { .bi-layout { grid-template-columns: 1fr; } }
+
+    .bi-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow-sm); }
+    .bi-card h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+    .bi-card h3 i { color: var(--primary); }
+
+    .bi-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .bi-tabs label { padding: 8px 16px; border-radius: var(--radius-sm); background: var(--background); border: 1px solid var(--border); font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text-secondary); }
+    .bi-tabs input[type="radio"] { display: none; }
+    .bi-tabs input[type="radio"]:checked + span { color: var(--primary); }
+    .bi-tabs label:has(input:checked) { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
+
+    .bi-textarea { width: 100%; min-height: 380px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: 'Courier New', monospace; font-size: 13px; background: var(--surface); color: var(--text); tab-size: 2; line-height: 1.5; resize: vertical; }
+    .bi-textarea:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(255,49,56,0.08); }
+
+    .bi-drop { border: 2px dashed var(--border); border-radius: var(--radius-sm); padding: 40px 20px; text-align: center; background: var(--background); transition: var(--transition); }
+    .bi-drop.dragover { border-color: var(--primary); background: var(--primary-light); }
+
+    .bi-guide { background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.6; }
+    .bi-guide code { background: var(--surface); padding: 1px 6px; border-radius: 4px; font-size: 12px; color: var(--primary); border: 1px solid var(--border); }
+    .bi-guide pre { background: var(--surface); border-radius: var(--radius-sm); padding: 12px; margin: 8px 0 0; border: 1px solid var(--border); overflow-x: auto; font-size: 12px; line-height: 1.5; }
+
+    /* Live preview panel */
+    .bi-preview { position: sticky; top: 90px; }
+    .bi-pv-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .bi-pv-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+    .bi-pv-stat { background: var(--background); border-radius: var(--radius-sm); padding: 10px 8px; text-align: center; }
+    .bi-pv-stat .n { font-size: 20px; font-weight: 800; color: var(--text); line-height: 1; }
+    .bi-pv-stat .l { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; font-weight: 700; }
+    .bi-pv-stat.green .n { color: #10B981; }
+    .bi-pv-stat.amber .n { color: #F59E0B; }
+
+    .bi-pv-codes { margin-bottom: 14px; }
+    .bi-pv-code-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 4px; }
+    .bi-pv-code-row.ok { background: #ECFDF5; color: #065F46; }
+    .bi-pv-code-row.warn { background: #FEF3C7; color: #92400E; }
+    .bi-pv-code-row code { font-family: monospace; font-weight: 700; }
+
+    .bi-pv-list { max-height: 400px; overflow-y: auto; }
+    .bi-pv-item { padding: 8px 10px; border-bottom: 1px solid var(--border-light); font-size: 12px; }
+    .bi-pv-item:last-child { border-bottom: none; }
+    .bi-pv-item .qi { font-weight: 700; color: var(--text-muted); margin-right: 4px; }
+    .bi-pv-item .qt { color: var(--text); }
+    .bi-pv-item .qm { display: flex; gap: 8px; margin-top: 4px; font-size: 11px; color: var(--text-secondary); align-items: center; flex-wrap: wrap; }
+    .bi-pv-item .qc { background: var(--background); padding: 1px 8px; border-radius: 10px; font-family: monospace; font-weight: 600; }
+    .bi-pv-item .qc.ok { background: #ECFDF5; color: #065F46; }
+    .bi-pv-item .qc.warn { background: #FEF3C7; color: #92400E; }
+    .bi-pv-item .qc.none { background: transparent; color: var(--text-muted); font-style: italic; font-weight: 400; }
+    .bi-pv-item.warn { background: #FFFBEB; }
+    .bi-pv-item.err { background: #FEF2F2; }
+
+    .bi-pv-empty { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; }
+    .bi-pv-empty i { font-size: 32px; opacity: 0.3; margin-bottom: 8px; display: block; }
+
+    .bi-warnings { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #92400E; }
+    .bi-warnings .w-title { font-weight: 700; margin-bottom: 4px; }
+    .bi-warnings .w-item { padding: 2px 0; }
+</style>
+
+<div>
 
     <div class="breadcrumb">
         <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
@@ -17,22 +75,30 @@
         <span class="current">Bulk Import</span>
     </div>
 
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
         <div>
-            <h2 style="font-size: 20px; font-weight: 700; color: var(--text);">
+            <h2 style="font-size: 22px; font-weight: 700; color: var(--text); margin: 0;">
                 <i class="fas fa-upload" style="color: var(--primary);"></i> Bulk Import Questions
             </h2>
-            <p style="color: var(--text-secondary); font-size: 14px;">Import multiple single-choice questions at once using JSON format</p>
+            <p style="color: var(--text-secondary); font-size: 14px; margin: 4px 0 0;">
+                Paste JSON or upload a file. The preview updates live as you type.
+            </p>
         </div>
-        <a href="{{ url_for('admin.admin_questions') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back to Questions</a>
+        <div style="display: flex; gap: 10px;">
+            <a href="{{ url_for('admin.bulk_template') }}" class="btn btn-secondary">
+                <i class="fas fa-download"></i> Template
+            </a>
+            <a href="{{ url_for('admin.admin_questions') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
+        </div>
     </div>
 
-    <!-- Flash Messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             {% for category, message in messages %}
-                <div class="flash-message flash-{{ category }}" data-toast>
-                    <i class="fas {% if category == 'success' %}fa-check-circle{% elif category == 'error' %}fa-exclamation-circle{% elif category == 'info' %}fa-info-circle{% else %}fa-bell{% endif %}"></i>
+                <div class="flash-message flash-{{ category }}">
+                    <i class="fas {% if category == 'success' %}fa-check-circle{% elif category == 'error' %}fa-exclamation-circle{% elif category == 'warning' %}fa-exclamation-triangle{% else %}fa-info-circle{% endif %}"></i>
                     {{ message }}
                     <button class="flash-close" onclick="this.parentElement.remove()">&times;</button>
                 </div>
@@ -40,295 +106,320 @@
         {% endif %}
     {% endwith %}
 
-    <!-- Format Guide -->
-    <div class="card" style="margin-bottom: 24px;">
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-            <span style="font-size: 24px;">📋</span>
-            <h3 style="font-size: 16px; font-weight: 600; color: var(--text);">JSON Format Guide</h3>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 12px;">
-            <div>
-                <h4 style="font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">Required Fields</h4>
-                <ul style="list-style: none; padding: 0; font-size: 13px; color: var(--text-secondary);">
-                    <li style="padding: 4px 0;">📌 <strong>subject_code</strong> - Subject code (e.g., "geography")</li>
-                    <li style="padding: 4px 0;">❓ <strong>question</strong> - Question text</li>
-                    <li style="padding: 4px 0;">🔘 <strong>options</strong> - Array of options (3-6)</li>
-                    <li style="padding: 4px 0;">✅ <strong>correct</strong> - Index of correct option (1-based)</li>
-                    <li style="padding: 4px 0;">📊 <strong>difficulty</strong> - 1 to 5</li>
-                </ul>
-            </div>
-            <div>
-                <h4 style="font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">Optional Fields</h4>
-                <ul style="list-style: none; padding: 0; font-size: 13px; color: var(--text-secondary);">
-                    <li style="padding: 4px 0;">📖 <strong>chapter</strong> - Chapter name</li>
-                    <li style="padding: 4px 0;">🏷️ <strong>tags</strong> - Array of tags</li>
-                    <li style="padding: 4px 0;">💡 <strong>explanation</strong> - Answer explanation</li>
-                </ul>
-            </div>
-        </div>
+    <form method="POST" action="{{ url_for('admin.bulk_import') }}" enctype="multipart/form-data" id="bulkForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-        <div style="background: var(--background); border-radius: var(--radius-sm); padding: 16px; margin-top: 12px; border: 1px solid var(--border);">
-            <div style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">📄 Example JSON:</div>
-            <pre style="font-size: 12px; color: var(--text-secondary); overflow-x: auto; margin: 0; white-space: pre-wrap; word-break: break-word;">
+        <div class="bi-layout">
+
+            <!-- LEFT: INPUT -->
+            <div>
+                <div class="bi-card" style="margin-bottom: 20px;">
+                    <h3><i class="fas fa-code"></i> JSON Input</h3>
+
+                    <div class="bi-tabs">
+                        <label>
+                            <input type="radio" name="input_method" value="paste" checked onchange="toggleInputMethod()">
+                            <span>📝 Paste</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="input_method" value="file" onchange="toggleInputMethod()">
+                            <span>📁 Upload File</span>
+                        </label>
+                    </div>
+
+                    <div id="pasteArea">
+                        <textarea name="json_data" id="jsonData" class="bi-textarea"
+                                  placeholder='Paste your JSON here. Example:
 {
     "metadata": {
         "subject_code": "geography",
-        "chapter": "Chapter 1: Introduction"
+        "chapter": "Chapter 1",
+        "pdf_code": "GEO1-CH01"
     },
     "questions": [
         {
-            "tags": ["geography", "africa", "capitals"],
-            "difficulty": 2,
             "question": "What is the capital of Somalia?",
             "options": ["Mogadishu", "Hargeisa", "Kismayo", "Garowe"],
             "correct": 1,
-            "explanation": "Mogadishu has been the capital since 1960."
+            "pdf_page": 12
         }
     ]
-}</pre>
-        </div>
+}'
+                        ></textarea>
+                    </div>
 
-        <div style="display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;">
-            <a href="{{ url_for('admin.bulk_template') }}" class="btn btn-primary"><i class="fas fa-download"></i> Download Template</a>
-        </div>
-    </div>
+                    <div id="fileArea" style="display: none;">
+                        <div class="bi-drop" id="dropZone">
+                            <div style="font-size: 42px; opacity: 0.4; margin-bottom: 8px;">📤</div>
+                            <p style="font-size: 14px; color: var(--text-secondary); margin: 0;">Drop JSON here, or</p>
+                            <button type="button" onclick="document.getElementById('jsonFile').click()" class="btn btn-secondary btn-sm" style="margin-top: 10px;">Browse Files</button>
+                            <input type="file" name="json_file" id="jsonFile" accept=".json" style="display: none;">
+                            <div id="fileName" style="margin-top: 8px; font-size: 12px; color: var(--primary); display: none;"></div>
+                        </div>
+                    </div>
+                </div>
 
-    <!-- Import Form -->
-    <div class="card" style="margin-bottom: 24px;">
-        <form method="POST" action="{{ url_for('admin.bulk_import') }}" enctype="multipart/form-data" id="bulkImportForm">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <!-- Method Selection -->
-            <div style="display: flex; gap: 16px; margin-bottom: 20px;">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                    <input type="radio" name="input_method" value="paste" checked onchange="toggleInputMethod()">
-                    <span style="font-weight: 500;">📝 Paste JSON</span>
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                    <input type="radio" name="input_method" value="file" onchange="toggleInputMethod()">
-                    <span style="font-weight: 500;">📁 Upload File</span>
-                </label>
-            </div>
+                <!-- Format guide -->
+                <div class="bi-card">
+                    <h3><i class="fas fa-book"></i> Format Guide</h3>
+                    <div class="bi-guide">
+                        <strong>Required:</strong> <code>subject_code</code> (metadata), <code>question</code>, <code>options</code> (3-6), <code>correct</code> (1-based), <code>difficulty</code> (1-5).
+                        <br><br>
+                        <strong>Optional:</strong>
+                        <code>pdf_code</code> (metadata, format <code>XXXX-XXXX</code>) — links all questions to one PDF.<br>
+                        <code>pdf_page</code> (per question) — the exact page in that PDF.
+                        <br><br>
+                        <strong>Tip:</strong> Leave <code>pdf_code</code> empty for unlinked questions. Add <code>pdf_page</code> only when a PDF is linked.
+                    </div>
+                </div>
 
-            <!-- Paste JSON Area -->
-            <div id="pasteArea" style="margin-bottom: 16px;">
-                <div class="form-group">
-                    <label class="form-label">📋 Paste JSON Data</label>
-                    <textarea name="json_data" id="jsonData" rows="15" class="form-control" style="font-family: 'Courier New', monospace; tab-size: 2;" placeholder='{
-    "metadata": {
-        "subject_code": "geography",
-        "chapter": "Chapter 1"
-    },
-    "questions": [
-        {
-            "tags": ["tag1", "tag2"],
-            "difficulty": 2,
-            "question": "Your question here?",
-            "options": ["Option A", "Option B", "Option C", "Option D"],
-            "correct": 1,
-            "explanation": "Your explanation here."
-        }
-    ]
-}'></textarea>
+                <div class="bi-card" style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload"></i> Import Questions
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="clearAll()">
+                        <i class="fas fa-times"></i> Clear
+                    </button>
                 </div>
             </div>
 
-            <!-- File Upload Area -->
-            <div id="fileArea" style="display: none; margin-bottom: 16px;">
-                <div class="form-group">
-                    <label class="form-label">📁 Upload JSON File</label>
-                    <div style="border: 2px dashed var(--border); border-radius: var(--radius-sm); padding: 40px 20px; text-align: center; background: var(--background); transition: var(--transition);" id="dropZone">
-                        <div style="font-size: 48px; margin-bottom: 8px; opacity: 0.4;">📤</div>
-                        <p style="color: var(--text-secondary); font-size: 14px;">Drag & drop your JSON file here, or click to browse</p>
-                        <p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">Supported: .json | Max size: 5MB</p>
-                        <input type="file" name="json_file" id="jsonFile" accept=".json" style="display: none;" onchange="handleFileSelect(this)">
-                        <button type="button" onclick="document.getElementById('jsonFile').click()" class="btn btn-secondary" style="margin-top: 12px;">Browse Files</button>
-                        <div id="fileName" style="margin-top: 8px; font-size: 13px; color: var(--primary); font-weight: 500; display: none;"></div>
+            <!-- RIGHT: LIVE PREVIEW -->
+            <div class="bi-preview">
+                <div class="bi-card">
+                    <div class="bi-pv-head">
+                        <h3 style="margin: 0;"><i class="fas fa-eye"></i> Live Preview</h3>
+                        <span id="pvStatus" style="font-size: 11px; color: var(--text-muted);">idle</span>
+                    </div>
+
+                    <div id="pvContent">
+                        <div class="bi-pv-empty">
+                            <i class="fas fa-file-code"></i>
+                            Paste JSON to see a live preview here.
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Action Buttons -->
-            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Import Questions</button>
-                <button type="button" onclick="validateJSON()" class="btn btn-secondary"><i class="fas fa-check"></i> Validate</button>
-                <button type="reset" class="btn btn-danger"><i class="fas fa-times"></i> Clear</button>
-            </div>
-        </form>
-    </div>
-
-    <!-- Validation Results -->
-    <div id="validationResults" style="display: none; margin-top: 24px;">
-        <div class="card">
-            <h3 style="font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 16px;">
-                <i class="fas fa-check-circle" style="color: #10B981;"></i> Validation Results
-            </h3>
-            <div id="validationContent"></div>
         </div>
-    </div>
+    </form>
 
 </div>
 
 <script>
-function toggleInputMethod() {
-    const pasteRadio = document.querySelector('input[name="input_method"][value="paste"]');
-    const fileRadio = document.querySelector('input[name="input_method"][value="file"]');
-    
-    document.getElementById('pasteArea').style.display = pasteRadio.checked ? 'block' : 'none';
-    document.getElementById('fileArea').style.display = fileRadio.checked ? 'block' : 'none';
-    
-    if (fileRadio.checked) {
-        document.getElementById('jsonData').value = '';
-    } else {
-        document.getElementById('jsonFile').value = '';
-        document.getElementById('fileName').style.display = 'none';
-    }
-}
+(function () {
+    'use strict';
 
-function handleFileSelect(input) {
-    const file = input.files[0];
-    if (file) {
-        document.getElementById('fileName').textContent = '📄 ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
-        document.getElementById('fileName').style.display = 'block';
-        
+    const textarea = document.getElementById('jsonData');
+    const fileInput = document.getElementById('jsonFile');
+    const dropZone = document.getElementById('dropZone');
+    const fileNameEl = document.getElementById('fileName');
+    const pvContent = document.getElementById('pvContent');
+    const pvStatus = document.getElementById('pvStatus');
+    const CSRF = document.querySelector('input[name="csrf_token"]').value;
+
+    let debounceTimer = null;
+    let lastJSON = '';
+    let inflight = false;
+
+    // ── Input method toggle ──
+    window.toggleInputMethod = function () {
+        const paste = document.querySelector('input[name="input_method"][value="paste"]').checked;
+        document.getElementById('pasteArea').style.display = paste ? 'block' : 'none';
+        document.getElementById('fileArea').style.display = paste ? 'none' : 'block';
+    };
+
+    // ── File handling ──
+    function handleFile(file) {
+        if (!file) return;
+        fileNameEl.textContent = '📄 ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+        fileNameEl.style.display = 'block';
         const reader = new FileReader();
-        reader.onload = function(e) {
-            document.getElementById('jsonData').value = e.target.result;
+        reader.onload = function (e) {
+            textarea.value = e.target.result;
+            schedulePreview(true);
         };
         reader.readAsText(file);
     }
-}
 
-// Drag and drop support
-const dropZone = document.getElementById('dropZone');
-if (dropZone) {
-    dropZone.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        this.style.borderColor = 'var(--primary)';
-        this.style.background = 'var(--primary-light)';
-    });
-    
-    dropZone.addEventListener('dragleave', function(e) {
-        e.preventDefault();
-        this.style.borderColor = 'var(--border)';
-        this.style.background = 'var(--background)';
-    });
-    
-    dropZone.addEventListener('drop', function(e) {
-        e.preventDefault();
-        this.style.borderColor = 'var(--border)';
-        this.style.background = 'var(--background)';
-        
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            const file = files[0];
-            if (file.name.endsWith('.json')) {
-                document.getElementById('jsonFile').files = files;
-                handleFileSelect(document.getElementById('jsonFile'));
-            } else {
-                showToast('Please upload a JSON file.', 'error');
-            }
-        }
-    });
-}
-
-function validateJSON() {
-    const jsonData = document.getElementById('jsonData').value;
-    if (!jsonData) {
-        showToast('Please paste JSON data or upload a file first.', 'error');
-        return;
-    }
-    
-    fetch('{{ url_for("admin.bulk_preview") }}', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-CSRF-Token': '{{ csrf_token }}'
-        },
-        body: 'json_data=' + encodeURIComponent(jsonData)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            showToast('❌ ' + data.error, 'error');
-            document.getElementById('validationResults').style.display = 'none';
-            return;
-        }
-        
-        const container = document.getElementById('validationContent');
-        container.innerHTML = `
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px;">
-                <div style="background: #ECFDF5; padding: 12px; border-radius: var(--radius-sm); text-align: center; border: 1px solid #A7F3D0;">
-                    <div style="font-size: 24px; font-weight: 700; color: #065F46;">${data.total}</div>
-                    <div style="font-size: 12px; color: #065F46;">Total Questions</div>
-                </div>
-                <div style="background: var(--background); padding: 12px; border-radius: var(--radius-sm); text-align: center; border: 1px solid var(--border);">
-                    <div style="font-size: 24px; font-weight: 700; color: var(--text);">${data.subject_code || '—'}</div>
-                    <div style="font-size: 12px; color: var(--text-secondary);">Subject Code</div>
-                </div>
-                <div style="background: var(--background); padding: 12px; border-radius: var(--radius-sm); text-align: center; border: 1px solid var(--border);">
-                    <div style="font-size: 24px; font-weight: 700; color: var(--text);">${data.chapter || '—'}</div>
-                    <div style="font-size: 12px; color: var(--text-secondary);">Chapter</div>
-                </div>
-            </div>
-            
-            <div style="margin-top: 12px;">
-                <h4 style="font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">📋 Question Preview (first 10)</h4>
-                <div style="overflow-x: auto;">
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Question</th>
-                                <th style="text-align: center;">Difficulty</th>
-                                <th style="text-align: center;">Options</th>
-                                <th style="text-align: center;">Tags</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${data.preview.map(q => `
-                                <tr>
-                                    <td>${q.index}</td>
-                                    <td>${q.question}</td>
-                                    <td style="text-align: center;">
-                                        <span class="badge ${q.difficulty <= 2 ? 'badge-success' : q.difficulty <= 4 ? 'badge-warning' : 'badge-danger'}">
-                                            ${'⭐'.repeat(q.difficulty)}${'☆'.repeat(5 - q.difficulty)}
-                                        </span>
-                                    </td>
-                                    <td style="text-align: center;">${q.options_count}</td>
-                                    <td style="text-align: center; font-size: 11px;">${q.tags || '—'}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-                ${data.total > 10 ? `<p style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 8px;">Showing first 10 of ${data.total} questions</p>` : ''}
-            </div>
-        `;
-        
-        document.getElementById('validationResults').style.display = 'block';
-        showToast('✅ Validation complete! ' + data.total + ' questions found.', 'success');
-    })
-    .catch(error => {
-        showToast('❌ Error validating JSON: ' + error.message, 'error');
-    });
-}
-
-function showToast(message, type) {
-    if (typeof window.showToast === 'function') {
-        window.showToast(message, type);
-    } else {
-        alert(message);
-    }
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    const fileInput = document.getElementById('jsonFile');
     if (fileInput) {
-        fileInput.addEventListener('change', function() {
-            setTimeout(validateJSON, 500);
+        fileInput.addEventListener('change', function () { handleFile(this.files[0]); });
+    }
+
+    if (dropZone) {
+        dropZone.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            this.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', function (e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+        });
+        dropZone.addEventListener('drop', function (e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+            const f = e.dataTransfer.files[0];
+            if (f && f.name.endsWith('.json')) {
+                fileInput.files = e.dataTransfer.files;
+                handleFile(f);
+            } else {
+                showStatus('Only .json files accepted', 'err');
+            }
         });
     }
-});
+
+    // ── Live preview ──
+    function schedulePreview(immediate) {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(runPreview, immediate ? 50 : 600);
+    }
+
+    function showStatus(text, kind) {
+        pvStatus.textContent = text;
+        pvStatus.style.color =
+            kind === 'err' ? '#DC2626' :
+            kind === 'warn' ? '#D97706' :
+            kind === 'ok' ? '#10B981' :
+            'var(--text-muted)';
+    }
+
+    function runPreview() {
+        const raw = (textarea.value || '').trim();
+        if (!raw) {
+            pvContent.innerHTML = '<div class="bi-pv-empty"><i class="fas fa-file-code"></i>Paste JSON to see a live preview here.</div>';
+            showStatus('idle', '');
+            return;
+        }
+        if (raw === lastJSON) return;
+
+        if (inflight) return;
+        inflight = true;
+        showStatus('checking…', '');
+
+        fetch('{{ url_for("admin.bulk_preview") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRF-Token': CSRF
+            },
+            body: 'json_data=' + encodeURIComponent(raw)
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            inflight = false;
+            if (data.error) {
+                showStatus('error', 'err');
+                pvContent.innerHTML = '<div class="bi-pv-empty" style="color: #DC2626;"><i class="fas fa-exclamation-triangle" style="color: #DC2626;"></i>' + escapeHtml(data.error) + '</div>';
+                return;
+            }
+            lastJSON = raw;
+            showStatus('up to date', 'ok');
+            renderPreview(data);
+        })
+        .catch(function (err) {
+            inflight = false;
+            showStatus('network error', 'err');
+            pvContent.innerHTML = '<div class="bi-pv-empty" style="color: #DC2626;"><i class="fas fa-times-circle" style="color: #DC2626;"></i>Could not fetch preview.</div>';
+        });
+    }
+
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function renderPreview(data) {
+        const total = data.total || 0;
+        const linked = data.linked_count || 0;
+        const unlinked = total - linked;
+        const unknown = data.unknown_codes || [];
+
+        let html = '';
+
+        // Stats
+        html += '<div class="bi-pv-stats">';
+        html += '  <div class="bi-pv-stat"><div class="n">' + total + '</div><div class="l">Total</div></div>';
+        html += '  <div class="bi-pv-stat green"><div class="n">' + linked + '</div><div class="l">Linked</div></div>';
+        html += '  <div class="bi-pv-stat amber"><div class="n">' + unlinked + '</div><div class="l">Unlinked</div></div>';
+        html += '</div>';
+
+        // Subject / chapter
+        html += '<div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">';
+        html += '<div><strong>Subject:</strong> ' + escapeHtml(data.subject_code) + '</div>';
+        if (data.chapter) html += '<div><strong>Chapter:</strong> ' + escapeHtml(data.chapter) + '</div>';
+        if (data.default_pdf_code) {
+            const okDefault = data.default_valid;
+            html += '<div><strong>Batch PDF:</strong> <code>' + escapeHtml(data.default_pdf_code) + '</code> ' + (okDefault ? '✓' : '⚠ invalid format') + '</div>';
+        }
+        html += '</div>';
+
+        // Unknown codes warning
+        if (unknown.length) {
+            html += '<div class="bi-warnings">';
+            html += '<div class="w-title">⚠ PDF codes not found in library:</div>';
+            unknown.forEach(function (c) {
+                html += '<div class="w-item">• <code>' + escapeHtml(c) + '</code></div>';
+            });
+            html += '<div style="margin-top: 6px; font-size: 11px; opacity: 0.85;">You can still import — links resolve once the PDFs exist.</div>';
+            html += '</div>';
+        }
+
+        // Per-question list
+        html += '<div class="bi-pv-list">';
+        (data.preview || []).forEach(function (q) {
+            let cls = 'bi-pv-item';
+            if (q.orphan || q.invalid_code) cls += ' err';
+            else if (q.pdf_code && !q.pdf_exists) cls += ' warn';
+
+            let pdfChip = '';
+            if (q.pdf_code) {
+                if (q.pdf_exists) {
+                    pdfChip = '<span class="qc ok" title="' + escapeHtml(q.pdf_title) + '">📄 ' + escapeHtml(q.pdf_code) + (q.pdf_page ? ' · p.' + q.pdf_page : '') + '</span>';
+                } else if (q.invalid_code) {
+                    pdfChip = '<span class="qc warn">⚠ invalid format</span>';
+                } else {
+                    pdfChip = '<span class="qc warn">⚠ ' + escapeHtml(q.pdf_code) + (q.pdf_page ? ' · p.' + q.pdf_page : '') + ' not found</span>';
+                }
+            } else {
+                pdfChip = '<span class="qc none">no source</span>';
+            }
+
+            let warn = '';
+            if (q.orphan) warn = ' <span style="color: #DC2626;">(page dropped — no PDF)</span>';
+
+            html += '<div class="' + cls + '">';
+            html += '  <div><span class="qi">' + q.index + '.</span> <span class="qt">' + escapeHtml(q.question) + '</span>' + warn + '</div>';
+            html += '  <div class="qm">';
+            html += '    ' + pdfChip;
+            html += '    <span>' + '⭐'.repeat(q.difficulty) + '</span>';
+            html += '    <span>· ' + q.options_count + ' options</span>';
+            html += '  </div>';
+            html += '</div>';
+        });
+        html += '</div>';
+
+        if (data.truncated) {
+            html += '<div style="text-align: center; font-size: 11px; color: var(--text-muted); padding: 8px 0;">Showing first 30 of ' + total + '</div>';
+        }
+
+        pvContent.innerHTML = html;
+    }
+
+    // ── Textarea input → schedule preview ──
+    textarea.addEventListener('input', function () { schedulePreview(false); });
+    textarea.addEventListener('paste', function () { setTimeout(function () { schedulePreview(true); }, 20); });
+
+    // ── Clear ──
+    window.clearAll = function () {
+        if (!confirm('Clear all input and preview?')) return;
+        textarea.value = '';
+        lastJSON = '';
+        if (fileInput) fileInput.value = '';
+        fileNameEl.style.display = 'none';
+        runPreview();
+    };
+
+})();
 </script>
 {% endblock %}

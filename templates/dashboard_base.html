@@ -158,6 +158,15 @@
                     <span class="nav-badge">⚡</span>
                 </a>
 
+
+                <a href="{{ url_for('focus.index') }}"
+                   class="nav-item {% if request.endpoint.startswith('focus.') %}active{% endif %}"
+                   data-title="{{ _('nav.focus') }}" title="{{ _('nav.focus') }}">
+                    <span class="nav-icon"><i class="fas fa-bullseye"></i></span>
+                    <span class="nav-text">{{ _('nav.focus') }}</span>
+                    {% if not has_focus_access %}<span class="nav-badge">🔒</span>{% endif %}
+                </a>
+              
                 <a href="{{ url_for('pdfs.list_pdfs') }}"
                    class="nav-item {% if request.endpoint == 'pdfs.list_pdfs' or request.endpoint == 'pdfs.view_pdf' %}active{% endif %}"
                    data-title="{{ _('nav.pdfs') }}" title="{{ _('nav.pdfs') }}">

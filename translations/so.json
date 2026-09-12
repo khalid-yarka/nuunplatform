@@ -723,5 +723,42 @@
 "history.empty.take_quiz": "Qaado Imtixaan",
 "history.empty.join_live": "Ku Biir Imtixaan Toos ah",
 "history.empty.retry": "Isku day mar kale",
-"history.empty.clear_filters": "Nadiifi Shaandhaynta"
+"history.empty.clear_filters": "Nadiifi Shaandhaynta",
+  "nav.focus": "Diiradda",
+
+"focus.page_title": "Diiradda",
+"focus.title": "Diiraddaada",
+"focus.subtitle": "Halka aad ku socoto — ku saleysan wixii aad seegtay.",
+"focus.stat_sources": "Ilo",
+"focus.stat_analytics_level": "Heer",
+
+"focus.locked.title": "Diiraddu waa xidhan tahay",
+"focus.locked.desc": "Kor u qaad si aad u furto talooyin waxbarasho oo gaar ah iyo falanqayn waxqabad oo laga dhisay khaladaadkaaga.",
+"focus.locked.cta": "Kor u qaad si aad u furto",
+
+"focus.suggestions.title": "Ilo La Soo Jeediyay",
+"focus.suggestions.unlimited": "Xad la'aan",
+"focus.suggestions.limited": "Muujinaya {n} ugu sarreeya",
+"focus.suggestions.open_hint": "Ka fur bogga PDF-yada",
+"focus.suggestions.misses": "la seegay",
+"focus.suggestions.more_available": "{n} ilo oo dheeraad ah ayaa diyaar ah",
+"focus.suggestions.unlock_more": "Fur wax dheeraad ah",
+"focus.suggestions.empty_title": "Weli talooyin ma jiraan",
+"focus.suggestions.empty_desc": "Qaado imtixaanno oo su'aalo ku qaldan — ilaha khaladaadkaaga waxay halkan ka soo muuqan doonaan.",
+"focus.suggestions.empty_cta": "Qaado imtixaan",
+
+"focus.analytics.title": "Waxqabadkaaga",
+"focus.analytics.level": "Heer {n}",
+"focus.analytics.subjects": "Xoogga Maadooyinka",
+"focus.analytics.accuracy": "Saxnaanta Waqtiga",
+"focus.analytics.misses_by_subject": "Seegitaannada Maadooyinka",
+"focus.analytics.difficulty": "Kala-saarista Adkaanta",
+"focus.analytics.misses": "seegitaanno",
+
+"focus.tips.title": "Talooyin Diiradda",
+
+"admin.questions.pdf_code": "Koodhka PDF-ka Iliga",
+"admin.questions.pdf_code_hint": "Ikhtiyaari. Qaabka: XXXX-XXXX (tus. PHYS-CH5-A1B2)",
+"admin.questions.pdf_page": "Bogga Iliga",
+"admin.questions.pdf_page_hint": "Ikhtiyaari. Kaliya la isticmaalo haddii koodhka PDF-ka la dejiyay."
 }

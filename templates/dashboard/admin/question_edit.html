@@ -1,0 +1,335 @@
+{% extends "dashboard_base.html" %}
+
+{% block title %}{{ 'Edit Question' if question else 'New Question' }} - Admin{% endblock %}
+{% block page_title %}{{ 'Edit Question' if question else 'New Question' }}{% endblock %}
+
+{% block dashboard_content %}
+<style>
+    .qe-layout { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
+    @media (max-width: 900px) { .qe-layout { grid-template-columns: 1fr; } }
+
+    .qe-main, .qe-side {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 22px 24px; box-shadow: var(--shadow-sm);
+    }
+    .qe-section { margin-bottom: 22px; }
+    .qe-section:last-child { margin-bottom: 0; }
+    .qe-section h3 { font-size: 13px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+    .qe-section h3 i { color: var(--primary); }
+
+    .qe-field { margin-bottom: 14px; }
+    .qe-field label { display: block; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+    .qe-field .required { color: var(--primary); }
+    .qe-field .hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .qe-field input[type="text"], .qe-field input[type="number"], .qe-field select, .qe-field textarea {
+        width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+        font-size: 14px; background: var(--surface); color: var(--text); font-family: inherit; transition: all 0.2s ease;
+    }
+    .qe-field input:focus, .qe-field select:focus, .qe-field textarea:focus {
+        border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(255,49,56,0.08);
+    }
+    .qe-field textarea { resize: vertical; min-height: 70px; }
+
+    .qe-option-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .qe-option-row .correct-radio { width: 22px; height: 22px; accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
+    .qe-option-row .opt-letter { font-weight: 800; color: var(--text-secondary); width: 24px; text-align: center; flex-shrink: 0; }
+    .qe-option-row input[type="text"] { flex: 1; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; background: var(--surface); color: var(--text); font-family: inherit; }
+    .qe-option-row input[type="text"]:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(255,49,56,0.08); }
+    .qe-option-row.selected input[type="text"] { border-color: #10B981; background: #ECFDF5; }
+    .qe-option-row.selected .opt-letter { color: #10B981; }
+
+    .qe-pdf-preview { padding: 10px 12px; border-radius: var(--radius-sm); font-size: 13px; margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+    .qe-pdf-preview.loading { background: var(--background); color: var(--text-muted); }
+    .qe-pdf-preview.ok { background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; }
+    .qe-pdf-preview.warn { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
+    .qe-pdf-preview.err { background: #FEF2F2; color: #991B1B; border: 1px solid #FCA5A5; }
+    .qe-pdf-preview .source-tag { font-size: 10px; background: rgba(0,0,0,0.08); padding: 2px 6px; border-radius: 6px; text-transform: uppercase; font-weight: 700; }
+
+    .qe-actions { display: flex; gap: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); justify-content: space-between; align-items: center; flex-wrap: wrap; }
+</style>
+
+<div>
+
+    <div class="breadcrumb">
+        <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
+        <span class="separator">/</span>
+        <a href="{{ url_for('admin.admin_questions') }}">Manage Questions</a>
+        <span class="separator">/</span>
+        <span class="current">{{ 'Edit' if question else 'New' }}</span>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <div>
+            <h2 style="font-size: 22px; font-weight: 700; color: var(--text); margin: 0;">
+                {% if question %}
+                    <i class="fas fa-pen" style="color: var(--primary);"></i> Edit Question #{{ question.id }}
+                {% else %}
+                    <i class="fas fa-plus-circle" style="color: var(--primary);"></i> New Question
+                {% endif %}
+            </h2>
+            <p style="color: var(--text-secondary); font-size: 14px; margin: 4px 0 0;">
+                {% if question %}
+                    Last updated {{ (question.updated_at or question.created_at or '')[:16] }}
+                {% else %}
+                    Fill in the fields below to add a new question
+                {% endif %}
+            </p>
+        </div>
+        <a href="{{ url_for('admin.admin_questions') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to List
+        </a>
+    </div>
+
+    <form method="POST" id="questionForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <div class="qe-layout">
+
+            <!-- MAIN COLUMN -->
+            <div class="qe-main">
+
+                <div class="qe-section">
+                    <h3><i class="fas fa-info-circle"></i> Basics</h3>
+
+                    <div class="qe-field">
+                        <label>Subject <span class="required">*</span></label>
+                        <select name="subject_code" required>
+                            <option value="">— Select Subject —</option>
+                            {% for s in subjects %}
+                                <option value="{{ s.code }}"
+                                        {% if question and question.subject_code == s.code %}selected{% endif %}>
+                                    {{ s.icon or '📚' }} {{ s.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="qe-field">
+                        <label>Chapter</label>
+                        <input type="text" name="chapter"
+                               value="{{ question.chapter if question else '' }}"
+                               placeholder="e.g., Chapter 1, Unit 2">
+                    </div>
+
+                    <div class="qe-field">
+                        <label>Question Text <span class="required">*</span></label>
+                        <textarea name="question_text" rows="3" required
+                                  placeholder="Type the question here…">{{ question.question_text if question else '' }}</textarea>
+                    </div>
+                </div>
+
+                <div class="qe-section">
+                    <h3><i class="fas fa-list-ol"></i> Options & Correct Answer</h3>
+                    <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px;">
+                        Check the radio button next to the correct option. Options A–C are required; D–F are optional.
+                    </p>
+
+                    {% set opts = question.options if question and question.options else {} %}
+                    {% for letter in ['A', 'B', 'C', 'D', 'E', 'F'] %}
+                        <div class="qe-option-row {% if question and question.correct_answer == letter %}selected{% endif %}"
+                             data-letter="{{ letter }}"
+                             {% if letter in ['E', 'F'] %}data-optional="1"{% endif %}>
+                            <input type="radio" name="correct_answer" value="{{ letter }}"
+                                   class="correct-radio"
+                                   {% if question and question.correct_answer == letter %}checked{% endif %}
+                                   {% if letter in ['A', 'B', 'C'] %}required{% endif %}>
+                            <span class="opt-letter">{{ letter }}.</span>
+                            <input type="text" name="option_{{ letter|lower }}"
+                                   value="{{ opts.get(letter, '') }}"
+                                   placeholder="Option {{ letter }}{% if letter in ['A','B','C'] %} (required){% else %} (optional){% endif %}">
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <div class="qe-section">
+                    <h3><i class="fas fa-lightbulb"></i> Explanation</h3>
+                    <div class="qe-field">
+                        <textarea name="explanation" rows="3"
+                                  placeholder="Optional. Shown to students after they answer.">{{ question.explanation if question else '' }}</textarea>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- SIDEBAR COLUMN -->
+            <div class="qe-side">
+
+                <div class="qe-section">
+                    <h3><i class="fas fa-sliders-h"></i> Metadata</h3>
+
+                    <div class="qe-field">
+                        <label>Difficulty</label>
+                        <select name="difficulty">
+                            {% set d = question.difficulty if question else 1 %}
+                            <option value="1" {% if d == 1 %}selected{% endif %}>⭐ Easy</option>
+                            <option value="2" {% if d == 2 %}selected{% endif %}>⭐⭐ Easy</option>
+                            <option value="3" {% if d == 3 %}selected{% endif %}>⭐⭐⭐ Medium</option>
+                            <option value="4" {% if d == 4 %}selected{% endif %}>⭐⭐⭐⭐ Hard</option>
+                            <option value="5" {% if d == 5 %}selected{% endif %}>⭐⭐⭐⭐⭐ Expert</option>
+                        </select>
+                    </div>
+
+                    <div class="qe-field">
+                        <label>Tags</label>
+                        <input type="text" name="tags"
+                               value="{{ question.tags if question else '' }}"
+                               placeholder="comma, separated, tags">
+                    </div>
+
+                    <div class="qe-field">
+                        <label>Status</label>
+                        <select name="status">
+                            {% set st = question.status if question else 'active' %}
+                            <option value="active" {% if st == 'active' %}selected{% endif %}>● Active</option>
+                            <option value="archived" {% if st == 'archived' %}selected{% endif %}>● Archived</option>
+                            <option value="draft" {% if st == 'draft' %}selected{% endif %}>● Draft</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="qe-section">
+                    <h3><i class="fas fa-file-pdf"></i> Source PDF (optional)</h3>
+                    <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 10px;">
+                        Link this question to a study source. Format: <code>XXXX-XXXX</code>.
+                    </p>
+
+                    <div class="qe-field">
+                        <label>PDF Code</label>
+                        <input type="text" name="pdf_code" id="pdfCode"
+                               value="{{ question.pdf_code if question and question.pdf_code else '' }}"
+                               placeholder="e.g. A3B9-X7K2"
+                               style="text-transform: uppercase; font-family: monospace; letter-spacing: 1px;">
+                    </div>
+
+                    <div class="qe-field">
+                        <label>Page Number</label>
+                        <input type="number" name="pdf_page" id="pdfPage"
+                               value="{{ question.pdf_page if question and question.pdf_page else '' }}"
+                               min="1" placeholder="e.g., 42">
+                    </div>
+
+                    <div id="pdfPreview" style="display: none;"></div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="qe-actions">
+            <a href="{{ url_for('admin.admin_questions') }}" class="btn btn-secondary">
+                <i class="fas fa-times"></i> Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i> {{ 'Update Question' if question else 'Create Question' }}
+            </button>
+        </div>
+    </form>
+
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    const form = document.getElementById('questionForm');
+    const codeInput = document.getElementById('pdfCode');
+    const pageInput = document.getElementById('pdfPage');
+    const preview = document.getElementById('pdfPreview');
+    const CSRF = document.querySelector('input[name="csrf_token"]').value;
+
+    // ── Radio → highlight correct option ──
+    form.querySelectorAll('input[name="correct_answer"]').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+            form.querySelectorAll('.qe-option-row').forEach(function (row) {
+                row.classList.toggle('selected', row.dataset.letter === radio.value);
+            });
+        });
+    });
+
+    // ── PDF code: auto-format XXXX-XXXX ──
+    if (codeInput) {
+        codeInput.addEventListener('input', function () {
+            let v = this.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+            if (v.length > 4 && v[4] !== '-') {
+                v = v.slice(0, 4) + '-' + v.slice(4);
+            }
+            v = v.slice(0, 9);
+            this.value = v;
+            scheduleVerify();
+        });
+    }
+
+    // ── PDF code: verify on debounce ──
+    let verifyTimer = null;
+    function scheduleVerify() {
+        if (verifyTimer) clearTimeout(verifyTimer);
+        verifyTimer = setTimeout(verifyPdf, 450);
+    }
+
+    function verifyPdf() {
+        const code = (codeInput.value || '').trim();
+        if (!code) {
+            preview.style.display = 'none';
+            return;
+        }
+
+        if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) {
+            preview.className = 'qe-pdf-preview err';
+            preview.style.display = 'flex';
+            preview.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Invalid format. Expected XXXX-XXXX (letters &amp; digits).';
+            return;
+        }
+
+        preview.className = 'qe-pdf-preview loading';
+        preview.style.display = 'flex';
+        preview.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking…';
+
+        fetch('{{ url_for("admin.pdf_lookup") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': CSRF
+            },
+            body: JSON.stringify({ codes: [code] })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            const info = (data.results || {})[code];
+            if (info && info.exists) {
+                const srcTag = info.source === 'main' ? 'published' : 'bot';
+                const premium = info.is_premium ? ' 💎' : '';
+                preview.className = 'qe-pdf-preview ok';
+                preview.innerHTML =
+                    '<i class="fas fa-check-circle"></i> ' +
+                    '<span>' + (info.title || code) + premium + '</span>' +
+                    '<span class="source-tag">' + srcTag + '</span>';
+            } else {
+                preview.className = 'qe-pdf-preview warn';
+                preview.innerHTML =
+                    '<i class="fas fa-exclamation-triangle"></i> ' +
+                    'PDF not found in main or bot library. You can still save — the link will resolve once the PDF exists.';
+            }
+        })
+        .catch(function () {
+            preview.className = 'qe-pdf-preview err';
+            preview.innerHTML = '<i class="fas fa-times-circle"></i> Could not verify PDF.';
+        });
+    }
+
+    // ── Initial verify on load (edit mode) ──
+    if (codeInput && codeInput.value.trim()) {
+        verifyPdf();
+    }
+
+    // ── If page filled without code, disable and warn ──
+    if (pageInput) {
+        pageInput.addEventListener('input', function () {
+            if (this.value && !codeInput.value.trim()) {
+                this.style.borderColor = '#F59E0B';
+            } else {
+                this.style.borderColor = '';
+            }
+        });
+    }
+})();
+</script>
+{% endblock %}

@@ -3,21 +3,9 @@
 # Entitlement service — single source of truth for what each tier
 # is allowed to do.
 #
-# Design:
-#   - POLICY  → process-memory cache (loaded once per process)
-#   - TIER    → session (fallback to DB), auto-normalized
-#   - USAGE   → DB (user_usage table), only for quota features
-#
-# Read cost per request:
-#   - permission / level / content: 0 DB queries
-#   - quota check: 1 SELECT on user_usage
-#   - quota consume: 1 atomic INSERT/UPDATE
-#
-# Every admin write goes through:
-#   1. Validate
-#   2. Write to DB (in a transaction)
-#   3. Insert audit row
-#   4. Invalidate the cache
+# ── FIX (Focus): The policy cache no longer caches empty results,
+#    so running migrate_focus.py while the app is live is picked up
+#    on the next request without a restart.
 # ---------------------------------------------------------------
 
 import os
@@ -56,6 +44,8 @@ USER_STATE_FLAG = os.path.join(BASE_DIR, 'instance', 'user_state_changes.flag')
 
 _POLICY: Optional[Dict[str, Dict[str, Any]]] = None
 _POLICY_LOCK = threading.RLock()
+_POLICY_LAST_ATTEMPT: float = 0.0
+_POLICY_RETRY_INTERVAL: float = 5.0   # seconds between failed-load retries
 
 
 def _load_policy() -> Dict[str, Dict[str, Any]]:
@@ -109,21 +99,47 @@ def _load_policy() -> Dict[str, Dict[str, Any]]:
 
 
 def get_policy() -> Dict[str, Dict[str, Any]]:
-    """Return the process-memory policy cache, loading it on first access."""
-    global _POLICY
-    if _POLICY is None:
-        with _POLICY_LOCK:
-            if _POLICY is None:
-                _POLICY = _load_policy()
-                logger.info(f"Entitlement policy cache loaded ({len(_POLICY)} features)")
-    return _POLICY
+    """
+    Return the process-memory policy cache, loading it on first access.
+
+    ── FIX (Focus): If the load returns an empty dict (features table not
+       seeded yet, or migrations ran after process start), we do NOT cache
+       that empty result. Instead we retry at most every 5 seconds until
+       the DB actually has features.
+    """
+    global _POLICY, _POLICY_LAST_ATTEMPT
+
+    if _POLICY is not None:
+        return _POLICY
+
+    with _POLICY_LOCK:
+        if _POLICY is not None:
+            return _POLICY
+
+        now = time.time()
+        if now - _POLICY_LAST_ATTEMPT < _POLICY_RETRY_INTERVAL:
+            # Too soon to retry — return empty without caching
+            return {}
+
+        _POLICY_LAST_ATTEMPT = now
+        loaded = _load_policy()
+
+        if loaded:
+            _POLICY = loaded
+            logger.info(f"Entitlement policy cache loaded ({len(_POLICY)} features)")
+            return _POLICY
+
+        # Do NOT cache empty — allow retry after the interval
+        logger.warning("Entitlement policy load returned empty; will retry in 5s")
+        return {}
 
 
 def invalidate_policy_cache() -> None:
     """Drop the cache. Next get_policy() call rebuilds it from the DB."""
-    global _POLICY
+    global _POLICY, _POLICY_LAST_ATTEMPT
     with _POLICY_LOCK:
         _POLICY = None
+        _POLICY_LAST_ATTEMPT = 0.0
     logger.info("Entitlement policy cache invalidated")
 
 
@@ -131,8 +147,12 @@ def reload_policy_cache() -> None:
     """Force an immediate rebuild (used by admin writes)."""
     global _POLICY
     with _POLICY_LOCK:
-        _POLICY = _load_policy()
-    logger.info(f"Entitlement policy cache reloaded ({len(_POLICY)} features)")
+        loaded = _load_policy()
+        _POLICY = loaded if loaded else None
+    if _POLICY:
+        logger.info(f"Entitlement policy cache reloaded ({len(_POLICY)} features)")
+    else:
+        logger.warning("Entitlement policy reload returned empty")
 
 
 # ============================================
@@ -267,7 +287,6 @@ def check(user_id: Optional[int], feature_key: str) -> bool:
         limit = tp['limit_value']
         if limit is None:
             return True
-        # Need a concrete user_id to count usage
         uid = user_id
         if uid is None:
             try:
@@ -294,7 +313,15 @@ def get_level(user_id: Optional[int], feature_key: str) -> int:
 
 
 def get_limit(user_id: Optional[int], feature_key: str) -> Optional[int]:
-    """Return the numeric limit for a quota feature. None = unlimited."""
+    """
+    Return the numeric limit for a quota feature.
+
+    Semantics:
+        None  → unlimited
+        int   → hard cap (including 0 for disabled)
+    Unknown features return 0 (treated as disabled) so callers using
+    `> 0` checks behave safely.
+    """
     policy = get_policy().get(feature_key)
     if not policy or not policy.get('is_global_active'):
         return 0
@@ -500,25 +527,11 @@ def _validate_policy_update(policy_type: str, changes: Dict[str, Any]) -> Tuple[
 # ============================================
 
 def create_feature(admin_id: int, data: Dict[str, Any], reason: str = '') -> Tuple[bool, str]:
-    """
-    Create a new feature and its three per-tier policies.
-    data: {
-        feature_key, display_name, description, category, policy_type,
-        unit_hint, sort_order, notes,
-        policies: {
-            free:    {is_enabled, level_value?, limit_value?, limit_unit?},
-            premium: {...},
-            pro:     {...}
-        }
-    }
-    """
     ok, err = _validate_feature_data(data, require_key=True)
     if not ok:
         return False, err
 
     key = data['feature_key'].strip()
-
-    # Reject duplicates
     if get_policy().get(key):
         return False, f"Feature '{key}' already exists"
 
@@ -582,10 +595,6 @@ def create_feature(admin_id: int, data: Dict[str, Any], reason: str = '') -> Tup
 
 def update_feature(admin_id: int, feature_key: str, changes: Dict[str, Any],
                    reason: str = '') -> Tuple[bool, str]:
-    """
-    Update a feature's metadata (not its policies — use update_policy for those).
-    Allowed keys: display_name, description, category, unit_hint, sort_order, notes
-    """
     existing = get_policy().get(feature_key)
     if not existing:
         return False, f"Feature '{feature_key}' not found"
@@ -634,7 +643,6 @@ def update_feature(admin_id: int, feature_key: str, changes: Dict[str, Any],
 
 
 def delete_feature(admin_id: int, feature_key: str, reason: str = '') -> Tuple[bool, str]:
-    """Delete a feature and all its policies (CASCADE)."""
     existing = get_policy().get(feature_key)
     if not existing:
         return False, f"Feature '{feature_key}' not found"
@@ -661,10 +669,6 @@ def delete_feature(admin_id: int, feature_key: str, reason: str = '') -> Tuple[b
 
 def update_policy(admin_id: int, feature_key: str, tier: str,
                   changes: Dict[str, Any], reason: str = '') -> Tuple[bool, str]:
-    """
-    Update one tier's policy for a feature.
-    Allowed keys: is_enabled, level_value, limit_value, limit_unit
-    """
     if tier not in VALID_TIERS:
         return False, f"Invalid tier '{tier}'"
 
@@ -684,7 +688,6 @@ def update_policy(admin_id: int, feature_key: str, tier: str,
         return False, err
 
     try:
-        # Normalize is_enabled to int
         if 'is_enabled' in updates:
             updates['is_enabled'] = 1 if updates['is_enabled'] else 0
 
@@ -705,7 +708,6 @@ def update_policy(admin_id: int, feature_key: str, tier: str,
             params
         )
         if cursor.rowcount == 0:
-            # No policy row existed — insert one
             cursor.execute("""
                 INSERT INTO entitlement_policies
                     (feature_id, tier, is_enabled, level_value, limit_value, limit_unit)
@@ -732,7 +734,6 @@ def update_policy(admin_id: int, feature_key: str, tier: str,
 
 def toggle_feature_active(admin_id: int, feature_key: str, active: bool,
                           reason: str = '') -> Tuple[bool, str]:
-    """Enable or disable a feature globally across all tiers."""
     existing = get_policy().get(feature_key)
     if not existing:
         return False, f"Feature '{feature_key}' not found"
@@ -765,7 +766,6 @@ def toggle_feature_active(admin_id: int, feature_key: str, active: bool,
 # ============================================
 
 def export_to_json() -> Dict[str, Any]:
-    """Return the full policy state as a dict shaped like entitlements_seed.json."""
     features_out: List[Dict[str, Any]] = []
     for f in list_features():
         features_out.append({
@@ -785,14 +785,6 @@ def export_to_json() -> Dict[str, Any]:
 
 def import_from_json(admin_id: int, data: Dict[str, Any],
                      reason: str = '') -> Tuple[bool, str]:
-    """
-    Replace the entitlement configuration from a JSON payload.
-    Safety rules:
-      - Payload must be a superset of the existing feature keys.
-        Missing features abort the import to prevent accidental lockout.
-      - Runs inside a transaction.
-      - Logs an audit row with the full prior state.
-    """
     incoming_features = data.get('features') or []
     if not isinstance(incoming_features, list) or not incoming_features:
         return False, "JSON must contain a non-empty 'features' array"
@@ -807,7 +799,6 @@ def import_from_json(admin_id: int, data: Dict[str, Any],
             f"Delete them explicitly first."
         )
 
-    # Take a snapshot for the audit
     prior_state = export_to_json()
 
     try:
@@ -818,7 +809,6 @@ def import_from_json(admin_id: int, data: Dict[str, Any],
         for f in incoming_features:
             key = f['feature_key']
             if key in current_keys:
-                # Update metadata
                 cursor.execute("""
                     UPDATE entitlement_features
                     SET display_name = ?, description = ?, category = ?,
