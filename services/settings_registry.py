@@ -1,6 +1,20 @@
 # services/settings_registry.py
 """
 Central registry for all user-configurable settings.
+
+Each entry describes:
+    type          — 'enum' | 'integer' | 'boolean' | 'string'
+    default       — fallback value
+    allowed_values — for enum / integer / string
+    category      — grouping (for UI)
+    label         — human label
+    description   — short help text
+    tier_required — legacy gate: 'premium' | 'pro' | None
+    feature_key   — entitlement gate (preferred). When set, the
+                    setting is controlled by the entitlement system
+                    and can be re-configured by admins at any time.
+    live          — whether applying takes effect without a full reload
+    sensitive     — whether the setting is privacy-sensitive
 """
 
 from typing import Dict, Any, Optional, List
@@ -78,7 +92,10 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "requires_confirmation": False,
         "sensitive": False,
     },
-    # Language (gated by language_somali feature — Phase 3+)
+    # Language: gated by the entitlement feature `language_somali`.
+    # Admins control access by editing the feature's per-tier policy
+    # in the entitlement table — no code change required to allow/deny
+    # Somali for any tier.
     "appearance.language": {
         "type": "enum",
         "default": "en",
@@ -86,7 +103,7 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "category": "appearance",
         "label": "Language",
         "description": "Choose the display language.",
-        "tier_required": "pro",
+        "feature_key": "language_somali",
         "live": True,
         "requires_confirmation": False,
         "sensitive": False,

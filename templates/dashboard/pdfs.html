@@ -1,8 +1,8 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}PDFs - Student Platform{% endblock %}
+{% block title %}{{ _('pdfs.page_title') }} - NuunPlatform{% endblock %}
 
-{% block page_title %}PDFs{% endblock %}
+{% block page_title %}{{ _('pdfs.page_title') }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
@@ -170,22 +170,22 @@
 {% block dashboard_content %}
 <div style="max-width: 100%;">
     <div class="breadcrumb">
-        <a href="{{ url_for('dashboard.home') if is_logged_in else '#' }}">Dashboard</a>
+        <a href="{{ url_for('dashboard.home') if is_logged_in else '#' }}">{{ _('nav.dashboard') }}</a>
         <span class="separator">/</span>
-        <span class="current">PDFs</span>
+        <span class="current">{{ _('nav.pdfs') }}</span>
     </div>
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
         <div>
             <h2 style="font-size: 20px; font-weight: 700; color: var(--text);">
-                <i class="fas fa-file-pdf" style="color: #E74C3C;"></i> Study Materials
+                <i class="fas fa-file-pdf" style="color: #E74C3C;"></i> {{ _('pdfs.title') }}
             </h2>
             <p style="color: var(--text-secondary); font-size: 14px;">
                 {% if is_logged_in %}
-                    Browse and view educational PDFs
+                    {{ _('pdfs.subtitle_logged_in') }}
                 {% else %}
-                    <a href="{{ url_for('auth.login', next=request.url) }}" style="color: var(--primary); font-weight: 600;">Login</a> or
-                    <a href="{{ url_for('auth.register', next=request.url) }}" style="color: var(--primary); font-weight: 600;">Register</a> to access features
+                    <a href="{{ url_for('auth.login', next=request.url) }}" style="color: var(--primary); font-weight: 600;">{{ _('pdfs.login_link') }}</a> {{ _('pdfs.or') }}
+                    <a href="{{ url_for('auth.register', next=request.url) }}" style="color: var(--primary); font-weight: 600;">{{ _('pdfs.register_link') }}</a> {{ _('pdfs.subtitle_logged_out_after') }}
                 {% endif %}
             </p>
         </div>
@@ -194,9 +194,9 @@
                 <span class="pdf-download-quota">
                     <i class="fas fa-download"></i>
                     {% if remaining_downloads == 999 %}
-                        Unlimited downloads
+                        {{ _('pdfs.unlimited_downloads') }}
                     {% else %}
-                        {{ remaining_downloads }} downloads remaining today
+                        {{ _('pdfs.downloads_remaining', n=remaining_downloads) }}
                     {% endif %}
                 </span>
             {% endif %}
@@ -210,26 +210,26 @@
                  data-tier-locked data-feature="resource_search" data-required-tier="premium">
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                     <div style="flex: 1; min-width: 150px; position: relative;">
-                        <input type="text" placeholder="🔒 Search locked – Login/Upgrade to unlock" disabled
+                        <input type="text" placeholder="{{ _('pdfs.search_locked_placeholder') }}" disabled
                                style="width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; background: var(--surface); color: var(--text-muted);">
                     </div>
-                    <button class="btn btn-secondary" disabled style="opacity:0.5;">Search</button>
+                    <button class="btn btn-secondary" disabled style="opacity:0.5;">{{ _('pdfs.search_btn') }}</button>
                 </div>
                 <div class="lock-overlay">
-                    <span>🔒 {{ 'Login to search' if not is_logged_in else 'Upgrade to Premium' }}</span>
+                    <span>🔒 {% if not is_logged_in %}{{ _('pdfs.lock_login') }}{% else %}{{ _('pdfs.lock_upgrade_premium') }}{% endif %}</span>
                 </div>
             </div>
         {% else %}
             <form method="GET" id="searchForm" style="flex: 1; min-width: 200px;">
                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                     <div style="flex: 1; min-width: 150px;">
-                        <input type="text" name="search" id="searchInput" placeholder="🔍 Search PDFs..."
+                        <input type="text" name="search" id="searchInput" placeholder="{{ _('pdfs.search_placeholder') }}"
                                value="{{ search_query }}"
                                style="width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; background: var(--surface);">
                     </div>
                     {% if search_level >= 1 %}
                         <select name="subject" id="subjectFilter" style="padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; background: var(--surface); min-width: 120px;">
-                            <option value="">All Subjects</option>
+                            <option value="">{{ _('pdfs.all_subjects') }}</option>
                             {% for sub in subjects %}
                                 <option value="{{ sub }}" {% if subject_filter == sub %}selected{% endif %}>{{ sub }}</option>
                             {% endfor %}
@@ -237,24 +237,24 @@
                     {% endif %}
                     {% if search_level >= 2 %}
                         <select name="class" id="classFilter" style="padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; background: var(--surface); min-width: 120px;">
-                            <option value="">All Classes</option>
+                            <option value="">{{ _('pdfs.all_classes') }}</option>
                             {% for cls in classes %}
                                 <option value="{{ cls }}" {% if class_filter == cls %}selected{% endif %}>{{ cls }}</option>
                             {% endfor %}
                         </select>
                         <select name="curriculum" id="curriculumFilter" style="padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; background: var(--surface); min-width: 120px;">
-                            <option value="">All Curricula</option>
+                            <option value="">{{ _('pdfs.all_curricula') }}</option>
                             {% for cur in curricula %}
                                 <option value="{{ cur }}" {% if curriculum_filter == cur %}selected{% endif %}>{{ cur }}</option>
                             {% endfor %}
                         </select>
                     {% endif %}
                     <button type="submit" style="padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: var(--transition);">
-                        <i class="fas fa-search"></i> Search
+                        <i class="fas fa-search"></i> {{ _('pdfs.search_btn') }}
                     </button>
                     {% if search_query or subject_filter or class_filter or curriculum_filter %}
                         <a href="{{ url_for('pdfs.list_pdfs') }}" style="padding: 10px 16px; background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-sm); text-decoration: none; color: var(--text-secondary); font-weight: 500; transition: var(--transition);">
-                            <i class="fas fa-times"></i> Clear
+                            <i class="fas fa-times"></i> {{ _('pdfs.clear_btn') }}
                         </a>
                     {% endif %}
                 </div>
@@ -270,17 +270,17 @@
                      style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow-sm); transition: var(--transition); display: flex; flex-direction: column; position: relative;">
 
                     {% if pdf.is_premium %}
-                        <span class="premium-badge">💎 Premium</span>
+                        <span class="premium-badge">💎 {{ _('pdfs.premium_badge') }}</span>
                         {% if not can_access_premium %}
                             <div class="premium-lock" data-tier-locked data-feature="premium_resources" data-required-tier="premium">
-                                <span><i class="fas fa-lock"></i> {{ 'Login to access' if not is_logged_in else 'Upgrade to Access' }}</span>
+                                <span><i class="fas fa-lock"></i> {% if not is_logged_in %}{{ _('pdfs.premium_lock_login') }}{% else %}{{ _('pdfs.premium_lock_upgrade') }}{% endif %}</span>
                             </div>
                         {% endif %}
                     {% endif %}
 
                     {% if not is_logged_in %}
                     <div class="login-prompt-overlay">
-                        <span><i class="fas fa-lock"></i> <a href="{{ url_for('auth.login', next=request.url) }}" style="color: var(--primary); text-decoration: none;">Login</a> to access</span>
+                        <span><i class="fas fa-lock"></i> <a href="{{ url_for('auth.login', next=request.url) }}" style="color: var(--primary); text-decoration: none;">{{ _('pdfs.login_link') }}</a> {{ _('pdfs.login_to_access') }}</span>
                     </div>
                     {% endif %}
 
@@ -310,7 +310,7 @@
 
                     <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 14px;">
                         <i class="fas fa-eye" style="color: var(--text-muted); font-size: 13px;"></i>
-                        <span style="color: var(--text-secondary); font-size: 13px;">{{ pdf.view_count or 0 }} views</span>
+                        <span style="color: var(--text-secondary); font-size: 13px;">{{ _('pdfs.views_count', n=pdf.view_count or 0) }}</span>
                     </div>
 
                     <div class="pdf-actions-row">
@@ -322,8 +322,8 @@
                         {% if has_url %}
                             {% if tier == 'pro' and logged_in %}
                                 <a href="{{ url_for('pdfs.view_pdf', pdf_id=pdf.id) }}"
-                                   class="btn btn-premium btn-sm" title="Read online">
-                                    <span class="premium-star">✦</span> Read
+                                   class="btn btn-premium btn-sm" title="{{ _('pdfs.read_online_title') }}">
+                                    <span class="premium-star">✦</span> {{ _('pdfs.read_btn') }}
                                 </a>
                             {% else %}
                                 <button class="btn btn-secondary btn-sm btn-tier-locked"
@@ -332,7 +332,7 @@
                                         {% else %}
                                             onclick="window.location.href='{{ url_for('auth.login', next=request.url) }}'"
                                         {% endif %}>
-                                    <i class="fas fa-lock lock-icon"></i> Read
+                                    <i class="fas fa-lock lock-icon"></i> {{ _('pdfs.read_btn') }}
                                 </button>
                             {% endif %}
                         {% endif %}
@@ -341,8 +341,8 @@
                         {% if has_url %}
                             {% if tier == 'pro' and logged_in %}
                                 <a href="{{ url_for('pdfs.download_pdf', pdf_id=pdf.id) }}"
-                                   class="btn btn-premium btn-sm" title="Download directly">
-                                    <span class="premium-star">✦</span> Download
+                                   class="btn btn-premium btn-sm" title="{{ _('pdfs.download_direct_title') }}">
+                                    <span class="premium-star">✦</span> {{ _('pdfs.download_btn') }}
                                 </a>
                             {% else %}
                                 <button class="btn btn-secondary btn-sm btn-tier-locked"
@@ -351,7 +351,7 @@
                                         {% else %}
                                             onclick="window.location.href='{{ url_for('auth.login', next=request.url) }}'"
                                         {% endif %}>
-                                    <i class="fas fa-lock lock-icon"></i> Download
+                                    <i class="fas fa-lock lock-icon"></i> {{ _('pdfs.download_btn') }}
                                 </button>
                             {% endif %}
                         {% endif %}
@@ -360,9 +360,9 @@
                         {% if tier in ['premium', 'pro'] and logged_in %}
                             <a href="{{ url_for('pdfs.preview_telegram', code=pdf.code) }}"
                                class="btn {% if tier == 'pro' %}btn-premium{% else %}btn-info{% endif %} btn-sm"
-                               title="Preview via Telegram" target="_blank">
+                               title="{{ _('pdfs.preview_telegram_title') }}" target="_blank">
                                 {% if tier == 'pro' %}<span class="premium-star">✦</span>{% endif %}
-                                Preview
+                                {{ _('pdfs.preview_btn') }}
                             </a>
                         {% else %}
                             <button class="btn btn-secondary btn-sm btn-tier-locked"
@@ -371,7 +371,7 @@
                                     {% else %}
                                         onclick="window.location.href='{{ url_for('auth.login', next=request.url) }}'"
                                     {% endif %}>
-                                <i class="fas fa-lock lock-icon"></i> Preview
+                                <i class="fas fa-lock lock-icon"></i> {{ _('pdfs.preview_btn') }}
                             </button>
                         {% endif %}
 
@@ -380,9 +380,9 @@
                         <a href="https://t.me/{{ bot_username }}?start={{ pdf.code }}"
                            target="_blank"
                            class="btn {% if tier == 'pro' and logged_in %}btn-premium{% else %}btn-telegram{% endif %} btn-sm"
-                           title="Get via Telegram">
+                           title="{{ _('pdfs.get_telegram_title') }}">
                             {% if tier == 'pro' and logged_in %}<span class="premium-star">✦</span>{% endif %}
-                            <i class="fab fa-telegram-plane"></i> Get PDF
+                            <i class="fab fa-telegram-plane"></i> {{ _('pdfs.get_pdf_btn') }}
                         </a>
                     </div>
                 </div>
@@ -391,8 +391,8 @@
     {% else %}
         <div style="text-align: center; padding: 60px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);">
             <div style="font-size: 64px; opacity: 0.3; margin-bottom: 16px;">📄</div>
-            <h3 style="font-size: 18px; font-weight: 600; color: var(--text);">No PDFs available</h3>
-            <p style="color: var(--text-secondary); font-size: 14px; margin-top: 4px;">Study materials will be added soon!</p>
+            <h3 style="font-size: 18px; font-weight: 600; color: var(--text);">{{ _('pdfs.empty_title') }}</h3>
+            <p style="color: var(--text-secondary); font-size: 14px; margin-top: 4px;">{{ _('pdfs.empty_desc') }}</p>
         </div>
     {% endif %}
 </div>

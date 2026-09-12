@@ -101,6 +101,12 @@ application now flows through `services/entitlement_service.py`. The old
   These are the ONLY remaining consumers. Phase 6 will inline
   `normalize_tier` into a single helper and delete the file.
 
+
+- `achievements_bp` is registered but `dashboard/achievements.html` does
+  not exist. `/achievements/` returns 500. Deferred to Phase 6.
+
+
+  
 ### Deploy order (Phase 2)
 
 ```bash

@@ -7,23 +7,23 @@
             <div class="card-body">
                 <div class="title">
                     <span class="subject-icon">{{ quiz.subject_icon or '📚' }}</span>
-                    {{ quiz.title or 'Untitled Quiz' }}
-                    <span class="status-tag {{ quiz.status }}">{{ quiz.status|upper }}</span>
+                    {{ quiz.title or _('live_quiz.lobby.untitled_quiz') }}
+                    <span class="status-tag {{ quiz.status }}">{{ _('live_quiz.status.' ~ quiz.status) }}</span>
                     {% if not quiz.is_public %}
-                        <span class="status-tag" style="background:#FEF3C7;color:#92400E;">🔒 PRIVATE</span>
+                        <span class="status-tag" style="background:#FEF3C7;color:#92400E;">🔒 {{ _('live_quiz.lobby.private_tag') }}</span>
                     {% endif %}
                     {% if quiz.is_creator %}
-                        <span class="badge-creator">You (Creator)</span>
+                        <span class="badge-creator">{{ _('live_quiz.lobby.you_creator') }}</span>
                     {% elif quiz.is_participant %}
-                        <span class="badge-you">You</span>
+                        <span class="badge-you">{{ _('live_quiz.lobby.you') }}</span>
                     {% endif %}
                 </div>
                 <div class="meta">
-                    <span><i class="fas fa-book"></i> {{ quiz.subject_name or 'Unknown Subject' }}</span>
-                    <span><i class="fas fa-question-circle"></i> {{ quiz.question_count }} questions</span>
-                    <span><i class="fas fa-clock"></i> {{ quiz.time_per_question }}s each</span>
+                    <span><i class="fas fa-book"></i> {{ quiz.subject_name or _('live_quiz.lobby.unknown_subject') }}</span>
+                    <span><i class="fas fa-question-circle"></i> {{ _('live_quiz.lobby.questions_count', n=quiz.question_count) }}</span>
+                    <span><i class="fas fa-clock"></i> {{ _('live_quiz.lobby.seconds_each', n=quiz.time_per_question) }}</span>
                     {% if quiz.status == 'finished' %}
-                        <span><i class="fas fa-flag-checkered"></i> Finished</span>
+                        <span><i class="fas fa-flag-checkered"></i> {{ _('live_quiz.status.finished') }}</span>
                     {% endif %}
                     <span class="time-ago">
                         <i class="fas fa-calendar-alt"></i>
@@ -35,7 +35,7 @@
                     </span>
                 </div>
                 <div class="creator">
-                    👤 By <strong>{{ quiz.creator_first_name or 'Unknown' }} {{ quiz.creator_last_name or '' }}</strong>
+                    👤 {{ _('live_quiz.lobby.by') }} <strong>{{ quiz.creator_first_name or _('live_quiz.lobby.unknown_creator') }} {{ quiz.creator_last_name or '' }}</strong>
                 </div>
             </div>
 
@@ -47,31 +47,31 @@
                 {% if quiz.status == 'scheduled' or quiz.status == 'waiting' %}
                     {% if quiz.is_participant %}
                         <a href="{{ url_for('live_quiz.waiting_room', quiz_id=quiz.id) }}" class="btn-sm success">
-                            <i class="fas fa-door-open"></i> Waiting Room
+                            <i class="fas fa-door-open"></i> {{ _('live_quiz.lobby.waiting_room_btn') }}
                         </a>
                     {% else %}
                         <button class="btn-sm success" onclick="joinQuiz('{{ quiz.id }}')">
-                            <i class="fas fa-arrow-right"></i> Join
+                            <i class="fas fa-arrow-right"></i> {{ _('live_quiz.lobby.join_btn') }}
                         </button>
                     {% endif %}
                 {% elif quiz.status == 'active' %}
                     {% if quiz.is_participant %}
                         <a href="{{ url_for('live_quiz.play', quiz_id=quiz.id) }}" class="btn-sm primary">
-                            <i class="fas fa-play"></i> Continue
+                            <i class="fas fa-play"></i> {{ _('live_quiz.lobby.continue_btn') }}
                         </a>
                     {% else %}
                         <span class="btn-sm secondary" style="opacity:0.7; cursor:default;">
-                            <i class="fas fa-clock"></i> In Progress
+                            <i class="fas fa-clock"></i> {{ _('live_quiz.lobby.in_progress_btn') }}
                         </span>
                     {% endif %}
                 {% else %}
                     <a href="{{ url_for('live_quiz.results', quiz_id=quiz.id) }}" class="btn-sm primary">
-                        <i class="fas fa-chart-bar"></i> Results
+                        <i class="fas fa-chart-bar"></i> {{ _('live_quiz.lobby.results_btn') }}
                     </a>
                 {% endif %}
 
                 {% if (quiz.is_creator or session.is_admin) and quiz.status != 'active' %}
-                    <button class="btn-sm danger" onclick="deleteQuiz('{{ quiz.id }}', '{{ quiz.title or 'Untitled Quiz' }}')">
+                    <button class="btn-sm danger" onclick="deleteQuiz('{{ quiz.id }}', '{{ quiz.title or _("live_quiz.lobby.untitled_quiz") }}')">
                         <i class="fas fa-trash"></i>
                     </button>
                 {% endif %}
@@ -86,24 +86,24 @@
         {% if end_item > total %}{% set end_item = total %}{% endif %}
         <div class="lobby-pagination-wrap">
             <div class="lobby-pagination-info">
-                Showing <strong>{{ start_item }}–{{ end_item }}</strong> of <strong>{{ total }}</strong> quizzes
+                {{ _('live_quiz.lobby.pagination_before') }} <strong>{{ start_item }}–{{ end_item }}</strong> {{ _('live_quiz.lobby.pagination_of') }} <strong>{{ total }}</strong> {{ _('live_quiz.lobby.pagination_quizzes') }}
             </div>
             <div class="lobby-pagination">
                 <button type="button"
                         class="lobby-page-btn {% if page == 1 %}disabled{% endif %}"
                         data-page="{{ page - 1 }}"
                         {% if page == 1 %}disabled{% endif %}
-                        aria-label="Previous page">
+                        aria-label="{{ _('common.previous') }}">
                     <i class="fas fa-chevron-left"></i>
                 </button>
                 <span class="lobby-page-status">
-                    Page <strong>{{ page }}</strong> / {{ total_pages }}
+                    {{ _('live_quiz.lobby.pagination_page') }} <strong>{{ page }}</strong> / {{ total_pages }}
                 </span>
                 <button type="button"
                         class="lobby-page-btn {% if page == total_pages %}disabled{% endif %}"
                         data-page="{{ page + 1 }}"
                         {% if page == total_pages %}disabled{% endif %}
-                        aria-label="Next page">
+                        aria-label="{{ _('common.next') }}">
                     <i class="fas fa-chevron-right"></i>
                 </button>
             </div>
@@ -114,19 +114,19 @@
     <!-- Empty State -->
     <div class="lobby-empty">
         <div class="icon">🎯</div>
-        <h3>No quizzes found</h3>
+        <h3>{{ _('live_quiz.lobby.empty_title') }}</h3>
         <p>
             {% if search or status_filter or subject_filter %}
-                Try adjusting your filters or search terms.
+                {{ _('live_quiz.lobby.empty_filtered') }}
             {% else %}
-                There are no public quizzes available right now. Be the first to create one!
+                {{ _('live_quiz.lobby.empty_default') }}
             {% endif %}
         </p>
         <div class="actions">
             <a href="{{ url_for('live_quiz.create') }}" class="btn btn-primary">
-                <i class="fas fa-plus"></i> Create a Quiz
+                <i class="fas fa-plus"></i> {{ _('live_quiz.lobby.create_a_quiz') }}
             </a>
-            <a href="{{ url_for('live_quiz.lobby') }}" class="btn btn-secondary">Clear Filters</a>
+            <a href="{{ url_for('live_quiz.lobby') }}" class="btn btn-secondary">{{ _('live_quiz.lobby.clear_filters') }}</a>
         </div>
     </div>
 {% endif %}

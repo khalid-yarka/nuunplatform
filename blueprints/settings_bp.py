@@ -4,6 +4,7 @@ from functools import wraps
 from services.settings_service import SettingsService
 from services.settings_registry import SETTINGS_REGISTRY, get_all_categories
 from services.tier_service import get_current_user_tier, can_create_live_quiz, is_tier_at_least
+from services import entitlement_service
 from utils import validate_csrf
 from db import get_user_subject_list
 import logging
@@ -11,6 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 settings_bp = Blueprint('settings', __name__, url_prefix='/settings')
+
 
 def login_required(f):
     @wraps(f)
@@ -20,29 +22,50 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
+
 @settings_bp.route('/')
 @login_required
 def index():
     user_id = session['user_id']
     SettingsService.ensure_migrated(user_id)
+
     tier = get_current_user_tier()
     settings = SettingsService.get_all(user_id)
     categories = get_all_categories()
     can_create = can_create_live_quiz()
     user_subjects = get_user_subject_list(user_id)
 
+    # Language is gated by the entitlement feature `language_somali`.
+    # Resolved here so the template can disable the selector and show
+    # the upgrade hint for users who don't currently have access.
+    language_allowed = entitlement_service.check(user_id, "language_somali")
+
+    # Build the "Plan & Features" grid. Entries with `feature_key` are
+    # resolved through the entitlement service; entries with only
+    # `tier_required` use the legacy comparison.
     tier_features = []
     for key, definition in SETTINGS_REGISTRY.items():
+        feature_key = definition.get('feature_key')
         tier_required = definition.get('tier_required')
-        available = tier_required is None or is_tier_at_least(tier, tier_required)
+
+        if feature_key:
+            available = entitlement_service.check(user_id, feature_key)
+            required_label = None  # entitlement-based, no fixed tier label
+        elif tier_required is None:
+            available = True
+            required_label = None
+        else:
+            available = is_tier_at_least(tier, tier_required)
+            required_label = tier_required
+
         tier_features.append({
             'key': key,
             'label': definition.get('label', key),
             'description': definition.get('description', ''),
             'icon': definition.get('icon', '⚙️'),
             'available': available,
-            'tier_required': tier_required,
-            'category': definition.get('category', '')
+            'tier_required': required_label,
+            'category': definition.get('category', ''),
         })
 
     return render_template('settings/index.html',
@@ -51,7 +74,9 @@ def index():
                            categories=categories,
                            can_create_live=can_create,
                            user_subjects=user_subjects,
-                           tier_features=tier_features)
+                           tier_features=tier_features,
+                           language_allowed=language_allowed)
+
 
 @settings_bp.route('/api', methods=['GET'])
 @login_required
@@ -60,28 +85,30 @@ def api_get():
     category = request.args.get('category')
     settings = SettingsService.get_all(user_id)
     if category:
-        category_keys = {k for k, v in SETTINGS_REGISTRY.items() if v.get('category') == category}
+        category_keys = {k for k, v in SETTINGS_REGISTRY.items()
+                         if v.get('category') == category}
         settings = {k: v for k, v in settings.items() if k in category_keys}
     return jsonify(settings)
+
 
 @settings_bp.route('/api', methods=['PATCH'])
 @login_required
 def api_patch():
     logger.info(f"Settings PATCH request from user {session['user_id']}")
-    
+
     if not validate_csrf():
         logger.warning(f"CSRF validation failed for user {session['user_id']}")
         return jsonify({'error': 'CSRF validation failed. Please refresh the page and try again.'}), 403
-    
+
     user_id = session['user_id']
     data = request.get_json()
-    
+
     if not data:
         logger.warning(f"Empty data from user {user_id}")
         return jsonify({'error': 'No data provided'}), 400
-    
+
     logger.info(f"User {user_id} updating settings: {data}")
-    
+
     try:
         updated = SettingsService.update(user_id, data)
         logger.info(f"Settings updated successfully for user {user_id}")
@@ -98,6 +125,7 @@ def api_patch():
     except Exception as e:
         logger.error(f"Unexpected error for user {user_id}: {e}", exc_info=True)
         return jsonify({'error': 'Internal server error'}), 500
+
 
 @settings_bp.route('/api/reset', methods=['POST'])
 @login_required
@@ -119,6 +147,7 @@ def api_reset():
     except Exception as e:
         logger.error(f"Unexpected error in settings reset: {e}", exc_info=True)
         return jsonify({'error': 'Internal server error'}), 500
+
 
 @settings_bp.route('/api/password', methods=['POST'])
 @login_required
@@ -146,6 +175,7 @@ def api_password():
         commit=True
     )
     return jsonify({'success': True, 'message': 'Password changed. Please log in again.'})
+
 
 # ============================================
 # TEST ENDPOINT (for debugging)

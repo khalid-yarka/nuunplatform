@@ -86,6 +86,9 @@ from activity_logger import (
     log_backup_event, init_activity_logger,
 )
 
+# PHASE 3: i18n runtime
+from services.i18n_service import register_jinja as register_i18n
+
 # ============================================
 # BASE DIRECTORY
 # ============================================
@@ -326,6 +329,9 @@ app.config['SESSION_COOKIE_SAMESITE'] = Config.SESSION_COOKIE_SAMESITE
 
 app.jinja_env.filters['time_ago'] = time_ago
 app.jinja_env.globals['normalize_tier'] = normalize_tier
+
+# PHASE 3: i18n — expose t() and current_language() to every template
+register_i18n(app)
 
 
 # ============================================

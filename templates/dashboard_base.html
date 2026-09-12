@@ -90,9 +90,9 @@
             <button type="button"
                     class="sidebar-collapse-btn"
                     id="sidebarCollapseBtn"
-                    aria-label="Collapse sidebar"
+                    aria-label="{{ _('sidebar.collapse') }}"
                     aria-expanded="true"
-                    title="Toggle sidebar">
+                    title="{{ _('sidebar.toggle') }}">
                 <i class="fas fa-angles-left"></i>
             </button>
         </div>
@@ -100,24 +100,24 @@
         <!-- ---------- User Info ---------- -->
         <a href="{{ url_for('dashboard.profile') }}"
            class="sidebar-user"
-           title="View profile">
+           title="{{ _('sidebar.view_profile') }}">
             <div class="avatar avatar-primary">
                 {{ session.user_name[0] if session.user_name else 'U' }}
                 {% set current_tier = normalize_tier(session.tier) %}
                 {% if current_tier == 'pro' %}
-                    <span class="tier-badge tier-pro" title="Pro"><i class="fas fa-crown"></i></span>
+                    <span class="tier-badge tier-pro" title="{{ _('sidebar.tier.pro') }}"><i class="fas fa-crown"></i></span>
                 {% elif current_tier == 'premium' %}
-                    <span class="tier-badge tier-premium" title="Premium"><i class="fas fa-key"></i></span>
+                    <span class="tier-badge tier-premium" title="{{ _('sidebar.tier.premium') }}"><i class="fas fa-key"></i></span>
                 {% endif %}
             </div>
             <div class="user-details">
-                <span class="user-name">{{ session.user_name or 'User' }}</span>
+                <span class="user-name">{{ session.user_name or _('common.user') }}</span>
                 {% set show_public_id = settings.get('privacy.show_public_id', True) %}
                 {% set has_public_id = session.public_id and session.public_id != '----' %}
                 {% if not has_public_id %}
-                    <span class="user-id" style="background:#FEF3C7;color:#92400E;">⏳ PENDING</span>
+                    <span class="user-id" style="background:#FEF3C7;color:#92400E;">⏳ {{ _('sidebar.id.pending') }}</span>
                 {% elif not show_public_id %}
-                    <span class="user-id" style="background:var(--background);color:var(--text-muted);">🔒 Private</span>
+                    <span class="user-id" style="background:var(--background);color:var(--text-muted);">🔒 {{ _('sidebar.id.private') }}</span>
                 {% else %}
                     <span class="user-id">#{{ session.public_id }}</span>
                 {% endif %}
@@ -129,105 +129,105 @@
 
             <!-- ============ MAIN ============ -->
             <div class="nav-section">
-                <div class="nav-label">Main</div>
+                <div class="nav-label">{{ _('nav.section.main') }}</div>
 
                 <a href="{{ url_for('dashboard.home') }}"
                    class="nav-item {% if request.endpoint == 'dashboard.home' %}active{% endif %}"
-                   data-title="Dashboard" title="Dashboard">
+                   data-title="{{ _('nav.dashboard') }}" title="{{ _('nav.dashboard') }}">
                     <span class="nav-icon"><i class="fas fa-home"></i></span>
-                    <span class="nav-text">Dashboard</span>
+                    <span class="nav-text">{{ _('nav.dashboard') }}</span>
                 </a>
             </div>
 
             <!-- ============ LEARNING ============ -->
             <div class="nav-section">
-                <div class="nav-label">Learning</div>
+                <div class="nav-label">{{ _('nav.section.learning') }}</div>
 
                 <a href="{{ url_for('quiz.index') }}"
                    class="nav-item {% if request.endpoint.startswith('quiz.') and request.endpoint != 'quiz.leaderboard' %}active{% endif %}"
-                   data-title="Quizzes" title="Quizzes">
+                   data-title="{{ _('nav.quizzes') }}" title="{{ _('nav.quizzes') }}">
                     <span class="nav-icon"><i class="fas fa-pencil-alt"></i></span>
-                    <span class="nav-text">Quizzes</span>
+                    <span class="nav-text">{{ _('nav.quizzes') }}</span>
                 </a>
 
                 <a href="{{ url_for('live_quiz.lobby') }}"
                    class="nav-item {% if request.endpoint.startswith('live_quiz.') %}active{% endif %}"
-                   data-title="Live Quiz" title="Live Quiz">
+                   data-title="{{ _('nav.live_quiz') }}" title="{{ _('nav.live_quiz') }}">
                     <span class="nav-icon"><i class="fas fa-bolt"></i></span>
-                    <span class="nav-text">Live Quiz</span>
+                    <span class="nav-text">{{ _('nav.live_quiz') }}</span>
                     <span class="nav-badge">⚡</span>
                 </a>
 
                 <a href="{{ url_for('pdfs.list_pdfs') }}"
                    class="nav-item {% if request.endpoint == 'pdfs.list_pdfs' or request.endpoint == 'pdfs.view_pdf' %}active{% endif %}"
-                   data-title="PDFs" title="PDFs">
+                   data-title="{{ _('nav.pdfs') }}" title="{{ _('nav.pdfs') }}">
                     <span class="nav-icon"><i class="fas fa-file-pdf"></i></span>
-                    <span class="nav-text">PDFs</span>
+                    <span class="nav-text">{{ _('nav.pdfs') }}</span>
                 </a>
 
                 <a href="{{ url_for('groups.list_groups') }}"
                    class="nav-item {% if request.endpoint == 'groups.list_groups' %}active{% endif %}"
-                   data-title="Groups" title="Groups">
+                   data-title="{{ _('nav.groups') }}" title="{{ _('nav.groups') }}">
                     <span class="nav-icon"><i class="fas fa-users"></i></span>
-                    <span class="nav-text">Groups</span>
+                    <span class="nav-text">{{ _('nav.groups') }}</span>
                 </a>
             </div>
 
             <!-- ============ COMMUNITY ============ -->
             <div class="nav-section">
-                <div class="nav-label">Community</div>
+                <div class="nav-label">{{ _('nav.section.community') }}</div>
 
                 <a href="{{ url_for('quiz.leaderboard') }}"
                    class="nav-item {% if request.endpoint == 'quiz.leaderboard' %}active{% endif %}"
-                   data-title="Leaderboard" title="Leaderboard">
+                   data-title="{{ _('nav.leaderboard') }}" title="{{ _('nav.leaderboard') }}">
                     <span class="nav-icon"><i class="fas fa-trophy"></i></span>
-                    <span class="nav-text">Leaderboard</span>
+                    <span class="nav-text">{{ _('nav.leaderboard') }}</span>
                 </a>
 
                 <a href="{{ url_for('history.index') }}"
                    class="nav-item {% if request.endpoint.startswith('history.') %}active{% endif %}"
-                   data-title="History" title="History">
+                   data-title="{{ _('nav.history') }}" title="{{ _('nav.history') }}">
                     <span class="nav-icon"><i class="fas fa-history"></i></span>
-                    <span class="nav-text">History</span>
+                    <span class="nav-text">{{ _('nav.history') }}</span>
                 </a>
             </div>
 
             <!-- ============ ACCOUNT ============ -->
             <div class="nav-section">
-                <div class="nav-label">Account</div>
+                <div class="nav-label">{{ _('nav.section.account') }}</div>
 
                 <a href="{{ url_for('dashboard.profile') }}"
                    class="nav-item {% if request.endpoint == 'dashboard.profile' %}active{% endif %}"
-                   data-title="Profile" title="Profile">
+                   data-title="{{ _('nav.profile') }}" title="{{ _('nav.profile') }}">
                     <span class="nav-icon"><i class="fas fa-user"></i></span>
-                    <span class="nav-text">Profile</span>
+                    <span class="nav-text">{{ _('nav.profile') }}</span>
                 </a>
 
                 <a href="{{ url_for('settings.index') }}"
                    class="nav-item {% if request.endpoint.startswith('settings.') %}active{% endif %}"
-                   data-title="Settings" title="Settings">
+                   data-title="{{ _('nav.settings') }}" title="{{ _('nav.settings') }}">
                     <span class="nav-icon"><i class="fas fa-sliders-h"></i></span>
-                    <span class="nav-text">Settings</span>
+                    <span class="nav-text">{{ _('nav.settings') }}</span>
                 </a>
             </div>
 
             <!-- ============ ADMIN ============ -->
             {% if session.is_admin %}
                 <div class="nav-section">
-                    <div class="nav-label">Admin</div>
+                    <div class="nav-label">{{ _('nav.section.admin') }}</div>
 
                     <a href="{{ url_for('admin.dashboard') }}"
                        class="nav-item {% if request.endpoint.startswith('admin.') and not request.endpoint.startswith('admin_errors.') %}active{% endif %}"
-                       data-title="Admin Panel" title="Admin Panel">
+                       data-title="{{ _('nav.admin_panel') }}" title="{{ _('nav.admin_panel') }}">
                         <span class="nav-icon"><i class="fas fa-shield-alt"></i></span>
-                        <span class="nav-text">Admin Panel</span>
+                        <span class="nav-text">{{ _('nav.admin_panel') }}</span>
                     </a>
 
                     <a href="{{ url_for('upgrade.admin_list') }}"
                        class="nav-item {% if request.path.startswith('/upgrade/admin/upgrade-requests') %}active{% endif %}"
-                       data-title="Upgrade Requests" title="Upgrade Requests">
+                       data-title="{{ _('nav.upgrade_requests') }}" title="{{ _('nav.upgrade_requests') }}">
                         <span class="nav-icon"><i class="fas fa-rocket"></i></span>
-                        <span class="nav-text">Upgrade Requests</span>
+                        <span class="nav-text">{{ _('nav.upgrade_requests') }}</span>
                         {% if pending_upgrades_count and pending_upgrades_count > 0 %}
                             <span class="nav-badge danger">{{ pending_upgrades_count }}</span>
                         {% endif %}
@@ -235,16 +235,16 @@
 
                     <a href="{{ url_for('upgrade.admin_discounts') }}"
                        class="nav-item {% if request.path.startswith('/upgrade/admin/discounts') %}active{% endif %}"
-                       data-title="Discount Codes" title="Discount Codes">
+                       data-title="{{ _('nav.discount_codes') }}" title="{{ _('nav.discount_codes') }}">
                         <span class="nav-icon"><i class="fas fa-tags"></i></span>
-                        <span class="nav-text">Discount Codes</span>
+                        <span class="nav-text">{{ _('nav.discount_codes') }}</span>
                     </a>
 
                     <a href="{{ url_for('admin_errors.index') }}"
                        class="nav-item {% if request.endpoint.startswith('admin_errors.') %}active{% endif %}"
-                       data-title="Error Logs" title="Error Logs">
+                       data-title="{{ _('nav.error_logs') }}" title="{{ _('nav.error_logs') }}">
                         <span class="nav-icon"><i class="fas fa-exclamation-triangle"></i></span>
-                        <span class="nav-text">Error Logs</span>
+                        <span class="nav-text">{{ _('nav.error_logs') }}</span>
                         <span class="nav-badge danger">!</span>
                     </a>
                 </div>
@@ -256,10 +256,10 @@
             <button type="button"
                     class="nav-item logout"
                     id="sidebarLogoutBtn"
-                    data-title="Logout"
-                    title="Logout">
+                    data-title="{{ _('nav.logout') }}"
+                    title="{{ _('nav.logout') }}">
                 <span class="nav-icon"><i class="fas fa-sign-out-alt"></i></span>
-                <span class="nav-text">Logout</span>
+                <span class="nav-text">{{ _('nav.logout') }}</span>
             </button>
         </div>
     </aside>
@@ -271,37 +271,37 @@
         <!-- Top Navbar -->
         <header class="top-navbar">
             <div class="navbar-left">
-                <button class="menu-toggle" id="menuToggle" aria-label="Toggle sidebar">
+                <button class="menu-toggle" id="menuToggle" aria-label="{{ _('navbar.toggle_sidebar') }}">
                     <i class="fas fa-bars"></i>
                 </button>
                 <span class="page-title">{% block page_title %}Dashboard{% endblock %}</span>
             </div>
             <div class="navbar-right">
-                <button class="theme-toggle" id="themeToggle" aria-label="Change theme">
+                <button class="theme-toggle" id="themeToggle" aria-label="{{ _('navbar.toggle_theme') }}">
                     <i class="fas fa-sun" id="themeIcon"></i>
                 </button>
 
                 <div class="notification-wrapper" id="notificationWrapper">
-                    <button class="notification-toggle" id="notificationToggle" aria-label="Notifications">
+                    <button class="notification-toggle" id="notificationToggle" aria-label="{{ _('navbar.notifications') }}">
                         <i class="fas fa-bell"></i>
                         <span class="notification-badge" id="notificationBadge" style="display: none;">0</span>
                     </button>
 
                     <div class="notification-dropdown" id="notificationDropdown">
                         <div class="dropdown-header">
-                            <span>Notifications</span>
+                            <span>{{ _('navbar.notifications') }}</span>
                             <button class="mark-all-btn" id="markAllReadBtn" style="display: none;">
-                                Mark all as read
+                                {{ _('navbar.notifications.mark_all') }}
                             </button>
                         </div>
                         <div class="dropdown-body" id="notificationList">
                             <div class="notification-empty">
                                 <i class="fas fa-bell-slash"></i>
-                                <p>No notifications yet</p>
+                                <p>{{ _('navbar.notifications.empty') }}</p>
                             </div>
                         </div>
                         <div class="dropdown-footer">
-                            <a href="{{ url_for('notifications.index') }}">View All</a>
+                            <a href="{{ url_for('notifications.index') }}">{{ _('navbar.notifications.view_all') }}</a>
                         </div>
                     </div>
                 </div>
@@ -311,7 +311,7 @@
                     <div class="avatar avatar-sm avatar-primary">
                         {{ session.user_name[0] if session.user_name else 'U' }}
                     </div>
-                    <span class="user-name-sm">{{ session.user_name or 'User' }}</span>
+                    <span class="user-name-sm">{{ session.user_name or _('common.user') }}</span>
                 </a>
             </div>
         </header>
@@ -329,12 +329,12 @@
                     <span class="footer-brand-text">Nuun<span>Platform</span></span>
                 </div>
                 <div class="footer-links">
-                    <a href="{{ url_for('dashboard.home') }}">Dashboard</a>
-                    <a href="{{ url_for('quiz.index') }}">Quizzes</a>
-                    <a href="{{ url_for('live_quiz.lobby') }}">Live Quiz</a>
-                    <a href="{{ url_for('groups.list_groups') }}">Groups</a>
-                    <a href="{{ url_for('pdfs.list_pdfs') }}">PDFs</a>
-                    <a href="{{ url_for('quiz.leaderboard') }}">Leaderboard</a>
+                    <a href="{{ url_for('dashboard.home') }}">{{ _('nav.dashboard') }}</a>
+                    <a href="{{ url_for('quiz.index') }}">{{ _('nav.quizzes') }}</a>
+                    <a href="{{ url_for('live_quiz.lobby') }}">{{ _('nav.live_quiz') }}</a>
+                    <a href="{{ url_for('groups.list_groups') }}">{{ _('nav.groups') }}</a>
+                    <a href="{{ url_for('pdfs.list_pdfs') }}">{{ _('nav.pdfs') }}</a>
+                    <a href="{{ url_for('quiz.leaderboard') }}">{{ _('nav.leaderboard') }}</a>
                 </div>
                 <div class="footer-social">
                     <a href="#" aria-label="WhatsApp"><i class="fab fa-whatsapp"></i></a>
@@ -344,7 +344,7 @@
                 </div>
             </div>
             <div class="footer-copy">
-                © 2026 NuunPlatform · Made with <span class="heart">❤️</span> for students
+                © 2026 NuunPlatform · {{ _('footer.made_with') }} <span class="heart">❤️</span> {{ _('footer.for_students') }}
             </div>
         </footer>
     </main>

@@ -1,8 +1,8 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}Profile - Student Platform{% endblock %}
+{% block title %}{{ _('profile.page_title') }} - NuunPlatform{% endblock %}
 
-{% block page_title %}Profile{% endblock %}
+{% block page_title %}{{ _('profile.page_title') }}{% endblock %}
 
 {% block dashboard_content %}
 
@@ -28,7 +28,7 @@
                 </span>
             {% else %}
                 <span style="font-size: 14px; color: #92400E; background: #FEF3C7; padding: 4px 16px; border-radius: 12px; font-weight: 600; margin-top: 2px;">
-                    ⏳ PENDING ID
+                    ⏳ {{ _('profile.pending_id') }}
                 </span>
             {% endif %}
         </div>
@@ -37,32 +37,32 @@
         <div style="display: flex; flex-direction: column; gap: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden;">
             
             <div style="display: flex; justify-content: space-between; padding: 14px 20px; background: var(--background); border-bottom: 1px solid var(--border);">
-                <span style="color: var(--text-secondary); font-weight: 500;">📞 Phone</span>
+                <span style="color: var(--text-secondary); font-weight: 500;">📞 {{ _('profile.phone') }}</span>
                 <span style="color: var(--text); font-weight: 600;">{{ student.phone_number }}</span>
             </div>
             
             <div style="display: flex; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border);">
-                <span style="color: var(--text-secondary); font-weight: 500;">📍 Location</span>
-                <span style="color: var(--text);">{{ student.location or 'Not set' }}</span>
+                <span style="color: var(--text-secondary); font-weight: 500;">📍 {{ _('profile.location') }}</span>
+                <span style="color: var(--text);">{{ student.location or _('profile.not_set') }}</span>
             </div>
             
             <div style="display: flex; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--background);">
-                <span style="color: var(--text-secondary); font-weight: 500;">🌆 City</span>
-                <span style="color: var(--text);">{{ student.city or 'Not set' }}</span>
+                <span style="color: var(--text-secondary); font-weight: 500;">🌆 {{ _('profile.city') }}</span>
+                <span style="color: var(--text);">{{ student.city or _('profile.not_set') }}</span>
             </div>
             
             <div style="display: flex; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border);">
-                <span style="color: var(--text-secondary); font-weight: 500;">🏫 School</span>
-                <span style="color: var(--text);">{{ student.school or 'Not set' }}</span>
+                <span style="color: var(--text-secondary); font-weight: 500;">🏫 {{ _('profile.school') }}</span>
+                <span style="color: var(--text);">{{ student.school or _('profile.not_set') }}</span>
             </div>
             
             <div style="display: flex; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--background);">
-                <span style="color: var(--text-secondary); font-weight: 500;">📚 Grade</span>
-                <span style="color: var(--text);">{{ student.grade or 'Not set' }}</span>
+                <span style="color: var(--text-secondary); font-weight: 500;">📚 {{ _('profile.grade') }}</span>
+                <span style="color: var(--text);">{{ student.grade or _('profile.not_set') }}</span>
             </div>
             
             <div style="display: flex; justify-content: space-between; padding: 14px 20px;">
-                <span style="color: var(--text-secondary); font-weight: 500;">🏆 Total Points</span>
+                <span style="color: var(--text-secondary); font-weight: 500;">🏆 {{ _('profile.total_points') }}</span>
                 <span style="color: var(--primary); font-weight: 700; font-size: 18px;">{{ student.total_points or 0 }}</span>
             </div>
         </div>
@@ -70,12 +70,40 @@
         <!-- Actions -->
         <div style="display: flex; gap: 12px; margin-top: 24px;">
             <a href="{{ url_for('dashboard.home') }}" style="flex: 1; padding: 12px; background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-sm); text-decoration: none; color: var(--text); font-weight: 500; text-align: center; transition: var(--transition);">
-                <i class="fas fa-arrow-left"></i> Back
+                <i class="fas fa-arrow-left"></i> {{ _('common.back') }}
             </a>
-            <a href="#" onclick="showToast('Profile editing coming soon!', 'info'); return false;" style="flex: 1; padding: 12px; background: var(--primary); color: white; border: none; border-radius: var(--radius-sm); text-decoration: none; font-weight: 600; text-align: center; transition: var(--transition); box-shadow: 0 4px 14px rgba(255, 49, 56, 0.30);">
-                <i class="fas fa-edit"></i> Edit Profile
+            <a href="#" onclick="showToast('{{ _('profile.edit_coming_soon') }}', 'info'); return false;" style="flex: 1; padding: 12px; background: var(--primary); color: white; border: none; border-radius: var(--radius-sm); text-decoration: none; font-weight: 600; text-align: center; transition: var(--transition); box-shadow: 0 4px 14px rgba(255, 49, 56, 0.30);">
+                <i class="fas fa-edit"></i> {{ _('profile.edit_profile') }}
             </a>
         </div>
     </div>
 </div>
+
+<script>
+const I18N = {
+    copied: "{{ _('profile.copied') }}"
+};
+
+function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            if (typeof window.showToast === 'function') {
+                window.showToast(I18N.copied, 'success');
+            }
+        });
+    } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (typeof window.showToast === 'function') {
+            window.showToast(I18N.copied, 'success');
+        }
+    }
+}
+</script>
 {% endblock %}

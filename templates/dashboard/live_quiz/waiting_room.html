@@ -1,8 +1,8 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}Waiting Room - Live Quiz{% endblock %}
+{% block title %}{{ _('live_quiz.waiting.page_title') }}{% endblock %}
 
-{% block page_title %}Waiting Room{% endblock %}
+{% block page_title %}{{ _('live_quiz.waiting.page_title') }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
@@ -16,25 +16,25 @@
 
     <div class="quiz-started-alert" id="quizStartedAlert">
         <span class="spinner"></span>
-        🚀 Quiz has started! Redirecting to play page...
+        🚀 {{ _('live_quiz.waiting.started_alert') }}
     </div>
 
     <div class="notification-banner" id="notificationBanner">
         <span>🔔</span>
-        <span style="flex:1;">Get notified when the quiz starts, even if you're away!</span>
-        <button class="btn-allow" onclick="requestNotificationPermission()">Allow</button>
+        <span style="flex:1;">{{ _('live_quiz.waiting.notify_banner') }}</span>
+        <button class="btn-allow" onclick="requestNotificationPermission()">{{ _('live_quiz.waiting.allow_btn') }}</button>
     </div>
 
     <div class="waiting-room-card">
 
         <div class="wr-header">
             <div class="wr-title-section">
-                <h2 class="wr-title">{{ quiz.title or 'Live Quiz' }}</h2>
+                <h2 class="wr-title">{{ quiz.title or _('live_quiz.lobby.untitled_quiz') }}</h2>
                 <div class="wr-meta">
-                    <span>📚 {{ quiz.subjects.name if quiz.subjects else 'Unknown Subject' }}</span>
-                    <span>❓ {{ quiz.question_count }} questions</span>
-                    <span>⏱️ {{ quiz.time_per_question }}s each</span>
-                    {% if not quiz.is_public %}<span class="privacy-badge private">🔒 Private</span>{% else %}<span class="privacy-badge public">🌐 Public</span>{% endif %}
+                    <span>📚 {{ quiz.subjects.name if quiz.subjects else _('live_quiz.waiting.unknown_subject') }}</span>
+                    <span>❓ {{ _('live_quiz.waiting.questions_count', n=quiz.question_count) }}</span>
+                    <span>⏱️ {{ _('live_quiz.waiting.seconds_each', n=quiz.time_per_question) }}</span>
+                    {% if not quiz.is_public %}<span class="privacy-badge private">🔒 {{ _('live_quiz.create.private') }}</span>{% else %}<span class="privacy-badge public">🌐 {{ _('live_quiz.create.public') }}</span>{% endif %}
                 </div>
             </div>
             <div class="wr-participant-count">
@@ -46,7 +46,7 @@
         {% if quiz.status == 'scheduled' and starts_in_seconds is not none and starts_in_seconds > 0 %}
         <div class="wr-scheduled-info">
             <div class="wr-scheduled-time">
-                ⏳ Starts at <strong>{{ scheduled_start_display or quiz.scheduled_start }}</strong>
+                ⏳ {{ _('live_quiz.waiting.starts_at') }} <strong>{{ scheduled_start_display or quiz.scheduled_start }}</strong>
             </div>
             <div class="wr-countdown-circle">
                 <svg viewBox="0 0 100 100" width="80" height="80">
@@ -59,16 +59,16 @@
                     </text>
                 </svg>
             </div>
-            <div class="wr-countdown-label">Auto-starts when timer hits zero</div>
+            <div class="wr-countdown-label">{{ _('live_quiz.waiting.countdown_label') }}</div>
         </div>
         {% endif %}
 
         <div class="wr-share-section">
             <div class="wr-join-code">
-                <span class="wr-code-label">📌 Share this code</span>
+                <span class="wr-code-label">📌 {{ _('live_quiz.waiting.share_code') }}</span>
                 <div class="wr-code-display">
                     <span class="wr-code">{{ quiz.join_code }}</span>
-                    <button class="wr-copy-btn" onclick="copyCode('{{ quiz.join_code }}')"><i class="fas fa-copy"></i> Copy</button>
+                    <button class="wr-copy-btn" onclick="copyCode('{{ quiz.join_code }}')"><i class="fas fa-copy"></i> {{ _('live_quiz.waiting.copy_btn') }}</button>
                 </div>
             </div>
             <div class="wr-share-buttons">
@@ -76,14 +76,14 @@
                 <a href="#" onclick="shareTelegram('{{ quiz.join_code }}')" class="share-btn telegram"><i class="fab fa-telegram-plane"></i> Telegram</a>
             </div>
             {% if quiz.is_public %}
-            <div class="wr-public-note">🌐 This quiz is public and visible in the <a href="{{ url_for('live_quiz.lobby') }}">Lobby</a></div>
+            <div class="wr-public-note">🌐 {{ _('live_quiz.waiting.public_note_before') }} <a href="{{ url_for('live_quiz.lobby') }}">{{ _('live_quiz.waiting.public_note_link') }}</a></div>
             {% endif %}
         </div>
 
         <div class="wr-participants-section">
             <div class="wr-participants-header">
-                <h3>👥 Participants</h3>
-                <span class="wr-participants-count" id="participantCountLabel">{{ participant_count }} joined</span>
+                <h3>👥 {{ _('live_quiz.waiting.participants_title') }}</h3>
+                <span class="wr-participants-count" id="participantCountLabel">{{ _('live_quiz.waiting.participants_count', n=participant_count) }}</span>
             </div>
             <div class="wr-participants-list" id="participantList">
             </div>
@@ -93,37 +93,37 @@
             {% if is_creator %}
                 <div class="wr-status-message" id="statusMessage">
                     {% if active_participant_count >= 2 %}
-                        ✅ Ready to start! <span class="highlight">{{ active_participant_count }}</span> participants ready.
+                        ✅ {{ _('live_quiz.waiting.status_ready_before') }} <span class="highlight">{{ active_participant_count }}</span> {{ _('live_quiz.waiting.status_ready_after') }}
                     {% else %}
-                        ⚠️ Need at least <strong>2 active participants</strong> to start.
-                        {% if active_participant_count == 1 %}<br><span class="sub-text">Share the join code to invite others!</span>{% endif %}
+                        ⚠️ {{ _('live_quiz.waiting.status_need_before') }} <strong>{{ _('live_quiz.waiting.status_need_strong') }}</strong> {{ _('live_quiz.waiting.status_need_after') }}
+                        {% if active_participant_count == 1 %}<br><span class="sub-text">{{ _('live_quiz.waiting.status_share_hint') }}</span>{% endif %}
                     {% endif %}
                 </div>
                 <button class="wr-btn-start" id="startQuizBtn" {% if active_participant_count < 2 %}disabled{% endif %}>
-                    <i class="fas fa-play"></i> Start Quiz
+                    <i class="fas fa-play"></i> {{ _('live_quiz.waiting.start_btn') }}
                 </button>
-                <button class="wr-btn-delete" id="deleteBtn"><i class="fas fa-trash"></i> Delete Quiz</button>
+                <button class="wr-btn-delete" id="deleteBtn"><i class="fas fa-trash"></i> {{ _('live_quiz.waiting.delete_btn') }}</button>
             {% else %}
                 {% if user_participant_status == 'left' %}
                     <div class="wr-left-message">
                         <div class="wr-left-icon">🔁</div>
-                        <h4>You left this quiz</h4>
-                        <p>You can rejoin if the quiz hasn't started yet.</p>
-                        <button class="wr-btn-rejoin" id="rejoinBtn"><i class="fas fa-undo"></i> Rejoin Quiz</button>
+                        <h4>{{ _('live_quiz.waiting.left_title') }}</h4>
+                        <p>{{ _('live_quiz.waiting.left_desc') }}</p>
+                        <button class="wr-btn-rejoin" id="rejoinBtn"><i class="fas fa-undo"></i> {{ _('live_quiz.waiting.rejoin_btn') }}</button>
                     </div>
                 {% else %}
                     <div class="wr-waiting-message">
                         <div class="wr-waiting-icon">⏳</div>
-                        <h4>Waiting for the host to start...</h4>
-                        <p>The quiz will begin when the host clicks "Start Quiz"</p>
-                        <div class="wr-waiting-sub">👥 <span id="waitingParticipantCount">{{ active_participant_count }}</span> active participant(s) waiting</div>
+                        <h4>{{ _('live_quiz.waiting.waiting_title') }}</h4>
+                        <p>{{ _('live_quiz.waiting.waiting_desc') }}</p>
+                        <div class="wr-waiting-sub">👥 <span id="waitingParticipantCount">{{ active_participant_count }}</span> {{ _('live_quiz.waiting.waiting_active') }}</div>
                     </div>
-                    <button class="wr-btn-leave" id="leaveBtn"><i class="fas fa-sign-out-alt"></i> Leave Quiz</button>
+                    <button class="wr-btn-leave" id="leaveBtn"><i class="fas fa-sign-out-alt"></i> {{ _('live_quiz.waiting.leave_btn') }}</button>
                 {% endif %}
             {% endif %}
         </div>
 
-        <div class="wr-tip">💡 Tip: Share the join code to invite friends!</div>
+        <div class="wr-tip">💡 {{ _('live_quiz.waiting.tip') }}</div>
     </div>
 </div>
 
@@ -131,23 +131,52 @@
     <div class="modal-content">
         <div style="text-align: center; margin-bottom: 16px;">
             <div style="font-size: 48px; margin-bottom: 8px;">⚠️</div>
-            <h3 class="modal-title">Delete Quiz</h3>
+            <h3 class="modal-title">{{ _('live_quiz.waiting.delete_modal_title') }}</h3>
             <p class="modal-body">
-                Are you sure you want to delete <strong id="deleteQuizTitle">{{ quiz.title or 'this quiz' }}</strong>?
+                {{ _('live_quiz.waiting.delete_modal_body_before') }} <strong id="deleteQuizTitle">{{ quiz.title or _('live_quiz.waiting.delete_this') }}</strong>{{ _('live_quiz.waiting.delete_modal_body_after') }}
             </p>
             <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;">
-                This action <strong style="color: #EF4444;">cannot be undone</strong>.
+                {{ _('live_quiz.waiting.delete_modal_warn_before') }} <strong style="color: #EF4444;">{{ _('live_quiz.waiting.delete_modal_warn_strong') }}</strong>{{ _('live_quiz.waiting.delete_modal_warn_after') }}
             </p>
         </div>
         <div class="modal-actions">
-            <button onclick="closeDeleteModal()" class="btn btn-secondary">Cancel</button>
-            <button id="confirmDeleteBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Delete</button>
+            <button onclick="closeDeleteModal()" class="btn btn-secondary">{{ _('common.cancel') }}</button>
+            <button id="confirmDeleteBtn" class="btn btn-danger"><i class="fas fa-trash"></i> {{ _('live_quiz.waiting.delete_modal_confirm') }}</button>
         </div>
     </div>
 </div>
 
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
+const I18N = {
+    notify_title:      "{{ _('live_quiz.waiting.notify_starting_title') }}",
+    notify_body:       "{{ _('live_quiz.waiting.notify_starting_body', title=quiz.title or _('live_quiz.lobby.untitled_quiz')) }}",
+    quiz_started:      "{{ _('live_quiz.waiting.toast_started') }}",
+    starting:          "{{ _('live_quiz.waiting.starting') }}",
+    start_btn:         "{{ _('live_quiz.waiting.start_btn') }}",
+    start_error:       "{{ _('live_quiz.waiting.start_error') }}",
+    leaving:           "{{ _('live_quiz.waiting.leaving') }}",
+    left_ok:           "{{ _('live_quiz.waiting.left_ok') }}",
+    leave_error:       "{{ _('live_quiz.waiting.leave_error') }}",
+    leave_btn:         "{{ _('live_quiz.waiting.leave_btn') }}",
+    rejoining:         "{{ _('live_quiz.waiting.rejoining') }}",
+    rejoin_ok:         "{{ _('live_quiz.waiting.rejoin_ok') }}",
+    rejoin_error:      "{{ _('live_quiz.waiting.rejoin_error') }}",
+    rejoin_btn:        "{{ _('live_quiz.waiting.rejoin_btn') }}",
+    deleting:          "{{ _('live_quiz.waiting.deleting') }}",
+    delete_ok:         "{{ _('live_quiz.waiting.delete_ok') }}",
+    delete_error:      "{{ _('live_quiz.waiting.delete_error') }}",
+    delete_confirm:    "{{ _('live_quiz.waiting.delete_modal_confirm') }}",
+    code_copied:       "{{ _('live_quiz.waiting.code_copied') }}",
+    no_participants:   "{{ _('live_quiz.waiting.no_participants') }}",
+    badge_creator:     "{{ _('live_quiz.waiting.badge_creator') }}",
+    badge_you:         "{{ _('live_quiz.waiting.badge_you') }}",
+    badge_left:        "{{ _('live_quiz.waiting.badge_left') }}",
+    notif_enabled:     "{{ _('live_quiz.waiting.notif_enabled') }}",
+    notif_failed:      "{{ _('live_quiz.waiting.notif_failed') }}",
+    ready_updated_err: "{{ _('live_quiz.waiting.ready_updated_err') }}"
+};
 
 document.addEventListener('DOMContentLoaded', function() {
     const quizId = '{{ quiz.id }}';
@@ -208,8 +237,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (remaining <= 60 && remaining > 55 && !notificationSent) {
                 notificationSent = true;
                 sendBrowserNotification(
-                    '⏰ Quiz starting soon!',
-                    `"${quizTitle}" starts in ${remaining} seconds!`,
+                    I18N.notify_title,
+                    I18N.notify_body,
                     '/live-quiz/waiting-room/' + quizId
                 );
                 playNotificationSound();
@@ -239,7 +268,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (permission === 'granted') {
                     notificationBanner.classList.remove('show');
                     if (typeof window.showToast === 'function') {
-                        window.showToast('✅ Notifications enabled!', 'success');
+                        window.showToast(I18N.notif_enabled, 'success');
                     }
                 } else {
                     notificationBanner.classList.remove('show');
@@ -336,7 +365,7 @@ document.addEventListener('DOMContentLoaded', function() {
             participantListEl.innerHTML = `
                 <div class="wr-empty-participants">
                     <div class="wr-empty-icon">👥</div>
-                    <span>No participants yet. Share the join code!</span>
+                    <span>${I18N.no_participants}</span>
                 </div>
             `;
             return;
@@ -350,9 +379,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const isReady = (isP && p.status !== 'left') ? true : p.is_ready;
 
             let badge = '';
-            if (isP) badge += '<span class="wr-badge creator">Creator</span>';
-            if (isYou) badge += '<span class="wr-badge you">You</span>';
-            if (isLeft) badge += '<span class="wr-badge left">Left</span>';
+            if (isP) badge += '<span class="wr-badge creator">' + I18N.badge_creator + '</span>';
+            if (isYou) badge += '<span class="wr-badge you">' + I18N.badge_you + '</span>';
+            if (isLeft) badge += '<span class="wr-badge left">' + I18N.badge_left + '</span>';
 
             let readyHand = '';
             if (isReady && !isLeft) {
@@ -392,9 +421,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const activeCount = participantList.filter(p => p.status !== 'left').length;
             if (statusMsg) {
                 if (activeCount >= 2) {
-                    statusMsg.innerHTML = `✅ Ready to start! <span class="highlight">${activeCount}</span> participants ready.`;
+                    statusMsg.innerHTML = `✅ {{ _('live_quiz.waiting.status_ready_before') }} <span class="highlight">${activeCount}</span> {{ _('live_quiz.waiting.status_ready_after') }}`;
                 } else {
-                    statusMsg.innerHTML = `⚠️ Need at least <strong>2 active participants</strong> to start. ${activeCount === 1 ? '<br><span class="sub-text">Share the join code to invite others!</span>' : ''}`;
+                    statusMsg.innerHTML = `⚠️ {{ _('live_quiz.waiting.status_need_before') }} <strong>{{ _('live_quiz.waiting.status_need_strong') }}</strong> {{ _('live_quiz.waiting.status_need_after') }} ${activeCount === 1 ? '<br><span class="sub-text">{{ _("live_quiz.waiting.status_share_hint") }}</span>' : ''}`;
                 }
             }
             if (startBtn) {
@@ -424,13 +453,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 btn.classList.toggle('active', newState);
             } else {
                 if (typeof window.showToast === 'function') {
-                    window.showToast('Failed to update ready status', 'error');
+                    window.showToast(I18N.ready_updated_err, 'error');
                 }
             }
         })
         .catch(function() {
             if (typeof window.showToast === 'function') {
-                window.showToast('Error updating ready status', 'error');
+                window.showToast(I18N.ready_updated_err, 'error');
             }
         });
     }
@@ -440,7 +469,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (startBtn.disabled) return;
 
         startBtn.disabled = true;
-        startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting...';
+        startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + I18N.starting;
 
         fetch('/live-quiz/start/' + quizId, {
             method: 'POST',
@@ -455,31 +484,31 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 isRedirecting = true;
                 if (typeof window.showToast === 'function') {
-                    window.showToast('🎯 Quiz started! Redirecting...', 'success');
+                    window.showToast(I18N.quiz_started, 'success');
                 }
                 window.location.replace('/live-quiz/play/' + quizId);
             } else {
                 if (typeof window.showToast === 'function') {
-                    window.showToast('Error starting quiz: ' + (data.error || 'Unknown error'), 'error');
+                    window.showToast(I18N.start_error + ' ' + (data.error || ''), 'error');
                 }
                 startBtn.disabled = false;
-                startBtn.innerHTML = '<i class="fas fa-play"></i> Start Quiz';
+                startBtn.innerHTML = '<i class="fas fa-play"></i> ' + I18N.start_btn;
             }
         })
         .catch(function() {
             if (typeof window.showToast === 'function') {
-                window.showToast('Error starting quiz', 'error');
+                window.showToast(I18N.start_error, 'error');
             }
             startBtn.disabled = false;
-            startBtn.innerHTML = '<i class="fas fa-play"></i> Start Quiz';
+            startBtn.innerHTML = '<i class="fas fa-play"></i> ' + I18N.start_btn;
         });
     }
 
     function leaveQuiz() {
-        if (!confirm('Are you sure you want to leave this quiz?')) return;
+        if (!confirm("{{ _('live_quiz.waiting.leave_confirm') }}")) return;
         if (leaveBtn) {
             leaveBtn.disabled = true;
-            leaveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Leaving...';
+            leaveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + I18N.leaving;
         }
 
         fetch('/live-quiz/leave/' + quizId, {
@@ -494,26 +523,26 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 if (typeof window.showToast === 'function') {
-                    window.showToast('You have left the quiz.', 'info');
+                    window.showToast(I18N.left_ok, 'info');
                 }
                 window.location.href = data.redirect || '/live-quiz/lobby';
             } else {
                 if (typeof window.showToast === 'function') {
-                    window.showToast('Error leaving quiz: ' + (data.error || 'Unknown'), 'error');
+                    window.showToast(I18N.leave_error + ' ' + (data.error || ''), 'error');
                 }
                 if (leaveBtn) {
                     leaveBtn.disabled = false;
-                    leaveBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Leave Quiz';
+                    leaveBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> ' + I18N.leave_btn;
                 }
             }
         })
         .catch(function() {
             if (typeof window.showToast === 'function') {
-                window.showToast('Error leaving quiz', 'error');
+                window.showToast(I18N.leave_error, 'error');
             }
             if (leaveBtn) {
                 leaveBtn.disabled = false;
-                leaveBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Leave Quiz';
+                leaveBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> ' + I18N.leave_btn;
             }
         });
     }
@@ -521,7 +550,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function rejoinQuiz() {
         if (rejoinBtn) {
             rejoinBtn.disabled = true;
-            rejoinBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Rejoining...';
+            rejoinBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + I18N.rejoining;
         }
 
         fetch('/live-quiz/rejoin/' + quizId, {
@@ -536,26 +565,26 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 if (typeof window.showToast === 'function') {
-                    window.showToast('Rejoined successfully!', 'success');
+                    window.showToast(I18N.rejoin_ok, 'success');
                 }
                 window.location.href = data.redirect || '/live-quiz/waiting-room/' + quizId;
             } else {
                 if (typeof window.showToast === 'function') {
-                    window.showToast('Error rejoining: ' + (data.error || 'Unknown'), 'error');
+                    window.showToast(I18N.rejoin_error + ' ' + (data.error || ''), 'error');
                 }
                 if (rejoinBtn) {
                     rejoinBtn.disabled = false;
-                    rejoinBtn.innerHTML = '<i class="fas fa-undo"></i> Rejoin Quiz';
+                    rejoinBtn.innerHTML = '<i class="fas fa-undo"></i> ' + I18N.rejoin_btn;
                 }
             }
         })
         .catch(function() {
             if (typeof window.showToast === 'function') {
-                window.showToast('Error rejoining', 'error');
+                window.showToast(I18N.rejoin_error, 'error');
             }
             if (rejoinBtn) {
                 rejoinBtn.disabled = false;
-                rejoinBtn.innerHTML = '<i class="fas fa-undo"></i> Rejoin Quiz';
+                rejoinBtn.innerHTML = '<i class="fas fa-undo"></i> ' + I18N.rejoin_btn;
             }
         });
     }
@@ -576,7 +605,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
         const btn = this;
         btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + I18N.deleting;
 
         fetch('/live-quiz/delete/' + quizId, {
             method: 'POST',
@@ -590,24 +619,24 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 if (typeof window.showToast === 'function') {
-                    window.showToast('✅ Quiz deleted', 'success');
+                    window.showToast(I18N.delete_ok, 'success');
                 }
                 closeDeleteModal();
                 window.location.href = '/live-quiz/lobby';
             } else {
                 if (typeof window.showToast === 'function') {
-                    window.showToast('Error deleting quiz: ' + (data.error || 'Unknown'), 'error');
+                    window.showToast(I18N.delete_error + ' ' + (data.error || ''), 'error');
                 }
                 btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-trash"></i> Delete';
+                btn.innerHTML = '<i class="fas fa-trash"></i> ' + I18N.delete_confirm;
             }
         })
         .catch(function() {
             if (typeof window.showToast === 'function') {
-                window.showToast('Error deleting quiz', 'error');
+                window.showToast(I18N.delete_error, 'error');
             }
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-trash"></i> Delete';
+            btn.innerHTML = '<i class="fas fa-trash"></i> ' + I18N.delete_confirm;
         });
     });
 
@@ -618,7 +647,7 @@ document.addEventListener('DOMContentLoaded', function() {
     window.copyCode = function(code) {
         navigator.clipboard.writeText(code).then(function() {
             if (typeof window.showToast === 'function') {
-                window.showToast('Join code copied!', 'success');
+                window.showToast(I18N.code_copied, 'success');
             }
         }).catch(function() {
             const textarea = document.createElement('textarea');
@@ -628,7 +657,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.execCommand('copy');
             document.body.removeChild(textarea);
             if (typeof window.showToast === 'function') {
-                window.showToast('Join code copied!', 'success');
+                window.showToast(I18N.code_copied, 'success');
             }
         });
     };
@@ -661,7 +690,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     isRedirecting = true;
                     document.getElementById('quizStartedAlert').classList.add('show');
                     if (typeof window.showToast === 'function') {
-                        window.showToast('🚀 Quiz has started!', 'success');
+                        window.showToast(I18N.quiz_started, 'success');
                     }
                     console.log('Redirecting to /live-quiz/play/' + quizId);
                     window.location.replace('/live-quiz/play/' + quizId);
@@ -723,7 +752,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <span class="hand-icon">✋</span>
                 <span class="check-badge">✓</span>
             `;
-            readyBtn.title = 'Toggle ready status';
+            readyBtn.title = "{{ _('live_quiz.waiting.ready_tooltip') }}";
             readyBtn.addEventListener('click', toggleReady);
             const waitingMsg = actionsDiv.querySelector('.wr-waiting-message');
             if (waitingMsg) {

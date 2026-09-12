@@ -1,6 +1,6 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}Settings - NuunPlatform{% endblock %}
+{% block title %}{{ _('settings.title') }} - NuunPlatform{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
@@ -11,8 +11,6 @@
 
 <!-- ============================================ -->
 <!-- SERVER-SIDE ACCENT COLOURS – OVERRIDES       -->
-<!-- Loaded AFTER settings CSS so the user's      -->
-<!-- accent is applied immediately at paint time. -->
 <!-- ============================================ -->
 {% if accent_colours %}
 <style id="accent-style-override">
@@ -32,36 +30,36 @@
         <nav class="settings-nav-wrapper" id="settingsNavWrapper" style="display: none;">
             <div class="settings-nav">
                 <a class="settings-nav-item" data-section="appearance" href="#appearance">
-                    <i class="fas fa-palette"></i> Appearance
+                    <i class="fas fa-palette"></i> {{ _('settings.category.appearance') }}
                 </a>
                 <a class="settings-nav-item" data-section="quiz" href="#quiz">
-                    <i class="fas fa-pencil-alt"></i> Quiz
+                    <i class="fas fa-pencil-alt"></i> {{ _('settings.category.quiz') }}
                 </a>
                 <a class="settings-nav-item" data-section="notifications" href="#notifications">
-                    <i class="fas fa-bell"></i> Notifications
+                    <i class="fas fa-bell"></i> {{ _('settings.category.notifications') }}
                 </a>
                 <a class="settings-nav-item" data-section="privacy" href="#privacy">
-                    <i class="fas fa-lock"></i> Privacy
+                    <i class="fas fa-lock"></i> {{ _('settings.category.privacy') }}
                 </a>
                 {% if can_create_live %}
                 <a class="settings-nav-item" data-section="live_quiz" href="#live_quiz">
-                    <i class="fas fa-bolt"></i> Live Quiz
+                    <i class="fas fa-bolt"></i> {{ _('settings.category.live_quiz') }}
                 </a>
                 {% endif %}
                 <a class="settings-nav-item" data-section="security" href="#security">
-                    <i class="fas fa-shield-alt"></i> Security
+                    <i class="fas fa-shield-alt"></i> {{ _('settings.category.security') }}
                 </a>
                 <a class="settings-nav-item" data-section="tier" href="#tier">
-                    <i class="fas fa-crown"></i> Plan & Features
+                    <i class="fas fa-crown"></i> {{ _('settings.category.tier') }}
                 </a>
                 <a class="settings-nav-item" data-section="data" href="#data">
-                    <i class="fas fa-database"></i> Data
+                    <i class="fas fa-database"></i> {{ _('settings.category.data') }}
                 </a>
                 <a class="settings-nav-item" data-section="accessibility" href="#accessibility">
-                    <i class="fas fa-universal-access"></i> Accessibility
+                    <i class="fas fa-universal-access"></i> {{ _('settings.category.accessibility') }}
                 </a>
                 <a class="settings-nav-item" data-section="logout" href="#logout">
-                    <i class="fas fa-sign-out-alt" style="color: #DC2626;"></i> Logout
+                    <i class="fas fa-sign-out-alt" style="color: #DC2626;"></i> {{ _('settings.category.logout') }}
                 </a>
             </div>
         </nav>
@@ -70,10 +68,10 @@
     <!-- Content -->
     <main class="settings-content">
         <div class="settings-page-header">
-            <h1 class="settings-page-title">Settings</h1>
+            <h1 class="settings-page-title">{{ _('settings.title') }}</h1>
             <!-- Breadcrumb – clickable -->
             <nav class="settings-breadcrumb" id="settingsBreadcrumb">
-                <a href="#" class="breadcrumb-link" id="breadcrumbHome">Settings</a>
+                <a href="#" class="breadcrumb-link" id="breadcrumbHome">{{ _('settings.title') }}</a>
             </nav>
         </div>
 

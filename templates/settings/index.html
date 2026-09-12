@@ -5,60 +5,60 @@
 
 <div class="settings-landing" id="landing">
     <div class="settings-landing-header">
-        <h2>Customize Your Experience</h2>
-        <p>Choose a category below to adjust your preferences.</p>
+        <h2>{{ _('settings.landing.title') }}</h2>
+        <p>{{ _('settings.landing.subtitle') }}</p>
     </div>
     <div class="settings-grid">
         <a href="#appearance" class="settings-category-card" data-section="appearance">
             <div class="card-icon"><i class="fas fa-palette"></i></div>
-            <div class="card-content"><h3>Appearance</h3><p>Theme, colours, and layout</p></div>
+            <div class="card-content"><h3>{{ _('settings.category.appearance') }}</h3><p>{{ _('settings.category.appearance.desc') }}</p></div>
             <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
         </a>
         <a href="#quiz" class="settings-category-card" data-section="quiz">
             <div class="card-icon"><i class="fas fa-pencil-alt"></i></div>
-            <div class="card-content"><h3>Quiz</h3><p>Defaults and behaviour</p></div>
+            <div class="card-content"><h3>{{ _('settings.category.quiz') }}</h3><p>{{ _('settings.category.quiz.desc') }}</p></div>
             <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
         </a>
         <a href="#notifications" class="settings-category-card" data-section="notifications">
             <div class="card-icon"><i class="fas fa-bell"></i></div>
-            <div class="card-content"><h3>Notifications</h3><p>What and how you're notified</p></div>
+            <div class="card-content"><h3>{{ _('settings.category.notifications') }}</h3><p>{{ _('settings.category.notifications.desc') }}</p></div>
             <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
         </a>
         <a href="#privacy" class="settings-category-card" data-section="privacy">
             <div class="card-icon"><i class="fas fa-lock"></i></div>
-            <div class="card-content"><h3>Privacy</h3><p>Visibility and data sharing</p></div>
+            <div class="card-content"><h3>{{ _('settings.category.privacy') }}</h3><p>{{ _('settings.category.privacy.desc') }}</p></div>
             <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
         </a>
         {% if can_create_live %}
         <a href="#live_quiz" class="settings-category-card" data-section="live_quiz">
             <div class="card-icon"><i class="fas fa-bolt"></i></div>
-            <div class="card-content"><h3>Live Quiz</h3><p>Defaults for hosting</p></div>
+            <div class="card-content"><h3>{{ _('settings.category.live_quiz') }}</h3><p>{{ _('settings.category.live_quiz.desc') }}</p></div>
             <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
         </a>
         {% endif %}
         <a href="#security" class="settings-category-card" data-section="security">
             <div class="card-icon"><i class="fas fa-shield-alt"></i></div>
-            <div class="card-content"><h3>Security</h3><p>Password and account safety</p></div>
+            <div class="card-content"><h3>{{ _('settings.category.security') }}</h3><p>{{ _('settings.category.security.desc') }}</p></div>
             <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
         </a>
         <a href="#tier" class="settings-category-card" data-section="tier">
             <div class="card-icon"><i class="fas fa-crown"></i></div>
-            <div class="card-content"><h3>Plan & Features</h3><p>Your current tier and benefits</p></div>
+            <div class="card-content"><h3>{{ _('settings.category.tier') }}</h3><p>{{ _('settings.category.tier.desc') }}</p></div>
             <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
         </a>
         <a href="#data" class="settings-category-card" data-section="data">
             <div class="card-icon"><i class="fas fa-database"></i></div>
-            <div class="card-content"><h3>Data</h3><p>History, export, and deletion</p></div>
+            <div class="card-content"><h3>{{ _('settings.category.data') }}</h3><p>{{ _('settings.category.data.desc') }}</p></div>
             <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
         </a>
         <a href="#accessibility" class="settings-category-card" data-section="accessibility">
             <div class="card-icon"><i class="fas fa-universal-access"></i></div>
-            <div class="card-content"><h3>Accessibility</h3><p>Motion, contrast, and readability</p></div>
+            <div class="card-content"><h3>{{ _('settings.category.accessibility') }}</h3><p>{{ _('settings.category.accessibility.desc') }}</p></div>
             <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
         </a>
         <a href="#logout" class="settings-category-card" data-section="logout" style="border-color: #FCA5A5;">
             <div class="card-icon"><i class="fas fa-sign-out-alt" style="color: #DC2626;"></i></div>
-            <div class="card-content"><h3 style="color: #DC2626;">Logout</h3><p>Sign out of your account</p></div>
+            <div class="card-content"><h3 style="color: #DC2626;">{{ _('settings.category.logout') }}</h3><p>{{ _('settings.category.logout.desc') }}</p></div>
             <div class="card-arrow"><i class="fas fa-chevron-right"></i></div>
         </a>
     </div>
@@ -67,23 +67,23 @@
 <section id="appearance" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
-            <h3><i class="fas fa-palette"></i> Appearance</h3>
-            <p>Customize the look and feel of the platform.</p>
+            <h3><i class="fas fa-palette"></i> {{ _('settings.appearance.title') }}</h3>
+            <p>{{ _('settings.appearance.subtitle') }}</p>
         </div>
         <form id="appearance-form" class="settings-form">
             <div class="form-row">
                 <div class="form-group">
-                    <label>Theme</label>
+                    <label>{{ _('settings.appearance.theme') }}</label>
                     <div class="theme-selector" id="theme-selector">
-                        <div class="theme-option" data-theme="light"><div class="theme-preview light"><div class="theme-header">☀️ Light</div><div class="theme-body">Clean and bright.</div></div><div class="theme-check"></div></div>
-                        <div class="theme-option" data-theme="dark"><div class="theme-preview dark"><div class="theme-header">🌙 Dark</div><div class="theme-body">Easy on the eyes.</div></div><div class="theme-check"></div></div>
-                        <div class="theme-option" data-theme="system"><div class="theme-preview system"><div class="theme-header">🖥️ System</div><div class="theme-body">Follows your device.</div></div><div class="theme-check"></div></div>
+                        <div class="theme-option" data-theme="light"><div class="theme-preview light"><div class="theme-header">☀️ {{ _('settings.appearance.theme.light') }}</div><div class="theme-body">{{ _('settings.appearance.theme.light.desc') }}</div></div><div class="theme-check"></div></div>
+                        <div class="theme-option" data-theme="dark"><div class="theme-preview dark"><div class="theme-header">🌙 {{ _('settings.appearance.theme.dark') }}</div><div class="theme-body">{{ _('settings.appearance.theme.dark.desc') }}</div></div><div class="theme-check"></div></div>
+                        <div class="theme-option" data-theme="system"><div class="theme-preview system"><div class="theme-header">🖥️ {{ _('settings.appearance.theme.system') }}</div><div class="theme-body">{{ _('settings.appearance.theme.system.desc') }}</div></div><div class="theme-check"></div></div>
                     </div>
                 </div>
             </div>
             <div class="form-row two-col">
                 <div class="form-group">
-                    <label>Accent Colour</label>
+                    <label>{{ _('settings.appearance.accent') }}</label>
                     <div class="accent-selector">
                         <button type="button" class="accent-option red" data-accent="red" style="background:#FF3138;"></button>
                         <button type="button" class="accent-option blue" data-accent="blue" style="background:#3B82F6;"></button>
@@ -93,28 +93,47 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Font Size</label>
+                    <label>{{ _('settings.appearance.font_size') }}</label>
                     <select id="font_size" name="font_size">
-                        <option value="small" {% if settings['appearance.font_size'] == 'small' %}selected{% endif %}>Small</option>
-                        <option value="medium" {% if settings['appearance.font_size'] == 'medium' or not settings['appearance.font_size'] %}selected{% endif %}>Medium</option>
-                        <option value="large" {% if settings['appearance.font_size'] == 'large' %}selected{% endif %}>Large</option>
+                        <option value="small" {% if settings['appearance.font_size'] == 'small' %}selected{% endif %}>{{ _('settings.appearance.font_size.small') }}</option>
+                        <option value="medium" {% if settings['appearance.font_size'] == 'medium' or not settings['appearance.font_size'] %}selected{% endif %}>{{ _('settings.appearance.font_size.medium') }}</option>
+                        <option value="large" {% if settings['appearance.font_size'] == 'large' %}selected{% endif %}>{{ _('settings.appearance.font_size.large') }}</option>
                     </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>{{ _('settings.appearance.language') }}</label>
+                    <select id="language" name="language">
+                        <option value="en" {% if settings['appearance.language'] == 'en' or not settings['appearance.language'] %}selected{% endif %}>{{ _('settings.appearance.language.en') }}</option>
+                        <option value="so" {% if settings['appearance.language'] == 'so' %}selected{% endif %} {% if not language_allowed %}disabled{% endif %}>{{ _('settings.appearance.language.so') }}</option>
+                    </select>
+                    {% if not language_allowed %}
+                        <p class="toggle-desc" style="color: var(--text-muted); margin-top: 6px;">
+                            <i class="fas fa-lock"></i>
+                            {{ _('settings.appearance.language.locked') }}
+                        </p>
+                    {% else %}
+                        <p class="toggle-desc" style="color: var(--text-muted); margin-top: 6px;">
+                            {{ _('settings.appearance.language.desc') }}
+                        </p>
+                    {% endif %}
                 </div>
             </div>
             <div class="form-row toggle-group">
                 <div class="toggle-item">
                     <label class="toggle-label">
-                        <span class="toggle-text">Compact Mode</span>
+                        <span class="toggle-text">{{ _('settings.appearance.compact_mode') }}</span>
                         <span class="toggle-switch">
                             <input type="checkbox" id="compact_mode" {% if settings['appearance.compact_mode'] %}checked{% endif %}>
                             <span class="slider"></span>
                         </span>
                     </label>
-                    <p class="toggle-desc">Reduce padding and margins for a denser layout.</p>
+                    <p class="toggle-desc">{{ _('settings.appearance.compact_mode.desc') }}</p>
                 </div>
             </div>
             <div class="form-row">
-                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Appearance</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {{ _('settings.appearance.save') }}</button>
             </div>
         </form>
     </div>
@@ -480,8 +499,12 @@
                             <strong>{{ feature.label }}</strong>
                             <p>{{ feature.description }}</p>
                             {% if not feature.available %}
-                                <p class="upgrade-hint">Requires <strong>{{ feature.tier_required|capitalize }}</strong></p>
-                                <button class="btn btn-sm btn-primary upgrade-btn" data-feature="{{ feature.key }}" data-required-tier="{{ feature.tier_required or 'premium' }}">Upgrade</button>
+                                {% if feature.tier_required %}
+                                    <p class="upgrade-hint">Requires <strong>{{ feature.tier_required|capitalize }}</strong></p>
+                                    <button class="btn btn-sm btn-primary upgrade-btn" data-feature="{{ feature.key }}" data-required-tier="{{ feature.tier_required }}">Upgrade</button>
+                                {% else %}
+                                    <p class="upgrade-hint">Unavailable on your current plan.</p>
+                                {% endif %}
                             {% endif %}
                         </div>
                     </div>
@@ -870,12 +893,21 @@
                 const accent = activeAccent ? activeAccent.dataset.accent : 'red';
                 const fontSize = document.getElementById('font_size')?.value || 'medium';
                 const compactMode = document.getElementById('compact_mode')?.checked || false;
-                submitForm('/settings/api', {
+                const language = document.getElementById('language')?.value || 'en';
+
+                // Include language in the payload only if the user can change it.
+                // If the select is disabled (no entitlement), the browser returns
+                // the currently-selected value — which is always 'en' in that case —
+                // and the server will reject any attempt to flip it to 'so'.
+                const payload = {
                     'appearance.theme': theme,
                     'appearance.accent': accent,
                     'appearance.font_size': fontSize,
-                    'appearance.compact_mode': compactMode
-                }, 'Appearance updated!');
+                    'appearance.compact_mode': compactMode,
+                    'appearance.language': language
+                };
+
+                submitForm('/settings/api', payload, 'Appearance updated!');
             });
         }
 

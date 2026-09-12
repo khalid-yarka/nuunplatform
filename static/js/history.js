@@ -1,10 +1,12 @@
 // static/js/history.js
 // Tier-aware history page rendering.
+// All display strings come from window.I18N_HISTORY (set by history.html).
 
 (function() {
     'use strict';
 
     const cfg = window.historyConfig || {};
+    const T = window.I18N_HISTORY || {};
 
     let currentPage = 1;
     let perPage = 20;
@@ -58,15 +60,14 @@
     }
 
     function formatDateHeader(dateStr) {
-        if (!dateStr || dateStr === 'Unknown') return 'Unknown date';
+        if (!dateStr || dateStr === 'Unknown') return T.date_unknown || 'Unknown date';
         const today = new Date();
         const todayIso = today.toISOString().split('T')[0];
         const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
 
-        if (dateStr === todayIso) return '📅 Today';
-        if (dateStr === yesterday) return '📅 Yesterday';
+        if (dateStr === todayIso) return '📅 ' + (T.date_today || 'Today');
+        if (dateStr === yesterday) return '📅 ' + (T.date_yesterday || 'Yesterday');
 
-        // Relative for the current week
         try {
             const d = new Date(dateStr + 'T00:00:00');
             const diffDays = Math.floor((today - d) / 86400000);
@@ -112,7 +113,7 @@
         const meta = parseMetadata(entry.metadata);
         const time = formatEntryTime(entry.created_at);
 
-        let title = 'Unknown event';
+        let title = T.unknown_event || 'Unknown event';
         let detailsHtml = '';
 
         // ---------- Quiz attempt ----------
@@ -122,12 +123,12 @@
             const total = meta.total ?? 0;
             const pct = meta.percentage ?? 0;
             const cls = scoreBadgeClass(pct);
-            title = 'Completed a <span class="highlight">' + escapeHtml(subject) + '</span> quiz';
+            title = (T.quiz_completed_prefix || 'Completed a <span class="highlight">{subject}</span> quiz').replace('{subject}', escapeHtml(subject));
             detailsHtml =
                 '<span class="meta-item">' +
                     '<span class="meta-badge ' + cls + '">' + escapeHtml(String(score)) + '/' + escapeHtml(String(total)) + ' · ' + escapeHtml(String(pct)) + '%</span>' +
                 '</span>' +
-                '<span class="meta-item">📝 Practice</span>';
+                '<span class="meta-item">📝 ' + (T.practice || 'Practice') + '</span>';
         }
 
         // ---------- Live quiz ----------
@@ -136,16 +137,16 @@
             const score = meta.score ?? 0;
             const rank = meta.rank ?? null;
             const total = meta.total_questions ?? null;
-            title = 'Played a <span class="highlight">' + escapeHtml(subject) + '</span> live quiz';
+            title = (T.live_quiz_prefix || 'Played a <span class="highlight">{subject}</span> live quiz').replace('{subject}', escapeHtml(subject));
             detailsHtml =
                 '<span class="meta-item">' +
-                    '<span class="meta-badge good">' + escapeHtml(String(score)) + ' pts</span>' +
+                    '<span class="meta-badge good">' + escapeHtml(String(score)) + ' ' + (T.pts_suffix || 'pts') + '</span>' +
                 '</span>';
             if (rank) {
-                detailsHtml += '<span class="meta-item">🏅 Rank #' + escapeHtml(String(rank)) + '</span>';
+                detailsHtml += '<span class="meta-item">🏅 ' + (T.rank_prefix || 'Rank #') + escapeHtml(String(rank)) + '</span>';
             }
             if (total) {
-                detailsHtml += '<span class="meta-item">⚡ ' + escapeHtml(String(total)) + ' questions</span>';
+                detailsHtml += '<span class="meta-item">⚡ ' + escapeHtml(String(total)) + ' ' + (T.questions_suffix || 'questions') + '</span>';
             }
         }
 
@@ -153,8 +154,8 @@
         else if (type === 'achievement') {
             const name = meta.name || 'Achievement';
             const emoji = meta.icon || '🏆';
-            title = 'Unlocked <span class="highlight">' + escapeHtml(name) + '</span>';
-            detailsHtml = '<span class="meta-item">' + escapeHtml(emoji) + ' Achievement</span>';
+            title = (T.achievement_unlocked_prefix || 'Unlocked <span class="highlight">{name}</span>').replace('{name}', escapeHtml(name));
+            detailsHtml = '<span class="meta-item">' + escapeHtml(emoji) + ' ' + (T.achievement || 'Achievement') + '</span>';
         }
 
         // ---------- Save ----------
@@ -162,8 +163,8 @@
             const contentType = meta.content_type || 'item';
             const cid = meta.content_id || '';
             title = action === 'unsaved'
-                ? 'Removed a saved item'
-                : 'Saved a <span class="highlight">' + escapeHtml(contentType) + '</span>';
+                ? (T.save_removed || 'Removed a saved item')
+                : (T.save_added_prefix || 'Saved a <span class="highlight">{type}</span>').replace('{type}', escapeHtml(contentType));
             if (cid) {
                 detailsHtml = '<span class="meta-item">🔖 #' + escapeHtml(String(cid)) + '</span>';
             }
@@ -174,8 +175,9 @@
             const pdfTitle = meta.title || 'PDF';
             const subject = meta.subject || '';
             const isDownload = type === 'pdf_download';
-            title = (isDownload ? 'Downloaded ' : 'Viewed ') +
-                    '<span class="highlight">' + escapeHtml(pdfTitle) + '</span>';
+            const tmpl = isDownload ? (T.pdf_downloaded_prefix || 'Downloaded <span class="highlight">{title}</span>')
+                                    : (T.pdf_viewed_prefix || 'Viewed <span class="highlight">{title}</span>');
+            title = tmpl.replace('{title}', escapeHtml(pdfTitle));
             if (subject) {
                 detailsHtml = '<span class="meta-item">📚 ' + escapeHtml(subject) + '</span>';
             }
@@ -184,14 +186,14 @@
         // ---------- Like ----------
         else if (type === 'like') {
             const liked = action === 'liked';
-            title = liked ? 'Liked a question' : 'Unliked a question';
+            title = liked ? (T.like_added || 'Liked a question') : (T.like_removed || 'Unliked a question');
             detailsHtml = '<span class="meta-item">' + (liked ? '❤️' : '💔') + '</span>';
         }
 
         // ---------- Report ----------
         else if (type === 'report') {
             const reason = meta.reason || 'Issue';
-            title = 'Reported a question';
+            title = T.report_added || 'Reported a question';
             detailsHtml = '<span class="meta-item"><span class="meta-badge low">' + escapeHtml(reason) + '</span></span>';
         }
 
@@ -287,7 +289,6 @@
                 return;
             }
 
-            // Group by date
             const groups = {};
             const order = [];
             entries.forEach(e => {
@@ -340,7 +341,7 @@
         .catch(err => {
             console.error('History fetch error:', err);
             loading = false;
-            showEmptyState('error', 'Failed to load history. Please try again.');
+            showEmptyState('error', T.empty_filtered_desc || 'Failed to load history.');
         });
     }
 
@@ -351,37 +352,37 @@
         if (!timelineList) return;
 
         let icon = '📭';
-        let title = 'No history yet';
-        let text = message || 'Start learning to build your history timeline!';
+        let title = T.empty_title || 'No history yet';
+        let text = message || T.empty_desc || 'Start learning to build your history timeline!';
         let actionsHtml = '';
 
         if (kind === 'filtered') {
             icon = '🔍';
-            title = 'No matching entries';
-            text = 'No history entries match your current filters.';
+            title = T.empty_filtered_title || 'No matching entries';
+            text = T.empty_filtered_desc || 'No history entries match your current filters.';
             actionsHtml =
                 '<div class="empty-actions">' +
                     '<button type="button" class="btn btn-primary" onclick="document.getElementById(\'clearFilters\').click()">' +
-                        '<i class="fas fa-times"></i> Clear Filters' +
+                        '<i class="fas fa-times"></i> ' + (T.empty_clear_filters || 'Clear Filters') +
                     '</button>' +
                 '</div>';
         } else if (kind === 'error') {
             icon = '⚠️';
-            title = 'Something went wrong';
+            title = T.empty_error_title || 'Something went wrong';
             actionsHtml =
                 '<div class="empty-actions">' +
                     '<button type="button" class="btn btn-primary" onclick="location.reload()">' +
-                        '<i class="fas fa-redo"></i> Retry' +
+                        '<i class="fas fa-redo"></i> ' + (T.empty_retry || 'Retry') +
                     '</button>' +
                 '</div>';
         } else {
             actionsHtml =
                 '<div class="empty-actions">' +
                     '<a href="/quiz" class="btn btn-primary">' +
-                        '<i class="fas fa-rocket"></i> Take a Quiz' +
+                        '<i class="fas fa-rocket"></i> ' + (T.empty_take_quiz || 'Take a Quiz') +
                     '</a>' +
                     '<a href="/live-quiz/lobby" class="btn btn-secondary">' +
-                        '<i class="fas fa-bolt"></i> Join Live Quiz' +
+                        '<i class="fas fa-bolt"></i> ' + (T.empty_join_live || 'Join Live Quiz') +
                     '</a>' +
                 '</div>';
         }
@@ -429,7 +430,6 @@
         exportBtn.addEventListener('click', function() {
             const params = buildParams();
             const url = '/history/api/export?' + params.toString();
-            // Trigger download via hidden anchor
             const a = document.createElement('a');
             a.href = url;
             a.style.display = 'none';
@@ -478,13 +478,12 @@
         loadMoreBtn.addEventListener('click', () => {
             if (!hasMore || loading) return;
             loadMoreBtn.disabled = true;
-            loadMoreBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+            loadMoreBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + (T.loading || 'Loading...');
             loadEntries(false);
-            // Re-enable after fetch (loading is checked inside)
             setTimeout(() => {
                 if (!loading) {
                     loadMoreBtn.disabled = false;
-                    loadMoreBtn.innerHTML = '<i class="fas fa-chevron-down"></i> Load More';
+                    loadMoreBtn.innerHTML = '<i class="fas fa-chevron-down"></i> ' + (T.load_more || 'Load More');
                 }
             }, 600);
         });

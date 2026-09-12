@@ -1,8 +1,8 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}Quiz - Student Platform{% endblock %}
+{% block title %}{{ _('quiz.play.page_title') }}{% endblock %}
 
-{% block page_title %}Quiz{% endblock %}
+{% block page_title %}{{ _('quiz.play.page_title') }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
@@ -333,10 +333,10 @@
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <span style="color: var(--text-secondary); font-size: 14px;">
-            Question <span id="current-num">{{ current + 1 }}</span>/<span id="total-num">{{ total }}</span>
+            {{ _('quiz.play.question_label') }} <span id="current-num">{{ current + 1 }}</span>/<span id="total-num">{{ total }}</span>
         </span>
         <span style="color: var(--primary); font-weight: 600; font-size: 14px;">
-            ⭐ <span id="score-display">{{ score }}</span> points
+            ⭐ <span id="score-display">{{ score }}</span> {{ _('quiz.play.points_label') }}
         </span>
     </div>
 
@@ -377,42 +377,42 @@
             </div>
 
             <div class="interaction-row" id="interactionRow">
-                <button class="interaction-btn" id="likeBtn" data-question-id="{{ question.id }}" title="Like this question">
+                <button class="interaction-btn" id="likeBtn" data-question-id="{{ question.id }}" title="{{ _('quiz.play.like_tooltip') }}">
                     ♡
                 </button>
 
-                <button class="interaction-btn" id="saveBtn" data-question-id="{{ question.id }}" title="Save this question">
+                <button class="interaction-btn" id="saveBtn" data-question-id="{{ question.id }}" title="{{ _('quiz.play.save_tooltip') }}">
                     ☐
                 </button>
 
-                <button class="interaction-btn" id="reportBtn" data-question-id="{{ question.id }}" title="Report an issue">
+                <button class="interaction-btn" id="reportBtn" data-question-id="{{ question.id }}" title="{{ _('quiz.play.report_tooltip') }}">
                     ⚑
                 </button>
 
                 <span class="action-divider"></span>
 
                 <button class="btn-next" id="nextBtn" style="display:none;">
-                    <span class="icon">⏭️</span> Next Question
+                    <span class="icon">⏭️</span> {{ _('quiz.play.next_question') }}
                 </button>
 
                 <div class="interaction-wrapper">
-                    <button class="help-icon" id="helpBtn" title="Help">❓</button>
+                    <button class="help-icon" id="helpBtn" title="{{ _('quiz.play.help_tooltip') }}">❓</button>
                     <div class="help-popup" id="helpPopup">
-                        <div class="item"><span class="icon">♡</span> Like this question</div>
-                        <div class="item"><span class="icon">☐</span> Save to bookmarks</div>
-                        <div class="item"><span class="icon">⚑</span> Report an issue</div>
-                        <div class="item"><span class="icon">⏭️</span> Go to next question</div>
+                        <div class="item"><span class="icon">♡</span> {{ _('quiz.play.help_like') }}</div>
+                        <div class="item"><span class="icon">☐</span> {{ _('quiz.play.help_save') }}</div>
+                        <div class="item"><span class="icon">⚑</span> {{ _('quiz.play.help_report') }}</div>
+                        <div class="item"><span class="icon">⏭️</span> {{ _('quiz.play.help_next') }}</div>
                         {% if normalize_tier(user_tier) in ['premium', 'pro'] %}
-                        <div class="note">💡 Auto-advance enabled in Settings → Quiz Preferences.</div>
+                        <div class="note">{{ _('quiz.play.help_auto_advance_on') }}</div>
                         {% else %}
-                        <div class="note">🔒 Upgrade to Premium for auto-advance.</div>
+                        <div class="note">{{ _('quiz.play.help_auto_advance_locked') }}</div>
                         {% endif %}
                     </div>
                 </div>
             </div>
 
             <div id="autoSkipIndicator" class="auto-skip-indicator" style="display: none;">
-                <span class="spinner"></span> Moving to next question...
+                <span class="spinner"></span> {{ _('quiz.play.moving_to_next') }}
             </div>
         </div>
     </div>
@@ -421,28 +421,28 @@
 <!-- Report Modal -->
 <div class="report-modal" id="reportModal">
     <div class="modal-content">
-        <div class="modal-title">⚠️ Report Question</div>
-        <div class="modal-sub">Help us improve by reporting any issues.</div>
+        <div class="modal-title">⚠️ {{ _('quiz.play.report_title') }}</div>
+        <div class="modal-sub">{{ _('quiz.play.report_subtitle') }}</div>
         <form id="reportForm">
             <input type="hidden" id="reportQuestionId" value="{{ question.id }}">
             <div class="form-group">
-                <label for="reportReason">Reason <span style="color: var(--primary);">*</span></label>
+                <label for="reportReason">{{ _('quiz.play.report_reason') }} <span style="color: var(--primary);">*</span></label>
                 <select id="reportReason" required>
-                    <option value="">Select a reason...</option>
-                    <option value="incorrect">Incorrect Answer</option>
-                    <option value="inappropriate">Inappropriate Content</option>
-                    <option value="spam">Spam or Irrelevant</option>
-                    <option value="duplicate">Duplicate Question</option>
-                    <option value="other">Other</option>
+                    <option value="">{{ _('quiz.play.report_select_reason') }}</option>
+                    <option value="incorrect">{{ _('quiz.play.report_reason_incorrect') }}</option>
+                    <option value="inappropriate">{{ _('quiz.play.report_reason_inappropriate') }}</option>
+                    <option value="spam">{{ _('quiz.play.report_reason_spam') }}</option>
+                    <option value="duplicate">{{ _('quiz.play.report_reason_duplicate') }}</option>
+                    <option value="other">{{ _('quiz.play.report_reason_other') }}</option>
                 </select>
             </div>
             <div class="form-group">
-                <label for="reportComment">Additional Comments</label>
-                <textarea id="reportComment" rows="3" placeholder="Please provide more details..."></textarea>
+                <label for="reportComment">{{ _('quiz.play.report_comment') }}</label>
+                <textarea id="reportComment" rows="3" placeholder="{{ _('quiz.play.report_comment_placeholder') }}"></textarea>
             </div>
             <div class="modal-actions">
-                <button type="button" class="btn btn-secondary" onclick="closeReportModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary">Submit Report</button>
+                <button type="button" class="btn btn-secondary" onclick="closeReportModal()">{{ _('common.cancel') }}</button>
+                <button type="submit" class="btn btn-primary">{{ _('quiz.play.report_submit') }}</button>
             </div>
         </form>
     </div>
@@ -454,6 +454,21 @@ const questionId = {{ question.id }};
 const totalQuestions = {{ total }};
 const userTier = '{{ normalize_tier(user_tier|default("free")) }}';
 const autoSkipEnabled = {{ user_settings.auto_skip_enabled|default(0)|int }};
+
+// i18n strings handed to JS
+const I18N = {
+    correct:        "{{ _('quiz.play.feedback_correct') }}",
+    wrong:          "{{ _('quiz.play.feedback_wrong') }}",
+    correct_was:    "{{ _('quiz.play.feedback_correct_was') }}",
+    loading:        "{{ _('quiz.play.next_loading') }}",
+    next_question:  "{{ _('quiz.play.next_question') }}",
+    error_advance:  "{{ _('quiz.play.error_advance') }}",
+    error_submit:   "{{ _('quiz.play.error_submit') }}",
+    error_network:  "{{ _('quiz.play.error_network') }}",
+    error_generic:  "{{ _('quiz.play.error_generic') }}",
+    report_ok:      "{{ _('quiz.play.report_submitted') }}",
+    report_reason:  "{{ _('quiz.play.report_pick_reason') }}"
+};
 
 document.addEventListener('DOMContentLoaded', function() {
     const optionsContainer = document.getElementById('options-container');
@@ -524,7 +539,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (userTier === 'free') {
             saveBtn.classList.add('locked');
-            saveBtn.title = 'Upgrade to save questions';
+            saveBtn.title = "{{ _('quiz.play.save_locked_tooltip') }}";
         }
     }
 
@@ -569,7 +584,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 btn.textContent = '♡';
             }
         })
-        .catch(() => { showToast('Network error', 'error'); fetchInteractionStatus(); });
+        .catch(() => { showToast(I18N.error_network, 'error'); fetchInteractionStatus(); });
     });
 
     saveBtn.addEventListener('click', function(e) {
@@ -609,7 +624,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 btn.textContent = '☐';
             }
         })
-        .catch(() => { showToast('Network error', 'error'); fetchInteractionStatus(); });
+        .catch(() => { showToast(I18N.error_network, 'error'); fetchInteractionStatus(); });
     });
 
     reportBtn.addEventListener('click', function(e) {
@@ -625,10 +640,10 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         const reason = document.getElementById('reportReason').value;
         const comment = document.getElementById('reportComment').value.trim();
-        if (!reason) { showToast('Please select a reason.', 'warning'); return; }
+        if (!reason) { showToast(I18N.report_reason, 'warning'); return; }
         const submitBtn = this.querySelector('button[type="submit"]');
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Submitting...';
+        submitBtn.textContent = '...';
 
         fetch('/api/interaction/report', {
             method: 'POST',
@@ -638,14 +653,14 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(res => res.json())
         .then(data => {
             if (data.error) { showToast('Error: ' + data.error, 'error'); return; }
-            showToast('✅ Report submitted.', 'success');
+            showToast(I18N.report_ok, 'success');
             reportModal.classList.remove('show');
             reportBtn.disabled = true;
             reportBtn.classList.add('locked');
             reportBtn.textContent = '⚠';
         })
-        .catch(() => showToast('Network error', 'error'))
-        .finally(() => { submitBtn.disabled = false; submitBtn.textContent = 'Submit Report'; });
+        .catch(() => showToast(I18N.error_network, 'error'))
+        .finally(() => { submitBtn.disabled = false; submitBtn.textContent = "{{ _('quiz.play.report_submit') }}"; });
     });
 
     function closeReportModal() {
@@ -660,7 +675,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!answered) return;
 
         nextBtn.disabled = true;
-        nextBtn.innerHTML = '<span class="spinner" style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px;"></span> Loading...';
+        nextBtn.innerHTML = '<span class="spinner" style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px;"></span> ' + I18N.loading;
 
         fetch('/quiz/skip_rating', {
             method: 'POST',
@@ -676,9 +691,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(() => {
-            showToast('Error advancing. Please try again.', 'error');
+            showToast(I18N.error_advance, 'error');
             nextBtn.disabled = false;
-            nextBtn.innerHTML = '<span class="icon">⏭️</span> Next Question';
+            nextBtn.innerHTML = '<span class="icon">⏭️</span> ' + I18N.next_question;
         });
     });
 
@@ -713,13 +728,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 feedbackArea.style.display = 'block';
-                feedbackTitle.textContent = data.correct ? '✅ CORRECT! +1 point' : '❌ WRONG!';
+                feedbackTitle.textContent = data.correct ? I18N.correct : I18N.wrong;
                 feedbackTitle.style.color = data.correct ? '#10B981' : '#EF4444';
 
                 if (data.explanation) {
                     feedbackExplanation.textContent = '💡 ' + data.explanation;
                 } else {
-                    feedbackExplanation.textContent = 'Correct answer was: ' + data.correct_answer;
+                    feedbackExplanation.textContent = I18N.correct_was + ' ' + data.correct_answer;
                 }
 
                 nextBtn.style.display = 'inline-flex';
@@ -740,7 +755,7 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch(err => {
                 console.error('Error submitting answer:', err);
-                showToast('Error submitting answer.', 'error');
+                showToast(I18N.error_submit, 'error');
                 allBtns.forEach(b => b.disabled = false);
                 isSubmitting = false;
             });

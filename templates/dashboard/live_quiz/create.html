@@ -1,8 +1,8 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}Create Live Quiz - Student Platform{% endblock %}
+{% block title %}{{ _('live_quiz.create.page_title') }}{% endblock %}
 
-{% block page_title %}Create Live Quiz{% endblock %}
+{% block page_title %}{{ _('live_quiz.create.page_title') }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
@@ -124,9 +124,9 @@
 <div style="max-width: 640px; margin: 0 auto;">
 
     <div class="breadcrumb">
-        <a href="{{ url_for('live_quiz.lobby') }}">Live Quiz Lobby</a>
+        <a href="{{ url_for('live_quiz.lobby') }}">{{ _('live_quiz.lobby.page_title') }}</a>
         <span class="separator">/</span>
-        <span class="current">Create</span>
+        <span class="current">{{ _('live_quiz.create.breadcrumb_current') }}</span>
     </div>
 
     {% if not_enough %}
@@ -134,8 +134,8 @@
         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
             <span style="font-size: 28px;">⚠️</span>
             <div>
-                <h3 style="font-size: 18px; font-weight: 700; color: #92400E;">Not Enough Questions</h3>
-                <p style="color: #92400E; font-size: 14px;">Only {{ available }} questions available for this subject. You requested {{ requested }}.</p>
+                <h3 style="font-size: 18px; font-weight: 700; color: #92400E;">{{ _('live_quiz.create.not_enough_title') }}</h3>
+                <p style="color: #92400E; font-size: 14px;">{{ _('live_quiz.create.not_enough_desc', available=available, requested=requested) }}</p>
             </div>
         </div>
         <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
@@ -146,14 +146,14 @@
                 <input type="hidden" name="title" value="{{ title }}">
                 <input type="hidden" name="is_public" value="{{ is_public or 1 }}">
                 <button type="submit" style="padding: 8px 20px; background: #F59E0B; color: white; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: var(--transition);">
-                    Proceed with {{ available }} Questions
+                    {{ _('live_quiz.create.proceed_with', n=available) }}
                 </button>
             </form>
             <a href="{{ url_for('live_quiz.create') }}" style="padding: 8px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); text-decoration: none; color: var(--text); font-weight: 500; transition: var(--transition);">
-                Select Another Subject
+                {{ _('live_quiz.create.select_another') }}
             </a>
             <a href="{{ url_for('live_quiz.lobby') }}" style="padding: 8px 20px; background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; border-radius: var(--radius-sm); text-decoration: none; font-weight: 500; transition: var(--transition);">
-                Cancel
+                {{ _('common.cancel') }}
             </a>
         </div>
     </div>
@@ -162,8 +162,8 @@
     <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px; box-shadow: var(--shadow-sm);">
         <div style="text-align: center; margin-bottom: 24px;">
             <div style="font-size: 48px; margin-bottom: 8px;">🎯</div>
-            <h2 style="font-size: 22px; font-weight: 700; color: var(--text);">Create Live Quiz</h2>
-            <p style="color: var(--text-secondary); font-size: 14px; margin-top: 2px;">Host a real-time quiz competition</p>
+            <h2 style="font-size: 22px; font-weight: 700; color: var(--text);">{{ _('live_quiz.create.title') }}</h2>
+            <p style="color: var(--text-secondary); font-size: 14px; margin-top: 2px;">{{ _('live_quiz.create.subtitle') }}</p>
         </div>
 
         <form method="POST" action="{{ url_for('live_quiz.create') }}" id="createForm">
@@ -171,10 +171,10 @@
 
             <div class="form-group" style="margin-bottom: 20px;">
                 <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
-                    📚 Subject <span style="color: var(--primary);">*</span>
+                    📚 {{ _('live_quiz.create.subject') }} <span style="color: var(--primary);">*</span>
                 </label>
                 <select name="subject_code" required style="width: 100%; padding: 12px 16px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: 15px; background: var(--surface); color: var(--text); transition: var(--transition);">
-                    <option value="">Select Subject</option>
+                    <option value="">{{ _('live_quiz.create.select_subject') }}</option>
                     {% for subject in subjects %}
                         <option value="{{ subject.code }}" {% if subject_code == subject.code %}selected{% endif %}>
                             {{ subject.icon or '📚' }} {{ subject.name }}
@@ -185,7 +185,7 @@
 
             <div class="form-group" style="margin-bottom: 20px;">
                 <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
-                    📝 Number of Questions <span style="color: var(--primary);">*</span>
+                    📝 {{ _('live_quiz.create.question_count') }} <span style="color: var(--primary);">*</span>
                 </label>
                 <div class="question-count-options">
                     {% for n in [10, 15, 20, 25, 30] %}
@@ -199,12 +199,12 @@
 
             <div class="form-group" style="margin-bottom: 20px;">
                 <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
-                    🏷️ Quiz Title <span style="color: var(--primary);">*</span>
+                    🏷️ {{ _('live_quiz.create.quiz_title') }} <span style="color: var(--primary);">*</span>
                 </label>
                 <input type="text"
                        name="title"
                        id="quizTitleInput"
-                       placeholder="e.g., Friday Challenge"
+                       placeholder="{{ _('live_quiz.create.title_placeholder') }}"
                        value="{{ title or '' }}"
                        required
                        minlength="3"
@@ -212,73 +212,73 @@
                        style="width: 100%; padding: 12px 16px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: 15px; background: var(--surface); color: var(--text); transition: var(--transition);">
                 <div id="titleError"
                      style="display: none; color: #EF4444; font-size: 12px; margin-top: 6px; font-weight: 500;">
-                    ⚠️ Please give your quiz a title (at least 3 characters).
+                    ⚠️ {{ _('live_quiz.create.title_error') }}
                 </div>
             </div>
 
             <div class="form-group" style="margin-bottom: 20px;">
                 <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 8px;">
-                    🔒 Privacy Settings
+                    🔒 {{ _('live_quiz.create.privacy_settings') }}
                 </label>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <label class="privacy-option {% if default_privacy != 0 %}selected{% endif %}" id="publicLabel">
                         <input type="radio" name="is_public" value="1" {% if default_privacy != 0 %}checked{% endif %}>
                         <span class="privacy-icon">🌐</span>
-                        <span class="privacy-label">Public</span>
-                        <span class="privacy-desc">Visible in lobby, anyone can join</span>
-                        <span class="privacy-badge recommended">✓ Recommended</span>
+                        <span class="privacy-label">{{ _('live_quiz.create.public') }}</span>
+                        <span class="privacy-desc">{{ _('live_quiz.create.public_desc') }}</span>
+                        <span class="privacy-badge recommended">✓ {{ _('live_quiz.create.recommended') }}</span>
                     </label>
                     <label class="privacy-option {% if default_privacy == 0 %}selected{% endif %}" id="privateLabel">
                         <input type="radio" name="is_public" value="0" {% if default_privacy == 0 %}checked{% endif %}>
                         <span class="privacy-icon">🔒</span>
-                        <span class="privacy-label">Private</span>
-                        <span class="privacy-desc">Only accessible via join code</span>
-                        <span class="privacy-badge private">Not in lobby</span>
+                        <span class="privacy-label">{{ _('live_quiz.create.private') }}</span>
+                        <span class="privacy-desc">{{ _('live_quiz.create.private_desc') }}</span>
+                        <span class="privacy-badge private">{{ _('live_quiz.create.not_in_lobby') }}</span>
                     </label>
                 </div>
                 <div style="margin-top: 8px; font-size: 12px; color: var(--text-muted); text-align: center;">
-                    💡 Public quizzes help build community and attract more participants.
+                    💡 {{ _('live_quiz.create.public_hint') }}
                 </div>
             </div>
 
             <div class="form-group" style="margin-bottom: 20px;">
                 <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
-                    ⏰ Schedule Start
+                    ⏰ {{ _('live_quiz.create.schedule_start') }}
                 </label>
                 <div class="schedule-options" id="scheduleOptions">
                     <label class="selected">
                         <input type="radio" name="schedule_minutes" value="0" checked>
-                        <span>▶️ Start When Ready (Manual)</span>
+                        <span>▶️ {{ _('live_quiz.create.schedule_manual') }}</span>
                     </label>
                     <label>
                         <input type="radio" name="schedule_minutes" value="5">
-                        <span>⏳ +5 min</span>
+                        <span>⏳ +5 {{ _('live_quiz.create.schedule_min') }}</span>
                     </label>
                     <label>
                         <input type="radio" name="schedule_minutes" value="10">
-                        <span>⏳ +10 min</span>
+                        <span>⏳ +10 {{ _('live_quiz.create.schedule_min') }}</span>
                     </label>
                     <label>
                         <input type="radio" name="schedule_minutes" value="15">
-                        <span>⏳ +15 min</span>
+                        <span>⏳ +15 {{ _('live_quiz.create.schedule_min') }}</span>
                     </label>
                     <label>
                         <input type="radio" name="schedule_minutes" value="30">
-                        <span>⏳ +30 min</span>
+                        <span>⏳ +30 {{ _('live_quiz.create.schedule_min') }}</span>
                     </label>
                 </div>
                 <div style="margin-top: 6px; font-size: 12px; color: var(--text-muted);">
                     <i class="fas fa-info-circle"></i>
-                    Manual: You click 'Start' in the waiting room. Scheduled: Auto-starts when timer hits zero. Minimum 2 participants required.
+                    {{ _('live_quiz.create.schedule_hint') }}
                 </div>
             </div>
 
             <div style="display: flex; gap: 12px;">
                 <button type="submit" style="flex: 1; padding: 12px; background: var(--primary); color: white; border: none; border-radius: var(--radius-sm); font-weight: 600; font-size: 16px; cursor: pointer; transition: var(--transition);">
-                    <i class="fas fa-rocket"></i> Create Quiz
+                    <i class="fas fa-rocket"></i> {{ _('live_quiz.create.create_quiz') }}
                 </button>
                 <a href="{{ url_for('live_quiz.lobby') }}" style="flex: 1; padding: 12px; background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-sm); text-decoration: none; color: var(--text); font-weight: 500; text-align: center; transition: var(--transition);">
-                    Cancel
+                    {{ _('common.cancel') }}
                 </a>
             </div>
         </form>
@@ -286,7 +286,7 @@
 
     <div style="margin-top: 16px; padding: 16px; background: var(--background); border-radius: var(--radius-sm); text-align: center; color: var(--text-secondary); font-size: 13px;">
         <i class="fas fa-info-circle"></i>
-        Questions are randomly selected from the subject. Participants join via a unique code.
+        {{ _('live_quiz.create.footer_hint') }}
     </div>
 </div>
 

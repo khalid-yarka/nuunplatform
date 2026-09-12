@@ -1,8 +1,8 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}Leaderboard{% endblock %}
+{% block title %}{{ _('leaderboard.page_title') }}{% endblock %}
 
-{% block page_title %}Leaderboard{% endblock %}
+{% block page_title %}{{ _('leaderboard.page_title') }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
@@ -429,16 +429,16 @@
     <div class="leaderboard-header">
         <h2>
             <span class="trophy">🏆</span>
-            Leaderboard
+            {{ _('leaderboard.title') }}
         </h2>
-        <p>Top performers on the platform</p>
+        <p>{{ _('leaderboard.subtitle') }}</p>
     </div>
 
     <!-- User Rank -->
     {% if user_rank %}
         <div style="text-align: center;">
             <div class="user-rank-badge">
-                Your Rank: <span class="rank-number">#{{ user_rank }}</span>
+                {{ _('leaderboard.your_rank') }} <span class="rank-number">#{{ user_rank }}</span>
             </div>
         </div>
     {% endif %}
@@ -488,8 +488,8 @@
     <!-- Full Leaderboard Table (Top 50) -->
     <div class="leaderboard-table-wrap">
         <div class="table-header">
-            <span><strong>{{ leaders|length }}</strong> top performers</span>
-            <span>🏅 Top 50</span>
+            <span><strong>{{ leaders|length }}</strong> {{ _('leaderboard.top_performers') }}</span>
+            <span>🏅 {{ _('leaderboard.top_50') }}</span>
         </div>
 
         {% if leaders %}
@@ -497,10 +497,10 @@
                 <thead>
                     <tr>
                         <th style="text-align:center; width:48px;">#</th>
-                        <th>Student</th>
-                        <th class="school-cell">School</th>
-                        <th class="public-id-cell" style="text-align:center;">ID</th>
-                        <th style="text-align:right; width:80px;">Points</th>
+                        <th>{{ _('leaderboard.col_student') }}</th>
+                        <th class="school-cell">{{ _('leaderboard.col_school') }}</th>
+                        <th class="public-id-cell" style="text-align:center;">{{ _('leaderboard.col_id') }}</th>
+                        <th style="text-align:right; width:80px;">{{ _('leaderboard.col_points') }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -526,7 +526,7 @@
                                 {% if student.middle_name %}{{ student.middle_name }} {% endif %}
                                 {{ student.last_name or '' }}
                                 {% if is_you %}
-                                    <span class="you-tag">You</span>
+                                    <span class="you-tag">{{ _('leaderboard.you') }}</span>
                                 {% endif %}
                             </td>
                             <td class="school-cell">{{ student.school or '—' }}</td>
@@ -539,8 +539,8 @@
         {% else %}
             <div class="leaderboard-empty">
                 <span class="empty-icon">🏆</span>
-                <h3>No scores yet</h3>
-                <p>Be the first to play and claim the top spot!</p>
+                <h3>{{ _('leaderboard.empty_title') }}</h3>
+                <p>{{ _('leaderboard.empty_desc') }}</p>
             </div>
         {% endif %}
     </div>

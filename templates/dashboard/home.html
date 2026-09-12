@@ -1,7 +1,7 @@
 {% extends "dashboard_base.html" %}
 
 {% block title %}Dashboard - NuunPlatform{% endblock %}
-{% block page_title %}Dashboard{% endblock %}
+{% block page_title %}{{ _('nav.dashboard') }}{% endblock %}
 
 {% block dashboard_css %}
 <style>
@@ -684,7 +684,6 @@
 
 {# ============================================
    UNVERIFIED ACCOUNT BANNER
-   Shown only if session.is_verified is falsy AND user is not admin.
    ============================================ #}
 {% if not session.get('is_verified') and not session.get('is_admin') %}
     {% if super_admin_phone %}
@@ -693,8 +692,8 @@
            class="dh-verify-banner">
             <span class="dh-verify-icon">⚠️</span>
             <div class="dh-verify-text">
-                <strong>Your account is not verified yet</strong>
-                <span>Tap to send a verification request to the admin on WhatsApp</span>
+                <strong>{{ _('home.verify.title') }}</strong>
+                <span>{{ _('home.verify.tap_hint') }}</span>
             </div>
             <span class="dh-verify-arrow"><i class="fas fa-arrow-right"></i></span>
         </a>
@@ -702,8 +701,8 @@
         <div class="dh-verify-banner static">
             <span class="dh-verify-icon">⚠️</span>
             <div class="dh-verify-text">
-                <strong>Your account is not verified yet</strong>
-                <span>Please contact your teacher or school admin to verify your account.</span>
+                <strong>{{ _('home.verify.title') }}</strong>
+                <span>{{ _('home.verify.contact_hint') }}</span>
             </div>
         </div>
     {% endif %}
@@ -715,42 +714,48 @@
 <div class="dh-hero">
     <div class="dh-hero-inner">
         <div class="dh-hero-text">
-            <h1>{{ greeting_icon }} {{ greeting }}, <span class="accent">{{ session.user_name }}</span>!</h1>
+            <h1>
+                {{ greeting_icon }}
+                {% if greeting == 'Good Morning' %}{{ _('home.hero.greeting_morning') }}
+                {% elif greeting == 'Good Afternoon' %}{{ _('home.hero.greeting_afternoon') }}
+                {% else %}{{ _('home.hero.greeting_evening') }}{% endif %},
+                <span class="accent">{{ session.user_name }}</span>!
+            </h1>
             <p>
                 {% if total_points > 0 %}
-                    You've earned <strong>{{ total_points }}</strong> XP so far.
+                    {{ _('home.hero.earned_xp', n=total_points) }}
                     {% if xp_to_next > 0 %}
-                        Just <strong>{{ xp_to_next }}</strong> more to reach Level {{ level + 1 }}.
+                        {{ _('home.hero.to_next_level', n=xp_to_next, level=level + 1) }}
                     {% endif %}
                 {% else %}
-                    Ready to start your learning journey? Take your first quiz to begin.
+                    {{ _('home.hero.ready') }}
                 {% endif %}
             </p>
             <div class="xp-line">
-                🎯 Level <strong>{{ level }}</strong> · <strong>{{ xp_in_level }}/{{ xp_needed }}</strong> XP
+                🎯 {{ _('home.hero.level_and_xp', n=level, current=xp_in_level, needed=xp_needed) }}
             </div>
         </div>
         <div class="dh-level-card">
             <div class="lv-row">
                 <div>
-                    <div class="lv-label">Your Level</div>
+                    <div class="lv-label">{{ _('home.hero.your_level') }}</div>
                     <div class="lv-num">{{ level }}</div>
                 </div>
                 <div style="text-align:right;">
-                    <div class="lv-label">Total XP</div>
+                    <div class="lv-label">{{ _('home.hero.total_xp') }}</div>
                     <div class="lv-num" style="font-size:24px; color:#FCD34D;">{{ total_points }}</div>
                 </div>
             </div>
             <div class="dh-level-bar">
                 <div class="fill" style="width: {{ xp_percent }}%;"></div>
             </div>
-            <div class="lv-xp">{{ xp_to_next }} XP to next level</div>
+            <div class="lv-xp">{{ _('home.hero.xp_to_next', n=xp_to_next) }}</div>
         </div>
     </div>
 </div>
 
 <!-- ============================================
-     TIER STRIP (upgrade CTA)
+     TIER STRIP
      ============================================ -->
 {% if next_tier %}
 <div class="dh-tier-strip">
@@ -758,15 +763,15 @@
         <span class="ts-icon">⬆️</span>
         <div class="ts-text">
             {% if tier == 'free' %}
-                You're on <strong>Free</strong>. {{ upgrade_hint }}
+                {{ _('home.tier.line_free') }}
             {% else %}
-                You're on <strong>Premium</strong>. {{ upgrade_hint }}
+                {{ _('home.tier.line_premium') }}
             {% endif %}
         </div>
     </div>
     <button type="button" class="ts-btn"
             onclick="openSafkaPreview({ requiredTier: '{{ next_tier }}' })">
-        Upgrade to {{ next_tier|capitalize }}
+        {{ _('home.tier.upgrade_to', tier=_('tier.' ~ next_tier)) }}
     </button>
 </div>
 {% endif %}
@@ -779,21 +784,21 @@
     <div class="l-left">
         <span class="pulse"></span>
         <div class="l-info">
-            <h4>⚡ {{ active_quiz.title or 'Live Quiz' }}</h4>
+            <h4>⚡ {{ active_quiz.title or _('nav.live_quiz') }}</h4>
             <p>
                 {% if active_quiz.status == 'scheduled' %}
-                    Scheduled to start soon
+                    {{ _('home.live.scheduled_soon') }}
                 {% elif active_quiz.status == 'waiting' %}
-                    Waiting in lobby for participants
+                    {{ _('home.live.waiting') }}
                 {% else %}
-                    Currently active — jump back in!
+                    {{ _('home.live.active') }}
                 {% endif %}
             </p>
         </div>
     </div>
     <a href="{% if active_quiz.status == 'active' %}{{ url_for('live_quiz.play', quiz_id=active_quiz.id) }}{% else %}{{ url_for('live_quiz.waiting_room', quiz_id=active_quiz.id) }}{% endif %}"
        class="l-btn">
-        {% if active_quiz.status == 'active' %}Continue →{% else %}View Room →{% endif %}
+        {% if active_quiz.status == 'active' %}{{ _('home.live.continue') }}{% else %}{{ _('home.live.view_room') }}{% endif %}
     </a>
 </div>
 {% endif %}
@@ -807,8 +812,8 @@
             <span class="num">{{ success_rate }}%</span>
             <span class="ico">📊</span>
         </div>
-        <span class="lbl">Mastery Score</span>
-        <span class="sub">{{ total_correct }} correct answers</span>
+        <span class="lbl">{{ _('home.stat.mastery') }}</span>
+        <span class="sub">{{ _('home.stat.correct_answers', n=total_correct) }}</span>
     </div>
 
     <div class="dh-stat blue">
@@ -816,8 +821,8 @@
             <span class="num">{{ quiz_count }}</span>
             <span class="ico">📚</span>
         </div>
-        <span class="lbl">Quizzes Taken</span>
-        <span class="sub">{{ subjects_attempted }} subjects</span>
+        <span class="lbl">{{ _('home.stat.quizzes_taken') }}</span>
+        <span class="sub">{{ _('home.stat.subjects', n=subjects_attempted) }}</span>
     </div>
 
     <div class="dh-stat amber">
@@ -825,8 +830,8 @@
             <span class="num">{{ streak }}</span>
             <span class="ico">🔥</span>
         </div>
-        <span class="lbl">Day Streak</span>
-        <span class="sub">{% if streak > 0 %}Keep it going!{% else %}Start today{% endif %}</span>
+        <span class="lbl">{{ _('home.stat.streak') }}</span>
+        <span class="sub">{% if streak > 0 %}{{ _('home.stat.keep_going') }}{% else %}{{ _('home.stat.start_today') }}{% endif %}</span>
     </div>
 
     <div class="dh-stat purple">
@@ -834,8 +839,8 @@
             <span class="num">{{ level }}</span>
             <span class="ico">🏆</span>
         </div>
-        <span class="lbl">Current Level</span>
-        <span class="sub">{{ total_points }} XP total</span>
+        <span class="lbl">{{ _('home.stat.current_level') }}</span>
+        <span class="sub">{{ _('home.stat.xp_total', n=total_points) }}</span>
     </div>
 </div>
 
@@ -845,19 +850,19 @@
 <div class="dh-quick" style="margin-bottom: 22px;">
     <a href="{{ url_for('quiz.index') }}">
         <span class="qi">📝</span>
-        <span class="qt">Take Quiz</span>
+        <span class="qt">{{ _('home.quick.take_quiz') }}</span>
     </a>
     <a href="{{ url_for('live_quiz.lobby') }}">
         <span class="qi">⚡</span>
-        <span class="qt">Live Quiz</span>
+        <span class="qt">{{ _('home.quick.live_quiz') }}</span>
     </a>
     <a href="{{ url_for('pdfs.list_pdfs') }}">
         <span class="qi">📄</span>
-        <span class="qt">Resources</span>
+        <span class="qt">{{ _('home.quick.resources') }}</span>
     </a>
     <a href="{{ url_for('history.index') }}">
         <span class="qi">📈</span>
-        <span class="qt">My History</span>
+        <span class="qt">{{ _('home.quick.history') }}</span>
     </a>
 </div>
 
@@ -868,8 +873,14 @@
     <!-- Subject Mastery -->
     <div class="dh-card">
         <div class="dh-card-head">
-            <h3><i class="fas fa-bullseye"></i> Subject Mastery</h3>
-            <span class="hint">{{ subject_performance|length }} subject{% if subject_performance|length != 1 %}s{% endif %}</span>
+            <h3><i class="fas fa-bullseye"></i> {{ _('home.mastery.title') }}</h3>
+            <span class="hint">
+                {% if subject_performance|length == 1 %}
+                    {{ _('home.mastery.subtitle_one', n=1) }}
+                {% else %}
+                    {{ _('home.mastery.subtitle_many', n=subject_performance|length) }}
+                {% endif %}
+            </span>
         </div>
         <div class="dh-card-body">
             {% if subject_performance %}
@@ -890,15 +901,15 @@
                 </div>
                 {% if subject_performance|length > 5 %}
                     <div class="dh-mastery-more">
-                        + {{ subject_performance|length - 5 }} more subjects
+                        {{ _('home.mastery.more', n=subject_performance|length - 5) }}
                     </div>
                 {% endif %}
             {% else %}
                 <div class="dh-empty">
                     <span class="ico">🎯</span>
-                    <h4>No mastery yet</h4>
-                    <p>Complete a few quizzes to see your subject strengths.</p>
-                    <a href="{{ url_for('quiz.index') }}">Start Quiz</a>
+                    <h4>{{ _('home.mastery.empty_title') }}</h4>
+                    <p>{{ _('home.mastery.empty_desc') }}</p>
+                    <a href="{{ url_for('quiz.index') }}">{{ _('home.mastery.start_quiz') }}</a>
                 </div>
             {% endif %}
         </div>
@@ -907,10 +918,16 @@
     <!-- Performance Chart -->
     <div class="dh-card">
         <div class="dh-card-head">
-            <h3><i class="fas fa-chart-line"></i> Performance Trend</h3>
+            <h3><i class="fas fa-chart-line"></i> {{ _('home.chart.title') }}</h3>
             <span class="hint">
-                Last {{ chart_data|length }} quiz{% if chart_data|length != 1 %}zes{% endif %}
-                {% if analytics_level < 3 %} · <a href="#" onclick="openSafkaPreview({ requiredTier: 'premium' }); return false;" style="color: var(--primary); text-decoration: none;">+more</a>{% endif %}
+                {% if chart_data|length == 1 %}
+                    {{ _('home.chart.last_one', n=1) }}
+                {% else %}
+                    {{ _('home.chart.last_many', n=chart_data|length) }}
+                {% endif %}
+                {% if analytics_level < 3 %}
+                    · <a href="#" onclick="openSafkaPreview({ requiredTier: 'premium' }); return false;" style="color: var(--primary); text-decoration: none;">{{ _('home.chart.more') }}</a>
+                {% endif %}
             </span>
         </div>
         <div class="dh-card-body">
@@ -921,9 +938,9 @@
             {% else %}
                 <div class="dh-empty">
                     <span class="ico">📈</span>
-                    <h4>No data yet</h4>
-                    <p>Your performance chart appears after your first few quizzes.</p>
-                    <a href="{{ url_for('quiz.index') }}">Take Quiz</a>
+                    <h4>{{ _('home.chart.empty_title') }}</h4>
+                    <p>{{ _('home.chart.empty_desc') }}</p>
+                    <a href="{{ url_for('quiz.index') }}">{{ _('home.chart.take_quiz') }}</a>
                 </div>
             {% endif %}
         </div>
@@ -931,14 +948,14 @@
 </div>
 
 <!-- ============================================
-     INSIGHTS (Pro tier) OR LOCKED CARD
+     INSIGHTS (Pro) OR LOCKED
      ============================================ -->
 {% if analytics_level >= 3 %}
     {% if insights %}
         <div class="dh-card" style="margin-bottom: 22px;">
             <div class="dh-card-head">
-                <h3><i class="fas fa-lightbulb"></i> Personal Insights</h3>
-                <span class="hint">Just for you</span>
+                <h3><i class="fas fa-lightbulb"></i> {{ _('home.insights.title') }}</h3>
+                <span class="hint">{{ _('home.insights.subtitle') }}</span>
             </div>
             <div class="dh-card-body">
                 <div class="dh-insights">
@@ -955,19 +972,19 @@
 {% else %}
     <div class="dh-card locked" style="margin-bottom: 22px;">
         <div class="dh-card-head">
-            <h3><i class="fas fa-lightbulb"></i> Personal Insights</h3>
-            <span class="hint">Pro tier</span>
+            <h3><i class="fas fa-lightbulb"></i> {{ _('home.insights.title') }}</h3>
+            <span class="hint">{{ _('tier.pro') }}</span>
         </div>
         <div class="dh-card-body">
             <div class="dh-locked-overlay">
                 <span class="lock-badge">🔒</span>
-                <div class="lock-title">Personal insights locked</div>
+                <div class="lock-title">{{ _('home.insights.locked_title') }}</div>
                 <div class="lock-sub">
-                    Upgrade to <strong>Pro</strong> to unlock personalized study insights, trends, and tailored recommendations.
+                    {{ _('home.insights.locked_desc') }}
                 </div>
                 <button type="button" class="lock-btn"
                         onclick="openSafkaPreview({ requiredTier: 'pro' })">
-                    ⬆ Upgrade to Pro
+                    {{ _('home.insights.upgrade') }}
                 </button>
             </div>
         </div>
@@ -981,35 +998,35 @@
     <!-- Quotas -->
     <div class="dh-card">
         <div class="dh-card-head">
-            <h3><i class="fas fa-sliders-h"></i> Your Plan Limits</h3>
-            <span class="hint">{{ tier|capitalize }} tier</span>
+            <h3><i class="fas fa-sliders-h"></i> {{ _('home.limits.title') }}</h3>
+            <span class="hint">{{ _('home.limits.tier_label', tier=_('tier.' ~ tier)) }}</span>
         </div>
         <div class="dh-card-body">
             <div class="dh-quotas">
                 <div class="dh-quota">
-                    <div class="qk">Quiz Attempts</div>
+                    <div class="qk">{{ _('home.limits.quiz_attempts') }}</div>
                     <div class="qv {% if quiz_remaining == 999 %}unlimited{% endif %}">
-                        {% if quiz_remaining == 999 %}Unlimited{% else %}{{ quiz_remaining }}<small>left today</small>{% endif %}
+                        {% if quiz_remaining == 999 %}{{ _('common.unlimited') }}{% else %}{{ quiz_remaining }}<small>{{ _('home.limits.left_today') }}</small>{% endif %}
                     </div>
                 </div>
                 <div class="dh-quota">
-                    <div class="qk">History Retention</div>
+                    <div class="qk">{{ _('home.limits.history_retention') }}</div>
                     <div class="qv {% if not history_retention %}unlimited{% endif %}">
-                        {% if history_retention %}{{ history_retention }}<small>days</small>{% else %}Unlimited{% endif %}
+                        {% if history_retention %}{{ history_retention }}<small>{{ _('home.limits.days') }}</small>{% else %}{{ _('common.unlimited') }}{% endif %}
                     </div>
                 </div>
                 <div class="dh-quota">
-                    <div class="qk">History Cap</div>
+                    <div class="qk">{{ _('home.limits.history_cap') }}</div>
                     <div class="qv {% if not history_max %}unlimited{% endif %}">
-                        {% if history_max %}{{ history_max }}<small>entries</small>{% else %}Unlimited{% endif %}
+                        {% if history_max %}{{ history_max }}<small>{{ _('home.limits.entries') }}</small>{% else %}{{ _('common.unlimited') }}{% endif %}
                     </div>
                 </div>
                 <div class="dh-quota">
-                    <div class="qk">Tier</div>
+                    <div class="qk">{{ _('home.limits.tier') }}</div>
                     <div class="qv">
-                        {% if tier == 'free' %}🔓 Free
-                        {% elif tier == 'premium' %}🔑 Premium
-                        {% else %}⭐ Pro{% endif %}
+                        {% if tier == 'free' %}🔓 {{ _('tier.free') }}
+                        {% elif tier == 'premium' %}🔑 {{ _('tier.premium') }}
+                        {% else %}⭐ {{ _('tier.pro') }}{% endif %}
                     </div>
                 </div>
             </div>
@@ -1019,9 +1036,9 @@
     <!-- Recent Activity -->
     <div class="dh-card">
         <div class="dh-card-head">
-            <h3><i class="fas fa-clock"></i> Recent Activity</h3>
+            <h3><i class="fas fa-clock"></i> {{ _('home.activity.title') }}</h3>
             <span class="hint">
-                <a href="{{ url_for('history.index') }}" style="color: var(--primary); text-decoration: none;">View All →</a>
+                <a href="{{ url_for('history.index') }}" style="color: var(--primary); text-decoration: none;">{{ _('home.activity.view_all') }}</a>
             </span>
         </div>
         <div class="dh-card-body" style="padding-top: 6px; padding-bottom: 6px;">
@@ -1044,9 +1061,9 @@
             {% else %}
                 <div class="dh-empty">
                     <span class="ico">🚀</span>
-                    <h4>No activity yet</h4>
-                    <p>Start your first quiz to build your activity feed.</p>
-                    <a href="{{ url_for('quiz.index') }}">Start Quiz</a>
+                    <h4>{{ _('home.activity.empty_title') }}</h4>
+                    <p>{{ _('home.activity.empty_desc') }}</p>
+                    <a href="{{ url_for('quiz.index') }}">{{ _('home.activity.start_quiz') }}</a>
                 </div>
             {% endif %}
         </div>
@@ -1056,7 +1073,6 @@
 {% endblock %}
 
 {% block dashboard_js %}
-<!-- Chart.js from CDN (loaded only on this page) -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script id="dhData" type="application/json">
 {

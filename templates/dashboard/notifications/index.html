@@ -1,36 +1,36 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}Notifications - NuunPlatform{% endblock %}
+{% block title %}{{ _('notifications.page_title') }} - NuunPlatform{% endblock %}
 
-{% block page_title %}Notifications{% endblock %}
+{% block page_title %}{{ _('notifications.page_title') }}{% endblock %}
 
 {% block dashboard_content %}
 <div style="max-width: 800px; margin: 0 auto;">
 
     <!-- Breadcrumb -->
     <div class="breadcrumb">
-        <a href="{{ url_for('dashboard.home') }}">Dashboard</a>
+        <a href="{{ url_for('dashboard.home') }}">{{ _('nav.dashboard') }}</a>
         <span class="separator">/</span>
-        <span class="current">Notifications</span>
+        <span class="current">{{ _('nav.notifications') }}</span>
     </div>
 
     <!-- Header -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
         <div>
             <h2 style="font-size: 20px; font-weight: 700; color: var(--text);">
-                <i class="fas fa-bell" style="color: var(--primary);"></i> Notifications
+                <i class="fas fa-bell" style="color: var(--primary);"></i> {{ _('notifications.title') }}
             </h2>
             <p style="color: var(--text-secondary); font-size: 14px;">
                 {% if unread_count > 0 %}
-                    You have <strong style="color: var(--primary);">{{ unread_count }}</strong> unread notification{{ 's' if unread_count > 1 else '' }}
+                    {{ _('notifications.unread_before') }} <strong style="color: var(--primary);">{{ unread_count }}</strong> {{ _('notifications.unread_after_one') if unread_count == 1 else _('notifications.unread_after_many') }}
                 {% else %}
-                    All caught up! 🎉
+                    {{ _('notifications.all_caught_up') }}
                 {% endif %}
             </p>
         </div>
         {% if unread_count > 0 %}
             <button onclick="markAllRead()" style="padding: 8px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font-weight: 500; cursor: pointer; transition: var(--transition); color: var(--text);">
-                <i class="fas fa-check-double"></i> Mark All as Read
+                <i class="fas fa-check-double"></i> {{ _('notifications.mark_all_read') }}
             </button>
         {% endif %}
     </div>
@@ -54,7 +54,7 @@
                                 {{ notification.title }}
                             </div>
                             {% if not notification.is_read %}
-                                <span style="font-size: 10px; background: var(--primary); color: white; padding: 2px 10px; border-radius: 10px; font-weight: 600; flex-shrink: 0;">NEW</span>
+                                <span style="font-size: 10px; background: var(--primary); color: white; padding: 2px 10px; border-radius: 10px; font-weight: 600; flex-shrink: 0;">{{ _('notifications.new_badge') }}</span>
                             {% endif %}
                         </div>
                         <div style="color: var(--text-secondary); font-size: 14px; margin-top: 2px; line-height: 1.5;">
@@ -67,7 +67,7 @@
                             {% if not notification.is_read %}
                                 <button onclick="event.stopPropagation(); markSingleRead({{ notification.id }})" 
                                         style="background: none; border: none; color: var(--primary); font-size: 12px; cursor: pointer; font-weight: 500; padding: 2px 8px; border-radius: 4px; transition: var(--transition);">
-                                    Mark as read
+                                    {{ _('notifications.mark_read') }}
                                 </button>
                             {% endif %}
                         </div>
@@ -78,16 +78,20 @@
     {% else %}
         <div style="text-align: center; padding: 60px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);">
             <div style="font-size: 64px; opacity: 0.3; margin-bottom: 16px;">🔔</div>
-            <h3 style="font-size: 18px; font-weight: 600; color: var(--text);">No notifications yet</h3>
-            <p style="color: var(--text-secondary); font-size: 14px; margin-top: 4px;">You'll see notifications here when you complete quizzes or join live quizzes.</p>
+            <h3 style="font-size: 18px; font-weight: 600; color: var(--text);">{{ _('notifications.empty_title') }}</h3>
+            <p style="color: var(--text-secondary); font-size: 14px; margin-top: 4px;">{{ _('notifications.empty_desc') }}</p>
         </div>
     {% endif %}
 
 </div>
 
 <script>
+const I18N = {
+    confirm_mark_all: "{{ _('notifications.confirm_mark_all') }}"
+};
+
 function markAllRead() {
-    if (!confirm('Mark all notifications as read?')) return;
+    if (!confirm(I18N.confirm_mark_all)) return;
     
     fetch('/notifications/api/mark-all-read', {
         method: 'POST'
@@ -113,7 +117,6 @@ function markSingleRead(id) {
 }
 
 function handleNotificationClick(id, link) {
-    // Mark as read
     fetch('/notifications/api/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -129,7 +132,6 @@ function handleNotificationClick(id, link) {
     });
 }
 
-// Handle notification row hover styles
 document.querySelectorAll('.notification-row').forEach(row => {
     row.addEventListener('mouseenter', function() {
         this.style.background = 'var(--primary-light)';

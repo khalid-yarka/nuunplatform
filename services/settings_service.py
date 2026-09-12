@@ -123,9 +123,32 @@ class SettingsService:
 
     @staticmethod
     def can_modify(user_id: int, key: str) -> bool:
+        """
+        Return True if the user is allowed to change this setting.
+
+        Two gate types are supported:
+          - feature_key  : consult the entitlement system (preferred).
+                           Admins manage access via the entitlement
+                           panel — no code change needed to alter
+                           which tiers can use this setting.
+          - tier_required: legacy tier-name comparison (kept for
+                           entries that haven't been migrated yet).
+        """
         definition = get_setting(key)
         if not definition:
             return False
+
+        # Preferred: entitlement-based gate.
+        feature_key = definition.get("feature_key")
+        if feature_key:
+            try:
+                from services import entitlement_service
+                return entitlement_service.check(user_id, feature_key)
+            except Exception as e:
+                logger.warning(f"Entitlement check failed for {key}: {e}")
+                return False
+
+        # Legacy: tier-name comparison.
         tier_required = definition.get("tier_required")
         if not tier_required:
             return True
@@ -136,7 +159,7 @@ class SettingsService:
     def update(user_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """
         Batch update settings.
-        Validates, enforces tier, persists, reads back to confirm.
+        Validates, enforces entitlement/tier, persists, reads back to confirm.
         On success, refreshes the session.
         """
         normalized = {}
@@ -146,8 +169,7 @@ class SettingsService:
                 raise ValueError(f"Invalid value for {key}: {error}")
             if not SettingsService.can_modify(user_id, key):
                 raise PermissionError(
-                    f"Setting '{key}' requires tier "
-                    f"{get_setting(key).get('tier_required')}"
+                    f"Setting '{key}' is not available on your plan."
                 )
             if get_setting(key).get("type") == "boolean":
                 value = value in (True, 1, "true", "1")

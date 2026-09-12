@@ -1,8 +1,8 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}Live Quiz Lobby – NuunPlatform{% endblock %}
+{% block title %}{{ _('live_quiz.lobby.page_title') }} – NuunPlatform{% endblock %}
 
-{% block page_title %}Live Quiz Lobby{% endblock %}
+{% block page_title %}{{ _('live_quiz.lobby.page_title') }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
@@ -346,25 +346,25 @@
 
     <div class="lobby-header">
         <div class="title-section">
-            <h2>🎯 Live Quiz Lobby</h2>
-            <p>Find open quizzes, join games, or view results</p>
+            <h2>🎯 {{ _('live_quiz.lobby.title') }}</h2>
+            <p>{{ _('live_quiz.lobby.subtitle') }}</p>
         </div>
         <div class="actions">
             {% if can_create %}
                 <a href="{{ url_for('live_quiz.create') }}" class="btn btn-primary">
-                    <i class="fas fa-plus"></i> Create Quiz
+                    <i class="fas fa-plus"></i> {{ _('live_quiz.lobby.create_quiz') }}
                 </a>
             {% else %}
                 <button class="btn btn-secondary locked-btn"
                         data-tier-locked
                         data-feature="create_live_quiz"
                         data-required-tier="premium"
-                        title="Upgrade to Premium or Pro to create live quizzes.">
-                    <i class="fas fa-lock lock-icon"></i> Create Quiz (Upgrade)
+                        title="{{ _('live_quiz.lobby.create_locked_title') }}">
+                    <i class="fas fa-lock lock-icon"></i> {{ _('live_quiz.lobby.create_quiz_upgrade') }}
                 </button>
             {% endif %}
             <a href="{{ url_for('live_quiz.join') }}" class="btn btn-secondary">
-                <i class="fas fa-key"></i> Join with Code
+                <i class="fas fa-key"></i> {{ _('live_quiz.lobby.join_with_code') }}
             </a>
         </div>
     </div>
@@ -372,27 +372,27 @@
     <div class="lobby-stats" id="lobbyStats">
         <div class="lobby-stat scheduled">
             <div class="number">{{ stats.scheduled_count or 0 }}</div>
-            <div class="label">⏳ Scheduled</div>
+            <div class="label">⏳ {{ _('live_quiz.lobby.stat_scheduled') }}</div>
         </div>
         <div class="lobby-stat open">
             <div class="number">{{ stats.waiting_count or 0 }}</div>
-            <div class="label">🟢 Open</div>
+            <div class="label">🟢 {{ _('live_quiz.lobby.stat_open') }}</div>
         </div>
         <div class="lobby-stat active">
             <div class="number">{{ stats.active_count or 0 }}</div>
-            <div class="label">🟡 Active</div>
+            <div class="label">🟡 {{ _('live_quiz.lobby.stat_active') }}</div>
         </div>
         <div class="lobby-stat finished">
             <div class="number">{{ stats.finished_count or 0 }}</div>
-            <div class="label">🔵 Finished</div>
+            <div class="label">🔵 {{ _('live_quiz.lobby.stat_finished') }}</div>
         </div>
         <div class="lobby-stat total">
             <div class="number">{{ stats.total_public or 0 }}</div>
-            <div class="label">📊 Total Quizzes</div>
+            <div class="label">📊 {{ _('live_quiz.lobby.stat_total') }}</div>
         </div>
         <div class="lobby-stat total">
             <div class="number">{{ stats.total_participants or 0 }}</div>
-            <div class="label">👥 Participants</div>
+            <div class="label">👥 {{ _('live_quiz.lobby.stat_participants') }}</div>
         </div>
     </div>
 
@@ -400,20 +400,20 @@
         <div class="search-wrapper">
             <i class="fas fa-search"></i>
             <input type="text" id="searchInput" class="form-control"
-                   placeholder="Search by title or creator…"
+                   placeholder="{{ _('live_quiz.lobby.search_placeholder') }}"
                    value="{{ search }}" />
         </div>
 
         <select id="statusFilter" class="form-control">
-            <option value="">All Status</option>
-            <option value="scheduled" {% if status_filter == 'scheduled' %}selected{% endif %}>⏳ Scheduled</option>
-            <option value="waiting" {% if status_filter == 'waiting' %}selected{% endif %}>🟢 Open</option>
-            <option value="active" {% if status_filter == 'active' %}selected{% endif %}>🟡 Active</option>
-            <option value="finished" {% if status_filter == 'finished' %}selected{% endif %}>🔵 Finished</option>
+            <option value="">{{ _('live_quiz.lobby.all_status') }}</option>
+            <option value="scheduled" {% if status_filter == 'scheduled' %}selected{% endif %}>⏳ {{ _('live_quiz.lobby.status_scheduled') }}</option>
+            <option value="waiting" {% if status_filter == 'waiting' %}selected{% endif %}>🟢 {{ _('live_quiz.lobby.status_open') }}</option>
+            <option value="active" {% if status_filter == 'active' %}selected{% endif %}>🟡 {{ _('live_quiz.lobby.status_active') }}</option>
+            <option value="finished" {% if status_filter == 'finished' %}selected{% endif %}>🔵 {{ _('live_quiz.lobby.status_finished') }}</option>
         </select>
 
         <select id="subjectFilter" class="form-control">
-            <option value="">All Subjects</option>
+            <option value="">{{ _('live_quiz.lobby.all_subjects') }}</option>
             {% for subject in subjects %}
                 <option value="{{ subject.code }}" {% if subject_filter == subject.code %}selected{% endif %}>
                     {{ subject.icon or '📚' }} {{ subject.name }}
@@ -425,11 +425,11 @@
                 id="clearFiltersBtn"
                 class="btn-clear"
                 style="{% if not (search or status_filter or subject_filter) %}display: none;{% endif %}">
-            <i class="fas fa-times"></i> Clear
+            <i class="fas fa-times"></i> {{ _('live_quiz.lobby.clear') }}
         </button>
 
         <span class="auto-sync-status">
-            <span class="sync-dot"></span> Auto-sync
+            <span class="sync-dot"></span> {{ _('live_quiz.lobby.auto_sync') }}
         </span>
     </div>
 
@@ -443,18 +443,18 @@
     <div class="modal-content">
         <div class="text-center" style="margin-bottom: 16px;">
             <div style="font-size: 48px; margin-bottom: 8px;">⚠️</div>
-            <h3 class="modal-title">Delete Quiz</h3>
+            <h3 class="modal-title">{{ _('live_quiz.lobby.delete_title') }}</h3>
             <p class="modal-body">
-                Are you sure you want to delete <strong id="deleteQuizTitle">this quiz</strong>?
+                {{ _('live_quiz.lobby.delete_body_before') }} <strong id="deleteQuizTitle">{{ _('live_quiz.lobby.delete_this') }}</strong>{{ _('live_quiz.lobby.delete_body_after') }}
             </p>
             <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;">
-                This action <strong style="color: #EF4444;">cannot be undone</strong> and will remove all participant data.
+                {{ _('live_quiz.lobby.delete_warn_before') }} <strong style="color: #EF4444;">{{ _('live_quiz.lobby.delete_warn_strong') }}</strong> {{ _('live_quiz.lobby.delete_warn_after') }}
             </p>
         </div>
         <div class="modal-actions">
-            <button onclick="closeDeleteModal()" class="btn btn-secondary">Cancel</button>
+            <button onclick="closeDeleteModal()" class="btn btn-secondary">{{ _('common.cancel') }}</button>
             <button id="confirmDeleteBtn" class="btn btn-danger">
-                <i class="fas fa-trash"></i> Delete Permanently
+                <i class="fas fa-trash"></i> {{ _('live_quiz.lobby.delete_confirm') }}
             </button>
         </div>
     </div>
@@ -462,6 +462,15 @@
 
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
+const I18N = {
+    joining:         "{{ _('live_quiz.lobby.joining') }}",
+    joined_ok:       "{{ _('live_quiz.lobby.joined_ok') }}",
+    join_error:      "{{ _('live_quiz.lobby.join_error') }}",
+    deleting:        "{{ _('live_quiz.lobby.deleting') }}",
+    delete_ok:       "{{ _('live_quiz.lobby.delete_ok') }}",
+    delete_error:    "{{ _('live_quiz.lobby.delete_error') }}"
+};
 
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchInput');
@@ -588,7 +597,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!btn) return;
         const originalText = btn.innerHTML;
         btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Joining…';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + I18N.joining;
 
         fetch('/live-quiz/lobby/join/' + quizId, {
             method: 'POST',
@@ -608,13 +617,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             if (data.success && data.redirect) {
-                showToast('✅ Joined successfully! Redirecting…', 'success');
+                showToast(I18N.joined_ok, 'success');
                 setTimeout(function() { window.location.href = data.redirect; }, 800);
             }
         })
         .catch(function(err) {
             console.error('Join error:', err);
-            showToast('Error joining quiz. Please try again.', 'error');
+            showToast(I18N.join_error, 'error');
             btn.disabled = false;
             btn.innerHTML = originalText;
         });
@@ -624,7 +633,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.deleteQuiz = function(quizId, title) {
         deleteQuizId = quizId;
-        document.getElementById('deleteQuizTitle').textContent = title || 'this quiz';
+        document.getElementById('deleteQuizTitle').textContent = title || "{{ _('live_quiz.lobby.delete_this') }}";
         document.getElementById('deleteModal').classList.add('active');
     };
 
@@ -638,7 +647,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!deleteQuizId) return;
         const btn = this;
         btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting…';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + I18N.deleting;
 
         fetch('/live-quiz/delete/' + deleteQuizId, {
             method: 'POST',
@@ -652,20 +661,20 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                showToast('✅ Quiz deleted successfully', 'success');
+                showToast(I18N.delete_ok, 'success');
                 closeDeleteModal();
                 refreshLobby(currentPage);
             } else {
-                showToast(data.error || 'Failed to delete quiz', 'error');
+                showToast(data.error || I18N.delete_error, 'error');
                 btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-trash"></i> Delete Permanently';
+                btn.innerHTML = '<i class="fas fa-trash"></i> {{ _("live_quiz.lobby.delete_confirm") }}';
             }
         })
         .catch(function(err) {
             console.error('Delete error:', err);
-            showToast('Error deleting quiz. Please try again.', 'error');
+            showToast(I18N.delete_error, 'error');
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-trash"></i> Delete Permanently';
+            btn.innerHTML = '<i class="fas fa-trash"></i> {{ _("live_quiz.lobby.delete_confirm") }}';
         });
     });
 

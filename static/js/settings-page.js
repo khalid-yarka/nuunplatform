@@ -75,7 +75,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 'appearance.theme': document.querySelector('.theme-option.active')?.dataset.theme || 'system',
                 'appearance.accent': document.querySelector('.accent-option.active')?.dataset.accent || 'red',
                 'appearance.font_size': document.getElementById('font_size')?.value || 'medium',
-                'appearance.compact_mode': document.getElementById('compact_mode')?.checked || false
+                'appearance.compact_mode': document.getElementById('compact_mode')?.checked || false,
+                'appearance.language': document.getElementById('language')?.value || 'en'
             };
             submitForm('/settings/api', data, 'Appearance updated!');
         });
@@ -91,7 +92,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 'quiz.default_difficulty': parseInt(document.getElementById('default_difficulty').value),
                 'quiz.default_subject': document.getElementById('default_subject').value,
                 'quiz.show_correct_immediately': document.getElementById('show_correct_immediately').checked,
-                'quiz.skip_rating_after_quiz': document.getElementById('skip_rating_after_quiz').checked,
+                'quiz.skip_rating_after_quiz': document.getElementById('skip_rating_after_quiz')?.checked || false,
                 'quiz.auto_skip_enabled': document.getElementById('auto_skip_enabled').checked
             };
             submitForm('/settings/api', data, 'Quiz preferences saved!');

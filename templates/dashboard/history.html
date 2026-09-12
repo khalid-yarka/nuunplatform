@@ -1,7 +1,7 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}My History - NuunPlatform{% endblock %}
-{% block page_title %}My History{% endblock %}
+{% block title %}{{ _('history.page_title') }} - NuunPlatform{% endblock %}
+{% block page_title %}{{ _('history.page_title') }}{% endblock %}
 
 {% block dashboard_css %}
 <style>
@@ -661,24 +661,24 @@
         <div class="title-block">
             <h2>
                 <i class="fas fa-history" style="color: var(--primary);"></i>
-                My History
+                {{ _('history.title') }}
                 <span class="tier-badge-h {{ t }}">
-                    {% if t == 'free' %}🔓 Free
-                    {% elif t == 'premium' %}🔑 Premium
-                    {% else %}⭐ Pro{% endif %}
+                    {% if t == 'free' %}🔓 {{ _('tier.free') }}
+                    {% elif t == 'premium' %}🔑 {{ _('tier.premium') }}
+                    {% else %}⭐ {{ _('tier.pro') }}{% endif %}
                 </span>
             </h2>
-            <p>Every quiz, live quiz, save, and achievement — all in one place.</p>
+            <p>{{ _('history.subtitle') }}</p>
         </div>
         <div class="actions">
             {% if can_export %}
                 <button type="button" class="btn btn-secondary" id="exportBtn">
-                    <i class="fas fa-download"></i> Export CSV
+                    <i class="fas fa-download"></i> {{ _('history.export_csv') }}
                 </button>
             {% else %}
                 <button type="button" class="btn btn-secondary" data-tier-locked
                         data-feature="history_export" data-required-tier="premium">
-                    <i class="fas fa-lock"></i> Export CSV
+                    <i class="fas fa-lock"></i> {{ _('history.export_csv') }}
                 </button>
             {% endif %}
         </div>
@@ -689,23 +689,23 @@
         <div class="tp-header">
             <h3>
                 <i class="fas fa-layer-group" style="color: var(--primary);"></i>
-                Your History Plan
+                {{ _('history.plan_title') }}
             </h3>
             <span class="tier-badge-h {{ t }}">
-                {% if t == 'free' %}🔓 Free
-                {% elif t == 'premium' %}🔑 Premium
-                {% else %}⭐ Pro{% endif %}
+                {% if t == 'free' %}🔓 {{ _('tier.free') }}
+                {% elif t == 'premium' %}🔑 {{ _('tier.premium') }}
+                {% else %}⭐ {{ _('tier.pro') }}{% endif %}
             </span>
         </div>
 
         <div class="hist-quota">
             <div class="q-head">
-                <span class="q-label">Entries stored</span>
+                <span class="q-label">{{ _('history.entries_stored') }}</span>
                 <span class="q-value {% if not max_entries %}unlimited{% endif %}">
                     {% if max_entries %}
                         {{ current_count }} / {{ max_entries }}
                     {% else %}
-                        {{ current_count }} · Unlimited
+                        {{ current_count }} · {{ _('common.unlimited') }}
                     {% endif %}
                 </span>
             </div>
@@ -719,9 +719,9 @@
             </div>
             <div class="q-hint">
                 {% if max_entries %}
-                    Retention: {{ retention_days }} days · Entries capped at {{ max_entries }}
+                    {{ _('history.retention_hint', days=retention_days, max=max_entries) }}
                 {% else %}
-                    Unlimited retention · Unlimited entries
+                    {{ _('history.unlimited_hint') }}
                 {% endif %}
             </div>
         </div>
@@ -730,9 +730,9 @@
             <div class="hist-feature">
                 <span class="fi">📆</span>
                 <div class="ft">
-                    <span class="name">Retention</span>
+                    <span class="name">{{ _('history.feature_retention') }}</span>
                     <span class="val">
-                        {% if retention_days %}{{ retention_days }} days{% else %}Unlimited{% endif %}
+                        {% if retention_days %}{{ _('history.feature_retention_days', n=retention_days) }}{% else %}{{ _('common.unlimited') }}{% endif %}
                     </span>
                 </div>
                 <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
@@ -741,9 +741,9 @@
             <div class="hist-feature">
                 <span class="fi">📊</span>
                 <div class="ft">
-                    <span class="name">Entries</span>
+                    <span class="name">{{ _('history.feature_entries') }}</span>
                     <span class="val">
-                        {% if max_entries %}{{ max_entries }} max{% else %}Unlimited{% endif %}
+                        {% if max_entries %}{{ _('history.feature_entries_max', n=max_entries) }}{% else %}{{ _('common.unlimited') }}{% endif %}
                     </span>
                 </div>
                 <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
@@ -752,9 +752,9 @@
             <div class="hist-feature {% if not can_search %}locked{% endif %}">
                 <span class="fi">🔍</span>
                 <div class="ft">
-                    <span class="name">Search</span>
+                    <span class="name">{{ _('history.feature_search') }}</span>
                     <span class="val">
-                        {% if can_search %}Available{% else %}Pro tier{% endif %}
+                        {% if can_search %}{{ _('history.feature_available') }}{% else %}{{ _('history.feature_pro_only') }}{% endif %}
                     </span>
                 </div>
                 {% if can_search %}
@@ -762,18 +762,18 @@
                 {% else %}
                     <span class="lock-icon" data-tier-locked
                           data-feature="history_search" data-required-tier="pro"
-                          title="Upgrade to Pro">🔒</span>
+                          title="{{ _('history.upgrade_to_pro_title') }}">🔒</span>
                 {% endif %}
             </div>
 
             <div class="hist-feature {% if not can_export %}locked{% endif %}">
                 <span class="fi">⬇️</span>
                 <div class="ft">
-                    <span class="name">Export</span>
+                    <span class="name">{{ _('history.feature_export') }}</span>
                     <span class="val">
                         {% if can_export %}
-                            {% if t == 'premium' %}Last 100 rows{% else %}Full history{% endif %}
-                        {% else %}Premium+ tier{% endif %}
+                            {% if t == 'premium' %}{{ _('history.feature_export_premium') }}{% else %}{{ _('history.feature_export_pro') }}{% endif %}
+                        {% else %}{{ _('history.feature_premium_plus') }}{% endif %}
                     </span>
                 </div>
                 {% if can_export %}
@@ -781,16 +781,16 @@
                 {% else %}
                     <span class="lock-icon" data-tier-locked
                           data-feature="history_export" data-required-tier="premium"
-                          title="Upgrade to Premium">🔒</span>
+                          title="{{ _('history.upgrade_to_premium_title') }}">🔒</span>
                 {% endif %}
             </div>
 
             <div class="hist-feature {% if not can_trend %}locked{% endif %}">
                 <span class="fi">📈</span>
                 <div class="ft">
-                    <span class="name">Trends</span>
+                    <span class="name">{{ _('history.feature_trends') }}</span>
                     <span class="val">
-                        {% if can_trend %}Available{% else %}Pro tier{% endif %}
+                        {% if can_trend %}{{ _('history.feature_available') }}{% else %}{{ _('history.feature_pro_only') }}{% endif %}
                     </span>
                 </div>
                 {% if can_trend %}
@@ -798,16 +798,16 @@
                 {% else %}
                     <span class="lock-icon" data-tier-locked
                           data-feature="history_trends" data-required-tier="pro"
-                          title="Upgrade to Pro">🔒</span>
+                          title="{{ _('history.upgrade_to_pro_title') }}">🔒</span>
                 {% endif %}
             </div>
 
             <div class="hist-feature {% if not can_delete %}locked{% endif %}">
                 <span class="fi">🗑️</span>
                 <div class="ft">
-                    <span class="name">Delete entries</span>
+                    <span class="name">{{ _('history.feature_delete') }}</span>
                     <span class="val">
-                        {% if can_delete %}Available{% else %}Pro tier{% endif %}
+                        {% if can_delete %}{{ _('history.feature_available') }}{% else %}{{ _('history.feature_pro_only') }}{% endif %}
                     </span>
                 </div>
                 {% if can_delete %}
@@ -815,7 +815,7 @@
                 {% else %}
                     <span class="lock-icon" data-tier-locked
                           data-feature="history_delete" data-required-tier="pro"
-                          title="Upgrade to Pro">🔒</span>
+                          title="{{ _('history.upgrade_to_pro_title') }}">🔒</span>
                 {% endif %}
             </div>
         </div>
@@ -823,12 +823,12 @@
         {% if t != 'pro' and upgrade_benefits %}
             <div class="hist-upgrade-cta">
                 <div class="cta-text">
-                    <strong>Upgrade to {{ 'Premium' if t == 'free' else 'Pro' }}</strong> to unlock:
+                    <strong>{{ _('history.upgrade_to', tier=_('tier.' ~ ('premium' if t == 'free' else 'pro'))) }}</strong> {{ _('history.upgrade_unlock') }}
                     {{ upgrade_benefits | join(' · ') }}
                 </div>
                 <button type="button" class="btn-upgrade"
                         onclick="openUpgradeSheet({ requiredTier: '{{ 'premium' if t == 'free' else 'pro' }}' })">
-                    ⬆ Upgrade Now
+                    ⬆ {{ _('history.upgrade_now') }}
                 </button>
             </div>
         {% endif %}
@@ -839,42 +839,42 @@
         <div class="hist-stat-card">
             <div class="stat-head">
                 <span class="stat-icon blue">📊</span>
-                <span class="stat-label">Total</span>
+                <span class="stat-label">{{ _('history.stat_total') }}</span>
             </div>
             <div class="stat-number blue" id="statTotal">—</div>
         </div>
         <div class="hist-stat-card">
             <div class="stat-head">
                 <span class="stat-icon green">📝</span>
-                <span class="stat-label">Quizzes</span>
+                <span class="stat-label">{{ _('history.stat_quizzes') }}</span>
             </div>
             <div class="stat-number green" id="statQuizzes">—</div>
         </div>
         <div class="hist-stat-card">
             <div class="stat-head">
                 <span class="stat-icon purple">🏆</span>
-                <span class="stat-label">Achievements</span>
+                <span class="stat-label">{{ _('history.stat_achievements') }}</span>
             </div>
             <div class="stat-number purple" id="statAchievements">—</div>
         </div>
         <div class="hist-stat-card">
             <div class="stat-head">
                 <span class="stat-icon amber">🔖</span>
-                <span class="stat-label">Saves</span>
+                <span class="stat-label">{{ _('history.stat_saves') }}</span>
             </div>
             <div class="stat-number amber" id="statSaves">—</div>
         </div>
         <div class="hist-stat-card">
             <div class="stat-head">
                 <span class="stat-icon red">📄</span>
-                <span class="stat-label">PDFs</span>
+                <span class="stat-label">{{ _('history.stat_pdfs') }}</span>
             </div>
             <div class="stat-number red" id="statPdfs">—</div>
         </div>
         <div class="hist-stat-card">
             <div class="stat-head">
                 <span class="stat-icon primary">📈</span>
-                <span class="stat-label">Avg Score</span>
+                <span class="stat-label">{{ _('history.stat_avg_score') }}</span>
             </div>
             <div class="stat-number primary" id="statAvgScore">—</div>
         </div>
@@ -885,32 +885,32 @@
         <div class="search-wrapper">
             <i class="fas fa-search"></i>
             <input type="text" id="filterSearch"
-                   placeholder="Search your history..."
+                   placeholder="{{ _('history.search_placeholder') }}"
                    {% if not can_search %}disabled{% endif %}>
             {% if not can_search %}
                 <span class="lock-icon" data-tier-locked
                       data-feature="history_search" data-required-tier="pro"
-                      title="Upgrade to Pro to search">🔒</span>
+                      title="{{ _('history.upgrade_to_pro_to_search') }}">🔒</span>
             {% endif %}
         </div>
 
         <select id="filterType">
-            <option value="">All Types</option>
-            <option value="quiz_attempt">📝 Quizzes</option>
-            <option value="live_quiz">⚡ Live Quizzes</option>
-            <option value="achievement">🏆 Achievements</option>
-            <option value="save">🔖 Saves</option>
-            <option value="pdf_view">📄 PDF Views</option>
-            <option value="pdf_download">⬇️ PDF Downloads</option>
-            <option value="like">❤️ Likes</option>
-            <option value="report">⚠️ Reports</option>
+            <option value="">{{ _('history.filter_all_types') }}</option>
+            <option value="quiz_attempt">📝 {{ _('history.filter_quizzes') }}</option>
+            <option value="live_quiz">⚡ {{ _('history.filter_live_quizzes') }}</option>
+            <option value="achievement">🏆 {{ _('history.filter_achievements') }}</option>
+            <option value="save">🔖 {{ _('history.filter_saves') }}</option>
+            <option value="pdf_view">📄 {{ _('history.filter_pdf_views') }}</option>
+            <option value="pdf_download">⬇️ {{ _('history.filter_pdf_downloads') }}</option>
+            <option value="like">❤️ {{ _('history.filter_likes') }}</option>
+            <option value="report">⚠️ {{ _('history.filter_reports') }}</option>
         </select>
 
-        <input type="date" id="filterStartDate" title="From date">
-        <input type="date" id="filterEndDate" title="To date">
+        <input type="date" id="filterStartDate" title="{{ _('history.filter_from_date') }}">
+        <input type="date" id="filterEndDate" title="{{ _('history.filter_to_date') }}">
 
         <button type="button" class="btn-clear" id="clearFilters" style="display: none;">
-            <i class="fas fa-times"></i> Clear
+            <i class="fas fa-times"></i> {{ _('history.clear_filters') }}
         </button>
     </div>
 
@@ -919,12 +919,12 @@
         <div class="hist-timeline" id="timelineList">
             <div class="hist-loading">
                 <div class="spinner"></div>
-                <div>Loading your history...</div>
+                <div>{{ _('history.loading') }}</div>
             </div>
         </div>
         <div class="hist-load-more-wrap" id="loadMoreWrap" style="display: none;">
             <button type="button" class="hist-load-more" id="loadMoreBtn">
-                <i class="fas fa-chevron-down"></i> Load More
+                <i class="fas fa-chevron-down"></i> {{ _('history.load_more') }}
             </button>
         </div>
     </div>
@@ -942,6 +942,51 @@ window.historyConfig = {
     max_entries: {{ max_entries if max_entries else 'null' }},
     current_count: {{ current_count }},
     csrf_token: "{{ csrf_token }}"
+};
+
+window.I18N_HISTORY = {
+    // Entry titles
+    quiz_completed_prefix: "{{ _('history.entry.quiz_completed_prefix') }}",
+    live_quiz_prefix: "{{ _('history.entry.live_quiz_prefix') }}",
+    achievement_unlocked_prefix: "{{ _('history.entry.achievement_unlocked_prefix') }}",
+    save_added_prefix: "{{ _('history.entry.save_added_prefix') }}",
+    save_removed: "{{ _('history.entry.save_removed') }}",
+    pdf_downloaded_prefix: "{{ _('history.entry.pdf_downloaded_prefix') }}",
+    pdf_viewed_prefix: "{{ _('history.entry.pdf_viewed_prefix') }}",
+    like_added: "{{ _('history.entry.like_added') }}",
+    like_removed: "{{ _('history.entry.like_removed') }}",
+    report_added: "{{ _('history.entry.report_added') }}",
+    unknown_event: "{{ _('history.entry.unknown_event') }}",
+
+    // Meta labels
+    practice: "{{ _('history.entry.practice') }}",
+    live: "{{ _('history.entry.live') }}",
+    achievement: "{{ _('history.entry.achievement') }}",
+    rank_prefix: "{{ _('history.entry.rank_prefix') }}",
+    questions_suffix: "{{ _('history.entry.questions_suffix') }}",
+    pts_suffix: "{{ _('history.entry.pts_suffix') }}",
+    saved_item_prefix: "{{ _('history.entry.saved_item_prefix') }}",
+    subject_icon: "📚",
+
+    // Date headers
+    date_today: "{{ _('history.date.today') }}",
+    date_yesterday: "{{ _('history.date.yesterday') }}",
+    date_unknown: "{{ _('history.date.unknown') }}",
+
+    // Empty states
+    empty_title: "{{ _('history.empty.title') }}",
+    empty_desc: "{{ _('history.empty.desc') }}",
+    empty_filtered_title: "{{ _('history.empty.filtered_title') }}",
+    empty_filtered_desc: "{{ _('history.empty.filtered_desc') }}",
+    empty_error_title: "{{ _('history.empty.error_title') }}",
+    empty_take_quiz: "{{ _('history.empty.take_quiz') }}",
+    empty_join_live: "{{ _('history.empty.join_live') }}",
+    empty_retry: "{{ _('history.empty.retry') }}",
+    empty_clear_filters: "{{ _('history.empty.clear_filters') }}",
+
+    // Load more
+    load_more: "{{ _('history.load_more') }}",
+    loading: "{{ _('common.loading') }}"
 };
 </script>
 <script src="{{ url_for('static', filename='js/history.js') }}"></script>

@@ -1,8 +1,8 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}Groups - NuunPlatform{% endblock %}
+{% block title %}{{ _('groups.page_title') }} - NuunPlatform{% endblock %}
 
-{% block page_title %}Groups{% endblock %}
+{% block page_title %}{{ _('groups.page_title') }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
@@ -121,10 +121,10 @@
     <!-- Header -->
     <div class="groups-header">
         <div class="title-section">
-            <h2><i class="fas fa-users" style="color: var(--primary);"></i> Study Groups</h2>
+            <h2><i class="fas fa-users" style="color: var(--primary);"></i> {{ _('groups.title') }}</h2>
             <p>
-                Join communities tailored to your curriculum.
-                <span class="highlight">{{ total_groups }}</span> active groups available.
+                {{ _('groups.subtitle_before') }}
+                <span class="highlight">{{ total_groups }}</span> {{ _('groups.subtitle_after') }}
             </p>
         </div>
     </div>
@@ -143,8 +143,8 @@
     {% if featured_groups %}
     <div class="featured-section">
         <div class="section-title">
-            ⭐ Featured Groups
-            <span class="badge">Recommended</span>
+            ⭐ {{ _('groups.featured_title') }}
+            <span class="badge">{{ _('groups.featured_badge') }}</span>
         </div>
         <div class="featured-grid" id="featuredGrid">
             {% for group in featured_groups %}
@@ -161,11 +161,11 @@
                         {% if group.category %}
                             <span>· {{ group.category }}</span>
                         {% endif %}
-                        <span class="count">· {{ group.click_count or 0 }} clicks</span>
+                        <span class="count">· {{ group.click_count or 0 }} {{ _('groups.clicks') }}</span>
                     </div>
                     <span class="lock-badge">{% if group.locked %}🔒{% endif %}</span>
                     {% if group.locked %}
-                        <div class="upgrade-hint">Click to upgrade</div>
+                        <div class="upgrade-hint">{{ _('groups.click_to_upgrade') }}</div>
                     {% endif %}
                 </div>
             {% endfor %}
@@ -176,17 +176,17 @@
     <!-- Filter Bar -->
     <div class="filter-bar">
         <select id="platformFilter">
-            <option value="">All Platforms</option>
+            <option value="">{{ _('groups.all_platforms') }}</option>
             <option value="whatsapp">💬 WhatsApp</option>
             <option value="telegram">✈️ Telegram</option>
         </select>
         <select id="categoryFilter">
-            <option value="">All Categories</option>
+            <option value="">{{ _('groups.all_categories') }}</option>
             {% for cat in categories %}
                 <option value="{{ cat.category }}">{{ cat.category }} ({{ cat.count }})</option>
             {% endfor %}
         </select>
-        <button class="btn-clear" id="clearFilters" style="display: none;">Clear Filters</button>
+        <button class="btn-clear" id="clearFilters" style="display: none;">{{ _('groups.clear_filters') }}</button>
         <div class="active-filters" id="activeFilters"></div>
     </div>
 
@@ -226,7 +226,7 @@
                             {% if group.curriculum %}
                                 <span>🎓 {{ group.curriculum }}</span>
                             {% endif %}
-                            <span>👥 {{ group.click_count or 0 }} joins</span>
+                            <span>👥 {{ group.click_count or 0 }} {{ _('groups.joins') }}</span>
                         </div>
                     </div>
                 </div>
@@ -238,18 +238,18 @@
                 <div class="join-btn-area">
                     {% if group.locked %}
                         <span class="btn-join locked" style="background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);">
-                            <span class="lock-icon">🔒</span> Unavailable
+                            <span class="lock-icon">🔒</span> {{ _('groups.unavailable') }}
                             <span class="lock-hint">
                                 {% if group.join_block_reason == 'curriculum' %}
-                                    (Curriculum mismatch)
+                                    ({{ _('groups.lock_curriculum') }})
                                 {% else %}
-                                    (Upgrade required)
+                                    ({{ _('groups.lock_tier') }})
                                 {% endif %}
                             </span>
                         </span>
                     {% else %}
                         <span class="btn-join" style="background: var(--primary); color: white; padding: 6px 16px; border-radius: var(--radius-sm); font-weight: 600; display: inline-block;">
-                            <i class="fas fa-arrow-right"></i> Join
+                            <i class="fas fa-arrow-right"></i> {{ _('groups.join') }}
                         </span>
                     {% endif %}
                 </div>
@@ -257,8 +257,8 @@
         {% else %}
             <div class="groups-empty">
                 <span class="empty-icon">👥</span>
-                <h3>No groups found</h3>
-                <p>Try adjusting your filters or check back later.</p>
+                <h3>{{ _('groups.empty_title') }}</h3>
+                <p>{{ _('groups.empty_desc') }}</p>
             </div>
         {% endfor %}
     </div>
@@ -266,8 +266,8 @@
     <!-- Pagination -->
     {% if total_pages > 1 %}
         <div class="pagination" style="margin-top: 24px;">
-            <a href="?page=1&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == 1 %}disabled{% endif %}">First</a>
-            <a href="?page={{ page - 1 }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == 1 %}disabled{% endif %}">Previous</a>
+            <a href="?page=1&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == 1 %}disabled{% endif %}">{{ _('common.first') }}</a>
+            <a href="?page={{ page - 1 }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == 1 %}disabled{% endif %}">{{ _('common.previous') }}</a>
             {% for p in range(1, total_pages + 1) %}
                 {% if p == page %}
                     <span class="page-link active">{{ p }}</span>
@@ -275,8 +275,8 @@
                     <a href="?page={{ p }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link">{{ p }}</a>
                 {% endif %}
             {% endfor %}
-            <a href="?page={{ page + 1 }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == total_pages %}disabled{% endif %}">Next</a>
-            <a href="?page={{ total_pages }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == total_pages %}disabled{% endif %}">Last</a>
+            <a href="?page={{ page + 1 }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == total_pages %}disabled{% endif %}">{{ _('common.next') }}</a>
+            <a href="?page={{ total_pages }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == total_pages %}disabled{% endif %}">{{ _('common.last') }}</a>
         </div>
     {% endif %}
 </div>
@@ -286,27 +286,33 @@
     <div class="modal-content">
         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 4px;">
             <span id="joinModalIcon" style="font-size: 28px;">📚</span>
-            <h3 class="modal-title" id="joinModalTitle">Group Name</h3>
+            <h3 class="modal-title" id="joinModalTitle">{{ _('groups.modal_group_name') }}</h3>
         </div>
         <div class="modal-body" style="margin-bottom: 8px;">
             <div class="group-details">
-                <div class="detail-item"><strong>Platform:</strong> <span id="joinModalPlatform"></span></div>
-                <div class="detail-item"><strong>Category:</strong> <span id="joinModalCategory"></span></div>
-                <div class="detail-item" style="grid-column: 1 / -1;"><strong>Description:</strong> <span id="joinModalDescription"></span></div>
+                <div class="detail-item"><strong>{{ _('groups.modal_platform') }}</strong> <span id="joinModalPlatform"></span></div>
+                <div class="detail-item"><strong>{{ _('groups.modal_category') }}</strong> <span id="joinModalCategory"></span></div>
+                <div class="detail-item" style="grid-column: 1 / -1;"><strong>{{ _('groups.modal_description') }}</strong> <span id="joinModalDescription"></span></div>
             </div>
-            <div style="font-weight: 600; margin-top: 12px;">📋 Group Rules:</div>
+            <div style="font-weight: 600; margin-top: 12px;">📋 {{ _('groups.modal_rules_title') }}</div>
             <div class="rules-box" id="joinModalRules">{{ join_rules }}</div>
         </div>
         <div class="modal-actions">
-            <button onclick="closeJoinModal()" class="btn btn-secondary">Cancel</button>
+            <button onclick="closeJoinModal()" class="btn btn-secondary">{{ _('common.cancel') }}</button>
             <a href="#" id="joinModalProceedBtn" class="btn btn-primary" target="_blank" style="text-decoration: none;">
-                <i class="fas fa-arrow-right"></i> Proceed to Group
+                <i class="fas fa-arrow-right"></i> {{ _('groups.modal_proceed') }}
             </a>
         </div>
     </div>
 </div>
 
 <script>
+const I18N = {
+    curriculum_lock_msg: "{{ _('groups.upgrade_curriculum_msg') }}",
+    tier_lock_msg:       "{{ _('groups.upgrade_tier_msg') }}",
+    category_general:    "{{ _('groups.modal_default_category') }}"
+};
+
 document.addEventListener('DOMContentLoaded', function() {
     const tabs = document.querySelectorAll('.curriculum-tab');
     const groups = document.querySelectorAll('.group-card');
@@ -345,13 +351,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (platform) {
             const tag = document.createElement('span');
             tag.className = 'filter-tag';
-            tag.innerHTML = `Platform: ${platform} <span class="remove" data-filter="platform">&times;</span>`;
+            tag.innerHTML = `{{ _('groups.filter_platform') }}: ${platform} <span class="remove" data-filter="platform">&times;</span>`;
             activeFilters.appendChild(tag);
         }
         if (category) {
             const tag = document.createElement('span');
             tag.className = 'filter-tag';
-            tag.innerHTML = `Category: ${category} <span class="remove" data-filter="category">&times;</span>`;
+            tag.innerHTML = `{{ _('groups.filter_category') }}: ${category} <span class="remove" data-filter="category">&times;</span>`;
             activeFilters.appendChild(tag);
         }
 
@@ -387,16 +393,12 @@ document.addEventListener('DOMContentLoaded', function() {
             let slideTarget = requiredTier;
 
             if (lockReason === 'curriculum') {
-                // For curriculum locks, we want to show the middle slide (premium)
-                // and a custom message.
                 feature = 'curriculum_access';
-                message = 'This group is for a different curriculum. Upgrade to Pro to access all curricula.';
-                // Set slideTarget to 'premium' to show the middle slide, but also pass the message.
-                // upgrade.js will handle the message.
+                message = I18N.curriculum_lock_msg;
                 slideTarget = 'premium';
             } else {
                 slideTarget = requiredTier;
-                message = `Upgrade to ${requiredTier.charAt(0).toUpperCase() + requiredTier.slice(1)} to join this group.`;
+                message = I18N.tier_lock_msg.replace('{tier}', requiredTier.charAt(0).toUpperCase() + requiredTier.slice(1));
             }
 
             if (typeof openUpgradeSheet === 'function') {
@@ -415,11 +417,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const name = card.dataset.groupName || 'Group';
             const description = card.dataset.groupDescription || '';
             const platform = card.dataset.groupPlatform || 'WhatsApp';
-            const category = card.dataset.groupCategory || 'General';
+            const category = card.dataset.groupCategory || I18N.category_general;
             const icon = card.querySelector('.icon')?.textContent || '📚';
 
             document.getElementById('joinModalTitle').textContent = name;
-            document.getElementById('joinModalDescription').textContent = description || 'No description provided.';
+            document.getElementById('joinModalDescription').textContent = description || "{{ _('groups.modal_no_description') }}";
             document.getElementById('joinModalPlatform').textContent = platform.charAt(0).toUpperCase() + platform.slice(1);
             document.getElementById('joinModalCategory').textContent = category;
             document.getElementById('joinModalIcon').textContent = icon;

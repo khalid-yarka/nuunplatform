@@ -1,17 +1,17 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}Select Subject - Quiz{% endblock %}
+{% block title %}{{ _('quiz.select.page_title') }}{% endblock %}
 
-{% block page_title %}Select Subject{% endblock %}
+{% block page_title %}{{ _('quiz.select.page_title') }}{% endblock %}
 
 {% block dashboard_content %}
 <div style="max-width: 640px; margin: 0 auto;">
     <div style="text-align: center; margin-bottom: 32px;">
         <h2 style="font-size: 24px; font-weight: 700; color: var(--text);">
-            📝 Start a Quiz
+            📝 {{ _('quiz.select.title') }}
         </h2>
         <p style="color: var(--text-secondary); font-size: 15px; margin-top: 4px;">
-            Select a subject to test your knowledge
+            {{ _('quiz.select.subtitle') }}
         </p>
     </div>
 
@@ -22,15 +22,15 @@
                    style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 16px; text-align: center; text-decoration: none; transition: var(--transition); box-shadow: var(--shadow-sm);">
                     <div style="font-size: 48px; margin-bottom: 8px;">{{ subject.icon or '📚' }}</div>
                     <h3 style="font-size: 16px; font-weight: 600; color: var(--text);">{{ subject.name }}</h3>
-                    <span style="font-size: 13px; color: var(--text-secondary);">10 questions</span>
+                    <span style="font-size: 13px; color: var(--text-secondary);">{{ _('quiz.select.ten_questions') }}</span>
                 </a>
             {% endfor %}
         </div>
     {% else %}
         <div style="text-align: center; padding: 60px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);">
             <div style="font-size: 64px; opacity: 0.3; margin-bottom: 16px;">📚</div>
-            <h3 style="font-size: 18px; font-weight: 600; color: var(--text);">No subjects available</h3>
-            <p style="color: var(--text-secondary); font-size: 14px; margin-top: 4px;">Check back later for new quizzes!</p>
+            <h3 style="font-size: 18px; font-weight: 600; color: var(--text);">{{ _('quiz.select.empty_title') }}</h3>
+            <p style="color: var(--text-secondary); font-size: 14px; margin-top: 4px;">{{ _('quiz.select.empty_desc') }}</p>
         </div>
     {% endif %}
 </div>

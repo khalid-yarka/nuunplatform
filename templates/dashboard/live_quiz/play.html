@@ -1,8 +1,8 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}Live Quiz - {{ quiz.title or 'Quiz' }}{% endblock %}
+{% block title %}{{ _('live_quiz.playing.page_title') }} - {{ quiz.title or _('live_quiz.lobby.untitled_quiz') }}{% endblock %}
 
-{% block page_title %}Live Quiz{% endblock %}
+{% block page_title %}{{ _('live_quiz.playing.page_title') }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
@@ -351,30 +351,30 @@
 <div class="live-quiz-container">
 
     <div class="reconnection-notice" id="reconnectionNotice">
-        🔄 Reconnected! Resuming your quiz...
+        🔄 {{ _('live_quiz.playing.reconnected') }}
         <button class="dismiss" onclick="document.getElementById('reconnectionNotice').classList.remove('show')">✕</button>
     </div>
 
     <div class="quiz-notification" id="notificationBanner">
-        🚀 <span id="notificationText">Quiz has started!</span>
+        🚀 <span id="notificationText">{{ _('live_quiz.playing.notif_started') }}</span>
     </div>
 
     <div class="quiz-header">
         <div class="title-section">
-            <h3>{{ quiz.title or 'Live Quiz' }}</h3>
+            <h3>{{ quiz.title or _('live_quiz.lobby.untitled_quiz') }}</h3>
             <div class="meta">
-                <span>📚 {{ quiz.subjects.name if quiz.subjects else 'Unknown' }}</span>
-                <span id="questionCounter">Q <span id="currentQ">0</span>/<span id="totalQ">{{ quiz.question_count }}</span></span>
+                <span>📚 {{ quiz.subjects.name if quiz.subjects else _('live_quiz.waiting.unknown_subject') }}</span>
+                <span id="questionCounter">{{ _('live_quiz.playing.question_label') }} <span id="currentQ">0</span>/<span id="totalQ">{{ quiz.question_count }}</span></span>
             </div>
         </div>
         <div class="timer-section">
             <div class="question-timer" id="timerDisplay">--</div>
-            <div class="label">seconds</div>
+            <div class="label">{{ _('live_quiz.playing.seconds_label') }}</div>
         </div>
     </div>
 
     <div class="total-timer-progress" id="totalTimerContainer">
-        <span class="status-label">⏱️ Quiz ends in</span>
+        <span class="status-label">⏱️ {{ _('live_quiz.playing.quiz_ends_in') }}</span>
         <div class="progress-bar-wrap">
             <div class="fill" id="totalProgressFill" style="width: 100%;"></div>
         </div>
@@ -386,20 +386,20 @@
     </div>
 
     <div class="creator-progress" id="participantProgressContainer">
-        <div class="cp-title">👥 Participant Progress</div>
+        <div class="cp-title">👥 {{ _('live_quiz.playing.participant_progress') }}</div>
         <div id="participantProgressList">
-            <div style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 4px 0;">Waiting for data...</div>
+            <div style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 4px 0;">{{ _('live_quiz.playing.waiting_data') }}</div>
         </div>
     </div>
 
     <div class="leaderboard-mini" id="leaderboardContainer">
         <div class="header">
-            <span class="title">🏆 Live Leaderboard</span>
-            <span class="rank-badge">Your Rank: <strong id="userRank">-</strong></span>
+            <span class="title">🏆 {{ _('live_quiz.playing.live_leaderboard') }}</span>
+            <span class="rank-badge">{{ _('live_quiz.playing.your_rank') }}: <strong id="userRank">-</strong></span>
         </div>
         <div id="leaderboardList">
             <div style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 8px 0;">
-                Waiting for results...
+                {{ _('live_quiz.playing.waiting_results') }}
             </div>
         </div>
     </div>
@@ -408,10 +408,10 @@
         <div id="questionContainer">
             <div style="text-align: center; padding: 40px 20px; color: var(--text-secondary);">
                 <div style="font-size: 48px; margin-bottom: 12px;">⏳</div>
-                <h3 style="font-size: 18px; font-weight: 600; color: var(--text);">Waiting for quiz to start...</h3>
-                <p style="font-size: 14px;">The host will start the quiz shortly</p>
+                <h3 style="font-size: 18px; font-weight: 600; color: var(--text);">{{ _('live_quiz.playing.waiting_quiz_title') }}</h3>
+                <p style="font-size: 14px;">{{ _('live_quiz.playing.waiting_quiz_desc') }}</p>
                 <div style="margin-top: 12px; font-size: 13px; color: var(--text-muted);">
-                    <i class="fas fa-spinner fa-spin"></i> Checking for updates...
+                    <i class="fas fa-spinner fa-spin"></i> {{ _('live_quiz.playing.checking_updates') }}
                 </div>
             </div>
         </div>
@@ -419,7 +419,7 @@
 
     {% if quiz.creator_id != session.user_id and quiz.status != 'finished' %}
         <button class="btn-leave" id="leaveBtn">
-            <i class="fas fa-sign-out-alt"></i> Leave Quiz
+            <i class="fas fa-sign-out-alt"></i> {{ _('live_quiz.playing.leave_btn') }}
         </button>
     {% endif %}
 
@@ -427,6 +427,66 @@
 
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
+// Server-rendered strings handed to JS
+const I18N = {
+    notif_quiz_started_title: "{{ _('live_quiz.playing.bnotif_started_title') }}",
+    notif_quiz_started_body:  "{{ _('live_quiz.playing.bnotif_started_body', title=quiz.title or _('live_quiz.lobby.untitled_quiz')) }}",
+    notif_all_finished_title: "{{ _('live_quiz.playing.bnotif_all_finished_title') }}",
+    notif_all_finished_body:  "{{ _('live_quiz.playing.bnotif_all_finished_body') }}",
+    notif_quiz_complete_title:"{{ _('live_quiz.playing.bnotif_complete_title') }}",
+    notif_quiz_complete_body: "{{ _('live_quiz.playing.bnotif_complete_body', title=quiz.title or _('live_quiz.lobby.untitled_quiz')) }}",
+
+    toast_started:            "{{ _('live_quiz.playing.toast_started') }}",
+    toast_answer_error:       "{{ _('live_quiz.playing.toast_answer_error') }}",
+    toast_skip_error:         "{{ _('live_quiz.playing.toast_skip_error') }}",
+    toast_rating_error:       "{{ _('live_quiz.playing.toast_rating_error') }}",
+    toast_leave_error:        "{{ _('live_quiz.playing.toast_leave_error') }}",
+    toast_no_question:        "{{ _('live_quiz.playing.toast_no_question') }}",
+    toast_network:            "{{ _('live_quiz.playing.toast_network') }}",
+
+    leave_confirm:            "{{ _('live_quiz.playing.leave_confirm') }}",
+    leaving:                  "{{ _('live_quiz.playing.leaving') }}",
+    leave_btn:                "{{ _('live_quiz.playing.leave_btn') }}",
+
+    error_unavailable:        "{{ _('live_quiz.playing.error_unavailable') }}",
+    return_lobby:             "{{ _('live_quiz.playing.return_lobby') }}",
+    unable_title:             "{{ _('live_quiz.playing.unable_title') }}",
+
+    completed_all:            "{{ _('live_quiz.playing.completed_all') }}",
+    loading_progress:         "{{ _('live_quiz.playing.loading_progress') }}",
+    waiting_more_one:         "{{ _('live_quiz.playing.waiting_more_one') }}",
+    waiting_more_many:        "{{ _('live_quiz.playing.waiting_more_many') }}",
+    time_remaining:           "{{ _('live_quiz.playing.time_remaining') }}",
+    loading_participant:      "{{ _('live_quiz.playing.loading_participant') }}",
+    motivation_ahead:         "{{ _('live_quiz.playing.motivation_ahead') }}",
+    motivation_everyone:      "{{ _('live_quiz.playing.motivation_everyone') }}",
+    motivation_only_one:      "{{ _('live_quiz.playing.motivation_only_one') }}",
+    motivation_only_many:     "{{ _('live_quiz.playing.motivation_only_many') }}",
+    motivation_some_one:      "{{ _('live_quiz.playing.motivation_some_one') }}",
+    motivation_some_many:     "{{ _('live_quiz.playing.motivation_some_many') }}",
+    motivation_default:       "{{ _('live_quiz.playing.motivation_default') }}",
+    you_label:                "{{ _('live_quiz.lobby.you') }}",
+
+    status_playing:           "{{ _('live_quiz.playing.status_playing') }}",
+    status_done:              "{{ _('live_quiz.playing.status_done') }}",
+    status_left:              "{{ _('live_quiz.playing.status_left') }}",
+
+    leaderboard_empty:        "{{ _('live_quiz.playing.leaderboard_empty') }}",
+    player_unknown:           "{{ _('live_quiz.playing.player_unknown') }}",
+    pts_label:                "{{ _('live_quiz.playing.pts_label') }}",
+
+    feedback_correct:         "{{ _('live_quiz.playing.feedback_correct') }}",
+    feedback_wrong:           "{{ _('live_quiz.playing.feedback_wrong') }}",
+    feedback_skipped:         "{{ _('live_quiz.playing.feedback_skipped') }}",
+    feedback_moving_next:     "{{ _('live_quiz.playing.feedback_moving_next') }}",
+    feedback_rate_continue:   "{{ _('live_quiz.playing.feedback_rate_continue') }}",
+    feedback_already_answered: "{{ _('live_quiz.playing.feedback_already_answered') }}",
+    feedback_rated:           "{{ _('live_quiz.playing.feedback_rated') }}",
+    reminder_rate:            "{{ _('live_quiz.playing.reminder_rate') }}",
+    reminder_already_answer:  "{{ _('live_quiz.playing.reminder_already_answer') }}",
+    explanation_prefix:       "{{ _('live_quiz.playing.explanation_prefix') }}"
+};
 
 document.addEventListener('DOMContentLoaded', function() {
     const quizId = '{{ quiz.id }}';
@@ -576,18 +636,18 @@ document.addEventListener('DOMContentLoaded', function() {
         const container = document.getElementById('participantProgressList');
         if (!container) return;
         if (!progressData || progressData.length === 0) {
-            container.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 4px 0;">No participants yet</div>';
+            container.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 4px 0;">{{ _("live_quiz.playing.no_participants") }}</div>';
             return;
         }
         let html = '';
         progressData.forEach(p => {
             const pct = totalQuestions > 0 ? Math.round((p.current_question_index / totalQuestions) * 100) : 0;
-            let statusClass = 'waiting', statusText = '⏳ Playing';
-            if (p.status === 'left') { statusClass = 'left'; statusText = '🔴 Left'; }
-            else if (p.current_question_index >= totalQuestions) { statusClass = 'done'; statusText = '✅ Done'; }
+            let statusClass = 'waiting', statusText = '⏳ ' + I18N.status_playing;
+            if (p.status === 'left') { statusClass = 'left'; statusText = '🔴 ' + I18N.status_left; }
+            else if (p.current_question_index >= totalQuestions) { statusClass = 'done'; statusText = '✅ ' + I18N.status_done; }
             const isYou = p.user_id == '{{ session.user_id }}';
             html += `<div class="progress-item">
-                        <span class="name">${p.name}${isYou ? ' (You)' : ''}</span>
+                        <span class="name">${p.name}${isYou ? ' (' + I18N.you_label + ')' : ''}</span>
                         <div class="bar-wrap">
                             <div class="fill" style="width: ${pct}%;"></div>
                         </div>
@@ -600,8 +660,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const leaveBtn = document.getElementById('leaveBtn');
     if (leaveBtn) {
         leaveBtn.addEventListener('click', function() {
-            if (!confirm('Are you sure you want to leave this quiz?')) return;
-            leaveBtn.disabled = true; leaveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Leaving...';
+            if (!confirm(I18N.leave_confirm)) return;
+            leaveBtn.disabled = true; leaveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + I18N.leaving;
             fetchWithTimeout('/live-quiz/leave/' + quizId, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
@@ -610,9 +670,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) { sessionStorage.removeItem('live_quiz_' + quizId); window.location.href = data.redirect; }
-                    else { showToast(data.error || 'Failed to leave quiz', 'error'); leaveBtn.disabled = false; leaveBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Leave Quiz'; }
+                    else { showToast(data.error || I18N.toast_leave_error, 'error'); leaveBtn.disabled = false; leaveBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> ' + I18N.leave_btn; }
                 })
-                .catch(() => { showToast('Error leaving quiz.', 'error'); leaveBtn.disabled = false; leaveBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Leave Quiz'; });
+                .catch(() => { showToast(I18N.toast_network, 'error'); leaveBtn.disabled = false; leaveBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> ' + I18N.leave_btn; });
         });
     }
 
@@ -620,8 +680,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const container = document.getElementById('questionContainer');
         if (!container) return;
         clearInterval(timerInterval); clearTimeout(pollTimer); clearTimeout(leaderboardTimer);
-        container.innerHTML = `<div class="error-state"><div class="icon">⚠️</div><h3>Unable to load quiz</h3><p>${message || 'This quiz is no longer available.'}</p><a href="${redirectUrl || '/live-quiz/lobby'}" class="btn"><i class="fas fa-arrow-left"></i> Return to Lobby</a></div>`;
-        showToast(message || 'Quiz unavailable', 'error', 5000);
+        container.innerHTML = `<div class="error-state"><div class="icon">⚠️</div><h3>${I18N.unable_title}</h3><p>${message || I18N.error_unavailable}</p><a href="${redirectUrl || '/live-quiz/lobby'}" class="btn"><i class="fas fa-arrow-left"></i> ${I18N.return_lobby}</a></div>`;
+        showToast(message || I18N.error_unavailable, 'error', 5000);
     }
 
     function pollQuizState() {
@@ -630,7 +690,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.abort) {
                     clearInterval(timerInterval); clearTimeout(pollTimer); clearTimeout(leaderboardTimer);
-                    showErrorState(data.message || 'Quiz is no longer available', data.redirect || '/live-quiz/lobby');
+                    showErrorState(data.message || I18N.error_unavailable, data.redirect || '/live-quiz/lobby');
                     return;
                 }
                 if (data.error) { console.warn('Polling error:', data.error); pollInterval = Math.min(pollInterval + 500, 5000); resetPollTimer(); return; }
@@ -658,7 +718,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 if (data.status === 'finished' && !quizEnded) {
                     quizEnded = true;
-                    sendBrowserNotification('🏆 Quiz Complete!', quizTitle + ' has finished. Check your results!', '/live-quiz/results/' + quizId);
+                    sendBrowserNotification(I18N.notif_quiz_complete_title, I18N.notif_quiz_complete_body, '/live-quiz/results/' + quizId);
                     window.location.href = data.redirect_url || '/live-quiz/results/' + quizId;
                     return;
                 }
@@ -666,7 +726,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.status === 'active') {
                     if (!quizStarted) {
                         quizStarted = true;
-                        if (!notificationShown) { notificationShown = true; showNotification('🚀 Quiz has started! Get ready!'); playNotificationSound(); sendBrowserNotification('🚀 Quiz Started!', quizTitle + ' has begun!', '/live-quiz/play/' + quizId); }
+                        if (!notificationShown) { notificationShown = true; showNotification(I18N.toast_started); playNotificationSound(); sendBrowserNotification(I18N.notif_quiz_started_title, I18N.notif_quiz_started_body, '/live-quiz/play/' + quizId); }
                         loadQuestion();
                         resetPollTimer();
                         return;
@@ -688,7 +748,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     if (data.all_completed && data.status === 'active') {
                         if (data.is_completed) {
-                            sendBrowserNotification('🏆 All Finished!', 'All participants have completed!', '/live-quiz/results/' + quizId);
+                            sendBrowserNotification(I18N.notif_all_finished_title, I18N.notif_all_finished_body, '/live-quiz/results/' + quizId);
                             window.location.href = '/live-quiz/results/' + quizId;
                             return;
                         }
@@ -715,7 +775,7 @@ document.addEventListener('DOMContentLoaded', function() {
         fetchWithTimeout('/live-quiz/get-question/' + quizId + '?t=' + Date.now(), {}, 8000)
             .then(response => response.json())
             .then(data => {
-                if (data.abort) { showErrorState(data.message || 'Quiz is no longer available', data.redirect || '/live-quiz/lobby'); return; }
+                if (data.abort) { showErrorState(data.message || I18N.error_unavailable, data.redirect || '/live-quiz/lobby'); return; }
                 if (data.error) {
                     if (data.completed) {
                         isCompleted = true;
@@ -770,9 +830,9 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="options-container">${optionsHtml}</div>
             <div id="feedbackContainer">
                 <div class="feedback-area ${isCorrect ? 'success' : 'error'}">
-                    <div class="feedback-title">${isCorrect ? '✅ CORRECT! +2 points' : '❌ WRONG! 0 points'}</div>
-                    ${explanation ? `<div style="font-size: 14px; margin-top: 4px; color: var(--text-secondary);">💡 ${explanation}</div>` : ''}
-                    <div style="margin-top: 10px; font-size: 13px; color: var(--text-secondary);">You already answered this question. Please rate it to continue.</div>
+                    <div class="feedback-title">${isCorrect ? I18N.feedback_correct : I18N.feedback_wrong}</div>
+                    ${explanation ? `<div style="font-size: 14px; margin-top: 4px; color: var(--text-secondary);">${I18N.explanation_prefix} ${explanation}</div>` : ''}
+                    <div style="margin-top: 10px; font-size: 13px; color: var(--text-secondary);">${I18N.feedback_already_answered}</div>
                     <div class="rating-buttons"><button class="haa" onclick="submitRating('HAA')">✅ HAA</button><button class="may" onclick="submitRating('MAY')">❌ MAY</button></div>
                 </div>
             </div>`;
@@ -790,7 +850,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <button class="option-btn" data-value="B" onclick="selectOption('B')"><span class="letter">B.</span><span>${question.options.B}</span></button>
                 <button class="option-btn" data-value="C" onclick="selectOption('C')"><span class="letter">C.</span><span>${question.options.C}</span></button>
             </div>
-            <button class="skip-btn" onclick="skipQuestion()" id="skipBtn"><i class="fas fa-forward"></i> Skip Question</button>
+            <button class="skip-btn" onclick="skipQuestion()" id="skipBtn"><i class="fas fa-forward"></i> {{ _('live_quiz.playing.skip_btn') }}</button>
             <div id="feedbackContainer"></div>`;
         timer = timePerQuestion; updateTimerDisplay();
     }
@@ -807,7 +867,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (container && !container.querySelector('.rating-reminder')) {
                         const reminder = document.createElement('div');
                         reminder.className = 'rating-reminder';
-                        reminder.textContent = '⏰ Please rate this question to continue!';
+                        reminder.textContent = I18N.reminder_rate;
                         container.appendChild(reminder);
                     }
                 }
@@ -825,13 +885,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.selectOption = function(value) {
         if (isAnswered) return;
-        if (!questionData) { showToast('Question not loaded. Please wait.', 'warning'); return; }
+        if (!questionData) { showToast(I18N.toast_no_question, 'warning'); return; }
         isAnswered = true; hasAnsweredCurrent = true;
         const buttons = document.querySelectorAll('.option-btn'); const skipBtn = document.getElementById('skipBtn');
         buttons.forEach(b => b.disabled = true); if (skipBtn) skipBtn.disabled = true;
         const selectedBtn = document.querySelector(`.option-btn[data-value="${value}"]`);
         const originalText = selectedBtn ? selectedBtn.innerHTML : '';
-        if (selectedBtn) selectedBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+        if (selectedBtn) selectedBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
         fetchWithTimeout('/live-quiz/submit-answer', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
@@ -851,9 +911,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (container) {
                 container.innerHTML = `
                     <div class="feedback-area ${data.correct ? 'success' : 'error'}">
-                        <div class="feedback-title">${data.correct ? '✅ CORRECT! +2 points' : '❌ WRONG! 0 points'}</div>
-                        ${data.explanation ? `<div style="font-size: 14px; margin-top: 4px; color: var(--text-secondary);">💡 ${data.explanation}</div>` : ''}
-                        <div style="margin-top: 10px; font-size: 13px; color: var(--text-secondary);">Rate this question to continue</div>
+                        <div class="feedback-title">${data.correct ? I18N.feedback_correct : I18N.feedback_wrong}</div>
+                        ${data.explanation ? `<div style="font-size: 14px; margin-top: 4px; color: var(--text-secondary);">${I18N.explanation_prefix} ${data.explanation}</div>` : ''}
+                        <div style="margin-top: 10px; font-size: 13px; color: var(--text-secondary);">${I18N.feedback_rate_continue}</div>
                         <div class="rating-buttons"><button class="haa" onclick="submitRating('HAA')">✅ HAA</button><button class="may" onclick="submitRating('MAY')">❌ MAY</button></div>
                     </div>`;
             }
@@ -865,7 +925,7 @@ document.addEventListener('DOMContentLoaded', function() {
             buttons.forEach(b => { b.disabled = false; if (b === selectedBtn) b.innerHTML = originalText; });
             if (skipBtn) skipBtn.disabled = false;
             isAnswered = false; hasAnsweredCurrent = false;
-            showToast('Error submitting answer. Please try again.', 'error');
+            showToast(I18N.toast_answer_error, 'error');
         });
     };
 
@@ -875,7 +935,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (container && !container.querySelector('.rating-reminder')) {
                 const reminder = document.createElement('div');
                 reminder.className = 'rating-reminder';
-                reminder.textContent = '⏰ You already answered! Please rate this question to continue.';
+                reminder.textContent = I18N.reminder_already_answer;
                 container.appendChild(reminder);
             }
             return;
@@ -892,7 +952,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             const container = document.getElementById('feedbackContainer');
-            if (container) container.innerHTML = `<div class="feedback-area skipped"><div class="feedback-title">⏭️ Skipped! 0 points</div><div style="margin-top: 6px; font-size: 13px; color: var(--text-secondary);">Moving to next question...</div></div>`;
+            if (container) container.innerHTML = `<div class="feedback-area skipped"><div class="feedback-title">${I18N.feedback_skipped}</div><div style="margin-top: 6px; font-size: 13px; color: var(--text-secondary);">${I18N.feedback_moving_next}</div></div>`;
             clearInterval(timerInterval);
             currentQuestionIndex += 1;
             if (currentQuestionIndex >= totalQuestions) {
@@ -908,7 +968,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Skip question error:', error);
             buttons.forEach(b => b.disabled = false); if (skipBtn) skipBtn.disabled = false;
             isAnswered = false; hasAnsweredCurrent = false;
-            showToast('Error skipping question. Please try again.', 'error');
+            showToast(I18N.toast_skip_error, 'error');
         });
     };
 
@@ -931,7 +991,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const ratingText = rating === 'HAA' ? '✅ HAA' : '❌ MAY';
                     const ratingDiv = document.createElement('div');
                     ratingDiv.style.cssText = 'margin-top: 8px; font-weight: 600; color: var(--primary);';
-                    ratingDiv.textContent = `⭐ Rated: ${ratingText}`;
+                    ratingDiv.textContent = I18N.feedback_rated + ' ' + ratingText;
                     feedback.appendChild(ratingDiv);
                     const ratingBtns = feedback.querySelector('.rating-buttons'); if (ratingBtns) ratingBtns.remove();
                     const reminder = feedback.querySelector('.rating-reminder'); if (reminder) reminder.remove();
@@ -951,7 +1011,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Submit rating error:', error);
             buttons.forEach(b => b.disabled = false);
             isRated = false;
-            showToast('Error submitting rating. Please try again.', 'error');
+            showToast(I18N.toast_rating_error, 'error');
         });
     };
 
@@ -979,8 +1039,8 @@ document.addEventListener('DOMContentLoaded', function() {
         container.innerHTML = `
             <div class="completed-state">
                 <span class="icon">🎉</span>
-                <h3>You've completed all questions!</h3>
-                <p class="sub">Loading participant progress...</p>
+                <h3>${I18N.completed_all}</h3>
+                <p class="sub">${I18N.loading_progress}</p>
                 <div style="text-align: center; padding: 20px;">
                     <i class="fas fa-spinner fa-spin" style="font-size: 32px; color: var(--primary);"></i>
                 </div>
@@ -1000,11 +1060,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const circumference = 339.292;
         const offset = circumference * (1 - pct / 100);
 
+        const waitingCount = totalParticipantsCount - completedParticipantsCount;
+        const waitingText = waitingCount === 1
+            ? I18N.waiting_more_one
+            : I18N.waiting_more_many.replace('{n}', waitingCount);
+
         let html = `
             <div class="completed-state">
                 <span class="icon">🎉</span>
-                <h3>You finished all questions!</h3>
-                <p class="sub">Waiting for <span class="highlight" id="waitingCount">${totalParticipantsCount - completedParticipantsCount}</span> more participant${totalParticipantsCount - completedParticipantsCount !== 1 ? 's' : ''} to finish...</p>
+                <h3>${I18N.completed_all}</h3>
+                <p class="sub">${waitingText}</p>
 
                 <div class="waiting-dashboard">
                     <div class="overall-stats">
@@ -1017,17 +1082,17 @@ document.addEventListener('DOMContentLoaded', function() {
                             <div class="center-text" id="overallPercentage">${Math.round(pct)}%</div>
                         </div>
                         <div class="timer-display">
-                            <span class="timer-label">Time Remaining</span>
+                            <span class="timer-label">${I18N.time_remaining}</span>
                             <span class="timer-value" id="waitingTimerLarge">${formatTime(remaining)}</span>
                         </div>
                     </div>
 
                     <div class="participant-progress-list" id="participantProgressList">
-                        <div style="text-align: center; color: var(--text-muted); padding: 8px 0;">Loading participant status...</div>
+                        <div style="text-align: center; color: var(--text-muted); padding: 8px 0;">${I18N.loading_participant}</div>
                     </div>
 
                     <div class="motivation" id="motivationMessage">
-                        <span class="emoji">💪</span> You're ahead of the pack!
+                        <span class="emoji">💪</span> ${I18N.motivation_ahead}
                     </div>
                 </div>
             </div>
@@ -1098,28 +1163,30 @@ document.addEventListener('DOMContentLoaded', function() {
         if (mot) {
             const left = totalParticipantsCount - completedParticipantsCount;
             if (left === 0) {
-                mot.innerHTML = '<span class="emoji">🏆</span> Everyone finished! Heading to results...';
+                mot.innerHTML = '<span class="emoji">🏆</span> ' + I18N.motivation_everyone;
+            } else if (left === 1) {
+                mot.innerHTML = '<span class="emoji">🔥</span> ' + I18N.motivation_only_one;
             } else if (left <= 2) {
-                mot.innerHTML = `<span class="emoji">🔥</span> Only ${left} participant${left > 1 ? 's' : ''} left! So close!`;
+                mot.innerHTML = '<span class="emoji">🔥</span> ' + I18N.motivation_only_many.replace('{n}', left);
             } else if (left <= 5) {
-                mot.innerHTML = `<span class="emoji">⏳</span> ${left} more to go – you're doing great!`;
+                mot.innerHTML = '<span class="emoji">⏳</span> ' + I18N.motivation_some_many.replace('{n}', left);
             } else {
-                mot.innerHTML = `<span class="emoji">💪</span> You're leading the pack! Keep cheering for others.`;
+                mot.innerHTML = '<span class="emoji">💪</span> ' + I18N.motivation_default;
             }
         }
 
         let html = '';
         progressData.forEach(p => {
             const pctDone = totalQuestions > 0 ? Math.round((p.current_question_index / totalQuestions) * 100) : 0;
-            let statusClass = 'status-playing', statusText = '⏳ Playing';
-            if (p.status === 'left') { statusClass = 'status-left'; statusText = '🔴 Left'; }
-            else if (p.current_question_index >= totalQuestions) { statusClass = 'status-done'; statusText = '✅ Done'; }
+            let statusClass = 'status-playing', statusText = '⏳ ' + I18N.status_playing;
+            if (p.status === 'left') { statusClass = 'status-left'; statusText = '🔴 ' + I18N.status_left; }
+            else if (p.current_question_index >= totalQuestions) { statusClass = 'status-done'; statusText = '✅ ' + I18N.status_done; }
             const isYou = p.user_id == '{{ session.user_id }}';
             html += `
                 <div class="pp-item">
                     <span class="name">
                         ${p.name}
-                        ${isYou ? '<span class="you-badge">You</span>' : ''}
+                        ${isYou ? '<span class="you-badge">' + I18N.you_label + '</span>' : ''}
                     </span>
                     <div class="bar-wrap">
                         <div class="fill" style="width: ${pctDone}%;"></div>
@@ -1162,12 +1229,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 const userRank = data.user_rank || '-';
                 const rankBadge = document.getElementById('userRank'); if (rankBadge) rankBadge.textContent = userRank;
                 if (!list) return;
-                if (top5.length === 0) { list.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 8px 0;">No scores yet</div>'; return; }
+                if (top5.length === 0) { list.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 8px 0;">' + I18N.leaderboard_empty + '</div>'; return; }
                 let html = '';
                 top5.forEach((item, i) => {
                     const isYou = item.student_id == '{{ session.user_id }}' || item.user_id == '{{ session.user_id }}';
                     const rankDisplay = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1);
-                    html += `<div class="lb-item ${isYou ? 'you' : ''}"><span class="rank">${rankDisplay}</span><span class="name">${item.name || 'Player'}${isYou ? ' (You)' : ''}</span><span class="score">${item.score} pts</span></div>`;
+                    html += `<div class="lb-item ${isYou ? 'you' : ''}"><span class="rank">${rankDisplay}</span><span class="name">${item.name || I18N.player_unknown}${isYou ? ' (' + I18N.you_label + ')' : ''}</span><span class="score">${item.score} ${I18N.pts_label}</span></div>`;
                 });
                 list.innerHTML = html;
                 leaderboardTimer = setTimeout(updateLeaderboard, leaderboardInterval);

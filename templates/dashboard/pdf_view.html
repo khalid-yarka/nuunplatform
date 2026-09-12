@@ -1,6 +1,6 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}{{ pdf.title }} - Reading{% endblock %}
+{% block title %}{{ pdf.title }} - {{ _('pdf_view.reading_title') }}{% endblock %}
 
 {% block extra_css %}
 <!-- Override dashboard layout for clean reading mode -->
@@ -473,7 +473,7 @@
     <div class="pdf-topbar">
         <div class="left">
             <a href="{{ url_for('pdfs.list_pdfs') }}" class="back-link">
-                <i class="fas fa-arrow-left"></i> Back
+                <i class="fas fa-arrow-left"></i> {{ _('common.back') }}
             </a>
             <span class="title">{{ pdf.title }}</span>
         </div>
@@ -483,7 +483,7 @@
             </span>
             <a href="{{ url_for('pdfs.telegram_download', code=pdf.code) }}" target="_blank" class="btn-telegram">
                 <i class="fab fa-telegram-plane"></i>
-                Get PDF
+                {{ _('pdf_view.get_pdf_btn') }}
             </a>
         </div>
     </div>
@@ -493,7 +493,7 @@
         <!-- Loading State -->
         <div class="pdf-loading" id="pdfLoading">
             <div class="spinner"></div>
-            <p>Loading document...</p>
+            <p>{{ _('pdf_view.loading') }}</p>
             <div class="loader-bar">
                 <div class="fill"></div>
             </div>
@@ -534,13 +534,15 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // ============================================
-    // PDF.JS VIEWER - VERTICAL SCROLLING + PINCH ZOOM
-    // ============================================
+const I18N = {
+    pdf_not_available:    "{{ _('pdf_view.not_available') }}",
+    pdf_telegram_hint:    "{{ _('pdf_view.telegram_hint') }}",
+    pdf_failed_load:      "{{ _('pdf_view.failed_load') }}",
+    fullscreen_unsupported: "{{ _('pdf_view.fullscreen_unsupported') }}",
+    saving_disabled:      "{{ _('pdf_view.saving_disabled') }}"
+};
 
-    // Determine which URL to use
-    // If file_url exists, use it directly; otherwise stream from Telegram
+document.addEventListener('DOMContentLoaded', function() {
     let PDF_URL = null;
     {% if pdf.file_url %}
         PDF_URL = "{{ pdf.file_url }}";
@@ -548,27 +550,24 @@ document.addEventListener('DOMContentLoaded', function() {
         PDF_URL = "{{ url_for('pdfs.stream_pdf', code=pdf.code) }}";
     {% endif %}
 
-    // If PDF_URL is still null, fallback to Telegram link
     if (!PDF_URL) {
         document.getElementById('pdfLoading').innerHTML = `
             <div style="font-size: 48px; opacity:0.3;">📲</div>
-            <h3 style="font-size:18px; color:var(--text);">PDF not available</h3>
+            <h3 style="font-size:18px; color:var(--text);">${I18N.pdf_not_available}</h3>
             <p style="font-size:14px; color:var(--text-secondary);">
-                This document is available via Telegram.
+                ${I18N.pdf_telegram_hint}
             </p>
             <a href="{{ url_for('pdfs.telegram_download', code=pdf.code) }}" target="_blank"
                style="display:inline-block; margin-top:16px; padding:10px 24px; background:#0088CC; color:white; border-radius:8px; text-decoration:none; font-weight:600;">
-                <i class="fab fa-telegram-plane"></i> Get PDF via Telegram
+                <i class="fab fa-telegram-plane"></i> {{ _('pdf_view.get_pdf_btn') }}
             </a>
         `;
         document.getElementById('pdfControls').style.display = 'none';
         return;
     }
 
-    // Set worker source
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    // DOM Elements
     const container = document.getElementById('pdfContainer');
     const pagesContainer = document.getElementById('pdfPagesContainer');
     const loading = document.getElementById('pdfLoading');
@@ -584,7 +583,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const zoomLevelDisplay = document.getElementById('zoomLevelDisplay');
     const fullscreenBtn = document.getElementById('fullscreenBtn');
 
-    // State
     let pdfDoc = null;
     let totalPages = 0;
     let scale = 1.0;
@@ -593,10 +591,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const SCALE_STEP = 0.1;
     let currentPage = 1;
     let isRendering = false;
-
-    // ============================================
-    // PINCH-TO-ZOOM STATE
-    // ============================================
 
     let lastPinchDistance = 0;
     let isPinching = false;
@@ -609,10 +603,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
     }
 
-    // ============================================
-    // SECURITY MEASURES
-    // ============================================
-
     document.querySelector('.pdf-reader-wrapper')?.addEventListener('contextmenu', function(e) {
         e.preventDefault();
         return false;
@@ -621,7 +611,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('keydown', function(e) {
         if (e.ctrlKey && (e.key === 's' || e.key === 'p')) {
             e.preventDefault();
-            showToast('Saving/Printing is disabled.');
+            showToast(I18N.saving_disabled);
             return false;
         }
         if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I') || (e.ctrlKey && e.key === 'u')) {
@@ -629,10 +619,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return false;
         }
     });
-
-    // ============================================
-    // TOAST
-    // ============================================
 
     function showToast(message) {
         const toast = document.createElement('div');
@@ -652,15 +638,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 2000);
     }
 
-    // ============================================
-    // PDF LOADING
-    // ============================================
-
     function loadPDF(url) {
         if (!url) {
             loading.innerHTML = `
                 <div style="font-size: 48px; opacity:0.3;">⚠️</div>
-                <p>Failed to load PDF.</p>
+                <p>${I18N.pdf_failed_load}</p>
             `;
             controls.style.display = 'none';
             return;
@@ -683,21 +665,17 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(function(error) {
                 loading.innerHTML = `
                     <div style="font-size: 48px; opacity:0.3;">⚠️</div>
-                    <h3 style="font-size:18px; color:var(--text);">Failed to load PDF</h3>
+                    <h3 style="font-size:18px; color:var(--text);">${I18N.pdf_failed_load}</h3>
                     <p style="font-size:14px; color:var(--text-secondary);">${error.message}</p>
                     <a href="{{ url_for('pdfs.telegram_download', code=pdf.code) }}" target="_blank"
                        style="display:inline-block; margin-top:12px; padding:8px 20px; background:#0088CC; color:white; border-radius:8px; text-decoration:none; font-weight:600;">
-                        <i class="fab fa-telegram-plane"></i> Get PDF via Telegram
+                        <i class="fab fa-telegram-plane"></i> {{ _('pdf_view.get_pdf_btn') }}
                     </a>
                 `;
                 controls.style.display = 'none';
                 console.error('PDF Error:', error);
             });
     }
-
-    // ============================================
-    // RENDER ALL PAGES (Vertical Scrolling)
-    // ============================================
 
     function renderAllPages() {
         if (!pdfDoc || isRendering) return;
@@ -713,7 +691,6 @@ document.addEventListener('DOMContentLoaded', function() {
         Promise.all(promises).then(function() {
             isRendering = false;
             updateControls();
-            // Scroll to first page after render
             setTimeout(function() {
                 const wrapper = document.getElementById('page-1');
                 if (wrapper) {
@@ -787,17 +764,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // ============================================
-    // SCROLL TO PAGE - SIMPLE & RELIABLE
-    // ============================================
-
     function scrollToPage(pageNum) {
         if (pageNum < 1 || pageNum > totalPages) return;
         if (!pdfDoc) return;
 
         currentPage = pageNum;
 
-        // Find the page wrapper
         const wrapper = document.getElementById('page-' + pageNum);
         if (wrapper) {
             wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -805,10 +777,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
         updateControls();
     }
-
-    // ============================================
-    // CONTROLS
-    // ============================================
 
     function updateControls() {
         if (pageInfoDisplay) {
@@ -844,11 +812,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // ============================================
-    // EVENT LISTENERS
-    // ============================================
-
-    // Page navigation buttons
     if (prevBtn) {
         prevBtn.addEventListener('click', function() {
             if (currentPage > 1) {
@@ -865,7 +828,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Page input
     if (pageInput) {
         pageInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
@@ -887,7 +849,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Keyboard arrows
     document.addEventListener('keydown', function(e) {
         if (e.target.tagName === 'INPUT') return;
         if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
@@ -901,18 +862,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Zoom
     if (zoomInBtn) zoomInBtn.addEventListener('click', function() { changeZoom(SCALE_STEP); });
     if (zoomOutBtn) zoomOutBtn.addEventListener('click', function() { changeZoom(-SCALE_STEP); });
     if (resetZoomBtn) resetZoomBtn.addEventListener('click', resetZoom);
 
-    // Fullscreen
     if (fullscreenBtn) {
         fullscreenBtn.addEventListener('click', function() {
             const wrapper = document.querySelector('.pdf-reader-wrapper');
             if (!document.fullscreenElement) {
                 wrapper.requestFullscreen().catch(function() {
-                    showToast('Fullscreen not supported.');
+                    showToast(I18N.fullscreen_unsupported);
                 });
             } else {
                 document.exitFullscreen();
@@ -925,7 +884,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Mouse wheel zoom (Ctrl + Scroll)
     container.addEventListener('wheel', function(e) {
         if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
@@ -933,10 +891,6 @@ document.addEventListener('DOMContentLoaded', function() {
             changeZoom(delta);
         }
     }, { passive: false });
-
-    // ============================================
-    // PINCH-TO-ZOOM (Two-Finger)
-    // ============================================
 
     container.addEventListener('touchstart', function(e) {
         if (e.touches.length === 2) {
@@ -964,10 +918,6 @@ document.addEventListener('DOMContentLoaded', function() {
     container.addEventListener('touchend', function(e) {
         isPinching = false;
     }, { passive: true });
-
-    // ============================================
-    // DETECT VISIBLE PAGE FOR UPDATING CONTROLS
-    // ============================================
 
     let scrollTimeout;
     container.addEventListener('scroll', function() {
@@ -997,10 +947,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }, 150);
     }, { passive: true });
-
-    // ============================================
-    // INITIALIZE
-    // ============================================
 
     loadPDF(PDF_URL);
 });
