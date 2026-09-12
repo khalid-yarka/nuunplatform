@@ -45,7 +45,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (changed) {
                     showUnsavedIndicator();
                 } else {
-                    // Check if any other fields are changed
                     let anyChanged = false;
                     inputs.forEach(inp => {
                         const k = inp.id || inp.name;
@@ -66,20 +65,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Track all settings forms
     document.querySelectorAll('.settings-form').forEach(form => {
         trackFormChanges(form);
     });
 
-    // Save now button
     if (saveNowBtn) {
         saveNowBtn.addEventListener('click', function() {
-            // Find the nearest form with changes
             const form = document.querySelector('.settings-form:not([style*="display: none"])');
             if (form) {
                 form.dispatchEvent(new Event('submit'));
             } else {
-                // If no visible form, try to save all
                 document.querySelectorAll('.settings-form').forEach(f => {
                     if (f.style.display !== 'none') {
                         f.dispatchEvent(new Event('submit'));
@@ -89,7 +84,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Discard button
     if (discardBtn) {
         discardBtn.addEventListener('click', function() {
             if (confirm('Discard all unsaved changes?')) {
@@ -98,7 +92,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Before unload warning
     window.addEventListener('beforeunload', function(e) {
         if (unsavedChanges) {
             e.preventDefault();
@@ -110,20 +103,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // ============================================
     // TIER-LOCKED ACCENT COLOURS
     // ============================================
-    const userTier = document.body.dataset.tier || 'danbe';
-    const tierLevels = { 'danbe': 0, 'dhexe': 1, 'hore': 2 };
+    const userTier = document.body.dataset.tier || 'free';
+    const tierLevels = { 'free': 0, 'premium': 1, 'pro': 2 };
     const userTierLevel = tierLevels[userTier] || 0;
     const accentTiers = {
-        'red': 'danbe',
-        'blue': 'dhexe',
-        'green': 'dhexe',
-        'purple': 'dhexe',
-        'orange': 'hore'
+        'red': 'free',
+        'blue': 'premium',
+        'green': 'premium',
+        'purple': 'premium',
+        'orange': 'pro'
     };
 
     document.querySelectorAll('.accent-option').forEach(btn => {
         const accent = btn.dataset.accent;
-        const requiredTier = accentTiers[accent] || 'danbe';
+        const requiredTier = accentTiers[accent] || 'free';
         const requiredLevel = tierLevels[requiredTier] || 0;
 
         if (requiredLevel > userTierLevel) {
@@ -133,8 +126,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (this.classList.contains('locked')) {
                     e.preventDefault();
                     e.stopPropagation();
-                    if (typeof window.openSafkaPreview === 'function') {
-                        window.openSafkaPreview({ feature: 'accent_color', requiredTier: requiredTier });
+                    if (typeof window.openUpgradeSheet === 'function') {
+                        window.openUpgradeSheet({ feature: 'accent_color', requiredTier: requiredTier });
                     }
                 }
             });

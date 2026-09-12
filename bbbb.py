@@ -1,244 +1,253 @@
 #!/usr/bin/env python3
-# seed_test_users.py
-# One-time script: insert test users + admin directly into the database.
-# For local testing only.
+# migrate_1b.py
+# ---------------------------------------------------------------
+# One-shot data migration: normalize legacy tier vocabulary.
+#
+#   danbe → free
+#   dhexe → premium
+#   hore  → pro
+#
+# Runs on:
+#   students.tier
+#   groups.tier_required
+#   achievements.tier_required
+#   discount_codes.applies_to
+#   upgrade_requests.requested_tier
+#
+# Safe:
+#   - Makes a .bak snapshot of the DB before touching anything
+#   - Idempotent — second run is a no-op
+#   - Prints counts before and after
+#   - Verifies each UPDATE actually hit the expected rows
 #
 # Usage:
-#   python seed_test_users.py
-#
-# Re-running updates existing users' passwords and re-activates them.
+#   python migrate_1b.py            # run migration
+#   python migrate_1b.py --dry-run  # show what would change, no writes
+# ---------------------------------------------------------------
 
 import os
 import sys
+import shutil
 import sqlite3
-import secrets
-from werkzeug.security import generate_password_hash
+import argparse
+from datetime import datetime
+from pathlib import Path
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
+BASE_DIR = Path(__file__).resolve().parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 from config import Config
 
 
-# ============================================
-# TEST ACCOUNTS
-# ============================================
-
-TEST_ACCOUNTS = [
-    # ---- Admin (verified) ----
+# ---------------------------------------------------------------
+# Mapping table: which column in which table needs renaming,
+# and what the old → new mapping is.
+# ---------------------------------------------------------------
+MIGRATIONS = [
     {
-        'phone':    '610000000',
-        'password': 'admin1234',
-        'first':    'Admin',
-        'middle':   'System',
-        'last':     'Root',
-        'location': 'SO',
-        'city':     'Mogadishu',
-        'school':   'NuunPlatform HQ',
-        'grade':    'F4',
-        'tier':     'pro',
-        'verified': 1,
-        'is_admin': 1,
+        'table': 'students',
+        'column': 'tier',
+        'label': 'Students',
     },
-    # ---- Free, unverified (banner test) ----
     {
-        'phone':    '610000001',
-        'password': 'test1234',
-        'first':    'Ahmed',
-        'middle':   'Hassan',
-        'last':     'Ali',
-        'location': 'SO',
-        'city':     'Mogadishu',
-        'school':   'Test Secondary School',
-        'grade':    'G7',
-        'tier':     'free',
-        'verified': 0,
+        'table': 'groups',
+        'column': 'tier_required',
+        'label': 'Groups (tier_required)',
     },
-    # ---- Premium, verified ----
     {
-        'phone':    '610000002',
-        'password': 'test1234',
-        'first':    'Fatima',
-        'middle':   'Omar',
-        'last':     'Yusuf',
-        'location': 'PL',
-        'city':     'Garowe',
-        'school':   'Test High School',
-        'grade':    'G8',
-        'tier':     'premium',
-        'verified': 1,
-        'curriculum': 'general',
+        'table': 'achievements',
+        'column': 'tier_required',
+        'label': 'Achievements (tier_required)',
     },
-    # ---- Pro, verified ----
     {
-        'phone':    '610000003',
-        'password': 'test1234',
-        'first':    'Mohamed',
-        'middle':   'Abdullah',
-        'last':     'Ibrahim',
-        'location': 'SL',
-        'city':     'Hargeisa',
-        'school':   'Test Academy',
-        'grade':    'F3',
-        'tier':     'pro',
-        'verified': 1,
+        'table': 'discount_codes',
+        'column': 'applies_to',
+        'label': 'Discount codes (applies_to)',
+    },
+    {
+        'table': 'upgrade_requests',
+        'column': 'requested_tier',
+        'label': 'Upgrade requests (requested_tier)',
     },
 ]
 
-
-# ============================================
-# HELPERS
-# ============================================
-
-def ensure_schema(conn):
-    schema_path = os.path.join(BASE_DIR, 'schema.sql')
-    if not os.path.exists(schema_path):
-        print("❌ schema.sql not found in project root. Cannot proceed.")
-        sys.exit(1)
-
-    with open(schema_path, 'r', encoding='utf-8') as f:
-        schema = f.read()
-
-    conn.executescript(schema)
-    conn.commit()
-    print("✅ Schema applied (tables verified / created).")
+LEGACY_VALUES = ('danbe', 'dhexe', 'hore')
 
 
-def generate_public_id(conn, chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789'):
-    for _ in range(50):
-        candidate = ''.join(secrets.choice(chars) for _ in range(4))
-        row = conn.execute(
-            "SELECT 1 FROM students WHERE public_id = ?", (candidate,)
-        ).fetchone()
-        if not row:
-            return candidate
-    raise RuntimeError("Could not generate a unique public ID")
+# ---------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------
+def snapshot_db(db_path: str) -> str:
+    """Create a timestamped .bak copy of the database."""
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    bak_path = f"{db_path}.bak.{ts}"
+    shutil.copy2(db_path, bak_path)
+    return bak_path
 
 
-def normalize_phone(phone):
-    digits = ''.join(c for c in phone if c.isdigit())
-    if digits.startswith('252'):
-        digits = digits[3:]
-    return '+252' + digits
+def count_legacy(conn, table: str, column: str) -> dict:
+    """Return counts per legacy value for a given table.column."""
+    counts = {}
+    try:
+        cursor = conn.execute(
+            f"SELECT {column}, COUNT(*) AS c FROM {table} "
+            f"WHERE {column} IN (?, ?, ?) "
+            f"GROUP BY {column}",
+            LEGACY_VALUES
+        )
+        for row in cursor.fetchall():
+            counts[row[0]] = row[1]
+    except sqlite3.OperationalError as e:
+        # Table or column missing — not fatal, just report
+        counts['__error__'] = str(e)
+    return counts
 
 
-def upsert_student(conn, acc):
-    phone = normalize_phone(acc['phone'])
-    password_hash = generate_password_hash(acc['password'])
+def run_migration(conn, table: str, column: str, dry_run: bool = False) -> int:
+    """
+    Run the CASE UPDATE for a single table.column.
+    Returns the number of rows that were updated.
+    """
+    sql = f"""
+        UPDATE {table}
+        SET {column} = CASE {column}
+            WHEN 'danbe' THEN 'free'
+            WHEN 'dhexe' THEN 'premium'
+            WHEN 'hore'  THEN 'pro'
+            ELSE {column}
+        END
+        WHERE {column} IN ('danbe', 'dhexe', 'hore')
+    """
+    if dry_run:
+        # Just count what would change
+        cursor = conn.execute(
+            f"SELECT COUNT(*) FROM {table} WHERE {column} IN (?, ?, ?)",
+            LEGACY_VALUES
+        )
+        return cursor.fetchone()[0]
 
-    existing = conn.execute(
-        "SELECT id, public_id FROM students WHERE phone_number = ?",
-        (phone,)
-    ).fetchone()
-
-    if existing:
-        conn.execute("""
-            UPDATE students
-            SET password = ?, first_name = ?, middle_name = ?, last_name = ?,
-                location = ?, city = ?, school = ?, grade = ?,
-                curriculum = ?, tier = ?, tier_expires_at = NULL,
-                tier_updated_at = datetime('now', 'localtime'),
-                is_admin = ?, is_verified = ?
-            WHERE id = ?
-        """, (
-            password_hash,
-            acc['first'], acc['middle'], acc['last'],
-            acc['location'], acc['city'], acc['school'], acc['grade'],
-            acc.get('curriculum'),
-            acc['tier'],
-            acc.get('is_admin', 0),
-            acc.get('verified', 0),
-            existing['id'],
-        ))
-        conn.commit()
-        return ('updated', phone, existing['public_id'])
-
-    public_id = generate_public_id(conn)
-    conn.execute("""
-        INSERT INTO students (
-            public_id, phone_number, password,
-            first_name, middle_name, last_name,
-            location, city, school, grade, curriculum,
-            total_points, is_admin, is_verified, tier, tier_expires_at,
-            created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, NULL, datetime('now', 'localtime'))
-    """, (
-        public_id, phone, password_hash,
-        acc['first'], acc['middle'], acc['last'],
-        acc['location'], acc['city'], acc['school'], acc['grade'],
-        acc.get('curriculum'),
-        acc.get('is_admin', 0),
-        acc.get('verified', 0),
-        acc['tier'],
-    ))
-    conn.commit()
-    return ('created', phone, public_id)
+    cursor = conn.execute(sql)
+    return cursor.rowcount
 
 
-# ============================================
-# MAIN
-# ============================================
-
+# ---------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------
 def main():
+    parser = argparse.ArgumentParser(
+        description='Phase 1b: normalize legacy tier vocabulary in the DB.'
+    )
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Show what would change without writing.')
+    args = parser.parse_args()
+
     db_path = Config.DATABASE_PATH
     print(f"📁 Database: {db_path}")
 
     if not os.path.exists(db_path):
-        print("ℹ️  Database file not found. It will be created.")
+        print("❌ Database file not found.")
+        sys.exit(1)
+
+    # ---- Snapshot ----
+    if not args.dry_run:
+        bak = snapshot_db(db_path)
+        print(f"💾 Snapshot created: {bak}")
+    else:
+        print("🔍 DRY RUN — no snapshot created.")
 
     conn = sqlite3.connect(db_path, timeout=30)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
 
-    try:
-        ensure_schema(conn)
+    # ---- Report + migrate ----
+    print()
+    print("=" * 70)
+    print("PHASE 1B — TIER VOCABULARY NORMALIZATION")
+    print("=" * 70)
 
-        print()
-        print("=" * 70)
-        print("SEEDING TEST USERS")
-        print("=" * 70)
+    total_updated = 0
 
-        for acc in TEST_ACCOUNTS:
-            try:
-                action, phone, public_id = upsert_student(conn, acc)
-                icon = "🆕" if action == 'created' else "♻️ "
-                label = "Admin" if acc.get('is_admin') else acc['tier'].capitalize()
-                verified = "✅" if acc.get('verified') else "❌"
-                print(f"{icon}  {label:8s} {verified}  {phone}  #{public_id}")
-            except Exception as e:
-                print(f"❌ Failed to seed {acc['phone']}: {e}")
+    for m in MIGRATIONS:
+        table = m['table']
+        column = m['column']
+        label = m['label']
 
-        # Touch the flag file so any active sessions refresh
+        before = count_legacy(conn, table, column)
+        if '__error__' in before:
+            print(f"⚠️  {label}: skipped ({before['__error__']})")
+            continue
+
+        legacy_total = sum(before.values())
+        if legacy_total == 0:
+            print(f"✅ {label}: already clean (0 legacy rows)")
+            continue
+
+        print(f"📋 {label}: {legacy_total} legacy row(s)")
+        for value, count in sorted(before.items()):
+            print(f"     - {value}: {count}")
+
         try:
-            instance_dir = os.path.join(BASE_DIR, 'instance')
-            os.makedirs(instance_dir, exist_ok=True)
-            flag_path = os.path.join(instance_dir, 'user_state_changes.flag')
-            with open(flag_path, 'w') as f:
-                f.write(str(__import__('time').time()))
-        except Exception:
-            pass
+            updated = run_migration(conn, table, column, dry_run=args.dry_run)
+            total_updated += updated
+            if args.dry_run:
+                print(f"   → would update {updated} row(s)")
+            else:
+                print(f"   → updated {updated} row(s)")
+        except sqlite3.OperationalError as e:
+            print(f"   ❌ Failed: {e}")
+            if not args.dry_run:
+                conn.rollback()
+            continue
 
+    # ---- Commit ----
+    if not args.dry_run:
+        conn.commit()
         print()
         print("=" * 70)
-        print("LOGIN CREDENTIALS (enter digits only, no +252)")
+        print(f"✅ Migration complete. {total_updated} row(s) updated.")
         print("=" * 70)
-        print(f"{'Phone':<14} {'Password':<14} {'Tier':<10} {'Verified':<10} {'Admin'}")
-        print("-" * 70)
-        for acc in TEST_ACCOUNTS:
-            phone = normalize_phone(acc['phone'])
-            tier = acc['tier'].upper()
-            verified = "YES" if acc.get('verified') else "NO"
-            admin = 'YES' if acc.get('is_admin') else '—'
-            print(f"{phone:<14} {acc['password']:<14} {tier:<10} {verified:<10} {admin}")
 
+        # ---- Verify ----
         print()
-        print("✅ Done. Log in at /login")
-        print()
+        print("VERIFICATION (should all be 0):")
+        all_clean = True
+        for m in MIGRATIONS:
+            after = count_legacy(conn, m['table'], m['column'])
+            if '__error__' in after:
+                continue
+            remaining = sum(after.values())
+            icon = "✅" if remaining == 0 else "❌"
+            print(f"  {icon} {m['label']}: {remaining} legacy row(s) remaining")
+            if remaining > 0:
+                all_clean = False
 
-    finally:
+        # ---- Check CHECK constraint compatibility ----
+        # After UPDATE, tier values must be valid new names.
+        print()
+        print("VALID VALUES IN students.tier (should only be free/premium/pro):")
+        cursor = conn.execute(
+            "SELECT tier, COUNT(*) FROM students GROUP BY tier ORDER BY tier"
+        )
+        for row in cursor.fetchall():
+            print(f"  - {row[0] or '(null)'}: {row[1]}")
+
         conn.close()
+
+        if all_clean:
+            print()
+            print("🎉 All tables normalized. Safe to commit.")
+            print(f"   Rollback available via: cp {bak} {db_path}")
+        else:
+            print()
+            print("⚠️  Some rows still have legacy values. Investigate before proceeding.")
+            sys.exit(2)
+    else:
+        conn.rollback()
+        conn.close()
+        print()
+        print("🔍 DRY RUN complete. No changes written.")
 
 
 if __name__ == '__main__':

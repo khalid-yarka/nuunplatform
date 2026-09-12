@@ -6,29 +6,27 @@
 
 {% block extra_css %}
 {{ super() }}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-core.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-flow.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-shared.css') }}" />
 {% endblock %}
 
 {% block dashboard_content %}
 <div class="waiting-room-container" data-quiz-id="{{ quiz.id }}" data-user-id="{{ session.user_id }}">
 
-    <!-- Quiz Started Alert -->
     <div class="quiz-started-alert" id="quizStartedAlert">
         <span class="spinner"></span>
         🚀 Quiz has started! Redirecting to play page...
     </div>
 
-    <!-- Notification Permission Banner -->
     <div class="notification-banner" id="notificationBanner">
         <span>🔔</span>
         <span style="flex:1;">Get notified when the quiz starts, even if you're away!</span>
         <button class="btn-allow" onclick="requestNotificationPermission()">Allow</button>
     </div>
 
-    <!-- Main Card -->
     <div class="waiting-room-card">
 
-        <!-- Header: Title & Meta -->
         <div class="wr-header">
             <div class="wr-title-section">
                 <h2 class="wr-title">{{ quiz.title or 'Live Quiz' }}</h2>
@@ -45,7 +43,6 @@
             </div>
         </div>
 
-        <!-- Scheduled Countdown (only if scheduled) -->
         {% if quiz.status == 'scheduled' and starts_in_seconds is not none and starts_in_seconds > 0 %}
         <div class="wr-scheduled-info">
             <div class="wr-scheduled-time">
@@ -62,11 +59,10 @@
                     </text>
                 </svg>
             </div>
-            <div class="wr-countdown-label">Auto‑starts when timer hits zero</div>
+            <div class="wr-countdown-label">Auto-starts when timer hits zero</div>
         </div>
         {% endif %}
 
-        <!-- Join Code & Share -->
         <div class="wr-share-section">
             <div class="wr-join-code">
                 <span class="wr-code-label">📌 Share this code</span>
@@ -84,18 +80,15 @@
             {% endif %}
         </div>
 
-        <!-- Participants List -->
         <div class="wr-participants-section">
             <div class="wr-participants-header">
                 <h3>👥 Participants</h3>
                 <span class="wr-participants-count" id="participantCountLabel">{{ participant_count }} joined</span>
             </div>
             <div class="wr-participants-list" id="participantList">
-                <!-- Rendered by JS -->
             </div>
         </div>
 
-        <!-- Action Area -->
         <div class="wr-actions">
             {% if is_creator %}
                 <div class="wr-status-message" id="statusMessage">
@@ -134,7 +127,6 @@
     </div>
 </div>
 
-<!-- Delete Modal - FIXED: using modal-overlay class for dark mode support -->
 <div class="modal-overlay" id="deleteModal">
     <div class="modal-content">
         <div style="text-align: center; margin-bottom: 16px;">
@@ -155,14 +147,7 @@
 </div>
 
 <script>
-// ============================================
-// CSRF TOKEN
-// ============================================
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
-
-// ============================================
-// WAITING ROOM JAVASCRIPT – COMPLETE
-// ============================================
 
 document.addEventListener('DOMContentLoaded', function() {
     const quizId = '{{ quiz.id }}';
@@ -174,7 +159,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const ratingTime = 10;
     const totalDuration = totalQuestions * (timePerQuestion + ratingTime);
 
-    // Check if quizId is valid
     if (!quizId || quizId === 'None') {
         console.error('Invalid quizId. Redirect to lobby.');
         window.location.href = '/live-quiz/lobby';
@@ -189,7 +173,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let notificationSent = false;
     let isRedirecting = false;
 
-    // DOM refs
     const participantListEl = document.getElementById('participantList');
     const participantCountEl = document.getElementById('participantCount');
     const participantCountLabel = document.getElementById('participantCountLabel');
@@ -201,9 +184,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const deleteBtn = document.getElementById('deleteBtn');
     const notificationBanner = document.getElementById('notificationBanner');
 
-    // ============================================
-    // COUNTDOWN
-    // ============================================
     let initialStartsIn = {{ starts_in_seconds|default(0) }};
 
     function startCountdown(seconds) {
@@ -225,7 +205,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const progress = remaining / total;
             circle.style.strokeDashoffset = circumference * (1 - progress);
 
-            // Notification at 60 seconds
             if (remaining <= 60 && remaining > 55 && !notificationSent) {
                 notificationSent = true;
                 sendBrowserNotification(
@@ -250,14 +229,10 @@ document.addEventListener('DOMContentLoaded', function() {
         return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
     }
 
-    // Start countdown if initialStartsIn > 0
     if (initialStartsIn > 0) {
         startCountdown(initialStartsIn);
     }
 
-    // ============================================
-    // NOTIFICATIONS
-    // ============================================
     function requestNotificationPermission() {
         if ('Notification' in window) {
             Notification.requestPermission().then(function(permission) {
@@ -336,9 +311,6 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) {}
     }
 
-    // ============================================
-    // PARTICIPANTS POLLING
-    // ============================================
     function fetchParticipants() {
         if (isPolling) return;
         isPolling = true;
@@ -373,12 +345,12 @@ document.addEventListener('DOMContentLoaded', function() {
         let html = '';
         participantList.forEach(function(p) {
             const isYou = p.student_id == userId;
-            const isCreator = p.is_creator;
+            const isP = p.is_creator;
             const isLeft = p.status === 'left';
-            const isReady = (isCreator && p.status !== 'left') ? true : p.is_ready;
+            const isReady = (isP && p.status !== 'left') ? true : p.is_ready;
 
             let badge = '';
-            if (isCreator) badge += '<span class="wr-badge creator">Creator</span>';
+            if (isP) badge += '<span class="wr-badge creator">Creator</span>';
             if (isYou) badge += '<span class="wr-badge you">You</span>';
             if (isLeft) badge += '<span class="wr-badge left">Left</span>';
 
@@ -431,9 +403,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // ============================================
-    // READY TOGGLE (for non-creators)
-    // ============================================
     function toggleReady() {
         if (isCreator) return;
         const btn = document.querySelector('.ready-btn');
@@ -466,9 +435,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // ============================================
-    // START QUIZ (creator)
-    // ============================================
     function startQuiz() {
         if (!isCreator) return;
         if (startBtn.disabled) return;
@@ -509,9 +475,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // ============================================
-    // LEAVE & REJOIN
-    // ============================================
     function leaveQuiz() {
         if (!confirm('Are you sure you want to leave this quiz?')) return;
         if (leaveBtn) {
@@ -597,9 +560,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // ============================================
-    // DELETE QUIZ (Creator only)
-    // ============================================
     function showDeleteModal() {
         document.getElementById('deleteModal').classList.add('active');
     }
@@ -655,9 +615,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.target === this) closeDeleteModal();
     });
 
-    // ============================================
-    // SHARE HELPERS
-    // ============================================
     window.copyCode = function(code) {
         navigator.clipboard.writeText(code).then(function() {
             if (typeof window.showToast === 'function') {
@@ -688,9 +645,6 @@ document.addEventListener('DOMContentLoaded', function() {
         window.open('https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(text), '_blank');
     };
 
-    // ============================================
-    // QUIZ STATE POLLING (for auto-start and redirect)
-    // ============================================
     function pollQuizState() {
         fetch('/live-quiz/quiz-state/' + quizId + '?t=' + Date.now())
             .then(response => response.json())
@@ -733,7 +687,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
-    // Safety net: force redirect if quiz started but no redirect
     let redirectTimeout = null;
     function forceRedirectIfNeeded() {
         if (isRedirecting) return;
@@ -744,10 +697,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     setInterval(forceRedirectIfNeeded, 2000);
-
-    // ============================================
-    // INIT
-    // ============================================
 
     fetchParticipants();
     pollTimer = setInterval(fetchParticipants, pollInterval);
@@ -765,7 +714,6 @@ document.addEventListener('DOMContentLoaded', function() {
         rejoinBtn.addEventListener('click', rejoinQuiz);
     }
 
-    // Add ready button for non-creators
     if (!isCreator) {
         const actionsDiv = document.querySelector('.wr-actions');
         if (actionsDiv && !document.querySelector('.ready-btn')) {

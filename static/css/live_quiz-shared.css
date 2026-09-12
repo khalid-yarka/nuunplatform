@@ -1,0 +1,195 @@
+/* ============================================
+   LIVE QUIZ — SHARED EXTRAS
+   Notification, share, redirect, alerts.
+   Loaded on every live-quiz page.
+   ============================================ */
+
+/* ---------- Quiz started alert ---------- */
+
+.quiz-started-alert {
+    display: none;
+    background: #10B981;
+    color: #ffffff !important;
+    padding: 12px 20px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 16px;
+    text-align: center;
+    font-weight: 600;
+    animation: slideDown 0.5s ease;
+}
+
+.quiz-started-alert.show {
+    display: block;
+}
+
+.quiz-started-alert .spinner {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top: 2px solid #ffffff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
+/* ---------- Notification banner ---------- */
+
+.notification-banner {
+    display: none;
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.notification-banner.show {
+    display: flex;
+}
+
+.notification-banner .btn-allow {
+    padding: 4px 14px;
+    background: var(--primary);
+    color: #ffffff !important;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    transition: var(--transition);
+    flex-shrink: 0;
+}
+
+.notification-banner .btn-allow:hover {
+    background: var(--primary-hover);
+    color: #ffffff !important;
+}
+
+/* ---------- Quiz notification (top banner) ---------- */
+
+.quiz-notification {
+    background: var(--primary);
+    color: #ffffff !important;
+    padding: 12px 20px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 16px;
+    text-align: center;
+    font-weight: 600;
+    animation: slideDown 0.5s ease;
+    display: none;
+    box-shadow: 0 4px 14px rgba(255, 49, 56, 0.25);
+}
+
+.quiz-notification.show {
+    display: block;
+}
+
+/* ---------- Redirect / loading screen ---------- */
+
+.redirect-container {
+    max-width: 600px;
+    margin: 40px auto;
+    text-align: center;
+    padding: 60px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+}
+
+.redirect-container .spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid var(--border);
+    border-top: 4px solid var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 16px;
+}
+
+.redirect-container h2 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 8px 0;
+}
+
+.redirect-container p {
+    color: var(--text-secondary);
+    font-size: 15px;
+    margin: 0 0 20px 0;
+}
+
+.redirect-container .btn {
+    display: inline-block;
+    padding: 10px 28px;
+    background: var(--primary);
+    color: #ffffff !important;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 15px;
+    text-decoration: none;
+    transition: var(--transition);
+    box-shadow: 0 4px 14px rgba(255, 49, 56, 0.25);
+}
+
+.redirect-container .btn:hover {
+    background: var(--primary-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 49, 56, 0.35);
+    color: #ffffff !important;
+}
+
+/* ---------- Share buttons (bottom of code display) ---------- */
+
+.share-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.share-buttons a {
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 13px;
+    text-decoration: none;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.share-buttons .whatsapp {
+    background: #25D366;
+    color: #ffffff !important;
+}
+
+.share-buttons .whatsapp:hover {
+    background: #1DA851;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(37, 211, 102, 0.35);
+    color: #ffffff !important;
+}
+
+.share-buttons .telegram {
+    background: #0088CC;
+    color: #ffffff !important;
+}
+
+.share-buttons .telegram:hover {
+    background: #006699;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 136, 204, 0.35);
+    color: #ffffff !important;
+}

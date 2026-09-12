@@ -83,7 +83,6 @@ def index():
     retention_days = get_history_retention_days(user_id)
     max_entries = get_history_max_entries(user_id)
 
-    # Current entry count for the usage bar
     try:
         cursor = execute_with_retry(
             "SELECT COUNT(*) AS c FROM history_entries WHERE user_id = ?",
@@ -98,23 +97,21 @@ def index():
     stats['retention_days'] = retention_days
     stats['max_entries'] = max_entries
 
-    # Usage % (only meaningful when a cap exists)
     if max_entries:
         usage_pct = round(min(100, (current_count / max_entries) * 100), 1)
     else:
         usage_pct = 0
     stats['usage_pct'] = usage_pct
 
-    # What the next tier would unlock
     upgrade_benefits = []
-    if tier == 'danbe':
+    if tier == 'free':
         upgrade_benefits = [
             '180-day retention (vs 30)',
             'Up to 500 entries (vs 50)',
             'CSV export of your history',
             'Extended activity types',
         ]
-    elif tier == 'dhexe':
+    elif tier == 'premium':
         upgrade_benefits = [
             'Unlimited retention',
             'Unlimited entries',
@@ -167,13 +164,12 @@ def get_entries():
     if order not in ('asc', 'desc'):
         order = 'desc'
 
-    max_per_page = 20 if tier == 'danbe' else 50 if tier == 'dhexe' else 100
+    max_per_page = 20 if tier == 'free' else 50 if tier == 'premium' else 100
     if per_page > max_per_page:
         per_page = max_per_page
 
-    # Tier-based date restrictions
     somali_now = get_somali_time()
-    if tier == 'danbe':
+    if tier == 'free':
         if not start_date or not end_date:
             end_date = somali_now.isoformat()
             start_date = (somali_now - timedelta(days=7)).isoformat()
@@ -182,7 +178,7 @@ def get_entries():
             end_dt = datetime.fromisoformat(end_date)
             if (end_dt - start_dt).days > 7:
                 start_date = (end_dt - timedelta(days=7)).isoformat()
-    elif tier == 'dhexe':
+    elif tier == 'premium':
         if not start_date or not end_date:
             end_date = somali_now.isoformat()
             start_date = (somali_now - timedelta(days=30)).isoformat()
@@ -284,7 +280,7 @@ def export():
     order = request.args.get('order', 'desc').lower()
 
     tier = get_current_user_tier()
-    limit = 100 if tier == 'dhexe' else None
+    limit = 100 if tier == 'premium' else None
 
     query = """
         SELECT id, entry_type, action, metadata, created_at
@@ -339,7 +335,7 @@ def export():
 
 
 # -------------------------------------------------------------------
-# API: Trends (Hore only)
+# API: Trends (Pro only)
 # -------------------------------------------------------------------
 
 @history_bp.route('/api/trends')

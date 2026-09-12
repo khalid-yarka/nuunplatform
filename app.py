@@ -1,4 +1,4 @@
-# app.py – Complete file with auth blueprint + user state refresh
+# app.py – Complete file with auth blueprint + user state refresh + redesigned logging
 
 import os
 import sys
@@ -6,7 +6,7 @@ import time
 import secrets
 import logging
 import atexit
-from datetime import datetime
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, g, flash
@@ -18,8 +18,9 @@ from db import (
 )
 from utils import (
     get_somali_time_display, validate_csrf, ensure_csrf_token, time_ago,
-    get_accent_colours, ACCENT_MAP, get_somali_time_db,
+    get_accent_colours, ACCENT_MAP, get_somali_time_db, SOMALI_TIMEZONE,
 )
+from tier_config import normalize_tier
 from startup import verify_startup, get_startup_health
 from database import get_database_health
 from errors import register_error_handlers
@@ -48,7 +49,6 @@ ensure_single_worker()
 # ============================================
 # BLUEPRINT IMPORTS
 # ============================================
-
 from blueprints.auth_bp import auth_bp
 from blueprints.dashboard_bp import dashboard_bp
 from blueprints.groups_bp import groups_bp
@@ -65,43 +65,30 @@ from blueprints.admin_backup_bp import admin_backup_bp
 from blueprints.upgrade_bp import upgrade_bp
 from blueprints.admin_platform_bp import admin_platform_bp
 
-# ============================================
-# PDF ADMIN BLUEPRINT & TELEGRAM BOT (Webhook)
-# ============================================
+# PDF admin + Telegram bot
 from blueprints.pdf_admin_bp import pdf_admin_bp
 from bot.bot import start_bot, stop_bot, get_bot
 from bot.handlers import process_telegram_update
 from bot.db import init_bot_db
 
-# ============================================
-# INTERACTIONS BLUEPRINT
-# ============================================
+# Interactions + history
 from blueprints.interactions_bp import interactions_bp
-
-# ============================================
-# HISTORY BLUEPRINT
-# ============================================
 from blueprints.history_bp import history_bp
 from history_logger import recover_pending_entries
 
-# ============================================
-# SETTINGS & PROFILE BLUEPRINTS
-# ============================================
+# Settings + profile
 from blueprints.settings_bp import settings_bp
 from blueprints.profile_bp import profile_bp
 
-# ============================================
 # Activity logger
-# ============================================
 from activity_logger import (
     log_activity, log_admin_action, log_quiz_complete,
-    log_backup_event, init_activity_logger
+    log_backup_event, init_activity_logger,
 )
 
 # ============================================
-# BASE DIRECTORY & LOGGING
+# BASE DIRECTORY
 # ============================================
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = Config.LOG_DIR
 
@@ -114,7 +101,6 @@ if not os.path.exists(LOG_DIR):
 # ============================================
 # INSTANCE DIRECTORY (flag files)
 # ============================================
-
 INSTANCE_DIR = os.path.join(BASE_DIR, 'instance')
 try:
     os.makedirs(INSTANCE_DIR, exist_ok=True)
@@ -130,10 +116,38 @@ if not os.path.exists(USER_STATE_FLAG):
         pass
 
 # ============================================
-# REQUEST ID FILTER
+# LOGGING — Somali time formatter
 # ============================================
+def _format_somali_log_time(ts: float) -> str:
+    """Format a Unix timestamp as Somali time with AM/PM.
+    Example: 2026/9/11 2:32:01 PM
+    """
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc).astimezone(SOMALI_TIMEZONE)
+    hour = dt.hour % 12
+    if hour == 0:
+        hour = 12
+    am_pm = "AM" if dt.hour < 12 else "PM"
+    return f"{dt.year}/{dt.month}/{dt.day} {hour}:{dt.minute:02d}:{dt.second:02d} {am_pm}"
+
+
+class SomaliFormatter(logging.Formatter):
+    """logging.Formatter subclass that uses Somali time for `%(asctime)s`."""
+    def formatTime(self, record, datefmt=None):
+        return _format_somali_log_time(record.created)
+
+
+class ModuleRoutingFilter(logging.Filter):
+    """Only allow records whose logger name starts with one of the prefixes."""
+    def __init__(self, allow_prefixes):
+        super().__init__()
+        self.allow_prefixes = tuple(allow_prefixes)
+
+    def filter(self, record):
+        return record.name.startswith(self.allow_prefixes)
+
 
 class RequestIDFilter(logging.Filter):
+    """Attach the current request_id (or 'no-req' outside a request context)."""
     def filter(self, record):
         try:
             record.request_id = getattr(g, 'request_id', 'no-req')
@@ -141,63 +155,71 @@ class RequestIDFilter(logging.Filter):
             record.request_id = 'no-req'
         return True
 
+
 # ============================================
-# LOGGING SETUP
+# LOGGING SETUP — four destinations
 # ============================================
+LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] - %(message)s'
+log_formatter = SomaliFormatter(LOG_FORMAT)
+request_id_filter = RequestIDFilter()
 
-log_format = '%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] - %(message)s'
-log_datefmt = '%Y-%m-%d %H:%M:%S'
+_root_level = logging.DEBUG if Config.DEBUG else getattr(logging, Config.LOG_LEVEL, logging.INFO)
+_console_level = logging.DEBUG if Config.DEBUG else logging.ERROR
+_file_size = (5 * 1024 * 1024) if Config.DEBUG else Config.LOG_MAX_BYTES
+_file_backups = 5 if Config.DEBUG else Config.LOG_BACKUP_COUNT
 
-log_file = os.path.join(LOG_DIR, 'app.log')
-try:
-    file_handler = RotatingFileHandler(
-        log_file,
-        maxBytes=Config.LOG_MAX_BYTES,
-        backupCount=Config.LOG_BACKUP_COUNT
-    )
-    file_handler.setFormatter(logging.Formatter(log_format, log_datefmt))
-    file_handler.setLevel(getattr(logging, Config.LOG_LEVEL, logging.WARNING))
-except Exception:
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setFormatter(logging.Formatter(log_format, log_datefmt))
-    file_handler.setLevel(logging.WARNING)
+WEB_PREFIXES = ('blueprints.', 'services.', 'nuun.', 'app', 'utils', '__main__')
+WORKER_PREFIXES = (
+    'db', 'cache', 'live_quiz_state', 'history_logger',
+    'activity_logger', 'platform_activity', 'redis_state', 'bot.',
+)
 
-error_log_file = os.path.join(LOG_DIR, 'error.log')
-try:
-    error_file_handler = RotatingFileHandler(
-        error_log_file,
-        maxBytes=Config.LOG_MAX_BYTES,
-        backupCount=Config.LOG_BACKUP_COUNT
-    )
-    error_file_handler.setFormatter(logging.Formatter(log_format, log_datefmt))
-    error_file_handler.setLevel(logging.ERROR)
-except Exception:
-    error_file_handler = logging.FileHandler(error_log_file)
-    error_file_handler.setFormatter(logging.Formatter(log_format, log_datefmt))
-    error_file_handler.setLevel(logging.ERROR)
+
+def _make_rotating_handler(path, level, allow_prefixes=None):
+    try:
+        h = RotatingFileHandler(path, maxBytes=_file_size, backupCount=_file_backups)
+    except Exception:
+        h = logging.FileHandler(path)
+    h.setLevel(level)
+    h.setFormatter(log_formatter)
+    h.addFilter(request_id_filter)
+    if allow_prefixes is not None:
+        h.addFilter(ModuleRoutingFilter(allow_prefixes))
+    return h
+
+
+app_handler = _make_rotating_handler(
+    os.path.join(LOG_DIR, 'app.log'), _root_level, WEB_PREFIXES
+)
+workers_handler = _make_rotating_handler(
+    os.path.join(LOG_DIR, 'workers.log'), _root_level, WORKER_PREFIXES
+)
+error_file_handler = _make_rotating_handler(
+    os.path.join(LOG_DIR, 'error.log'), logging.ERROR, None
+)
 
 console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setFormatter(logging.Formatter(log_format, log_datefmt))
-console_handler.setLevel(logging.ERROR)
-
-request_id_filter = RequestIDFilter()
-for handler in [file_handler, error_file_handler, console_handler]:
-    handler.addFilter(request_id_filter)
+console_handler.setLevel(_console_level)
+console_handler.setFormatter(log_formatter)
+console_handler.addFilter(request_id_filter)
 
 root_logger = logging.getLogger()
-root_logger.setLevel(getattr(logging, Config.LOG_LEVEL, logging.WARNING))
-root_logger.addHandler(file_handler)
-root_logger.addHandler(error_file_handler)
-root_logger.addHandler(console_handler)
+root_logger.setLevel(_root_level)
+for _h in (app_handler, workers_handler, error_file_handler, console_handler):
+    root_logger.addHandler(_h)
 
-logging.getLogger('werkzeug').setLevel(logging.ERROR)
+for _lib in (
+    'urllib3', 'requests', 'PIL', 'werkzeug',
+    'matplotlib', 'telebot', 'asyncio',
+):
+    logging.getLogger(_lib).setLevel(logging.CRITICAL)
 
 logger = logging.getLogger(__name__)
+
 
 # ============================================
 # STARTUP VERIFICATION
 # ============================================
-
 logger.info("=" * 60)
 logger.info("NUUNPLATFORM STARTUP - Starting verification")
 logger.info("=" * 60)
@@ -211,16 +233,16 @@ if not verify_startup():
 logger.info("Startup verification PASSED")
 logger.info("=" * 60)
 
+
 # ============================================
 # BACKUP INTEGRATION
 # ============================================
-
 BACKUP_AVAILABLE = False
 BACKUP_LOCK_FILE = None
 try:
     from backup import (
         BackupManager, acquire_backup_lock, release_backup_lock,
-        is_backup_locked, BACKUP_LOCK_FILE
+        is_backup_locked, BACKUP_LOCK_FILE,
     )
     BACKUP_AVAILABLE = True
 except ImportError as e:
@@ -231,6 +253,7 @@ BACKUP_ENABLED = Config.BACKUP_ENABLED
 
 _backup_manager = None
 
+
 def get_backup_manager():
     global _backup_manager
     if _backup_manager is None and BACKUP_AVAILABLE:
@@ -239,6 +262,7 @@ def get_backup_manager():
         except Exception as e:
             logger.error(f"Failed to initialize backup manager: {e}")
     return _backup_manager
+
 
 def execute_backup(backup_type='daily'):
     if not BACKUP_AVAILABLE:
@@ -265,10 +289,10 @@ def execute_backup(backup_type='daily'):
         logger.error(f"Backup error: {e}", exc_info=True)
         return {'success': False, 'message': str(e)}
 
+
 # ============================================
 # CACHE INITIALIZATION
 # ============================================
-
 try:
     from cache import get_cache_manager, start_worker
     cache_manager = get_cache_manager()
@@ -285,15 +309,15 @@ try:
 except Exception as e:
     logger.error(f"Cache initialization failed: {e}")
 
+
 # ============================================
 # FLASK APP
 # ============================================
-
 app = Flask(__name__)
 app.config['SECRET_KEY'] = Config.SECRET_KEY
 app.config['PERMANENT_SESSION_LIFETIME'] = Config.PERMANENT_SESSION_LIFETIME
-app.debug = False
-app.config['DEBUG'] = False
+app.debug = Config.DEBUG
+app.config['DEBUG'] = Config.DEBUG
 app.config['TESTING'] = False
 
 app.config['SESSION_COOKIE_SECURE'] = Config.SESSION_COOKIE_SECURE
@@ -301,15 +325,17 @@ app.config['SESSION_COOKIE_HTTPONLY'] = Config.SESSION_COOKIE_HTTPONLY
 app.config['SESSION_COOKIE_SAMESITE'] = Config.SESSION_COOKIE_SAMESITE
 
 app.jinja_env.filters['time_ago'] = time_ago
+app.jinja_env.globals['normalize_tier'] = normalize_tier
+
 
 # ============================================
 # REQUEST CONTEXT
 # ============================================
-
 @app.before_request
 def set_request_id():
     g.request_id = request.headers.get('X-Request-ID') or secrets.token_hex(8)[:8]
     g.start_time = time.time()
+
 
 @app.after_request
 def log_request_end(response):
@@ -324,21 +350,18 @@ def log_request_end(response):
         response.headers['X-Request-ID'] = g.request_id
     return response
 
+
 # ============================================
 # CSRF PROTECTION
 # ============================================
-
 @app.before_request
 def generate_csrf_if_needed():
     ensure_csrf_token()
 
+
 # ============================================
 # USER STATE REFRESH (verification, tier)
 # ============================================
-# Checks the flag file mtime against session['user_state_loaded_at'].
-# On change (or 1-hour fallback), reloads tier + is_verified from DB.
-# Zero DB cost on the common path: one stat() syscall per request.
-
 @app.before_request
 def refresh_user_state_if_needed():
     if 'user_id' not in session:
@@ -370,7 +393,7 @@ def refresh_user_state_if_needed():
     try:
         student = get_student_by_id(session['user_id'])
         if student:
-            session['tier'] = student.get('tier', 'free')
+            session['tier'] = normalize_tier(student.get('tier', 'free'))
             session['tier_expires_at'] = student.get('tier_expires_at')
             session['is_verified'] = int(student.get('is_verified', 0))
             session['is_admin'] = bool(student.get('is_admin', 0))
@@ -379,11 +402,10 @@ def refresh_user_state_if_needed():
     except Exception as e:
         logger.warning(f"Failed to refresh user state: {e}")
 
+
 # ============================================
 # REGISTER BLUEPRINTS
 # ============================================
-
-# Auth first — owns /register, /login, /logout, /help
 app.register_blueprint(auth_bp)
 
 app.register_blueprint(dashboard_bp)
@@ -404,9 +426,7 @@ app.register_blueprint(admin_platform_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(profile_bp)
 
-# ============================================
-# REGISTER PDF ADMIN BLUEPRINT (Secret Path)
-# ============================================
+# PDF Admin (secret path)
 PDF_ADMIN_SECRET = Config.PDF_ADMIN_SECRET_PATH
 if not PDF_ADMIN_SECRET:
     PDF_ADMIN_SECRET = '/pdf-admin-' + os.urandom(8).hex()
@@ -415,25 +435,23 @@ elif not PDF_ADMIN_SECRET.startswith('/'):
 app.register_blueprint(pdf_admin_bp, url_prefix=PDF_ADMIN_SECRET)
 logger.info(f"PDF Admin panel mounted at {PDF_ADMIN_SECRET}")
 
-# ============================================
-# REGISTER INTERACTIONS + HISTORY BLUEPRINTS
-# ============================================
 app.register_blueprint(interactions_bp)
 app.register_blueprint(history_bp)
+
 
 # ============================================
 # REGISTER ERROR HANDLERS
 # ============================================
-
 register_error_handlers(app)
+
 
 # ============================================
 # TEARDOWN
 # ============================================
-
 @app.teardown_appcontext
 def close_db_connection(exception=None):
     close_db(exception)
+
 
 @atexit.register
 def cleanup():
@@ -444,6 +462,7 @@ def cleanup():
     except Exception as e:
         logger.warning(f"Cleanup error: {e}")
 
+
 # ============================================
 # INITIALIZE BOT DATABASE
 # ============================================
@@ -453,10 +472,10 @@ try:
 except Exception as e:
     logger.error(f"Failed to initialize bot database: {e}")
 
+
 # ============================================
 # TELEGRAM WEBHOOK ROUTE
 # ============================================
-
 @app.route('/webhook/<token>', methods=['POST'])
 def telegram_webhook(token):
     expected_token = Config.TELEGRAM_BOT_TOKEN
@@ -476,6 +495,7 @@ def telegram_webhook(token):
         logger.error(f"Webhook error: {e}", exc_info=True)
         return jsonify({'error': 'Internal error'}), 500
 
+
 # ============================================
 # START BOT (Set Webhook, No Polling)
 # ============================================
@@ -484,6 +504,7 @@ try:
     logger.info("Bot webhook configured successfully.")
 except Exception as e:
     logger.error(f"Failed to configure bot webhook: {e}")
+
 
 # ============================================
 # HISTORY SYSTEM – RECOVER PENDING ENTRIES
@@ -494,10 +515,10 @@ try:
 except Exception as e:
     logger.error(f"History recovery error: {e}")
 
+
 # ============================================
 # ROUTES
 # ============================================
-
 @app.route('/favicon.ico')
 def favicon():
     return '', 204
@@ -557,7 +578,7 @@ def health_check():
             'cache': cache_health,
             'errors': error_stats,
         },
-        'critical_issues': critical_issues
+        'critical_issues': critical_issues,
     }), status_code
 
 
@@ -576,7 +597,6 @@ def index():
 # ============================================
 # BACKUP TRIGGER ENDPOINTS
 # ============================================
-
 @app.route('/backup/trigger', methods=['GET'])
 def trigger_backup():
     if not Config.BACKUP_ENABLED:
@@ -609,7 +629,7 @@ def trigger_backup():
             'size_kb': round(result['size_bytes'] / 1024, 2),
             'duration_seconds': round(duration, 2),
             'timestamp': get_somali_time_display(),
-            'warning': 'Web-triggered backups are not recommended. Use scheduled tasks.'
+            'warning': 'Web-triggered backups are not recommended. Use scheduled tasks.',
         }), 200
     else:
         error_msg = result.get('message', 'Backup failed') if result else 'Backup failed'
@@ -639,7 +659,6 @@ def backup_status():
 # ============================================
 # CONTEXT PROCESSOR
 # ============================================
-
 @app.context_processor
 def utility_processor():
     token = ensure_csrf_token()
@@ -665,7 +684,6 @@ def utility_processor():
         from utils import get_accent_colours as get_accent
         accent_colours = get_accent(accent, is_dark)
 
-    # Pending upgrade requests count (admins only)
     pending_upgrades_count = 0
     if session.get('is_admin'):
         try:
@@ -688,16 +706,16 @@ def utility_processor():
         'super_admin_phone': Config.SUPER_ADMIN_PHONE,
     }
 
+
 # ============================================
 # INITIALIZE ACTIVITY LOGGER
 # ============================================
-
 init_activity_logger(app)
+
 
 # ============================================
 # INITIALIZE LIVE QUIZ STATE MANAGER
 # ============================================
-
 try:
     from live_quiz_state import initialize_state_manager, recover_active_quizzes
     initialize_state_manager()
@@ -706,12 +724,11 @@ try:
 except Exception as e:
     logger.error(f"Live Quiz State Manager initialization failed: {e}", exc_info=True)
 
+
 # ============================================
 # RUN APP
 # ============================================
-
 if __name__ == '__main__':
-    debug_mode = Config.FLASK_DEBUG
     port = Config.PORT
     logger.info(f"Server starting at: {get_somali_time_display()}")
     logger.info(f"Database path: {Config.DATABASE_PATH}")
@@ -719,5 +736,5 @@ if __name__ == '__main__':
     logger.info(f"Log directory: {Config.LOG_DIR}")
     logger.info(f"Backup directory: {Config.BACKUP_DIR}")
     logger.info(f"Redis URL: {Config.REDIS_URL or 'Not configured'}")
-    logger.info(f"Debug mode: {debug_mode}")
-    app.run(debug=debug_mode, host='0.0.0.0', port=port)
+    logger.info(f"Debug mode: {Config.DEBUG}")
+    app.run(debug=Config.DEBUG, host='0.0.0.0', port=port)

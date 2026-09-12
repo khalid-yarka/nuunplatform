@@ -32,7 +32,6 @@
     border-radius: 10px;
 }
 
-/* Navigation wrapper */
 .settings-nav-wrapper {
     display: none;
 }
@@ -828,19 +827,19 @@
     letter-spacing: 0.5px;
 }
 
-.tier-badge.danbe {
+.tier-badge.free {
     background: var(--background);
     color: var(--text-secondary);
     border: 1px solid var(--border);
 }
 
-.tier-badge.dhexe {
+.tier-badge.premium {
     background: var(--primary-light);
     color: var(--text) !important;
     border: 1px solid var(--primary);
 }
 
-.tier-badge.hore {
+.tier-badge.pro {
     background: linear-gradient(135deg, var(--primary), #B91C1C);
     color: #ffffff !important;
     border: none;
@@ -1210,7 +1209,7 @@
     border-color: var(--border);
 }
 
-[data-theme="dark"] .tier-badge.dhexe {
+[data-theme="dark"] .tier-badge.premium {
     background: var(--primary-light);
     color: #ffffff !important;
 }

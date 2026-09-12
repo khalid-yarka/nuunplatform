@@ -6,7 +6,6 @@
 {% block dashboard_content %}
 <div style="max-width: 900px; margin: 0 auto;">
 
-    <!-- Breadcrumb -->
     <div class="breadcrumb">
         <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
         <span class="separator">/</span>
@@ -15,7 +14,8 @@
         <span class="current">{{ upgrade_request.request_id }}</span>
     </div>
 
-    <!-- Header card -->
+    {% set current_tier = normalize_tier(upgrade_request.current_tier) %}
+
     <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 28px; box-shadow: var(--shadow-sm); margin-bottom: 20px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;">
             <div>
@@ -89,10 +89,8 @@
         {% endif %}
     </div>
 
-    <!-- Two-column: user + request -->
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
 
-        <!-- User info -->
         <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; box-shadow: var(--shadow-sm);">
             <h3 style="font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 14px 0;">
                 <i class="fas fa-user" style="color: var(--primary);"></i> User Information
@@ -112,7 +110,7 @@
                 </div>
                 <div style="display: flex; justify-content: space-between;">
                     <span style="color: var(--text-secondary);">Current Tier</span>
-                    <span class="badge badge-primary" style="text-transform: uppercase;">{{ upgrade_request.current_tier or 'danbe' }}</span>
+                    <span class="badge badge-primary" style="text-transform: uppercase;">{{ current_tier }}</span>
                 </div>
                 <div style="display: flex; justify-content: space-between;">
                     <span style="color: var(--text-secondary);">Total Points</span>
@@ -126,7 +124,6 @@
             </div>
         </div>
 
-        <!-- Request details -->
         <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; box-shadow: var(--shadow-sm);">
             <h3 style="font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 14px 0;">
                 <i class="fas fa-file-invoice" style="color: var(--primary);"></i> Request Details
@@ -160,7 +157,6 @@
         </div>
     </div>
 
-    <!-- User note -->
     {% if upgrade_request.user_note %}
         <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 20px;">
             <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
@@ -172,7 +168,6 @@
         </div>
     {% endif %}
 
-    <!-- Admin decision -->
     {% if upgrade_request.status == 'pending' %}
         <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; box-shadow: var(--shadow-sm); margin-bottom: 20px;">
             <h3 style="font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 12px 0;">
@@ -222,7 +217,6 @@
         </div>
     {% endif %}
 
-    <!-- Timeline -->
     <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; box-shadow: var(--shadow-sm);">
         <h3 style="font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 14px 0;">
             <i class="fas fa-clock" style="color: var(--primary);"></i> Timeline

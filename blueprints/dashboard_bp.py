@@ -45,8 +45,6 @@ def home():
     xp_in_level = total_points % 10
     xp_needed = 10
     xp_percent = int(round((xp_in_level / xp_needed) * 100)) if xp_needed else 0
-
-    # Next level preview
     xp_to_next = xp_needed - xp_in_level
 
     # ---------- Performance ----------
@@ -83,7 +81,7 @@ def home():
         pct = round((a.get('score', 0) / total_q) * 100) if total_q else 0
         chart_data.append(pct)
 
-    # ---------- Streak (days with at least one attempt, counted backwards) ----------
+    # ---------- Streak ----------
     streak = _compute_streak(user_id)
 
     # ---------- Live quiz banner ----------
@@ -94,7 +92,6 @@ def home():
     limit = 5 if analytics_level == 1 else 10 if analytics_level == 2 else 20
     recent_activity = []
     for q in attempts[:limit]:
-        # db.get_user_quiz_history returns 'subject' (singular)
         subject_name = 'Unknown'
         if q.get('subject'):
             subject_name = q['subject'].get('name') or subject_name
@@ -114,7 +111,7 @@ def home():
             'time': (q.get('completed_at') or '')[:16],
         })
 
-    # ---------- Insights (Hore only) ----------
+    # ---------- Insights (Pro only) ----------
     insights = []
     if analytics_level >= 3 and subject_performance:
         best = max(subject_performance, key=lambda x: x['avg_score'])
@@ -153,11 +150,11 @@ def home():
     # ---------- Tier upgrade hint ----------
     next_tier = None
     upgrade_hint = None
-    if tier == 'danbe':
-        next_tier = 'dhexe'
+    if tier == 'free':
+        next_tier = 'premium'
         upgrade_hint = 'Unlock analytics, live quiz hosting, and 3× more quiz attempts.'
-    elif tier == 'dhexe':
-        next_tier = 'hore'
+    elif tier == 'premium':
+        next_tier = 'pro'
         upgrade_hint = 'Get unlimited access, premium PDFs, and full live quiz hosting.'
 
     return render_template(
@@ -227,13 +224,11 @@ def _compute_streak(user_id: int) -> int:
             return 0
 
         today = get_somali_time().date()
-        from datetime import date as _date
         try:
             days = [datetime.strptime(d, '%Y-%m-%d').date() for d in rows]
         except Exception:
             return 0
 
-        # If most recent isn't today or yesterday, streak is 0
         if days[0] not in (today, today - timedelta(days=1)):
             return 0
 

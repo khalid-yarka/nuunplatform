@@ -5,14 +5,8 @@
 
 {% block dashboard_css %}
 <style>
-    /* ============================================
-       PAGE WRAPPER
-       ============================================ */
     .dc-page { max-width: 100%; }
 
-    /* ============================================
-       HEADER
-       ============================================ */
     .dc-header {
         display: flex;
         justify-content: space-between;
@@ -41,9 +35,6 @@
         flex-wrap: wrap;
     }
 
-    /* ============================================
-       STATS CARDS
-       ============================================ */
     .dc-stats {
         display: grid;
         grid-template-columns: repeat(5, 1fr);
@@ -115,9 +106,6 @@
         font-weight: 500;
     }
 
-    /* ============================================
-       FILTER BAR
-       ============================================ */
     .dc-filter {
         display: flex;
         gap: 10px;
@@ -176,9 +164,6 @@
         box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.10);
     }
 
-    /* ============================================
-       BULK ACTIONS BAR
-       ============================================ */
     .dc-bulk-bar {
         display: flex;
         justify-content: space-between;
@@ -235,9 +220,6 @@
         cursor: not-allowed;
     }
 
-    /* ============================================
-       TABLE CONTAINER
-       ============================================ */
     .dc-table-wrap {
         position: relative;
         background: var(--surface);
@@ -280,9 +262,6 @@
     }
     .dc-table-wrap.has-overflow.show-fade::after { opacity: 1; }
 
-    /* ============================================
-       TABLE
-       ============================================ */
     .dc-table {
         width: 100%;
         min-width: 980px;
@@ -311,7 +290,6 @@
     .dc-table tbody tr:hover { background: var(--primary-light); }
     .dc-table tbody tr:last-child td { border-bottom: none; }
 
-    /* Checkbox */
     .cell-check { width: 32px; text-align: center; }
     .cell-check input {
         width: 16px; height: 16px;
@@ -319,7 +297,6 @@
         accent-color: var(--primary);
     }
 
-    /* Code cell */
     .code-cell {
         display: flex;
         align-items: center;
@@ -356,7 +333,6 @@
     }
     .copy-btn.copied { color: #10B981; }
 
-    /* Type pill */
     .type-pill {
         display: inline-block;
         padding: 2px 10px;
@@ -375,7 +351,6 @@
         color: #92400E;
     }
 
-    /* Value cell */
     .value-cell {
         font-weight: 700;
         font-size: 15px;
@@ -383,7 +358,6 @@
         white-space: nowrap;
     }
 
-    /* Applies-to pill */
     .applies-pill {
         display: inline-block;
         padding: 3px 10px;
@@ -398,16 +372,15 @@
         background: var(--background);
         color: var(--text-secondary);
     }
-    .applies-pill.dhexe {
+    .applies-pill.premium {
         background: var(--primary-light);
         color: var(--primary);
     }
-    .applies-pill.hore {
+    .applies-pill.pro {
         background: linear-gradient(135deg, var(--primary), #B91C1C);
         color: white;
     }
 
-    /* Usage cell */
     .usage-cell { min-width: 130px; }
     .usage-head {
         display: flex;
@@ -439,7 +412,6 @@
     .usage-bar .fill.high   { background: #EF4444; }
     .usage-bar .fill.unlimited { background: var(--primary); }
 
-    /* Expiry cell */
     .expiry-cell { min-width: 120px; white-space: nowrap; }
     .expiry-rel {
         font-size: 13px;
@@ -455,7 +427,6 @@
         margin-top: 2px;
     }
 
-    /* Status pill */
     .status-pill {
         display: inline-block;
         padding: 3px 12px;
@@ -471,15 +442,11 @@
     .status-pill.expired   { background: #FEF2F2; color: #991B1B; }
     .status-pill.exhausted { background: #FFFBEB; color: #92400E; }
 
-    /* Actions */
     .cell-actions {
         text-align: right;
         white-space: nowrap;
     }
 
-    /* ============================================
-       SCROLL HINT
-       ============================================ */
     .dc-scroll-hint {
         display: none;
         text-align: center;
@@ -497,9 +464,6 @@
         50%      { transform: translateX(4px); }
     }
 
-    /* ============================================
-       ZERO STATE
-       ============================================ */
     .dc-zero {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -535,9 +499,6 @@
         flex-wrap: wrap;
     }
 
-    /* ============================================
-       TOAST (copy feedback)
-       ============================================ */
     .dc-toast {
         position: fixed;
         bottom: 30px;
@@ -560,9 +521,6 @@
         transform: translateX(-50%) translateY(0);
     }
 
-    /* ============================================
-       RESPONSIVE
-       ============================================ */
     @media (max-width: 1100px) {
         .dc-stats { grid-template-columns: repeat(3, 1fr); }
     }
@@ -600,7 +558,6 @@
         .dc-scroll-hint { display: block; }
     }
     @media (max-width: 560px) {
-        /* Cards mode */
         .dc-table,
         .dc-table tbody,
         .dc-table tr,
@@ -678,7 +635,6 @@
 {% block dashboard_content %}
 <div class="dc-page">
 
-    <!-- BREADCRUMB -->
     <div class="breadcrumb">
         <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
         <span class="separator">/</span>
@@ -687,7 +643,6 @@
         <span class="current">Discount Codes</span>
     </div>
 
-    <!-- HEADER -->
     <div class="dc-header">
         <div class="title-section">
             <h2>
@@ -706,7 +661,6 @@
         </div>
     </div>
 
-    <!-- STATS -->
     <div class="dc-stats">
         <a href="{{ url_for('upgrade.admin_discounts') }}" class="dc-stat-card">
             <div class="stat-head">
@@ -754,7 +708,6 @@
         </div>
     </div>
 
-    <!-- FILTER -->
     <form method="GET" class="dc-filter">
         <div class="search-wrapper">
             <i class="fas fa-search"></i>
@@ -779,13 +732,11 @@
         {% endif %}
     </form>
 
-    <!-- CONTENT -->
     {% if discounts %}
         <form method="POST" action="{{ url_for('upgrade.admin_discount_bulk') }}" id="bulkForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="action" id="bulkAction" value="">
 
-            <!-- BULK BAR -->
             <div class="dc-bulk-bar">
                 <div class="bulk-left">
                     <label class="bulk-checkbox">
@@ -812,7 +763,6 @@
                 </div>
             </div>
 
-            <!-- TABLE -->
             <div class="dc-table-wrap" id="dcTableWrap">
                 <div class="dc-table-scroll" id="dcTableScroll">
                     <table class="dc-table">
@@ -840,6 +790,7 @@
                                     {% set pct = 0 %}
                                     {% set bar_cls = 'unlimited' %}
                                 {% endif %}
+                                {% set applies = normalize_tier(d.applies_to) if d.applies_to != 'all' else 'all' %}
 
                                 <tr>
                                     <td class="cell-check">
@@ -878,8 +829,8 @@
                                     </td>
 
                                     <td class="cell-applies">
-                                        <span class="applies-pill {{ d.applies_to }}">
-                                            {% if d.applies_to == 'all' %}All Tiers{% else %}{{ d.applies_to }}{% endif %}
+                                        <span class="applies-pill {{ applies }}">
+                                            {% if applies == 'all' %}All Tiers{% else %}{{ applies }}{% endif %}
                                         </span>
                                     </td>
 
@@ -939,7 +890,6 @@
                 </div>
             </div>
 
-            <!-- SCROLL HINT -->
             <div class="dc-scroll-hint">
                 <i class="fas fa-arrows-alt-h"></i>
                 Scroll the table sideways to see more columns
@@ -948,7 +898,6 @@
         </form>
 
     {% else %}
-        <!-- ZERO STATE -->
         {% set is_filtered = search or filter_status %}
         <div class="dc-zero">
             {% if is_filtered %}
@@ -981,13 +930,9 @@
 
 </div>
 
-<!-- Copy toast -->
 <div class="dc-toast" id="dcToast">✅ Copied!</div>
 
 <script>
-    // ============================================
-    // COPY CODE
-    // ============================================
     function copyCode(btn, code) {
         function done() {
             btn.classList.add('copied');
@@ -1022,9 +967,6 @@
         document.body.removeChild(ta);
     }
 
-    // ============================================
-    // RELATIVE EXPIRY
-    // ============================================
     document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.expiry-rel[data-expires]').forEach(function(el) {
             const iso = el.getAttribute('data-expires');
@@ -1062,9 +1004,6 @@
         });
     });
 
-    // ============================================
-    // SELECT ALL
-    // ============================================
     function toggleAll(source) {
         document.querySelectorAll('.row-checkbox').forEach(function(cb) {
             cb.checked = source.checked;
@@ -1095,9 +1034,6 @@
         cb.addEventListener('change', updateSelectedCount);
     });
 
-    // ============================================
-    // BULK SUBMIT
-    // ============================================
     function submitBulk(action) {
         const checked = document.querySelectorAll('.row-checkbox:checked');
         if (checked.length === 0) {
@@ -1121,9 +1057,6 @@
         document.getElementById('bulkForm').submit();
     }
 
-    // ============================================
-    // SCROLL HINT FADE
-    // ============================================
     document.addEventListener('DOMContentLoaded', function() {
         const wrap = document.getElementById('dcTableWrap');
         const scroll = document.getElementById('dcTableScroll');
@@ -1142,9 +1075,6 @@
         setTimeout(updateOverflow, 400);
     });
 
-    // ============================================
-    // INIT
-    // ============================================
     document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('[data-bulk-btn]').forEach(function(btn) {
             btn.disabled = true;

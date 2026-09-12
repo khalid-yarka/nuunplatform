@@ -5,14 +5,8 @@
 
 {% block dashboard_css %}
 <style>
-    /* ============================================
-       PAGE
-       ============================================ */
     .history-page { max-width: 100%; }
 
-    /* ============================================
-       HEADER
-       ============================================ */
     .hist-header {
         display: flex;
         justify-content: space-between;
@@ -43,7 +37,6 @@
         align-items: center;
     }
 
-    /* Tier badge in header */
     .tier-badge-h {
         display: inline-flex;
         align-items: center;
@@ -55,13 +48,10 @@
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
-    .tier-badge-h.danbe { background: #F3F4F6; color: #4B5563; }
-    .tier-badge-h.dhexe { background: var(--primary-light); color: var(--primary); }
-    .tier-badge-h.hore  { background: linear-gradient(135deg, var(--primary), #B91C1C); color: white; }
+    .tier-badge-h.free    { background: #F3F4F6; color: #4B5563; }
+    .tier-badge-h.premium { background: var(--primary-light); color: var(--primary); }
+    .tier-badge-h.pro     { background: linear-gradient(135deg, var(--primary), #B91C1C); color: white; }
 
-    /* ============================================
-       TIER PANEL (quota + features)
-       ============================================ */
     .hist-tier-panel {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -88,7 +78,6 @@
         gap: 8px;
     }
 
-    /* Quota bar */
     .hist-quota {
         margin-bottom: 18px;
     }
@@ -138,7 +127,6 @@
         margin-top: 6px;
     }
 
-    /* Feature grid */
     .hist-features {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -189,7 +177,6 @@
         flex-shrink: 0;
     }
 
-    /* Upgrade CTA */
     .hist-upgrade-cta {
         background: linear-gradient(135deg, var(--primary-light), rgba(255,49,56,0.06));
         border: 1px solid rgba(255,49,56,0.2);
@@ -231,9 +218,6 @@
         box-shadow: 0 6px 18px rgba(255,49,56,0.35);
     }
 
-    /* ============================================
-       STATS CARDS
-       ============================================ */
     .hist-stats {
         display: grid;
         grid-template-columns: repeat(6, 1fr);
@@ -294,9 +278,6 @@
     .hist-stat-card .stat-number.amber   { color: #F59E0B; }
     .hist-stat-card .stat-number.red     { color: #EF4444; }
 
-    /* ============================================
-       FILTER BAR
-       ============================================ */
     .hist-filters {
         display: flex;
         gap: 10px;
@@ -413,9 +394,6 @@
         color: var(--primary);
     }
 
-    /* ============================================
-       TIMELINE
-       ============================================ */
     .hist-timeline { display: flex; flex-direction: column; gap: 0; }
 
     .hist-day-group {
@@ -553,9 +531,6 @@
         flex-shrink: 0;
     }
 
-    /* ============================================
-       LOAD MORE
-       ============================================ */
     .hist-load-more-wrap {
         text-align: center;
         margin-top: 24px;
@@ -588,9 +563,6 @@
         cursor: not-allowed;
     }
 
-    /* ============================================
-       EMPTY / LOADING
-       ============================================ */
     .hist-empty {
         text-align: center;
         padding: 60px 24px;
@@ -646,9 +618,6 @@
         to { transform: rotate(360deg); }
     }
 
-    /* ============================================
-       RESPONSIVE
-       ============================================ */
     @media (max-width: 1100px) {
         .hist-stats { grid-template-columns: repeat(3, 1fr); }
     }
@@ -685,16 +654,18 @@
 {% block dashboard_content %}
 <div class="history-page" id="historyApp">
 
+    {% set t = normalize_tier(tier) %}
+
     <!-- HEADER -->
     <div class="hist-header">
         <div class="title-block">
             <h2>
                 <i class="fas fa-history" style="color: var(--primary);"></i>
                 My History
-                <span class="tier-badge-h {{ tier }}">
-                    {% if tier == 'danbe' %}🔓 Danbe
-                    {% elif tier == 'dhexe' %}🔑 Dhexe
-                    {% else %}⭐ Hore{% endif %}
+                <span class="tier-badge-h {{ t }}">
+                    {% if t == 'free' %}🔓 Free
+                    {% elif t == 'premium' %}🔑 Premium
+                    {% else %}⭐ Pro{% endif %}
                 </span>
             </h2>
             <p>Every quiz, live quiz, save, and achievement — all in one place.</p>
@@ -706,7 +677,7 @@
                 </button>
             {% else %}
                 <button type="button" class="btn btn-secondary" data-tier-locked
-                        data-feature="history_export" data-required-tier="dhexe">
+                        data-feature="history_export" data-required-tier="premium">
                     <i class="fas fa-lock"></i> Export CSV
                 </button>
             {% endif %}
@@ -720,14 +691,13 @@
                 <i class="fas fa-layer-group" style="color: var(--primary);"></i>
                 Your History Plan
             </h3>
-            <span class="tier-badge-h {{ tier }}">
-                {% if tier == 'danbe' %}🔓 Danbe
-                {% elif tier == 'dhexe' %}🔑 Dhexe
-                {% else %}⭐ Hore{% endif %}
+            <span class="tier-badge-h {{ t }}">
+                {% if t == 'free' %}🔓 Free
+                {% elif t == 'premium' %}🔑 Premium
+                {% else %}⭐ Pro{% endif %}
             </span>
         </div>
 
-        <!-- Quota bar -->
         <div class="hist-quota">
             <div class="q-head">
                 <span class="q-label">Entries stored</span>
@@ -756,7 +726,6 @@
             </div>
         </div>
 
-        <!-- Feature grid -->
         <div class="hist-features">
             <div class="hist-feature">
                 <span class="fi">📆</span>
@@ -785,15 +754,15 @@
                 <div class="ft">
                     <span class="name">Search</span>
                     <span class="val">
-                        {% if can_search %}Available{% else %}Hore tier{% endif %}
+                        {% if can_search %}Available{% else %}Pro tier{% endif %}
                     </span>
                 </div>
                 {% if can_search %}
                     <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
                 {% else %}
                     <span class="lock-icon" data-tier-locked
-                          data-feature="history_search" data-required-tier="hore"
-                          title="Upgrade to Hore">🔒</span>
+                          data-feature="history_search" data-required-tier="pro"
+                          title="Upgrade to Pro">🔒</span>
                 {% endif %}
             </div>
 
@@ -803,16 +772,16 @@
                     <span class="name">Export</span>
                     <span class="val">
                         {% if can_export %}
-                            {% if tier == 'dhexe' %}Last 100 rows{% else %}Full history{% endif %}
-                        {% else %}Dhexe+ tier{% endif %}
+                            {% if t == 'premium' %}Last 100 rows{% else %}Full history{% endif %}
+                        {% else %}Premium+ tier{% endif %}
                     </span>
                 </div>
                 {% if can_export %}
                     <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
                 {% else %}
                     <span class="lock-icon" data-tier-locked
-                          data-feature="history_export" data-required-tier="dhexe"
-                          title="Upgrade to Dhexe">🔒</span>
+                          data-feature="history_export" data-required-tier="premium"
+                          title="Upgrade to Premium">🔒</span>
                 {% endif %}
             </div>
 
@@ -821,15 +790,15 @@
                 <div class="ft">
                     <span class="name">Trends</span>
                     <span class="val">
-                        {% if can_trend %}Available{% else %}Hore tier{% endif %}
+                        {% if can_trend %}Available{% else %}Pro tier{% endif %}
                     </span>
                 </div>
                 {% if can_trend %}
                     <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
                 {% else %}
                     <span class="lock-icon" data-tier-locked
-                          data-feature="history_trends" data-required-tier="hore"
-                          title="Upgrade to Hore">🔒</span>
+                          data-feature="history_trends" data-required-tier="pro"
+                          title="Upgrade to Pro">🔒</span>
                 {% endif %}
             </div>
 
@@ -838,28 +807,27 @@
                 <div class="ft">
                     <span class="name">Delete entries</span>
                     <span class="val">
-                        {% if can_delete %}Available{% else %}Hore tier{% endif %}
+                        {% if can_delete %}Available{% else %}Pro tier{% endif %}
                     </span>
                 </div>
                 {% if can_delete %}
                     <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
                 {% else %}
                     <span class="lock-icon" data-tier-locked
-                          data-feature="history_delete" data-required-tier="hore"
-                          title="Upgrade to Hore">🔒</span>
+                          data-feature="history_delete" data-required-tier="pro"
+                          title="Upgrade to Pro">🔒</span>
                 {% endif %}
             </div>
         </div>
 
-        <!-- Upgrade CTA -->
-        {% if tier != 'hore' and upgrade_benefits %}
+        {% if t != 'pro' and upgrade_benefits %}
             <div class="hist-upgrade-cta">
                 <div class="cta-text">
-                    <strong>Upgrade to {{ 'Dhexe' if tier == 'danbe' else 'Hore' }}</strong> to unlock:
+                    <strong>Upgrade to {{ 'Premium' if t == 'free' else 'Pro' }}</strong> to unlock:
                     {{ upgrade_benefits | join(' · ') }}
                 </div>
                 <button type="button" class="btn-upgrade"
-                        onclick="openSafkaPreview({ requiredTier: '{{ 'dhexe' if tier == 'danbe' else 'hore' }}' })">
+                        onclick="openUpgradeSheet({ requiredTier: '{{ 'premium' if t == 'free' else 'pro' }}' })">
                     ⬆ Upgrade Now
                 </button>
             </div>
@@ -921,8 +889,8 @@
                    {% if not can_search %}disabled{% endif %}>
             {% if not can_search %}
                 <span class="lock-icon" data-tier-locked
-                      data-feature="history_search" data-required-tier="hore"
-                      title="Upgrade to Hore to search">🔒</span>
+                      data-feature="history_search" data-required-tier="pro"
+                      title="Upgrade to Pro to search">🔒</span>
             {% endif %}
         </div>
 
@@ -964,11 +932,8 @@
 </div>
 
 <script>
-// ============================================
-// BOOTSTRAP DATA (from server)
-// ============================================
 window.historyConfig = {
-    tier: "{{ tier }}",
+    tier: "{{ t }}",
     can_search: {{ 'true' if can_search else 'false' }},
     can_export: {{ 'true' if can_export else 'false' }},
     can_trend: {{ 'true' if can_trend else 'false' }},

@@ -6,7 +6,8 @@
 
 {% block extra_css %}
 {{ super() }}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-core.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-shared.css') }}" />
 <style>
     .privacy-option {
         display: flex;
@@ -167,8 +168,7 @@
 
         <form method="POST" action="{{ url_for('live_quiz.create') }}" id="createForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            
-            <!-- Subject -->
+
             <div class="form-group" style="margin-bottom: 20px;">
                 <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
                     📚 Subject <span style="color: var(--primary);">*</span>
@@ -183,7 +183,6 @@
                 </select>
             </div>
 
-            <!-- Question Count -->
             <div class="form-group" style="margin-bottom: 20px;">
                 <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
                     📝 Number of Questions <span style="color: var(--primary);">*</span>
@@ -198,7 +197,6 @@
                 </div>
             </div>
 
-            <!-- Title -->
             <div class="form-group" style="margin-bottom: 20px;">
                 <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
                     🏷️ Quiz Title <span style="color: var(--primary);">*</span>
@@ -218,7 +216,6 @@
                 </div>
             </div>
 
-            <!-- Privacy Settings -->
             <div class="form-group" style="margin-bottom: 20px;">
                 <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 8px;">
                     🔒 Privacy Settings
@@ -244,7 +241,6 @@
                 </div>
             </div>
 
-            <!-- Scheduling -->
             <div class="form-group" style="margin-bottom: 20px;">
                 <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
                     ⏰ Schedule Start
@@ -272,12 +268,11 @@
                     </label>
                 </div>
                 <div style="margin-top: 6px; font-size: 12px; color: var(--text-muted);">
-                    <i class="fas fa-info-circle"></i> 
+                    <i class="fas fa-info-circle"></i>
                     Manual: You click 'Start' in the waiting room. Scheduled: Auto-starts when timer hits zero. Minimum 2 participants required.
                 </div>
             </div>
 
-            <!-- Buttons -->
             <div style="display: flex; gap: 12px;">
                 <button type="submit" style="flex: 1; padding: 12px; background: var(--primary); color: white; border: none; border-radius: var(--radius-sm); font-weight: 600; font-size: 16px; cursor: pointer; transition: var(--transition);">
                     <i class="fas fa-rocket"></i> Create Quiz
@@ -290,20 +285,17 @@
     </div>
 
     <div style="margin-top: 16px; padding: 16px; background: var(--background); border-radius: var(--radius-sm); text-align: center; color: var(--text-secondary); font-size: 13px;">
-        <i class="fas fa-info-circle"></i> 
+        <i class="fas fa-info-circle"></i>
         Questions are randomly selected from the subject. Participants join via a unique code.
     </div>
 </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // ============================================
-    // Title validation
-    // ============================================
     var titleInput = document.getElementById('quizTitleInput');
     var titleError = document.getElementById('titleError');
     var submitBtn = document.querySelector('#createForm button[type="submit"]');
-    
+
     function validateTitle() {
         if (!titleInput) return true;
         var v = (titleInput.value || '').trim();
@@ -313,15 +305,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (submitBtn) submitBtn.disabled = !ok;
         return ok;
     }
-    
+
     if (titleInput) {
         titleInput.addEventListener('input', validateTitle);
         titleInput.addEventListener('blur', validateTitle);
-        // Initial check (in case the field was pre-filled)
         validateTitle();
     }
-    
-    // Guard against form submission if invalid
+
     var createForm = document.getElementById('createForm');
     if (createForm) {
         createForm.addEventListener('submit', function(e) {
@@ -331,7 +321,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-    // Question count selection
+
     document.querySelectorAll('.question-count-options label').forEach(function(label) {
         label.addEventListener('click', function() {
             const siblings = this.parentElement.querySelectorAll('label');
@@ -342,7 +332,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Privacy toggle
     const publicLabel = document.getElementById('publicLabel');
     const privateLabel = document.getElementById('privateLabel');
     const publicRadio = document.querySelector('input[name="is_public"][value="1"]');
@@ -361,7 +350,6 @@ document.addEventListener('DOMContentLoaded', function() {
     privateLabel.addEventListener('click', function() { privateRadio.checked = true; updatePrivacySelection(); });
     updatePrivacySelection();
 
-    // Schedule options toggle
     const scheduleLabels = document.querySelectorAll('#scheduleOptions label');
     scheduleLabels.forEach(function(label) {
         label.addEventListener('click', function() {

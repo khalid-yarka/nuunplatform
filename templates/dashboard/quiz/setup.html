@@ -189,10 +189,11 @@
         <h2>📝 Start a Quiz</h2>
         <p class="sub">Select a subject and number of questions.</p>
 
+        {% set t = normalize_tier(tier) %}
+
         <form method="POST" action="{{ url_for('quiz.start_quiz') }}" id="setupForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-            <!-- Subject -->
             <div class="form-group">
                 <label for="subjectSelect">📚 Subject <span style="color:var(--primary);">*</span></label>
                 <select id="subjectSelect" name="subject_code" required>
@@ -203,11 +204,9 @@
                 </select>
             </div>
 
-            <!-- Question Count -->
             <div class="form-group">
                 <label>📊 Number of Questions</label>
                 <div class="question-count-options" id="countOptions">
-                    {# 10 #}
                     <label class="q-option {% if allowed_counts['10'] %}{% else %}locked{% endif %}"
                            data-value="10" data-locked="{{ 'false' if allowed_counts['10'] else 'true' }}">
                         <input type="radio" name="question_count" value="10">
@@ -218,7 +217,6 @@
                         {% endif %}
                     </label>
 
-                    {# 20 #}
                     <label class="q-option {% if allowed_counts['20'] %}{% else %}locked{% endif %}"
                            data-value="20" data-locked="{{ 'false' if allowed_counts['20'] else 'true' }}">
                         <input type="radio" name="question_count" value="20">
@@ -229,7 +227,6 @@
                         {% endif %}
                     </label>
 
-                    {# 30 #}
                     <label class="q-option {% if allowed_counts['30'] %}{% else %}locked{% endif %}"
                            data-value="30" data-locked="{{ 'false' if allowed_counts['30'] else 'true' }}">
                         <input type="radio" name="question_count" value="30">
@@ -240,7 +237,6 @@
                         {% endif %}
                     </label>
 
-                    {# Custom #}
                     <label class="q-option {% if is_custom_allowed %}{% else %}locked{% endif %}"
                            data-value="custom" data-locked="{{ 'false' if is_custom_allowed else 'true' }}">
                         <input type="radio" name="question_count" value="custom">
@@ -262,8 +258,8 @@
 
         <div class="quota-info">
             📅 <strong>{{ remaining_attempts }}</strong> quiz attempt{{ 's' if remaining_attempts != 1 }} remaining today
-            {% if tier != 'hore' %}
-                · <span style="color:var(--primary);cursor:pointer;" onclick="openSafkaPreview({ requiredTier: 'dhexe' })">Upgrade for more</span>
+            {% if t != 'pro' %}
+                · <span style="color:var(--primary);cursor:pointer;" onclick="openUpgradeSheet({ requiredTier: 'premium' })">Upgrade for more</span>
             {% endif %}
         </div>
     </div>
@@ -285,20 +281,17 @@ document.addEventListener('DOMContentLoaded', function() {
         startBtn.disabled = !(subjectOk && countOk);
     }
 
-    // Handle click on option
     options.forEach(opt => {
         opt.addEventListener('click', function(e) {
-            // If locked, show upgrade sheet
             if (this.dataset.locked === 'true') {
-                const requiredTier = this.dataset.value === '10' ? 'danbe' : 
-                                     (this.dataset.value === '20' || this.dataset.value === '30') ? 'dhexe' : 'hore';
-                if (typeof window.openSafkaPreview === 'function') {
-                    window.openSafkaPreview({ feature: 'question_count', requiredTier: requiredTier });
+                const requiredTier = this.dataset.value === '10' ? 'free' :
+                                     (this.dataset.value === '20' || this.dataset.value === '30') ? 'premium' : 'pro';
+                if (typeof window.openUpgradeSheet === 'function') {
+                    window.openUpgradeSheet({ feature: 'question_count', requiredTier: requiredTier });
                 }
                 return;
             }
 
-            // Unlock: select this option
             options.forEach(o => o.classList.remove('selected'));
             this.classList.add('selected');
             const radio = this.querySelector('input[type="radio"]');
@@ -307,7 +300,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 selectedValue = radio.value;
             }
 
-            // Show/hide custom input
             if (this.dataset.value === 'custom') {
                 const input = this.querySelector('.custom-input');
                 if (input) input.style.display = 'block';
@@ -323,32 +315,31 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Subject change
     subjectSelect.addEventListener('change', updateStartButton);
 
-    // Custom input validation (only when custom is selected)
-    customInput.addEventListener('input', function() {
-        if (this.value) {
-            const val = parseInt(this.value);
-            if (val >= 5 && val <= 100) {
-                this.style.borderColor = 'var(--success)';
-                this.style.background = '#ECFDF5';
-                updateStartButton();
-            } else {
-                this.style.borderColor = '#EF4444';
-                this.style.background = '#FEF2F2';
-                startBtn.disabled = true;
+    if (customInput) {
+        customInput.addEventListener('input', function() {
+            if (this.value) {
+                const val = parseInt(this.value);
+                if (val >= 5 && val <= 100) {
+                    this.style.borderColor = 'var(--success)';
+                    this.style.background = '#ECFDF5';
+                    updateStartButton();
+                } else {
+                    this.style.borderColor = '#EF4444';
+                    this.style.background = '#FEF2F2';
+                    startBtn.disabled = true;
+                }
             }
-        }
-    });
+        });
+    }
 
-    // Form submit: ensure custom count is sent correctly
     form.addEventListener('submit', function(e) {
         const customOpt = document.querySelector('.q-option[data-value="custom"].selected');
         if (customOpt) {
             const input = customOpt.querySelector('.custom-input');
             if (input && input.value) {
-                // The value is already in the custom_count field
+                // ok
             } else {
                 e.preventDefault();
                 alert('Please enter a number between 5 and 100.');
@@ -356,7 +347,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Initial state: no selection
     updateStartButton();
 });
 </script>

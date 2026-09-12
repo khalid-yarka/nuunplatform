@@ -7,7 +7,6 @@
 <style>
     .pf-page { max-width: 100%; }
 
-    /* Header */
     .pf-header {
         display: flex; justify-content: space-between;
         align-items: flex-start; flex-wrap: wrap;
@@ -22,7 +21,6 @@
     }
     .pf-header .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 
-    /* Range selector */
     .pf-range {
         display: flex; background: var(--surface);
         border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -39,7 +37,6 @@
         background: var(--primary); color: white;
     }
 
-    /* Live pulse badge */
     .pf-live-badge {
         display: inline-flex; align-items: center; gap: 6px;
         padding: 4px 12px; border-radius: 12px;
@@ -56,7 +53,6 @@
         50%      { opacity: 0.4; transform: scale(0.8); }
     }
 
-    /* Stats grid */
     .pf-stats {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -109,7 +105,6 @@
         margin-top: 2px;
     }
 
-    /* Two-column layout */
     .pf-grid-2 {
         display: grid;
         grid-template-columns: 2fr 1fr;
@@ -117,7 +112,6 @@
     }
     @media (max-width: 900px) { .pf-grid-2 { grid-template-columns: 1fr; } }
 
-    /* Card */
     .pf-card {
         background: var(--surface); border: 1px solid var(--border);
         border-radius: var(--radius); box-shadow: var(--shadow-sm);
@@ -135,21 +129,19 @@
     .pf-card-head h3 i { color: var(--primary); }
     .pf-card-body { padding: 18px 20px; }
 
-    /* Chart canvas */
     .pf-chart-canvas {
         width: 100%; max-height: 220px;
     }
 
-    /* Distributions */
     .pf-dist-bar {
         display: flex; height: 12px; border-radius: 8px;
         overflow: hidden; margin: 10px 0 12px;
         background: var(--background);
     }
     .pf-dist-bar .seg { transition: width 0.4s ease; }
-    .pf-dist-bar .seg.danbe { background: #9CA3AF; }
-    .pf-dist-bar .seg.dhexe { background: var(--primary); }
-    .pf-dist-bar .seg.hore  { background: linear-gradient(90deg, var(--primary), #B91C1C); }
+    .pf-dist-bar .seg.free    { background: #9CA3AF; }
+    .pf-dist-bar .seg.premium { background: var(--primary); }
+    .pf-dist-bar .seg.pro     { background: linear-gradient(90deg, var(--primary), #B91C1C); }
 
     .pf-dist-legend {
         display: flex; gap: 16px; flex-wrap: wrap;
@@ -161,12 +153,11 @@
     .pf-dist-legend .dot {
         width: 10px; height: 10px; border-radius: 50%;
     }
-    .pf-dist-legend .dot.danbe { background: #9CA3AF; }
-    .pf-dist-legend .dot.dhexe { background: var(--primary); }
-    .pf-dist-legend .dot.hore  { background: #B91C1C; }
+    .pf-dist-legend .dot.free    { background: #9CA3AF; }
+    .pf-dist-legend .dot.premium { background: var(--primary); }
+    .pf-dist-legend .dot.pro     { background: #B91C1C; }
     .pf-dist-legend .li strong { color: var(--text); }
 
-    /* Top list */
     .pf-list {
         display: flex; flex-direction: column;
     }
@@ -197,7 +188,6 @@
         font-size: 11px; color: var(--text-muted); margin-left: 4px;
     }
 
-    /* Activity feed */
     .pf-feed {
         max-height: 560px; overflow-y: auto;
     }
@@ -240,9 +230,6 @@
         font-size: 32px; opacity: 0.3; display: block; margin-bottom: 8px;
     }
 
-    /* Broadcast modal styles handled by base.css */
-
-    /* Range filters on charts */
     .pf-chart-toggle {
         display: flex; gap: 6px;
         background: var(--background); border-radius: 6px;
@@ -262,7 +249,6 @@
         color: var(--primary);
     }
 
-    /* Responsive */
     @media (max-width: 900px) {
         .pf-stats { grid-template-columns: repeat(3, 1fr); }
     }
@@ -280,14 +266,12 @@
 {% block dashboard_content %}
 <div class="pf-page">
 
-    <!-- BREADCRUMB -->
     <div class="breadcrumb">
         <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
         <span class="separator">/</span>
         <span class="current">Platform Overview</span>
     </div>
 
-    <!-- HEADER -->
     <div class="pf-header">
         <div class="title-block">
             <h2>
@@ -312,7 +296,6 @@
         </div>
     </div>
 
-    <!-- STATS GRID -->
     <div class="pf-stats">
         <div class="pf-stat">
             <div class="row1">
@@ -403,9 +386,7 @@
         </div>
     </div>
 
-    <!-- CHART + TIER DISTRIBUTION -->
     <div class="pf-grid-2">
-        <!-- Trend chart -->
         <div class="pf-card">
             <div class="pf-card-head">
                 <h3><i class="fas fa-chart-line"></i> Activity Trend</h3>
@@ -420,29 +401,27 @@
             </div>
         </div>
 
-        <!-- Tier distribution -->
         <div class="pf-card">
             <div class="pf-card-head">
                 <h3><i class="fas fa-layer-group"></i> Tier Distribution</h3>
             </div>
             <div class="pf-card-body">
-                {% set total_tier = (tier_dist.danbe or 0) + (tier_dist.dhexe or 0) + (tier_dist.hore or 0) %}
-                {% set pct_danbe = ((tier_dist.danbe or 0) / total_tier * 100) if total_tier else 0 %}
-                {% set pct_dhexe = ((tier_dist.dhexe or 0) / total_tier * 100) if total_tier else 0 %}
-                {% set pct_hore  = ((tier_dist.hore  or 0) / total_tier * 100) if total_tier else 0 %}
+                {% set total_tier = (tier_dist.free or 0) + (tier_dist.premium or 0) + (tier_dist.pro or 0) %}
+                {% set pct_free    = ((tier_dist.free    or 0) / total_tier * 100) if total_tier else 0 %}
+                {% set pct_premium = ((tier_dist.premium or 0) / total_tier * 100) if total_tier else 0 %}
+                {% set pct_pro     = ((tier_dist.pro     or 0) / total_tier * 100) if total_tier else 0 %}
 
                 <div class="pf-dist-bar">
-                    <div class="seg danbe" style="width: {{ pct_danbe }}%;"></div>
-                    <div class="seg dhexe" style="width: {{ pct_dhexe }}%;"></div>
-                    <div class="seg hore"  style="width: {{ pct_hore  }}%;"></div>
+                    <div class="seg free"    style="width: {{ pct_free }}%;"></div>
+                    <div class="seg premium" style="width: {{ pct_premium }}%;"></div>
+                    <div class="seg pro"     style="width: {{ pct_pro }}%;"></div>
                 </div>
                 <div class="pf-dist-legend">
-                    <div class="li"><span class="dot danbe"></span> Danbe <strong>{{ tier_dist.danbe or 0 }}</strong></div>
-                    <div class="li"><span class="dot dhexe"></span> Dhexe <strong>{{ tier_dist.dhexe or 0 }}</strong></div>
-                    <div class="li"><span class="dot hore"></span> Hore <strong>{{ tier_dist.hore or 0 }}</strong></div>
+                    <div class="li"><span class="dot free"></span> Free <strong>{{ tier_dist.free or 0 }}</strong></div>
+                    <div class="li"><span class="dot premium"></span> Premium <strong>{{ tier_dist.premium or 0 }}</strong></div>
+                    <div class="li"><span class="dot pro"></span> Pro <strong>{{ tier_dist.pro or 0 }}</strong></div>
                 </div>
 
-                <!-- Locations -->
                 <div style="margin-top: 22px;">
                     <h4 style="font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 10px 0;">
                         🌍 By Location
@@ -465,7 +444,6 @@
         </div>
     </div>
 
-    <!-- TOP LISTS -->
     <div class="pf-grid-2">
         <div class="pf-card">
             <div class="pf-card-head">
@@ -520,7 +498,6 @@
         </div>
     </div>
 
-    <!-- ACTIVITY FEED -->
     <div class="pf-card" style="margin-bottom: 24px;">
         <div class="pf-card-head">
             <h3><i class="fas fa-stream"></i> Live Activity Feed</h3>
@@ -559,9 +536,6 @@
 
 </div>
 
-<!-- ============================================ -->
-<!-- BROADCAST MODAL -->
-<!-- ============================================ -->
 <div class="modal-overlay" id="broadcastModal">
     <div class="modal-content" style="max-width: 540px;">
         <h3 class="modal-title">📡 Notify All Admins</h3>
@@ -610,9 +584,6 @@
     </div>
 </div>
 
-<!-- ============================================ -->
-<!-- Chart data injected by server -->
-<!-- ============================================ -->
 <script id="pfChartData" type="application/json">
 {
   "days": {{ days|tojson }},
@@ -624,14 +595,10 @@
 }
 </script>
 
-<!-- Chart.js from CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
 <script>
 (function() {
-    // ============================================
-    // CHART
-    // ============================================
     const dataEl = document.getElementById('pfChartData');
     const chartEl = document.getElementById('pfChart');
     let chartInstance = null;
@@ -738,9 +705,6 @@
         });
     }
 
-    // ============================================
-    // BROADCAST MODAL
-    // ============================================
     window.openBroadcastModal = function() {
         const m = document.getElementById('broadcastModal');
         if (m) {
@@ -767,9 +731,6 @@
         if (e.key === 'Escape') closeBroadcastModal();
     });
 
-    // ============================================
-    // RELATIVE TIME FOR FEED
-    // ============================================
     function relativeTime(isoStr) {
         if (!isoStr) return '';
         try {
@@ -793,9 +754,6 @@
         }
     });
 
-    // ============================================
-    // AUTO REFRESH STATS + FEED (every 30s)
-    // ============================================
     function refreshStats() {
         fetch('/admin/platform/api/stats', {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }

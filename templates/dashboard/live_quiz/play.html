@@ -6,9 +6,10 @@
 
 {% block extra_css %}
 {{ super() }}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-core.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-flow.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-shared.css') }}" />
 <style>
-    /* ===== Completed State – Enhanced ===== */
     .completed-state {
         text-align: center;
         padding: 20px 16px;
@@ -24,6 +25,10 @@
         0% { transform: scale(0) rotate(-10deg); opacity: 0; }
         60% { transform: scale(1.2) rotate(2deg); }
         100% { transform: scale(1) rotate(0); opacity: 1; }
+    }
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
     }
     .completed-state h3 {
         font-size: 24px;
@@ -41,7 +46,6 @@
         font-weight: 600;
     }
 
-    /* Overall stats row */
     .waiting-dashboard {
         display: flex;
         flex-direction: column;
@@ -125,7 +129,6 @@
         animation: pulse 0.5s ease-in-out infinite;
     }
 
-    /* Participant progress list (same for all) */
     .participant-progress-list {
         background: var(--surface);
         border-radius: var(--radius-sm);
@@ -195,7 +198,6 @@
     }
     .motivation .emoji { font-style: normal; }
 
-    /* Confetti */
     .confetti-container {
         position: fixed;
         top: 0;
@@ -219,7 +221,6 @@
         100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
     }
 
-    /* Reconnection notice */
     .reconnection-notice {
         display: none;
         background: #10B981;
@@ -232,6 +233,10 @@
         animation: fadeSlide 0.5s ease;
     }
     .reconnection-notice.show { display: block; }
+    @keyframes fadeSlide {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
     .reconnection-notice .dismiss {
         margin-left: 12px;
         background: rgba(255,255,255,0.2);
@@ -243,7 +248,6 @@
         font-size: 13px;
     }
 
-    /* Leave button */
     .btn-leave {
         display: inline-flex;
         align-items: center;
@@ -272,7 +276,6 @@
         transform: none !important;
     }
 
-    /* Creator progress - kept only for creator (now we have a separate list for everyone) */
     .creator-progress {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -382,7 +385,6 @@
         <div id="progressBar" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.5s ease; border-radius: 4px;"></div>
     </div>
 
-    <!-- Participant progress – shown to ALL participants (not just creator) -->
     <div class="creator-progress" id="participantProgressContainer">
         <div class="cp-title">👥 Participant Progress</div>
         <div id="participantProgressList">
@@ -423,11 +425,7 @@
 
 </div>
 
-<!-- All the JavaScript remains the same as the previous version – it already handles participant progress for everyone -->
 <script>
-// ============================================
-// CSRF TOKEN
-// ============================================
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -438,7 +436,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const ratingTime = 10;
     const totalDuration = totalQuestions * (timePerQuestion + ratingTime);
     const isCreator = {{ 'true' if quiz.creator_id == session.user_id else 'false' }};
-    
+
     let currentQuestionIndex = 0;
     let timer = timePerQuestion;
     let timerInterval = null;
@@ -453,7 +451,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let answerData = null;
     let isReconnecting = false;
     let hasAnsweredCurrent = false;
-    
+
     let pollInterval = 1500;
     let pollTimer = null;
     let consecutiveNoChanges = 0;
@@ -463,10 +461,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let isRedirecting = false;
     let completedParticipantsCount = 0;
     let totalParticipantsCount = 0;
-    
-    // ============================================
-    // RESTORE STATE FROM sessionStorage
-    // ============================================
+
     function restoreStateFromStorage() {
         try {
             const saved = sessionStorage.getItem('live_quiz_' + quizId);
@@ -490,10 +485,7 @@ document.addEventListener('DOMContentLoaded', function() {
             sessionStorage.setItem('live_quiz_' + quizId, JSON.stringify(state));
         } catch (e) { console.warn('Failed to save state:', e); }
     }
-    
-    // ============================================
-    // FETCH WITH TIMEOUT
-    // ============================================
+
     function fetchWithTimeout(url, options, timeout = 10000) {
         options = options || {};
         options.headers = options.headers || {};
@@ -504,10 +496,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .finally(() => clearTimeout(timeoutId))
             .catch(error => { if (error.name === 'AbortError') throw new Error('Request timeout'); throw error; });
     }
-    
-    // ============================================
-    // BROWSER NOTIFICATION
-    // ============================================
+
     function requestNotificationPermission() {
         if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
     }
@@ -526,10 +515,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) { console.warn('Browser notification error:', e); }
     }
     requestNotificationPermission();
-    
-    // ============================================
-    // TOAST HELPER
-    // ============================================
+
     function showToast(message, type, duration) {
         if (typeof window.showToast === 'function') {
             window.showToast(message, type || 'info', duration || 4000);
@@ -541,7 +527,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s ease'; setTimeout(() => toast.remove(), 400); }, duration || 4000);
         }
     }
-    
+
     function showNotification(text) {
         const banner = document.getElementById('notificationBanner');
         const textEl = document.getElementById('notificationText');
@@ -570,7 +556,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 200);
         } catch (e) {}
     }
-    
+
     function updateTotalTimer(remaining) {
         const display = document.getElementById('totalTimerDisplay');
         const progress = document.getElementById('totalProgressFill');
@@ -585,10 +571,7 @@ document.addEventListener('DOMContentLoaded', function() {
         progress.style.width = pct + '%';
     }
     function formatTime(seconds) { const m = Math.floor(seconds / 60); const s = Math.floor(seconds % 60); return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0'); }
-    
-    // ============================================
-    // PARTICIPANT PROGRESS (shown to all)
-    // ============================================
+
     function updateParticipantProgress(progressData) {
         const container = document.getElementById('participantProgressList');
         if (!container) return;
@@ -613,17 +596,14 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         container.innerHTML = html;
     }
-    
-    // ============================================
-    // LEAVE QUIZ
-    // ============================================
+
     const leaveBtn = document.getElementById('leaveBtn');
     if (leaveBtn) {
         leaveBtn.addEventListener('click', function() {
             if (!confirm('Are you sure you want to leave this quiz?')) return;
             leaveBtn.disabled = true; leaveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Leaving...';
-            fetchWithTimeout('/live-quiz/leave/' + quizId, { 
-                method: 'POST', 
+            fetchWithTimeout('/live-quiz/leave/' + quizId, {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
                 body: JSON.stringify({})
             })
@@ -635,10 +615,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .catch(() => { showToast('Error leaving quiz.', 'error'); leaveBtn.disabled = false; leaveBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Leave Quiz'; });
         });
     }
-    
-    // ============================================
-    // SHOW ERROR STATE
-    // ============================================
+
     function showErrorState(message, redirectUrl) {
         const container = document.getElementById('questionContainer');
         if (!container) return;
@@ -646,10 +623,7 @@ document.addEventListener('DOMContentLoaded', function() {
         container.innerHTML = `<div class="error-state"><div class="icon">⚠️</div><h3>Unable to load quiz</h3><p>${message || 'This quiz is no longer available.'}</p><a href="${redirectUrl || '/live-quiz/lobby'}" class="btn"><i class="fas fa-arrow-left"></i> Return to Lobby</a></div>`;
         showToast(message || 'Quiz unavailable', 'error', 5000);
     }
-    
-    // ============================================
-    // POLL QUIZ STATE
-    // ============================================
+
     function pollQuizState() {
         fetchWithTimeout('/live-quiz/quiz-state/' + quizId + '?t=' + Date.now(), {}, 8000)
             .then(response => response.json())
@@ -660,8 +634,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 if (data.error) { console.warn('Polling error:', data.error); pollInterval = Math.min(pollInterval + 500, 5000); resetPollTimer(); return; }
-                
-                // Update total timer
+
                 if (data.remaining_time !== undefined) {
                     updateTotalTimer(data.remaining_time);
                     if (data.remaining_time <= 0 && !isRedirecting && data.status === 'active') {
@@ -670,13 +643,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         return;
                     }
                 }
-                
-                // Update participant progress (for all)
+
                 if (data.participant_progress) {
                     updateParticipantProgress(data.participant_progress);
                 }
-                
-                // Handle finished
+
                 if (data.redirect_url && !isRedirecting) {
                     isRedirecting = true;
                     clearInterval(timerInterval); clearTimeout(pollTimer);
@@ -684,15 +655,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     window.location.href = data.redirect_url;
                     return;
                 }
-                
+
                 if (data.status === 'finished' && !quizEnded) {
                     quizEnded = true;
                     sendBrowserNotification('🏆 Quiz Complete!', quizTitle + ' has finished. Check your results!', '/live-quiz/results/' + quizId);
                     window.location.href = data.redirect_url || '/live-quiz/results/' + quizId;
                     return;
                 }
-                
-                // Handle active state
+
                 if (data.status === 'active') {
                     if (!quizStarted) {
                         quizStarted = true;
@@ -701,7 +671,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         resetPollTimer();
                         return;
                     }
-                    
+
                     if (questionData) {
                         if (data.current_question_index !== undefined && data.current_question_index !== currentQuestionIndex) {
                             if (!isAnswered) loadQuestion();
@@ -709,13 +679,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         resetPollTimer();
                         return;
                     }
-                    
+
                     if (!questionData && !isCompleted) {
                         loadQuestion();
                         resetPollTimer();
                         return;
                     }
-                    
+
                     if (data.all_completed && data.status === 'active') {
                         if (data.is_completed) {
                             sendBrowserNotification('🏆 All Finished!', 'All participants have completed!', '/live-quiz/results/' + quizId);
@@ -723,8 +693,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             return;
                         }
                     }
-                    
-                    if (data.is_completed && !isCompleted) { 
+
+                    if (data.is_completed && !isCompleted) {
                         isCompleted = true;
                         showCompletedState(data);
                         saveStateToStorage();
@@ -733,26 +703,26 @@ document.addEventListener('DOMContentLoaded', function() {
                         return;
                     }
                 }
-                
+
                 previousStatus = data.status;
                 resetPollTimer();
             })
             .catch(function(err) { console.warn('Polling fetch error:', err); pollInterval = Math.min(pollInterval + 500, 5000); resetPollTimer(); });
     }
-    
+
     function loadQuestion() {
         if (isCompleted) return;
         fetchWithTimeout('/live-quiz/get-question/' + quizId + '?t=' + Date.now(), {}, 8000)
             .then(response => response.json())
             .then(data => {
                 if (data.abort) { showErrorState(data.message || 'Quiz is no longer available', data.redirect || '/live-quiz/lobby'); return; }
-                if (data.error) { 
-                    if (data.completed) { 
+                if (data.error) {
+                    if (data.completed) {
                         isCompleted = true;
                         fetchAndShowCompletedState();
-                    } 
+                    }
                     else if (data.waiting) { setTimeout(loadQuestion, 1000); }
-                    return; 
+                    return;
                 }
                 if (data.question) {
                     if (data.already_answered) {
@@ -767,12 +737,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         saveStateToStorage();
                         return;
                     }
-                    questionData = data; 
-                    currentQuestionIndex = data.index; 
-                    isAnswered = false; 
-                    isRated = false; 
+                    questionData = data;
+                    currentQuestionIndex = data.index;
+                    isAnswered = false;
+                    isRated = false;
                     hasAnsweredCurrent = false;
-                    renderQuestion(data); 
+                    renderQuestion(data);
                     startTimer();
                     const progressBar = document.getElementById('progressBar'); if (progressBar) progressBar.style.width = ((data.index / data.total) * 100) + '%';
                     saveStateToStorage();
@@ -780,7 +750,7 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch(function(err) { console.warn('Load question error:', err); setTimeout(loadQuestion, 2000); });
     }
-    
+
     function renderAnsweredQuestion(data, state) {
         const question = data.question; const index = data.index; const total = data.total;
         const currentQ = document.getElementById('currentQ'); const totalQ = document.getElementById('totalQ');
@@ -807,7 +777,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>`;
     }
-    
+
     function renderQuestion(data) {
         const question = data.question; const index = data.index; const total = data.total;
         const currentQ = document.getElementById('currentQ'); const totalQ = document.getElementById('totalQ');
@@ -824,7 +794,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <div id="feedbackContainer"></div>`;
         timer = timePerQuestion; updateTimerDisplay();
     }
-    
+
     function startTimer() {
         clearInterval(timerInterval); timer = timePerQuestion; updateTimerDisplay();
         timerInterval = setInterval(() => {
@@ -844,7 +814,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }, 1000);
     }
-    
+
     function updateTimerDisplay() {
         const display = document.getElementById('timerDisplay'); if (!display) return;
         display.textContent = timer; display.className = 'question-timer';
@@ -852,10 +822,7 @@ document.addEventListener('DOMContentLoaded', function() {
         else if (timer <= 10 && !isAnswered) display.classList.add('warning');
         else if (isAnswered) display.classList.add('stopped');
     }
-    
-    // ============================================
-    // SELECT / SKIP / RATING (with skip completion fix)
-    // ============================================
+
     window.selectOption = function(value) {
         if (isAnswered) return;
         if (!questionData) { showToast('Question not loaded. Please wait.', 'warning'); return; }
@@ -865,7 +832,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectedBtn = document.querySelector(`.option-btn[data-value="${value}"]`);
         const originalText = selectedBtn ? selectedBtn.innerHTML : '';
         if (selectedBtn) selectedBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
-        
+
         fetchWithTimeout('/live-quiz/submit-answer', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: JSON.stringify({ quiz_id: quizId, question_id: questionData.question.id, answer: value })
@@ -901,7 +868,7 @@ document.addEventListener('DOMContentLoaded', function() {
             showToast('Error submitting answer. Please try again.', 'error');
         });
     };
-    
+
     window.skipQuestion = function() {
         if (isAnswered && !hasAnsweredCurrent) {
             const container = document.getElementById('feedbackContainer');
@@ -917,7 +884,7 @@ document.addEventListener('DOMContentLoaded', function() {
         isAnswered = true; hasAnsweredCurrent = true;
         const buttons = document.querySelectorAll('.option-btn'); const skipBtn = document.getElementById('skipBtn');
         buttons.forEach(b => b.disabled = true); if (skipBtn) skipBtn.disabled = true;
-        
+
         fetchWithTimeout('/live-quiz/skip-question', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: JSON.stringify({ quiz_id: quizId, question_id: questionData.question.id })
@@ -944,13 +911,13 @@ document.addEventListener('DOMContentLoaded', function() {
             showToast('Error skipping question. Please try again.', 'error');
         });
     };
-    
+
     window.submitRating = function(rating) {
         if (isRated) return;
         isRated = true;
         const buttons = document.querySelectorAll('.rating-buttons button');
         buttons.forEach(b => b.disabled = true);
-        
+
         fetchWithTimeout('/live-quiz/submit-rating', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: JSON.stringify({ quiz_id: quizId, question_id: questionData.question.id, rating: rating })
@@ -988,9 +955,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     };
 
-    // ============================================
-    // FETCH AND SHOW COMPLETED STATE
-    // ============================================
     function fetchAndShowCompletedState() {
         fetchWithTimeout('/live-quiz/quiz-state/' + quizId + '?t=' + Date.now(), {}, 8000)
             .then(response => response.json())
@@ -1024,9 +988,6 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
     }
 
-    // ============================================
-    // ENHANCED COMPLETED STATE
-    // ============================================
     function showCompletedState(data) {
         if (!data) return;
         const container = document.getElementById('questionContainer');
@@ -1170,9 +1131,6 @@ document.addEventListener('DOMContentLoaded', function() {
         list.innerHTML = html;
     }
 
-    // ============================================
-    // CONFETTI
-    // ============================================
     function launchConfetti() {
         const container = document.createElement('div');
         container.className = 'confetti-container';
@@ -1192,10 +1150,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         setTimeout(() => container.remove(), 5000);
     }
-    
-    // ============================================
-    // LEADERBOARD
-    // ============================================
+
     let leaderboardTimer = null; let leaderboardInterval = 3000;
     function updateLeaderboard() {
         if (leaderboardTimer) { clearTimeout(leaderboardTimer); leaderboardTimer = null; }
@@ -1219,15 +1174,12 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch(function(err) { console.warn('Leaderboard update error:', err); leaderboardTimer = setTimeout(updateLeaderboard, 5000); });
     }
-    
+
     function resetPollTimer() {
         if (pollTimer) clearTimeout(pollTimer);
         pollTimer = setTimeout(() => pollQuizState(), pollInterval);
     }
-    
-    // ============================================
-    // INIT
-    // ============================================
+
     restoreStateFromStorage();
 
     if (isCompleted) {
@@ -1237,14 +1189,14 @@ document.addEventListener('DOMContentLoaded', function() {
     resetPollTimer();
     setTimeout(pollQuizState, 100);
     leaderboardTimer = setTimeout(updateLeaderboard, 3000);
-    
+
     window.addEventListener('beforeunload', function() {
         if (pollTimer) clearTimeout(pollTimer);
         if (leaderboardTimer) clearTimeout(leaderboardTimer);
         if (timerInterval) clearInterval(timerInterval);
         if (window._completedTimerInterval) clearInterval(window._completedTimerInterval);
     });
-    
+
     window.selectOption = selectOption;
     window.skipQuestion = skipQuestion;
     window.submitRating = submitRating;

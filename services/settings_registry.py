@@ -2,10 +2,12 @@
 """
 Central registry for all user-configurable settings.
 """
+
 from typing import Dict, Any, Optional, List
 
+
 SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
-    # Appearance
+    # ----- Appearance -----
     "appearance.theme": {
         "type": "enum",
         "default": "system",
@@ -25,7 +27,7 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "category": "appearance",
         "label": "Accent Colour",
         "description": "Choose a primary colour for the interface.",
-        "tier_required": "dhexe",
+        "tier_required": "premium",
         "live": True,
         "requires_confirmation": False,
         "sensitive": False,
@@ -37,7 +39,19 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "category": "appearance",
         "label": "Font Size",
         "description": "Adjust the text size across the platform.",
-        "tier_required": "dhexe",
+        "tier_required": "premium",
+        "live": True,
+        "requires_confirmation": False,
+        "sensitive": False,
+    },
+    "appearance.font_family": {
+        "type": "enum",
+        "default": "default",
+        "allowed_values": ["default", "serif", "sans", "mono", "dyslexic"],
+        "category": "appearance",
+        "label": "Font Family",
+        "description": "Choose the typeface for the interface.",
+        "tier_required": "premium",
         "live": True,
         "requires_confirmation": False,
         "sensitive": False,
@@ -48,7 +62,7 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "category": "appearance",
         "label": "Compact Mode",
         "description": "Reduce padding and margins for a denser layout.",
-        "tier_required": "dhexe",
+        "tier_required": "premium",
         "live": True,
         "requires_confirmation": False,
         "sensitive": False,
@@ -64,8 +78,21 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "requires_confirmation": False,
         "sensitive": False,
     },
+    # Language (gated by language_somali feature — Phase 3+)
+    "appearance.language": {
+        "type": "enum",
+        "default": "en",
+        "allowed_values": ["en", "so"],
+        "category": "appearance",
+        "label": "Language",
+        "description": "Choose the display language.",
+        "tier_required": "pro",
+        "live": True,
+        "requires_confirmation": False,
+        "sensitive": False,
+    },
 
-    # Quiz
+    # ----- Quiz -----
     "quiz.default_question_count": {
         "type": "integer",
         "default": 10,
@@ -95,7 +122,7 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "default": "",
         "category": "quiz",
         "label": "Default Subject",
-        "description": "Pre‑select a subject when starting a new quiz.",
+        "description": "Pre-select a subject when starting a new quiz.",
         "tier_required": None,
         "live": True,
         "requires_confirmation": False,
@@ -116,16 +143,15 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": "boolean",
         "default": False,
         "category": "quiz",
-        "label": "Auto‑advance After Answer",
+        "label": "Auto-advance After Answer",
         "description": "Smoothly move to the next question after answering.",
-        "tier_required": "dhexe",
+        "tier_required": "premium",
         "live": True,
         "requires_confirmation": False,
         "sensitive": False,
     },
-    # ---- REMOVED: quiz.skip_rating_after_quiz ----
 
-    # Notifications
+    # ----- Notifications -----
     "notifications.quiz_complete": {
         "type": "boolean",
         "default": True,
@@ -198,7 +224,7 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "category": "notifications",
         "label": "Daily Digest",
         "description": "Receive a daily summary of platform activity.",
-        "tier_required": "dhexe",
+        "tier_required": "premium",
         "live": True,
         "requires_confirmation": False,
         "sensitive": False,
@@ -209,7 +235,7 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "category": "notifications",
         "label": "Achievement Unlock",
         "description": "Get notified when you earn a new badge.",
-        "tier_required": "dhexe",
+        "tier_required": "premium",
         "live": True,
         "requires_confirmation": False,
         "sensitive": False,
@@ -219,8 +245,8 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "default": True,
         "category": "notifications",
         "label": "Live Quiz Reminder",
-        "description": "5‑minute reminder before a scheduled live quiz.",
-        "tier_required": "dhexe",
+        "description": "5-minute reminder before a scheduled live quiz.",
+        "tier_required": "premium",
         "live": True,
         "requires_confirmation": False,
         "sensitive": False,
@@ -230,14 +256,14 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "default": False,
         "category": "notifications",
         "label": "Weekly Summary",
-        "description": "Get a weekly wrap‑up of your progress.",
-        "tier_required": "hore",
+        "description": "Get a weekly wrap-up of your progress.",
+        "tier_required": "pro",
         "live": True,
         "requires_confirmation": False,
         "sensitive": False,
     },
 
-    # Privacy
+    # ----- Privacy -----
     "privacy.show_on_leaderboard": {
         "type": "boolean",
         "default": True,
@@ -261,7 +287,7 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "sensitive": False,
     },
 
-    # Live Quiz
+    # ----- Live Quiz -----
     "live_quiz.default_time_per_question": {
         "type": "integer",
         "default": 30,
@@ -269,7 +295,7 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "category": "live_quiz",
         "label": "Default Time per Question (seconds)",
         "description": "Default time allowed per question when creating a live quiz.",
-        "tier_required": "dhexe",
+        "tier_required": "premium",
         "live": True,
         "requires_confirmation": False,
         "sensitive": False,
@@ -281,7 +307,7 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "category": "live_quiz",
         "label": "Default Max Participants",
         "description": "Default maximum number of participants.",
-        "tier_required": "dhexe",
+        "tier_required": "premium",
         "live": True,
         "requires_confirmation": False,
         "sensitive": False,
@@ -293,21 +319,26 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "category": "live_quiz",
         "label": "Default Privacy",
         "description": "0 = private, 1 = public.",
-        "tier_required": "dhexe",
+        "tier_required": "premium",
         "live": True,
         "requires_confirmation": False,
         "sensitive": False,
     },
 }
 
+
 def get_setting(key: str) -> Optional[Dict]:
     return SETTINGS_REGISTRY.get(key)
 
+
 def get_settings_by_category(category: str) -> Dict[str, Dict]:
-    return {k: v for k, v in SETTINGS_REGISTRY.items() if v.get("category") == category}
+    return {k: v for k, v in SETTINGS_REGISTRY.items()
+            if v.get("category") == category}
+
 
 def get_all_categories() -> List[str]:
     return sorted({v["category"] for v in SETTINGS_REGISTRY.values()})
+
 
 def get_default(key: str):
     return SETTINGS_REGISTRY.get(key, {}).get("default")

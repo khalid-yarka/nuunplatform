@@ -5,14 +5,8 @@
 
 {% block dashboard_css %}
 <style>
-    /* ============================================
-       PAGE
-       ============================================ */
     .um-page { max-width: 100%; }
 
-    /* ============================================
-       HEADER
-       ============================================ */
     .um-header {
         display: flex;
         justify-content: space-between;
@@ -41,9 +35,6 @@
         flex-wrap: wrap;
     }
 
-    /* ============================================
-       STATS STRIP
-       ============================================ */
     .um-stats {
         display: grid;
         grid-template-columns: repeat(6, 1fr);
@@ -115,9 +106,6 @@
         font-weight: 500;
     }
 
-    /* ============================================
-       TABS
-       ============================================ */
     .um-tabs {
         display: flex;
         flex-wrap: wrap;
@@ -164,9 +152,6 @@
         color: white;
     }
 
-    /* ============================================
-       FILTER BAR
-       ============================================ */
     .um-filter {
         display: flex;
         gap: 10px;
@@ -230,9 +215,6 @@
         outline: none;
     }
 
-    /* ============================================
-       BULK BAR
-       ============================================ */
     .um-bulk-bar {
         display: flex;
         justify-content: space-between;
@@ -286,9 +268,6 @@
     }
     .um-bulk-bar .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    /* ============================================
-       TABLE
-       ============================================ */
     .um-table-wrap {
         position: relative;
         background: var(--surface);
@@ -343,14 +322,12 @@
     .um-table tbody tr:hover { background: var(--primary-light); }
     .um-table tbody tr:last-child td { border-bottom: none; }
 
-    /* Checkbox */
     .cell-check { width: 32px; text-align: center; }
     .cell-check input {
         width: 16px; height: 16px; cursor: pointer;
         accent-color: var(--primary);
     }
 
-    /* User cell */
     .cell-user { min-width: 240px; }
     .user-block { display: flex; align-items: center; gap: 12px; }
     .user-avatar {
@@ -378,7 +355,6 @@
         margin-top: 2px;
     }
 
-    /* Public ID chip */
     .pub-id-chip {
         display: inline-block;
         font-family: 'Courier New', monospace;
@@ -400,7 +376,6 @@
         border-radius: 6px;
     }
 
-    /* Phone cell */
     .cell-phone { white-space: nowrap; font-size: 13px; }
     .phone-wa {
         display: inline-flex; align-items: center; gap: 6px;
@@ -410,10 +385,8 @@
     .phone-wa:hover { color: var(--primary); }
     .phone-wa i { color: #25D366; font-size: 14px; }
 
-    /* Location cell */
     .cell-location { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
 
-    /* Tier pill */
     .tier-pill {
         display: inline-block;
         padding: 3px 10px;
@@ -424,20 +397,17 @@
         letter-spacing: 0.5px;
         white-space: nowrap;
     }
-    .tier-pill.danbe { background: #F3F4F6; color: #4B5563; }
-    .tier-pill.dhexe { background: var(--primary-light); color: var(--primary); }
-    .tier-pill.hore  { background: linear-gradient(135deg, var(--primary), #B91C1C); color: white; }
+    .tier-pill.free    { background: #F3F4F6; color: #4B5563; }
+    .tier-pill.premium { background: var(--primary-light); color: var(--primary); }
+    .tier-pill.pro     { background: linear-gradient(135deg, var(--primary), #B91C1C); color: white; }
 
-    /* Points */
     .cell-points { font-weight: 700; color: var(--primary); font-size: 15px; text-align: right; }
     .cell-points.low { color: var(--text-muted); font-weight: 500; }
     .cell-points.zero { color: var(--text-muted); font-weight: 400; }
 
-    /* Date cells */
     .cell-date { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
     .cell-date strong { color: var(--text); font-weight: 600; }
 
-    /* Actions */
     .cell-actions { text-align: right; white-space: nowrap; position: relative; }
     .action-menu-btn {
         background: transparent;
@@ -458,7 +428,6 @@
         color: var(--primary);
     }
 
-    /* Dropdown menu */
     .um-menu {
         position: fixed;
         background: var(--surface);
@@ -498,7 +467,6 @@
     .um-menu .danger { color: #DC2626; }
     .um-menu .danger:hover { background: #FEF2F2; color: #DC2626; }
 
-    /* Scroll hint */
     .um-scroll-hint {
         display: none;
         text-align: center;
@@ -516,9 +484,6 @@
         50%     { transform: translateX(4px); }
     }
 
-    /* ============================================
-       ZERO STATE
-       ============================================ */
     .um-zero {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -535,9 +500,6 @@
     }
     .um-zero .zero-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 
-    /* ============================================
-       PAGINATION
-       ============================================ */
     .um-pagination {
         display: flex; justify-content: center; align-items: center;
         gap: 6px; margin-top: 24px; flex-wrap: wrap;
@@ -567,9 +529,6 @@
         opacity: 0.4; cursor: not-allowed; pointer-events: none;
     }
 
-    /* ============================================
-       RESPONSIVE
-       ============================================ */
     @media (max-width: 1200px) {
         .um-stats { grid-template-columns: repeat(3, 1fr); }
     }
@@ -606,7 +565,6 @@
         .um-scroll-hint { display: block; }
     }
     @media (max-width: 560px) {
-        /* Card layout */
         .um-table,
         .um-table tbody,
         .um-table tr,
@@ -650,14 +608,12 @@
 {% block dashboard_content %}
 <div class="um-page">
 
-    <!-- BREADCRUMB -->
     <div class="breadcrumb">
         <a href="{{ url_for('admin.dashboard') }}">Admin Dashboard</a>
         <span class="separator">/</span>
         <span class="current">Manage Users</span>
     </div>
 
-    <!-- HEADER -->
     <div class="um-header">
         <div class="title-section">
             <h2>
@@ -682,7 +638,6 @@
         </div>
     </div>
 
-    <!-- STATS -->
     <div class="um-stats">
         <a href="{{ url_for('admin.admin_users') }}" class="um-stat-card">
             <div class="stat-head">
@@ -711,35 +666,34 @@
             <div class="stat-sub">New registrations</div>
         </div>
 
-        <a href="{{ url_for('admin.admin_users', tier='danbe') }}" class="um-stat-card">
+        <a href="{{ url_for('admin.admin_users', tier='free') }}" class="um-stat-card">
             <div class="stat-head">
                 <span class="stat-icon grey">🔓</span>
-                <span class="stat-label">Danbe</span>
+                <span class="stat-label">Free</span>
             </div>
-            <div class="stat-number">{{ stats.danbe }}</div>
+            <div class="stat-number">{{ stats.free }}</div>
             <div class="stat-sub">Basic tier</div>
         </a>
 
-        <a href="{{ url_for('admin.admin_users', tier='dhexe') }}" class="um-stat-card">
+        <a href="{{ url_for('admin.admin_users', tier='premium') }}" class="um-stat-card">
             <div class="stat-head">
                 <span class="stat-icon primary">🔑</span>
-                <span class="stat-label">Dhexe</span>
+                <span class="stat-label">Premium</span>
             </div>
-            <div class="stat-number primary">{{ stats.dhexe }}</div>
+            <div class="stat-number primary">{{ stats.premium }}</div>
             <div class="stat-sub">Advanced tier</div>
         </a>
 
-        <a href="{{ url_for('admin.admin_users', tier='hore') }}" class="um-stat-card">
+        <a href="{{ url_for('admin.admin_users', tier='pro') }}" class="um-stat-card">
             <div class="stat-head">
                 <span class="stat-icon gold">⭐</span>
-                <span class="stat-label">Hore</span>
+                <span class="stat-label">Pro</span>
             </div>
-            <div class="stat-number amber">{{ stats.hore }}</div>
+            <div class="stat-number amber">{{ stats.pro }}</div>
             <div class="stat-sub">Premium tier</div>
         </a>
     </div>
 
-    <!-- TABS -->
     <div class="um-tabs">
         <a href="{{ url_for('admin.admin_users') }}"
            class="um-tab {% if not tier_filter and not only_admins and not only_inactive %}active{% endif %}">
@@ -749,17 +703,17 @@
            class="um-tab {% if only_admins %}active{% endif %}">
             Admins <span class="count">{{ stats.admins }}</span>
         </a>
-        <a href="{{ url_for('admin.admin_users', tier='danbe') }}"
-           class="um-tab {% if tier_filter == 'danbe' %}active{% endif %}">
-            Danbe <span class="count">{{ stats.danbe }}</span>
+        <a href="{{ url_for('admin.admin_users', tier='free') }}"
+           class="um-tab {% if tier_filter == 'free' %}active{% endif %}">
+            Free <span class="count">{{ stats.free }}</span>
         </a>
-        <a href="{{ url_for('admin.admin_users', tier='dhexe') }}"
-           class="um-tab {% if tier_filter == 'dhexe' %}active{% endif %}">
-            Dhexe <span class="count">{{ stats.dhexe }}</span>
+        <a href="{{ url_for('admin.admin_users', tier='premium') }}"
+           class="um-tab {% if tier_filter == 'premium' %}active{% endif %}">
+            Premium <span class="count">{{ stats.premium }}</span>
         </a>
-        <a href="{{ url_for('admin.admin_users', tier='hore') }}"
-           class="um-tab {% if tier_filter == 'hore' %}active{% endif %}">
-            Hore <span class="count">{{ stats.hore }}</span>
+        <a href="{{ url_for('admin.admin_users', tier='pro') }}"
+           class="um-tab {% if tier_filter == 'pro' %}active{% endif %}">
+            Pro <span class="count">{{ stats.pro }}</span>
         </a>
         <a href="{{ url_for('admin.admin_users', inactive='1') }}"
            class="um-tab {% if only_inactive %}active{% endif %}">
@@ -767,7 +721,6 @@
         </a>
     </div>
 
-    <!-- FILTER BAR -->
     <form method="GET" class="um-filter">
         <input type="hidden" name="tier" value="{{ tier_filter }}">
         <input type="hidden" name="admins" value="{{ '1' if only_admins else '' }}">
@@ -795,10 +748,10 @@
         </select>
 
         <select name="sort">
-            <option value="newest"     {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
-            <option value="oldest"     {% if sort == 'oldest' %}selected{% endif %}>Oldest first</option>
-            <option value="name_az"    {% if sort == 'name_az' %}selected{% endif %}>Name A → Z</option>
-            <option value="name_za"    {% if sort == 'name_za' %}selected{% endif %}>Name Z → A</option>
+            <option value="newest"      {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
+            <option value="oldest"      {% if sort == 'oldest' %}selected{% endif %}>Oldest first</option>
+            <option value="name_az"     {% if sort == 'name_az' %}selected{% endif %}>Name A → Z</option>
+            <option value="name_za"     {% if sort == 'name_za' %}selected{% endif %}>Name Z → A</option>
             <option value="points_high" {% if sort == 'points_high' %}selected{% endif %}>Points: high → low</option>
             <option value="points_low"  {% if sort == 'points_low' %}selected{% endif %}>Points: low → high</option>
             <option value="tier_high"   {% if sort == 'tier_high' %}selected{% endif %}>Tier: high → low</option>
@@ -815,7 +768,6 @@
         {% endif %}
     </form>
 
-    <!-- CONTENT -->
     {% if users %}
         {% set has_content = users | length > 0 %}
 
@@ -826,7 +778,6 @@
             <input type="hidden" name="bulk_title" id="bulkTitle" value="">
             <input type="hidden" name="bulk_body" id="bulkBody" value="">
 
-            <!-- Bulk bar -->
             <div class="um-bulk-bar">
                 <div class="bulk-left">
                     <label class="bulk-checkbox">
@@ -861,7 +812,6 @@
                 </div>
             </div>
 
-            <!-- Table -->
             <div class="um-table-wrap" id="umTableWrap">
                 <div class="um-table-scroll" id="umTableScroll">
                     <table class="um-table">
@@ -880,7 +830,7 @@
                         </thead>
                         <tbody>
                             {% for u in users %}
-                                {% set tier = u.tier or 'danbe' %}
+                                {% set tier = normalize_tier(u.tier or 'free') %}
                                 {% set pts = u.total_points or 0 %}
                                 {% set pts_cls = 'zero' if pts == 0 else ('low' if pts < 50 else '') %}
 
@@ -977,7 +927,6 @@
             </div>
         </form>
 
-        <!-- Pagination -->
         {% if total_pages > 1 %}
             <div class="um-pagination">
                 <a href="?page=1&search={{ search }}&tier={{ tier_filter }}&location={{ location_filter }}&curriculum={{ curriculum_filter }}&admins={{ '1' if only_admins else '' }}&inactive={{ '1' if only_inactive else '' }}&sort={{ sort }}"
@@ -1029,9 +978,6 @@
 
 </div>
 
-<!-- ============================================ -->
-<!-- Action menu (single instance, positioned via JS) -->
-<!-- ============================================ -->
 <div class="um-menu" id="umActionMenu">
     <a href="#" id="umMenuView"><i class="fas fa-eye"></i> View Profile</a>
     <a href="#" id="umMenuTier"><i class="fas fa-layer-group"></i> Manage Tier</a>
@@ -1040,9 +986,6 @@
     <a href="#" id="umMenuWhatsApp" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> WhatsApp</a>
 </div>
 
-<!-- ============================================ -->
-<!-- Bulk Tier Modal -->
-<!-- ============================================ -->
 <div class="modal-overlay" id="bulkTierModal">
     <div class="modal-content" style="max-width: 460px;">
         <h3 class="modal-title">🎚️ Change Tier</h3>
@@ -1050,9 +993,9 @@
         <div class="form-group">
             <label class="form-label">New Tier</label>
             <select id="bulkTierSelect" class="form-control">
-                <option value="danbe">🔓 Danbe — Basic</option>
-                <option value="dhexe">🔑 Dhexe — Advanced</option>
-                <option value="hore">⭐ Hore — Premium</option>
+                <option value="free">🔓 Free — Basic</option>
+                <option value="premium">🔑 Premium — Advanced</option>
+                <option value="pro">⭐ Pro — Premium</option>
             </select>
         </div>
         <div class="modal-actions">
@@ -1062,9 +1005,6 @@
     </div>
 </div>
 
-<!-- ============================================ -->
-<!-- Bulk Notify Modal -->
-<!-- ============================================ -->
 <div class="modal-overlay" id="bulkNotifyModal">
     <div class="modal-content" style="max-width: 500px;">
         <h3 class="modal-title">📬 Send Notification</h3>
@@ -1087,9 +1027,6 @@
 </div>
 
 <script>
-// ============================================
-// SELECT ALL / COUNT
-// ============================================
 function toggleAll(source) {
     document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = source.checked);
     updateSelectedCount();
@@ -1112,9 +1049,6 @@ document.querySelectorAll('.row-checkbox').forEach(cb => {
     cb.addEventListener('change', updateSelectedCount);
 });
 
-// ============================================
-// BULK SUBMIT
-// ============================================
 function submitBulk(action) {
     const n = document.querySelectorAll('.row-checkbox:checked').length;
     if (!n) { alert('Select at least one user.'); return; }
@@ -1130,9 +1064,6 @@ function submitBulk(action) {
     document.getElementById('bulkForm').submit();
 }
 
-// ============================================
-// BULK TIER MODAL
-// ============================================
 function openBulkTierModal() {
     document.getElementById('bulkTierModal').classList.add('active');
     document.body.style.overflow = 'hidden';
@@ -1148,9 +1079,6 @@ function confirmBulkTier() {
     document.getElementById('bulkForm').submit();
 }
 
-// ============================================
-// BULK NOTIFY MODAL
-// ============================================
 function openBulkNotifyModal() {
     document.getElementById('bulkNotifyTitle').value = '';
     document.getElementById('bulkNotifyBody').value = '';
@@ -1171,9 +1099,6 @@ function confirmBulkNotify() {
     document.getElementById('bulkForm').submit();
 }
 
-// ============================================
-// ACTION MENU (single menu, positioned on click)
-// ============================================
 let currentMenuBtn = null;
 
 function openActionMenu(e, btn) {
@@ -1187,18 +1112,15 @@ function openActionMenu(e, btn) {
     const last = btn.dataset.last || '';
     const isAdmin = btn.dataset.isAdmin === '1';
 
-    // Configure links
     const base = "{{ url_for('admin.admin_user_detail', user_id=0) }}".replace('/0', '/' + userId);
     document.getElementById('umMenuView').href = base;
     document.getElementById('umMenuTier').href = "{{ url_for('admin.manage_user_tier', user_id=0) }}".replace('/0', '/' + userId);
 
-    // Toggle admin form (post via hidden form? use small inline form submit)
     const toggleBtn = document.getElementById('umMenuToggleAdmin');
     toggleBtn.innerHTML = isAdmin
         ? '<i class="fas fa-user-minus"></i> Remove Admin'
         : '<i class="fas fa-user-shield"></i> Make Admin';
 
-    // We'll POST to toggle-admin via a temporary form on click
     toggleBtn.onclick = function() {
         if (userId == "{{ session.user_id }}") {
             alert("You cannot change your own admin status.");
@@ -1218,20 +1140,14 @@ function openActionMenu(e, btn) {
         f.submit();
     };
 
-    // WhatsApp
-    // Note: we don't have phone in data attrs — add via JS from the row?
-    // Simplest: hide WhatsApp in the menu if no phone is known.
-    // To keep it simple, we skip WhatsApp here (use the phone column link instead).
     document.getElementById('umMenuWhatsApp').style.display = 'none';
 
-    // Position menu
     menu.classList.add('open');
     const rect = btn.getBoundingClientRect();
     menu.style.top = (rect.bottom + 6) + 'px';
     menu.style.left = 'auto';
     menu.style.right = (window.innerWidth - rect.right) + 'px';
 
-    // Ensure within viewport
     const menuRect = menu.getBoundingClientRect();
     if (menuRect.bottom > window.innerHeight - 10) {
         menu.style.top = (rect.top - menuRect.height - 6) + 'px';
@@ -1262,9 +1178,6 @@ window.addEventListener('scroll', function() {
     if (menu) menu.classList.remove('open');
 }, { passive: true });
 
-// ============================================
-// MODAL CLICK OUTSIDE
-// ============================================
 ['bulkTierModal', 'bulkNotifyModal'].forEach(function(id) {
     const el = document.getElementById(id);
     if (el) {
@@ -1277,9 +1190,6 @@ window.addEventListener('scroll', function() {
     }
 });
 
-// ============================================
-// SCROLL HINT
-// ============================================
 document.addEventListener('DOMContentLoaded', function() {
     const scroll = document.getElementById('umTableScroll');
     const wrap = document.getElementById('umTableWrap');

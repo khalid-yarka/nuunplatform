@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = {
                 'privacy.show_on_leaderboard': document.getElementById('show_on_leaderboard').checked,
                 'privacy.show_public_id': document.getElementById('show_public_id').checked,
-                'privacy.show_statistics': document.getElementById('show_statistics').checked
+                'privacy.show_statistics': document.getElementById('show_statistics')?.checked || false
             };
             submitForm('/settings/api', data, 'Privacy settings saved!');
         });
@@ -234,9 +234,9 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
             const feature = this.dataset.feature;
-            const requiredTier = this.dataset.requiredTier || 'dhexe';
-            if (typeof window.openSafkaPreview === 'function') {
-                window.openSafkaPreview({ feature: feature, requiredTier: requiredTier });
+            const requiredTier = this.dataset.requiredTier || 'premium';
+            if (typeof window.openUpgradeSheet === 'function') {
+                window.openUpgradeSheet({ feature: feature, requiredTier: requiredTier });
             }
         });
     });

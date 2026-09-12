@@ -171,9 +171,8 @@ def admin_users():
     total_pages = (total + per_page - 1) // per_page if total > 0 else 1
     stats = get_users_admin_stats()
 
-    # Add tier value per user via service
     for user in users:
-        user['tier'] = user.get('tier') or 'danbe'
+        user['tier'] = user.get('tier') or 'free'
 
     return render_template(
         'dashboard/admin/users.html',
@@ -233,13 +232,12 @@ def admin_user_detail(user_id):
         flash('User not found.', 'error')
         return redirect(url_for('admin.admin_users'))
 
-    user['tier'] = user.get('tier') or 'danbe'
+    user['tier'] = user.get('tier') or 'free'
 
     quizzes = get_user_recent_quizzes_admin(user_id, limit=20)
     live_quizzes = get_user_recent_live_quizzes(user_id, limit=10)
     history = get_user_admin_history(user_id, limit=50)
 
-    # Simple aggregations for the overview tab
     total_quizzes = len(quizzes)
     avg_score = 0
     if quizzes:
@@ -396,7 +394,6 @@ def admin_users_bulk():
         flash('Invalid user selection.', 'error')
         return redirect(request.referrer or url_for('admin.admin_users'))
 
-    # Prevent acting on self for destructive actions
     user_ids = [u for u in user_ids if u != session['user_id'] or action not in ('delete', 'demote_admin')]
 
     extra = {}
@@ -456,7 +453,7 @@ def manage_user_tier(user_id):
     if request.method == 'POST':
         validate_csrf()
         new_tier = request.form.get('tier')
-        if new_tier not in ['danbe', 'dhexe', 'hore']:
+        if new_tier not in ['free', 'premium', 'pro']:
             flash('Invalid tier value.', 'error')
             return redirect(url_for('admin.manage_user_tier', user_id=user_id))
 

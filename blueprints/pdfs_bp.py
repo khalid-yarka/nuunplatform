@@ -1,15 +1,20 @@
 # blueprints/pdfs_bp.py
 import os
-from flask import Blueprint, render_template, request, session, flash, redirect, url_for, abort, send_file, Response, jsonify
+from flask import (
+    Blueprint, render_template, request, session, flash,
+    redirect, url_for, abort, send_file, Response, jsonify,
+)
 from db import (
     get_all_pdfs, get_pdf_by_code, get_pdf_by_id, increment_pdf_view,
-    get_pdf_distinct_subjects, get_pdf_distinct_classes, get_pdf_distinct_curricula
+    get_pdf_distinct_subjects, get_pdf_distinct_classes, get_pdf_distinct_curricula,
 )
-from services.tier_service import can_access_premium_resources, get_user_tier, get_feature_level
+from services.tier_service import (
+    can_access_premium_resources, get_user_tier, get_feature_level,
+)
 from bot.utils import get_bot
 from bot.db import get_bot_pdf_by_code
 from config import Config
-from history_logger import add_history_entry   # NEW
+from history_logger import add_history_entry
 import requests
 import logging
 
@@ -32,7 +37,7 @@ def list_pdfs():
         search_level = get_feature_level("resource_search", user_id)
         can_access_premium = can_access_premium_resources()
     else:
-        user_tier = 'danbe'
+        user_tier = 'free'
         search_level = 0
         can_access_premium = False
 
@@ -85,7 +90,6 @@ def view_pdf(pdf_id):
 
     increment_pdf_view(pdf_id)
 
-    # ***** ADD HISTORY ENTRY *****
     add_history_entry(
         user_id=user_id,
         entry_type='pdf_view',
@@ -118,7 +122,6 @@ def download_pdf(pdf_id):
         flash('This is a premium resource. Upgrade to access it.', 'error')
         return redirect(url_for('pdfs.list_pdfs'))
 
-    # ***** ADD HISTORY ENTRY *****
     add_history_entry(
         user_id=user_id,
         entry_type='pdf_download',
@@ -130,7 +133,7 @@ def download_pdf(pdf_id):
         }
     )
 
-    if user_tier == 'hore' and pdf.get('file_url'):
+    if user_tier == 'pro' and pdf.get('file_url'):
         file_path = pdf['file_url']
         if os.path.exists(file_path):
             return send_file(file_path, as_attachment=True, download_name=pdf.get('title', 'document.pdf'))
@@ -148,7 +151,6 @@ def telegram_download(code):
         flash('PDF not found.', 'error')
         return redirect(url_for('pdfs.list_pdfs'))
 
-    # ***** ADD HISTORY ENTRY *****
     if 'user_id' in session:
         add_history_entry(
             user_id=session['user_id'],
@@ -175,7 +177,7 @@ def stream_pdf(code):
     user_id = session['user_id']
     user_tier = get_user_tier(user_id)
 
-    if user_tier not in ['dhexe', 'hore']:
+    if user_tier not in ['premium', 'pro']:
         return jsonify({'error': 'Upgrade to access this feature.'}), 403
 
     main_pdf = get_pdf_by_code(code)

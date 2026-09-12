@@ -1,7 +1,6 @@
 {% extends "dashboard_base.html" %}
 
 {% block title %}Manage User Tier - Admin{% endblock %}
-
 {% block page_title %}Manage User Tier{% endblock %}
 
 {% block extra_css %}
@@ -119,9 +118,9 @@
         margin-left: 8px;
     }
 
-    .tier-option .tier-badge.danbe { background: var(--background); color: var(--text-secondary); }
-    .tier-option .tier-badge.dhexe { background: var(--primary-light); color: var(--primary); }
-    .tier-option .tier-badge.hore { background: linear-gradient(135deg, var(--primary), #B91C1C); color: white; }
+    .tier-option .tier-badge.free    { background: var(--background); color: var(--text-secondary); }
+    .tier-option .tier-badge.premium { background: var(--primary-light); color: var(--primary); }
+    .tier-option .tier-badge.pro     { background: linear-gradient(135deg, var(--primary), #B91C1C); color: white; }
 
     .tier-option .current-badge {
         font-size: 11px;
@@ -223,47 +222,51 @@
             Select Tier
         </h3>
 
+        {% set current = normalize_tier(current_tier) %}
+
         <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;">
-            Current tier: <strong>{{ current_tier|capitalize }}</strong>
-            <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">(Admin: {{ admin_tier|capitalize }})</span>
+            Current tier: <strong>{{ current|capitalize }}</strong>
+            <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">
+                (Admin: {{ normalize_tier(admin_tier)|capitalize }})
+            </span>
         </p>
 
-        <!-- Danbe -->
-        <label class="tier-option {% if current_tier == 'danbe' %}selected{% endif %}">
-            <input type="radio" name="tier" value="danbe" class="tier-radio" {% if current_tier == 'danbe' %}checked{% endif %}>
+        <!-- Free -->
+        <label class="tier-option {% if current == 'free' %}selected{% endif %}">
+            <input type="radio" name="tier" value="free" class="tier-radio" {% if current == 'free' %}checked{% endif %}>
             <span class="tier-icon">🔓</span>
             <div class="tier-info">
-                <div class="tier-name">Safka Danbe</div>
+                <div class="tier-name">Free</div>
                 <div class="tier-desc">Basic access with limited features and quotas.</div>
             </div>
-            <span class="tier-badge danbe">Free</span>
-            {% if current_tier == 'danbe' %}<span class="current-badge">Current</span>{% endif %}
+            <span class="tier-badge free">Free</span>
+            {% if current == 'free' %}<span class="current-badge">Current</span>{% endif %}
             <span class="tier-check"><i class="fas fa-check-circle"></i></span>
         </label>
 
-        <!-- Dhexe -->
-        <label class="tier-option {% if current_tier == 'dhexe' %}selected{% endif %}">
-            <input type="radio" name="tier" value="dhexe" class="tier-radio" {% if current_tier == 'dhexe' %}checked{% endif %}>
+        <!-- Premium -->
+        <label class="tier-option {% if current == 'premium' %}selected{% endif %}">
+            <input type="radio" name="tier" value="premium" class="tier-radio" {% if current == 'premium' %}checked{% endif %}>
             <span class="tier-icon">🔑</span>
             <div class="tier-info">
-                <div class="tier-name">Safka Dhexe</div>
+                <div class="tier-name">Premium</div>
                 <div class="tier-desc">Advanced features, more quotas, and live quiz hosting.</div>
             </div>
-            <span class="tier-badge dhexe">Advanced</span>
-            {% if current_tier == 'dhexe' %}<span class="current-badge">Current</span>{% endif %}
+            <span class="tier-badge premium">Premium</span>
+            {% if current == 'premium' %}<span class="current-badge">Current</span>{% endif %}
             <span class="tier-check"><i class="fas fa-check-circle"></i></span>
         </label>
 
-        <!-- Hore -->
-        <label class="tier-option {% if current_tier == 'hore' %}selected{% endif %}">
-            <input type="radio" name="tier" value="hore" class="tier-radio" {% if current_tier == 'hore' %}checked{% endif %}>
+        <!-- Pro -->
+        <label class="tier-option {% if current == 'pro' %}selected{% endif %}">
+            <input type="radio" name="tier" value="pro" class="tier-radio" {% if current == 'pro' %}checked{% endif %}>
             <span class="tier-icon">⭐</span>
             <div class="tier-info">
-                <div class="tier-name">Safka Hore</div>
+                <div class="tier-name">Pro</div>
                 <div class="tier-desc">Complete access with unlimited features and premium resources.</div>
             </div>
-            <span class="tier-badge hore">Premium</span>
-            {% if current_tier == 'hore' %}<span class="current-badge">Current</span>{% endif %}
+            <span class="tier-badge pro">Pro</span>
+            {% if current == 'pro' %}<span class="current-badge">Current</span>{% endif %}
             <span class="tier-check"><i class="fas fa-check-circle"></i></span>
         </label>
 

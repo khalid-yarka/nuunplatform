@@ -12,11 +12,26 @@ load_dotenv(env_path)
 BASE_DIR = Path(__file__).resolve().parent
 
 
+def _env_bool(key: str, default: str = 'false') -> bool:
+    return os.getenv(key, default).lower() in ('true', '1', 'yes', 'on')
+
+
 class Config:
+    # ============================================
+    # DEBUG / DEV MODE
+    # ============================================
+    # `DEBUG=true` enables verbose logging, console output, Flask debug,
+    # SQL echoing, and the detailed 500 error page. `FLASK_DEBUG` is
+    # kept for backward compatibility — if either is true, DEBUG is true.
+    """DEBUG = (
+        _env_bool('DEBUG', 'false')
+        or _env_bool('FLASK_DEBUG', 'false')
+    )"""
+    DEBUG=True
+
     # ============================================
     # SECURITY
     # ============================================
-    
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
     ADMIN_ERROR_PASSWORD = os.getenv('ADMIN_ERROR_PASSWORD', 'samir')
     SUPER_ADMIN_PHONE = os.getenv('SUPER_ADMIN_PHONE', '')
@@ -24,7 +39,6 @@ class Config:
     # ============================================
     # DATABASE (Main)
     # ============================================
-
     DATABASE_PATH = os.getenv('DATABASE_PATH')
     if DATABASE_PATH:
         if not os.path.isabs(DATABASE_PATH):
@@ -35,7 +49,6 @@ class Config:
     # ============================================
     # BOT DATABASE (separate)
     # ============================================
-
     BOT_DATABASE_PATH = os.getenv('BOT_DATABASE_PATH', str(BASE_DIR / 'bot_data.db'))
 
     DB_TIMEOUT = float(os.getenv('DB_TIMEOUT', '30.0'))
@@ -48,19 +61,17 @@ class Config:
     # ============================================
     # SESSION
     # ============================================
-
     SESSION_TYPE = 'filesystem'
     PERMANENT_SESSION_LIFETIME_DAYS = int(os.getenv('PERMANENT_SESSION_LIFETIME_DAYS', '1'))
     PERMANENT_SESSION_LIFETIME = timedelta(days=PERMANENT_SESSION_LIFETIME_DAYS)
-    SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
-    SESSION_COOKIE_HTTPONLY = os.getenv('SESSION_COOKIE_HTTPONLY', 'true').lower() == 'true'
+    SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', 'false')
+    SESSION_COOKIE_HTTPONLY = _env_bool('SESSION_COOKIE_HTTPONLY', 'true')
     SESSION_COOKIE_SAMESITE = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
     ADMIN_SESSION_TIMEOUT = int(os.getenv('ADMIN_SESSION_TIMEOUT', '1800'))
 
     # ============================================
     # PATHS
     # ============================================
-
     BACKUP_DIR = os.getenv('BACKUP_DIR')
     if BACKUP_DIR:
         if not os.path.isabs(BACKUP_DIR):
@@ -84,8 +95,7 @@ class Config:
     # ============================================
     # BACKUP
     # ============================================
-
-    BACKUP_ENABLED = os.getenv('BACKUP_ENABLED', 'true').lower() == 'true'
+    BACKUP_ENABLED = _env_bool('BACKUP_ENABLED', 'true')
     BACKUP_TRIGGER_TOKEN = os.getenv('BACKUP_TRIGGER_TOKEN', 'change_this_token_in_production')
     BACKUP_RETENTION_DAILY = int(os.getenv('BACKUP_RETENTION_DAILY', '7'))
     BACKUP_RETENTION_WEEKLY = int(os.getenv('BACKUP_RETENTION_WEEKLY', '4'))
@@ -94,7 +104,6 @@ class Config:
     # ============================================
     # QUIZ
     # ============================================
-
     RATING_TIME = int(os.getenv('RATING_TIME', '10'))
     LIVE_QUIZ_TIME_PER_QUESTION = int(os.getenv('LIVE_QUIZ_TIME_PER_QUESTION', '30'))
     LIVE_QUIZ_MAX_PARTICIPANTS = int(os.getenv('LIVE_QUIZ_MAX_PARTICIPANTS', '50'))
@@ -102,7 +111,6 @@ class Config:
     # ============================================
     # RATE LIMITING
     # ============================================
-
     RATE_LIMIT_DEFAULT = os.getenv('RATE_LIMIT_DEFAULT', '200 per day;50 per hour')
     RATE_LIMIT_LOGIN = os.getenv('RATE_LIMIT_LOGIN', '5 per minute')
     RATE_LIMIT_ADMIN = os.getenv('RATE_LIMIT_ADMIN', '10 per minute')
@@ -110,15 +118,20 @@ class Config:
     # ============================================
     # LOGGING
     # ============================================
+    # Levels
+    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+    # Rotation (in DEBUG mode we allow a bit more room for troubleshooting)
+    LOG_MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', str(2 * 1024 * 1024)))
+    LOG_BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', '3'))
 
-    LOG_LEVEL = os.getenv('LOG_LEVEL', 'WARNING')
-    LOG_MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', str(10 * 1024 * 1024)))
-    LOG_BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', '5'))
+    # Dev-only flags (ignored unless DEBUG is true)
+    LOG_CONSOLE = _env_bool('LOG_CONSOLE', 'false')  # mirror INFO+ to stdout in dev
+    LOG_ACCESS = _env_bool('LOG_ACCESS', 'false')     # write access.log in dev
+    LOG_SQL = _env_bool('LOG_SQL', 'false')           # echo SQL statements in dev
 
     # ============================================
     # EMAIL (admin-only, for error dashboard)
     # ============================================
-
     SMTP_HOST = os.getenv('SMTP_HOST', 'smtp.gmail.com')
     SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
     SMTP_USER = os.getenv('SMTP_USER', '')
@@ -131,20 +144,18 @@ class Config:
     # ============================================
     # ERROR LOGGING
     # ============================================
-
     ERROR_RETENTION_DAYS = int(os.getenv('ERROR_RETENTION_DAYS', '30'))
     ERROR_LOG_SAMPLE_RATE = float(os.getenv('ERROR_LOG_SAMPLE_RATE', '1.0'))
 
     # ============================================
     # CACHE
     # ============================================
-
     REDIS_URL = os.getenv('REDIS_URL', '')
     CACHE_LOCAL_MAX_SIZE = int(os.getenv('CACHE_LOCAL_MAX_SIZE', '1000'))
     CACHE_LOCAL_TTL = int(os.getenv('CACHE_LOCAL_TTL', '60'))
     CACHE_SERIALIZATION = os.getenv('CACHE_SERIALIZATION', 'json')
     REDIS_MAX_CONNECTIONS = int(os.getenv('REDIS_MAX_CONNECTIONS', '10'))
-    CACHE_WORKER_ENABLED = os.getenv('CACHE_WORKER_ENABLED', 'false').lower() == 'true'
+    CACHE_WORKER_ENABLED = _env_bool('CACHE_WORKER_ENABLED', 'false')
 
     CACHE_TTL = {
         'user': {'profile': 300, 'preferences': 600},
@@ -161,7 +172,6 @@ class Config:
     # ============================================
     # TELEGRAM BOT (Webhook Mode)
     # ============================================
-
     TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
     TELEGRAM_BOT_USERNAME = os.getenv('TELEGRAM_BOT_USERNAME', 'nuunplatform_bot')
     TELEGRAM_ADMIN_IDS = os.getenv('TELEGRAM_ADMIN_IDS', '')
@@ -170,7 +180,6 @@ class Config:
     # ============================================
     # PDF ADMIN PANEL
     # ============================================
-
     PDF_ADMIN_SECRET_PATH = os.getenv('PDF_ADMIN_SECRET_PATH', '')
     PDF_ADMIN_PASSWORD = os.getenv('PDF_ADMIN_PASSWORD', 'admin123')
     PDF_SUPER_ADMIN_PASSWORD = os.getenv('PDF_SUPER_ADMIN_PASSWORD', 'super123')
@@ -179,14 +188,12 @@ class Config:
     # ============================================
     # FLASK / RUN
     # ============================================
-
-    FLASK_DEBUG = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+    FLASK_DEBUG = DEBUG  # kept as alias
     PORT = int(os.getenv('PORT', 5000))
 
     # ============================================
     # DIRECTORY CREATION & VALIDATION
     # ============================================
-
     @classmethod
     def ensure_directories(cls):
         directories = [
@@ -223,7 +230,6 @@ class Config:
     # ============================================
     # GROUP JOIN RULES
     # ============================================
-
     GROUP_JOIN_RULES = """
 📋 **Group Participation Rules**
 
@@ -243,6 +249,7 @@ By proceeding, you agree to these rules.
 Config.ensure_directories()
 
 print(f"✅ Config loaded successfully!")
+print(f"   Debug mode: {Config.DEBUG}")
 print(f"   Database: {Config.DATABASE_PATH}")
 print(f"   Backup Dir: {Config.BACKUP_DIR}")
 print(f"   Log Dir: {Config.LOG_DIR}")

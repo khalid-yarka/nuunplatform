@@ -1,6 +1,7 @@
 {% extends "settings/base.html" %}
 
 {% block settings_content %}
+{% set t = normalize_tier(tier) %}
 <div class="settings-landing" id="landing">
     <div class="settings-landing-header">
         <h2>Customize Your Experience</h2>
@@ -175,7 +176,7 @@
                 </div>
             </div>
             <div class="form-row toggle-group">
-                <div class="toggle-item {% if tier == 'danbe' %}locked{% endif %}">
+                <div class="toggle-item {% if t == 'free' %}locked{% endif %}">
                     <label class="toggle-label">
                         <span class="toggle-text">🚀 Auto‑advance after answering</span>
                         <span class="toggle-switch">
@@ -184,14 +185,14 @@
                         </span>
                     </label>
                     <p class="toggle-desc">
-                        {% if tier == 'danbe' %}
+                        {% if t == 'free' %}
                             <span class="locked-hint"><i class="fas fa-lock"></i> Upgrade to Dhexe or Hore to enable.</span>
                         {% else %}
                             Smoothly move to the next question after answering.
                         {% endif %}
                     </p>
-                    {% if tier == 'danbe' %}
-                        <button class="btn btn-sm btn-secondary upgrade-btn" data-feature="auto_skip" data-required-tier="dhexe">Upgrade</button>
+                    {% if t == 'free' %}
+                        <button class="btn btn-sm btn-secondary upgrade-btn" data-feature="auto_skip" data-required-tier="premium">Upgrade</button>
                     {% endif %}
                 </div>
             </div>
@@ -272,7 +273,7 @@
                     </label>
                 </div>
             </div>
-            <div class="form-row toggle-group tier-locked" data-tier="dhexe">
+            <div class="form-row toggle-group tier-locked" data-tier="premium">
                 <div class="toggle-item">
                     <label class="toggle-label">
                         <span class="toggle-text">Daily Digest</span>
@@ -294,7 +295,7 @@
                     <p class="toggle-desc">Get notified when you earn a new badge.</p>
                 </div>
             </div>
-            <div class="form-row toggle-group tier-locked" data-tier="dhexe">
+            <div class="form-row toggle-group tier-locked" data-tier="premium">
                 <div class="toggle-item">
                     <label class="toggle-label">
                         <span class="toggle-text">Live Quiz Reminder</span>
@@ -306,7 +307,7 @@
                     <p class="toggle-desc">5‑minute reminder before a scheduled live quiz.</p>
                 </div>
             </div>
-            <div class="form-row toggle-group tier-locked" data-tier="hore">
+            <div class="form-row toggle-group tier-locked" data-tier="pro">
                 <div class="toggle-item">
                     <label class="toggle-label">
                         <span class="toggle-text">Weekly Summary</span>
@@ -457,17 +458,17 @@
 
         <div class="tier-summary">
             <div class="tier-info-box">
-                <div class="tier-icon">{% if tier == 'danbe' %}🔓{% elif tier == 'dhexe' %}🔑{% else %}⭐{% endif %}</div>
+                <div class="tier-icon">{% if t == 'free' %}🔓{% elif t == 'premium' %}🔑{% else %}⭐{% endif %}</div>
                 <div>
                     <h4>{{ tier|capitalize }}</h4>
                     <p class="tier-desc">
-                        {% if tier == 'danbe' %}Basic access with essential features.{% elif tier == 'dhexe' %}Advanced features, more quotas, and live quiz hosting.{% else %}Complete access with unlimited features and premium resources.{% endif %}
+                        {% if t == 'free' %}Basic access with essential features.{% elif t == 'premium' %}Advanced features, more quotas, and live quiz hosting.{% else %}Complete access with unlimited features and premium resources.{% endif %}
                     </p>
                 </div>
             </div>
-            {% if tier != 'hore' %}
+            {% if t != 'pro' %}
                 <div class="upgrade-prompt">
-                    <button class="btn btn-primary upgrade-btn" data-feature="upgrade" data-required-tier="hore">Upgrade Now</button>
+                    <button class="btn btn-primary upgrade-btn" data-feature="upgrade" data-required-tier="pro">Upgrade Now</button>
                 </div>
             {% endif %}
         </div>
@@ -476,7 +477,7 @@
             {% for feature in tier_features %}
                 <div class="feature-card {% if not feature.available %}locked{% endif %}" 
                      data-feature="{{ feature.key }}"
-                     data-required-tier="{{ feature.tier_required or 'danbe' }}"
+                     data-required-tier="{{ feature.tier_required or 'free' }}"
                      onclick="toggleFeatureInfo(this)">
                     <div class="feature-icon">{{ feature.icon or '⚙️' }}</div>
                     <div class="feature-content">
@@ -496,7 +497,7 @@
                             <p>{{ feature.description }}</p>
                             {% if not feature.available %}
                                 <p class="upgrade-hint">Requires <strong>{{ feature.tier_required|capitalize }}</strong></p>
-                                <button class="btn btn-sm btn-primary upgrade-btn" data-feature="{{ feature.key }}" data-required-tier="{{ feature.tier_required or 'dhexe' }}">Upgrade</button>
+                                <button class="btn btn-sm btn-primary upgrade-btn" data-feature="{{ feature.key }}" data-required-tier="{{ feature.tier_required or 'premium' }}">Upgrade</button>
                             {% endif %}
                         </div>
                     </div>
@@ -1125,9 +1126,9 @@
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 const feature = this.dataset.feature;
-                const requiredTier = this.dataset.requiredTier || 'dhexe';
-                if (typeof window.openSafkaPreview === 'function') {
-                    window.openSafkaPreview({ feature: feature, requiredTier: requiredTier });
+                const requiredTier = this.dataset.requiredTier || 'premium';
+                if (typeof window.openUpgradeSheet === 'function') {
+                    window.openUpgradeSheet({ feature: feature, requiredTier: requiredTier });
                 }
             });
         });

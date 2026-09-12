@@ -6,6 +6,8 @@
 
 {% block extra_css %}
 {{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-core.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-shared.css') }}" />
 <style>
     .redirect-container {
         max-width: 600px;

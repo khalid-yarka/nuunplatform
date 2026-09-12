@@ -69,7 +69,7 @@
 {% block extra_css %}
 {{ super() }}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/safka.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/upgrade.css') }}" />
 {% block dashboard_css %}{% endblock %}
 {% endblock %}
 
@@ -103,10 +103,11 @@
            title="View profile">
             <div class="avatar avatar-primary">
                 {{ session.user_name[0] if session.user_name else 'U' }}
-                {% if session.tier == 'hore' %}
-                    <span class="tier-badge tier-hore" title="Safka Hore"><i class="fas fa-crown"></i></span>
-                {% elif session.tier == 'dhexe' %}
-                    <span class="tier-badge tier-dhexe" title="Safka Dhexe"><i class="fas fa-key"></i></span>
+                {% set current_tier = normalize_tier(session.tier) %}
+                {% if current_tier == 'pro' %}
+                    <span class="tier-badge tier-pro" title="Pro"><i class="fas fa-crown"></i></span>
+                {% elif current_tier == 'premium' %}
+                    <span class="tier-badge tier-premium" title="Premium"><i class="fas fa-key"></i></span>
                 {% endif %}
             </div>
             <div class="user-details">
@@ -350,27 +351,27 @@
 </div>
 
 <!-- ============================================ -->
-<!-- SAFKA PREVIEW SHEET -->
+<!-- UPGRADE SHEET                                -->
 <!-- ============================================ -->
-<div class="safka-sheet__backdrop" id="safkaBackdrop"></div>
-<div class="safka-sheet" id="safkaSheet" role="dialog" aria-modal="true" aria-label="Safka Tiers Preview">
-    <div class="safka-sheet__handle" id="safkaHandle"></div>
-    <button class="safka-sheet__close" id="safkaClose" aria-label="Close preview">&times;</button>
-    <div class="safka-sheet__content">
-        <div class="safka-carousel">
-            <div class="safka-carousel__track" id="safkaTrack">
+<div class="upgrade-sheet__backdrop" id="upgradeBackdrop"></div>
+<div class="upgrade-sheet" id="upgradeSheet" role="dialog" aria-modal="true" aria-label="Upgrade Tiers Preview">
+    <div class="upgrade-sheet__handle" id="upgradeHandle"></div>
+    <button class="upgrade-sheet__close" id="upgradeClose" aria-label="Close preview">&times;</button>
+    <div class="upgrade-sheet__content">
+        <div class="upgrade-carousel">
+            <div class="upgrade-carousel__track" id="upgradeTrack">
                 <!-- Rendered by JS -->
             </div>
         </div>
-        <div class="safka-pagination" id="safkaPagination" style="display:none;">
-            <button class="safka-pagination__dot active" data-slide="0" aria-label="Slide 1"></button>
-            <button class="safka-pagination__dot" data-slide="1" aria-label="Slide 2"></button>
-            <button class="safka-pagination__dot" data-slide="2" aria-label="Slide 3"></button>
+        <div class="upgrade-pagination" id="upgradePagination" style="display:none;">
+            <button class="upgrade-pagination__dot active" data-slide="0" aria-label="Slide 1"></button>
+            <button class="upgrade-pagination__dot" data-slide="1" aria-label="Slide 2"></button>
+            <button class="upgrade-pagination__dot" data-slide="2" aria-label="Slide 3"></button>
         </div>
     </div>
 </div>
 <!-- ============================================ -->
-<!-- END SAFKA PREVIEW SHEET -->
+<!-- END UPGRADE SHEET                            -->
 <!-- ============================================ -->
 
 {% endblock %}
@@ -379,7 +380,7 @@
 {{ super() }}
 <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
-<script src="{{ url_for('static', filename='js/safka.js') }}"></script>
+<script src="{{ url_for('static', filename='js/upgrade.js') }}"></script>
 <script src="{{ url_for('static', filename='js/font-size-fix.js') }}"></script>
 {% block dashboard_js %}{% endblock %}
 

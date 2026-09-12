@@ -6,7 +6,9 @@
 
 {% block extra_css %}
 {{ super() }}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-core.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-flow.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-shared.css') }}" />
 <style>
     .result-hero .medal {
         font-size: 48px;
@@ -47,7 +49,7 @@
     .leaderboard-full .row .rank-badge.medal.gold { color: #F59E0B; }
     .leaderboard-full .row .rank-badge.medal.silver { color: #9CA3AF; }
     .leaderboard-full .row .rank-badge.medal.bronze { color: #D97706; }
-    
+
     @media (max-width: 480px) {
         .result-hero .medal {
             font-size: 32px;
@@ -205,7 +207,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const quizId = '{{ quiz.id }}';
     const isCreator = {{ 'true' if is_creator else 'false' }};
     const totalParticipants = {{ participants|length }};
-    
+
     function pollResults() {
         fetch('/live-quiz/quiz-state/' + quizId + '?t=' + Date.now())
             .then(response => response.json())
@@ -215,12 +217,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     setTimeout(pollResults, 5000);
                     return;
                 }
-                
+
                 const countEl = document.getElementById('participantCount');
                 if (countEl && data.total_participants !== undefined) {
                     countEl.textContent = data.total_participants;
                 }
-                
+
                 setTimeout(pollResults, 3000);
             })
             .catch(function(err) {
@@ -228,14 +230,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 setTimeout(pollResults, 5000);
             });
     }
-    
-    function fetchLeaderboard() {
-        fetch('/live-quiz/leaderboard/' + quizId + '?t=' + Date.now())
-            .then(response => response.json())
-            .then(data => {})
-            .catch(function(err) {});
-    }
-    
+
     if (isCreator) {
         fetch('/live-quiz/analysis/' + quizId + '?t=' + Date.now())
             .then(response => response.json())
@@ -277,12 +272,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
     }
-    
+
     function exportResults() {
         window.location.href = '/live-quiz/export/' + quizId;
     }
     window.exportResults = exportResults;
-    
+
     const hero = document.getElementById('resultHero');
     if (hero) {
         const rank = {{ user_participant.ranking if user_participant else 0 }};

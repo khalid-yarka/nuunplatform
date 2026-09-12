@@ -6,14 +6,11 @@
 
 {% block extra_css %}
 {{ super() }}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-core.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-lobby.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-shared.css') }}" />
 <style>
-    .lobby-container { max-width: 100%; }
-    .lobby-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
-    .lobby-header .title-section h2 { font-size: 24px; font-weight: 700; color: var(--text); margin: 0; display: flex; align-items: center; gap: 10px; }
-    .lobby-header .title-section p { color: var(--text-secondary); font-size: 14px; margin: 2px 0 0 0; }
-    .lobby-header .actions { display: flex; gap: 10px; flex-wrap: wrap; }
-
+    /* Lobby-specific supplemental styles (page-local) */
     .lobby-filters {
         display: flex;
         flex-wrap: wrap;
@@ -93,7 +90,6 @@
         border-color: var(--primary);
         color: var(--primary);
     }
-
     .auto-sync-status {
         font-size: 12px;
         color: var(--text-muted);
@@ -109,10 +105,6 @@
         background: #10B981;
         display: inline-block;
         animation: pulse-dot 2s ease-in-out infinite;
-    }
-    @keyframes pulse-dot {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.3; }
     }
 
     .quiz-card {
@@ -254,7 +246,6 @@
         margin-top: 16px;
     }
 
-    /* Locked feature styles */
     .locked-btn {
         opacity: 0.7;
         cursor: pointer;
@@ -265,9 +256,6 @@
         margin-right: 4px;
     }
 
-    /* ============================================
-       LOBBY PAGINATION (redesigned)
-       ============================================ */
     .lobby-pagination-wrap {
         display: flex;
         justify-content: space-between;
@@ -356,7 +344,6 @@
 {% block dashboard_content %}
 <div class="lobby-container" id="lobbyContainer">
 
-    <!-- Header -->
     <div class="lobby-header">
         <div class="title-section">
             <h2>🎯 Live Quiz Lobby</h2>
@@ -371,8 +358,8 @@
                 <button class="btn btn-secondary locked-btn"
                         data-tier-locked
                         data-feature="create_live_quiz"
-                        data-required-tier="dhexe"
-                        title="Upgrade to Safka Dhexe or Hore to create live quizzes.">
+                        data-required-tier="premium"
+                        title="Upgrade to Premium or Pro to create live quizzes.">
                     <i class="fas fa-lock lock-icon"></i> Create Quiz (Upgrade)
                 </button>
             {% endif %}
@@ -382,7 +369,6 @@
         </div>
     </div>
 
-    <!-- Stats -->
     <div class="lobby-stats" id="lobbyStats">
         <div class="lobby-stat scheduled">
             <div class="number">{{ stats.scheduled_count or 0 }}</div>
@@ -410,7 +396,6 @@
         </div>
     </div>
 
-    <!-- Filter Bar -->
     <div class="lobby-filters" id="filterBar">
         <div class="search-wrapper">
             <i class="fas fa-search"></i>
@@ -444,18 +429,16 @@
         </button>
 
         <span class="auto-sync-status">
-            <span class="sync-dot"></span> Auto‑sync
+            <span class="sync-dot"></span> Auto-sync
         </span>
     </div>
 
-    <!-- Quiz List -->
     <div id="quizListContainer">
         {% include "dashboard/live_quiz/_lobby_quizzes.html" %}
     </div>
 
 </div>
 
-<!-- Delete Confirmation Modal -->
 <div id="deleteModal" class="modal-overlay">
     <div class="modal-content">
         <div class="text-center" style="margin-bottom: 16px;">
@@ -478,9 +461,6 @@
 </div>
 
 <script>
-// ============================================
-// CSRF TOKEN
-// ============================================
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -493,9 +473,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let autoRefreshInterval = null;
     let currentPage = 1;
 
-    // ============================================
-    // APPLY FILTERS (with debounce)
-    // ============================================
     function applyFilters() {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(function() {
@@ -503,9 +480,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 500);
     }
 
-    // ============================================
-    // TOGGLE CLEAR BUTTON VISIBILITY
-    // ============================================
     function updateClearButtonVisibility() {
         const btn = document.getElementById('clearFiltersBtn');
         if (!btn) return;
@@ -515,9 +489,6 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.style.display = hasFilter ? '' : 'none';
     }
 
-    // ============================================
-    // REFRESH LOBBY (AJAX)
-    // ============================================
     function refreshLobby(pageOverride) {
         const params = new URLSearchParams();
         const search = searchInput.value.trim();
@@ -528,7 +499,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (status) params.set('status', status);
         if (subject) params.set('subject', subject);
 
-        // Page: use override if passed, else reset to 1
         const page = pageOverride || 1;
         currentPage = page;
         params.set('page', String(page));
@@ -548,15 +518,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     quizListContainer.innerHTML = tempDiv.innerHTML;
                 }
             }
-            // Make sure the Clear button state reflects the current filters
             updateClearButtonVisibility();
         })
         .catch(err => console.warn('Lobby refresh error:', err));
     }
 
-    // ============================================
-    // EVENT LISTENERS
-    // ============================================
     if (searchInput) {
         searchInput.addEventListener('input', function() {
             updateClearButtonVisibility();
@@ -576,9 +542,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // ============================================
-    // CLEAR FILTERS (AJAX)
-    // ============================================
     document.addEventListener('click', function(e) {
         const clearBtn = e.target.closest('#clearFiltersBtn');
         if (!clearBtn) return;
@@ -591,13 +554,9 @@ document.addEventListener('DOMContentLoaded', function() {
         updateClearButtonVisibility();
         refreshLobby(1);
 
-        // Return focus to the search box for quick re-filtering
         if (searchInput) searchInput.focus();
     });
 
-    // ============================================
-    // LOBBY PAGINATION (AJAX page navigation)
-    // ============================================
     document.addEventListener('click', function(e) {
         const btn = e.target.closest('.lobby-page-btn');
         if (!btn || btn.disabled) return;
@@ -605,21 +564,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (isNaN(page) || page < 1) return;
 
         refreshLobby(page);
-        // Smooth scroll to the top of the list
         const container = document.getElementById('quizListContainer');
         if (container) {
             container.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     });
 
-    // ============================================
-    // AUTO-SYNC (every 30 seconds) — only on page 1
-    // ============================================
     function startAutoSync() {
         if (autoRefreshInterval) clearInterval(autoRefreshInterval);
         autoRefreshInterval = setInterval(function() {
-            // Only auto-refresh when viewing the first page and no filters active,
-            // to avoid yanking the user around while they browse.
             const hasFilter = (searchInput.value.trim() !== '')
                            || (statusFilter.value !== '')
                            || (subjectFilter.value !== '');
@@ -630,9 +583,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     startAutoSync();
 
-    // ============================================
-    // JOIN QUIZ
-    // ============================================
     window.joinQuiz = function(quizId) {
         const btn = event.target.closest('.btn-sm');
         if (!btn) return;
@@ -670,9 +620,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     };
 
-    // ============================================
-    // DELETE QUIZ
-    // ============================================
     let deleteQuizId = null;
 
     window.deleteQuiz = function(quizId, title) {
@@ -740,9 +687,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // ============================================
-    // INITIAL STATE
-    // ============================================
     updateClearButtonVisibility();
 });
 </script>

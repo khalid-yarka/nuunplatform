@@ -246,11 +246,11 @@ html.sidebar-collapsed {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
 }
 
-.tier-badge.tier-hore {
+.tier-badge.tier-pro {
     background: linear-gradient(135deg, #F59E0B, #D97706);
 }
 
-.tier-badge.tier-dhexe {
+.tier-badge.tier-premium {
     background: linear-gradient(135deg, var(--primary), #B91C1C);
 }
 
@@ -277,7 +277,6 @@ html.sidebar-collapsed {
     margin-bottom: 0;
 }
 
-/* Section Header */
 .sidebar-nav .nav-label {
     display: flex;
     align-items: center;
@@ -302,7 +301,6 @@ html.sidebar-collapsed {
     padding-top: 6px;
 }
 
-/* Nav Items */
 .sidebar-nav .nav-item {
     display: flex;
     align-items: center;
@@ -845,7 +843,6 @@ html.sidebar-collapsed .sidebar-footer .nav-item .nav-icon {
     margin-top: 2px;
 }
 
-/* Accent colors for stat icons */
 .stat-card.accent-primary .stat-icon { color: var(--text) !important; background: var(--primary-light); }
 .stat-card.accent-blue     .stat-icon { color: var(--text) !important; background: #EFF6FF; }
 .stat-card.accent-green    .stat-icon { color: var(--text) !important; background: #ECFDF5; }

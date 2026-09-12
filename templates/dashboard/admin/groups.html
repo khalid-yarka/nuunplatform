@@ -476,7 +476,6 @@
 {% block dashboard_content %}
 <div class="admin-groups-container">
 
-    <!-- Stats Cards -->
     <div class="admin-stats-grid">
         <div class="admin-stat-card">
             <div class="stat-number primary">{{ stats.total_groups|default(0) }}</div>
@@ -499,13 +498,11 @@
             <div class="stat-label">Total Clicks</div>
         </div>
         <div class="admin-stat-card">
-            <!-- FIXED: use (stats.avg_clicks or 0) to handle None -->
             <div class="stat-number">{{ (stats.avg_clicks or 0)|round(0) }}</div>
             <div class="stat-label">Avg Clicks/Group</div>
         </div>
     </div>
 
-    <!-- Toolbar -->
     <div class="admin-toolbar">
         <div class="search-wrapper">
             <i class="fas fa-search"></i>
@@ -544,7 +541,6 @@
         </a>
     </div>
 
-    <!-- Groups Table -->
     <div class="admin-table-wrap">
         <div class="table-header">
             <span><strong>{{ groups|length }}</strong> groups found</span>
@@ -621,7 +617,6 @@
                 </tbody>
             </table>
 
-            <!-- Bulk Actions -->
             <div class="bulk-actions">
                 <span class="bulk-label">Bulk Actions:</span>
                 <button type="button" class="btn-sm bulk-activate" onclick="bulkAction('activate')">
@@ -641,7 +636,6 @@
         </form>
     </div>
 
-    <!-- Pagination -->
     {% if total_pages > 1 %}
         <div class="pagination">
             <a href="?page=1&search={{ search }}&platform={{ platform }}&category={{ category }}&status={{ status }}" class="page-link {% if page == 1 %}disabled{% endif %}">First</a>
@@ -659,7 +653,6 @@
     {% endif %}
 </div>
 
-<!-- Add/Edit Modal -->
 <div class="modal-overlay" id="groupModal">
     <div class="modal-content" style="max-width: 560px;">
         <h3 class="modal-title" id="modalTitle">Add New Group</h3>
@@ -719,9 +712,9 @@
             <div class="form-group">
                 <label class="form-label">Required Tier</label>
                 <select name="tier_required" id="groupTier" class="form-control">
-                    <option value="danbe">🔓 Danbe (Free)</option>
-                    <option value="dhexe">🔑 Dhexe (Advanced)</option>
-                    <option value="hore">⭐ Hore (Premium)</option>
+                    <option value="free">🔓 Free</option>
+                    <option value="premium">🔑 Premium</option>
+                    <option value="pro">⭐ Pro</option>
                 </select>
                 <span class="form-hint">Minimum tier required to view and join this group.</span>
             </div>
@@ -768,14 +761,8 @@
 </div>
 
 <script>
-    // ============================================
-    // CSRF TOKEN
-    // ============================================
     const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
-    // ============================================
-    // FILTERS & SEARCH
-    // ============================================
     document.addEventListener('DOMContentLoaded', function() {
         const searchInput = document.getElementById('searchGroups');
         const platformFilter = document.getElementById('platformFilter');
@@ -801,9 +788,6 @@
         categoryFilter.addEventListener('change', applyFilters);
         statusFilter.addEventListener('change', applyFilters);
 
-        // ============================================
-        // CHECKBOX SELECT ALL
-        // ============================================
         window.toggleAllCheckboxes = function(source) {
             document.querySelectorAll('.group-checkbox').forEach(cb => {
                 cb.checked = source.checked;
@@ -820,9 +804,6 @@
             document.getElementById('selectedCount').textContent = selected + ' selected';
         }
 
-        // ============================================
-        // OPEN ADD MODAL
-        // ============================================
         window.openAddModal = function() {
             document.getElementById('modalTitle').textContent = 'Add New Group';
             document.getElementById('modalSubtitle').textContent = 'Fill in the group details below.';
@@ -837,9 +818,6 @@
             document.body.style.overflow = 'hidden';
         };
 
-        // ============================================
-        // OPEN EDIT MODAL
-        // ============================================
         window.openEditModal = function(groupId) {
             fetch('/admin/groups/api/' + groupId)
                 .then(response => response.json())
@@ -859,7 +837,7 @@
                     document.getElementById('groupCategory').value = data.category || '';
                     document.getElementById('groupCurriculum').value = data.curriculum || '';
                     document.getElementById('groupSubjects').value = data.subjects || '';
-                    document.getElementById('groupTier').value = data.tier_required || 'danbe';
+                    document.getElementById('groupTier').value = data.tier_required || 'free';
                     document.getElementById('groupType').value = data.group_type || 'community';
                     document.getElementById('groupDescription').value = data.description || '';
                     document.getElementById('groupOrder').value = data.display_order || 0;
@@ -875,9 +853,6 @@
                 });
         };
 
-        // ============================================
-        // CLOSE MODAL
-        // ============================================
         window.closeGroupModal = function() {
             document.getElementById('groupModal').classList.remove('active');
             document.body.style.overflow = '';
@@ -889,9 +864,6 @@
             }
         });
 
-        // ============================================
-        // SUBMIT FORM (Add/Edit)
-        // ============================================
         document.getElementById('groupForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const formData = new FormData(this);
@@ -946,9 +918,6 @@
             });
         });
 
-        // ============================================
-        // TOGGLE GROUP ACTIVE
-        // ============================================
         window.toggleGroupActive = function(groupId) {
             if (!confirm('Toggle active status for this group?')) return;
 
@@ -971,9 +940,6 @@
             .catch(() => showToast('Network error.', 'error'));
         };
 
-        // ============================================
-        // TOGGLE GROUP FEATURED
-        // ============================================
         window.toggleGroupFeatured = function(groupId) {
             fetch('/admin/groups/api/' + groupId + '/toggle-featured', {
                 method: 'POST',
@@ -994,9 +960,6 @@
             .catch(() => showToast('Network error.', 'error'));
         };
 
-        // ============================================
-        // DELETE GROUP
-        // ============================================
         window.deleteGroup = function(groupId, name) {
             if (!confirm('Delete group "' + name + '"? This action cannot be undone.')) return;
 
@@ -1019,9 +982,6 @@
             .catch(() => showToast('Network error.', 'error'));
         };
 
-        // ============================================
-        // BULK ACTIONS
-        // ============================================
         window.bulkAction = function(action) {
             const selected = document.querySelectorAll('.group-checkbox:checked');
             if (selected.length === 0) {
@@ -1059,9 +1019,6 @@
             .catch(() => showToast('Network error.', 'error'));
         };
 
-        // ============================================
-        // TOAST HELPER
-        // ============================================
         function showToast(message, type) {
             if (typeof window.showToast === 'function') {
                 window.showToast(message, type);

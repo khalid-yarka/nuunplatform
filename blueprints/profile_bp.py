@@ -1,5 +1,8 @@
 # blueprints/profile_bp.py
-from flask import Blueprint, render_template, request, session, jsonify, redirect, url_for, flash
+from flask import (
+    Blueprint, render_template, request, session, jsonify,
+    redirect, url_for, flash,
+)
 from functools import wraps
 from db import get_student_by_id, execute_with_retry, get_student_by_public_id
 from services.tier_service import get_current_user_tier
@@ -8,6 +11,7 @@ import secrets
 import string
 
 profile_bp = Blueprint('profile', __name__, url_prefix='/profile')
+
 
 def login_required(f):
     @wraps(f)
@@ -18,6 +22,7 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
+
 @profile_bp.route('/')
 @login_required
 def index():
@@ -26,12 +31,14 @@ def index():
     tier = get_current_user_tier()
     return render_template('dashboard/profile.html', student=student, tier=tier)
 
+
 @profile_bp.route('/edit', methods=['POST'])
 @login_required
 def edit():
     user_id = session['user_id']
     data = request.get_json() or {}
     errors = {}
+
     first = data.get('first_name', '').strip()
     last = data.get('last_name', '').strip()
     middle = data.get('middle_name', '').strip()
@@ -43,9 +50,13 @@ def edit():
 
     def validate_name(name):
         return bool(name) and len(name) >= 4 and re.fullmatch(r'[A-Za-z]+', name)
+
     def validate_school(school):
         words = school.strip().split()
-        return len(words) >= 2 and all(len(w) >= 4 and re.fullmatch(r'[A-Za-z]+', w) for w in words)
+        return len(words) >= 2 and all(
+            len(w) >= 4 and re.fullmatch(r'[A-Za-z]+', w) for w in words
+        )
+
     def validate_city(city):
         return bool(city) and len(city) >= 5 and re.fullmatch(r'[A-Za-z\s]+', city)
 
@@ -79,15 +90,16 @@ def edit():
         'grade': grade,
         'city': city,
         'location': location,
-        'curriculum': curriculum
+        'curriculum': curriculum,
     }
     for field, value in updates.items():
         execute_with_retry(
             f"UPDATE students SET {field} = ? WHERE id = ?",
             (value, user_id),
-            commit=True
+            commit=True,
         )
     return jsonify({'success': True, 'message': 'Profile updated successfully.'})
+
 
 @profile_bp.route('/public-id', methods=['POST'])
 @login_required
@@ -98,15 +110,17 @@ def public_id():
     action = data.get('action')
     new_id = data.get('public_id', '').strip().upper()
 
-    if tier == 'danbe':
-        return jsonify({'error': 'Public ID management requires Dhexe or Hore.'}), 403
+    if tier == 'free':
+        return jsonify({'error': 'Public ID management requires Premium or Pro.'}), 403
 
-    if tier == 'dhexe':
+    if tier == 'premium':
         if action != 'regenerate':
-            return jsonify({'error': 'Dhexe can only regenerate a random ID.'}), 400
+            return jsonify({'error': 'Premium tier can only regenerate a random ID.'}), 400
         attempts = 0
         while attempts < 10:
-            candidate = ''.join(secrets.choice(string.ascii_uppercase + '123456789') for _ in range(4))
+            candidate = ''.join(
+                secrets.choice(string.ascii_uppercase + '123456789') for _ in range(4)
+            )
             if not get_student_by_public_id(candidate):
                 new_id = candidate
                 break
@@ -114,11 +128,13 @@ def public_id():
         else:
             return jsonify({'error': 'Could not generate unique ID.'}), 500
 
-    elif tier == 'hore':
+    elif tier == 'pro':
         if action == 'regenerate':
             attempts = 0
             while attempts < 10:
-                candidate = ''.join(secrets.choice(string.ascii_uppercase + '123456789') for _ in range(4))
+                candidate = ''.join(
+                    secrets.choice(string.ascii_uppercase + '123456789') for _ in range(4)
+                )
                 if not get_student_by_public_id(candidate):
                     new_id = candidate
                     break
@@ -138,7 +154,7 @@ def public_id():
     execute_with_retry(
         "UPDATE students SET public_id = ? WHERE id = ?",
         (new_id, user_id),
-        commit=True
+        commit=True,
     )
     session['public_id'] = new_id
     return jsonify({'success': True, 'public_id': new_id, 'message': 'Public ID updated.'})

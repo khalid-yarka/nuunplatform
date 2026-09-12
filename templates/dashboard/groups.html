@@ -8,7 +8,6 @@
 {{ super() }}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/groups.css') }}" />
 <style>
-    /* Additional overrides for new design */
     .group-card {
         position: relative;
         transition: all 0.25s ease;
@@ -42,7 +41,7 @@
         flex-wrap: wrap;
     }
     .group-card .join-btn-area .btn-join {
-        pointer-events: none; /* controlled by card click */
+        pointer-events: none;
     }
     .group-card .join-btn-area .btn-join.locked {
         opacity: 0.7;
@@ -76,7 +75,6 @@
         opacity: 1;
     }
 
-    /* Join Modal Styles */
     .join-modal .modal-content {
         max-width: 500px;
         text-align: left;
@@ -310,9 +308,6 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // ============================================
-    // CURRICULUM TABS (filter groups)
-    // ============================================
     const tabs = document.querySelectorAll('.curriculum-tab');
     const groups = document.querySelectorAll('.group-card');
 
@@ -320,17 +315,10 @@ document.addEventListener('DOMContentLoaded', function() {
         tab.addEventListener('click', function() {
             tabs.forEach(t => t.classList.remove('active'));
             this.classList.add('active');
-            const curriculum = this.dataset.curriculum;
-            // For now, we just highlight; actual filtering can be done via backend
-            // We'll keep it simple: show all groups (since groups already show curriculum tag)
-            // But we could filter groups by curriculum if needed.
-            // We'll just update the UI to indicate active tab.
+            // Curriculum filtering is currently UI-only (server renders all).
         });
     });
 
-    // ============================================
-    // FILTERS (Platform & Category)
-    // ============================================
     const platformFilter = document.getElementById('platformFilter');
     const categoryFilter = document.getElementById('categoryFilter');
     const clearFiltersBtn = document.getElementById('clearFilters');
@@ -351,10 +339,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!show) hasFilter = true;
         });
 
-        // Show clear button if any filter active
         clearFiltersBtn.style.display = (platform || category) ? 'inline-block' : 'none';
 
-        // Update active filters display
         activeFilters.innerHTML = '';
         if (platform) {
             const tag = document.createElement('span');
@@ -369,7 +355,6 @@ document.addEventListener('DOMContentLoaded', function() {
             activeFilters.appendChild(tag);
         }
 
-        // Remove filter tags
         document.querySelectorAll('.filter-tag .remove').forEach(el => {
             el.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -389,53 +374,44 @@ document.addEventListener('DOMContentLoaded', function() {
         applyFilters();
     });
 
-    // ============================================
-    // GROUP CARD CLICK HANDLER
-    // ============================================
     function handleGroupClick(card) {
         const locked = card.dataset.locked === 'true';
         const groupId = card.dataset.groupId;
-        const requiredTier = card.dataset.requiredTier || 'danbe';
+        const requiredTier = card.dataset.requiredTier || 'free';
         const lockReason = card.dataset.lockReason || '';
         const inviteLink = card.dataset.inviteLink;
 
         if (locked) {
-            // Determine which upgrade sheet to show
             let feature = 'group_join';
             let message = '';
-            let slideTarget = requiredTier; // default
+            let slideTarget = requiredTier;
 
             if (lockReason === 'curriculum') {
-                // For curriculum locks, we want to show the middle slide (dhexe)
+                // For curriculum locks, we want to show the middle slide (premium)
                 // and a custom message.
                 feature = 'curriculum_access';
-                message = 'This group is for a different curriculum. Upgrade to Hore to access all curricula.';
-                // We'll set requiredTier to 'dhexe' to show the middle slide, but we also pass the message.
-                // The safka.js will handle the message.
-                slideTarget = 'dhexe';
+                message = 'This group is for a different curriculum. Upgrade to Pro to access all curricula.';
+                // Set slideTarget to 'premium' to show the middle slide, but also pass the message.
+                // upgrade.js will handle the message.
+                slideTarget = 'premium';
             } else {
-                // Tier lock: use requiredTier
                 slideTarget = requiredTier;
                 message = `Upgrade to ${requiredTier.charAt(0).toUpperCase() + requiredTier.slice(1)} to join this group.`;
             }
 
-            // Open upgrade sheet with custom message
-            if (typeof openSafkaPreview === 'function') {
-                openSafkaPreview({
+            if (typeof openUpgradeSheet === 'function') {
+                openUpgradeSheet({
                     feature: feature,
                     requiredTier: slideTarget,
                     message: message
                 });
             } else {
-                // Fallback: show alert
                 alert(message);
             }
             return;
         }
 
-        // Unlocked: open join modal
         if (inviteLink) {
-            // Populate modal
             const name = card.dataset.groupName || 'Group';
             const description = card.dataset.groupDescription || '';
             const platform = card.dataset.groupPlatform || 'WhatsApp';
@@ -449,22 +425,18 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('joinModalIcon').textContent = icon;
             document.getElementById('joinModalProceedBtn').href = inviteLink;
 
-            // Show modal
             document.getElementById('joinModal').classList.add('active');
             document.body.style.overflow = 'hidden';
         }
     }
 
-    // Attach click to all group cards and featured cards
     document.querySelectorAll('.group-card, .featured-card').forEach(card => {
         card.addEventListener('click', function(e) {
-            // Ignore if clicked on a button/link inside that might have its own handler
             if (e.target.closest('a, button, .btn-join')) return;
             handleGroupClick(this);
         });
     });
 
-    // Also allow join button click (which is inside card) to trigger same
     document.querySelectorAll('.group-card .btn-join, .featured-card .btn-join').forEach(btn => {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -473,32 +445,23 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // ============================================
-    // JOIN MODAL CONTROLS
-    // ============================================
     function closeJoinModal() {
         document.getElementById('joinModal').classList.remove('active');
         document.body.style.overflow = '';
     }
 
-    // Close on overlay click
     document.getElementById('joinModal').addEventListener('click', function(e) {
         if (e.target === this) closeJoinModal();
     });
 
-    // Close on Esc
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && document.getElementById('joinModal').classList.contains('active')) {
             closeJoinModal();
         }
     });
 
-    // Make closeJoinModal globally accessible
     window.closeJoinModal = closeJoinModal;
 
-    // ============================================
-    // INITIAL FILTERS
-    // ============================================
     applyFilters();
 });
 </script>
