@@ -7,6 +7,173 @@
 {% block extra_css %}
 {{ super() }}
 <style>
+    /* ============================================
+       FOCUS HIGHLIGHT — sticky banner at top
+       ============================================ */
+    .focus-focus-banner {
+        display: none;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 20px;
+        border-radius: var(--radius);
+        background: linear-gradient(135deg, var(--primary) 0%, #B91C1C 100%);
+        color: #ffffff;
+        margin-bottom: 20px;
+        box-shadow: 0 8px 28px rgba(255, 49, 56, 0.35);
+        position: sticky;
+        top: 80px;
+        z-index: 50;
+        animation: focusBannerIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .focus-focus-banner.visible { display: flex; }
+    .focus-focus-banner .ff-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.22);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        flex-shrink: 0;
+        animation: focusIconPulse 2s ease-in-out infinite;
+    }
+    .focus-focus-banner .ff-text {
+        flex: 1;
+        min-width: 0;
+        line-height: 1.4;
+    }
+    .focus-focus-banner .ff-text .ff-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        opacity: 0.85;
+        display: block;
+        margin-bottom: 2px;
+    }
+    .focus-focus-banner .ff-text .ff-title {
+        font-size: 16px;
+        font-weight: 700;
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .focus-focus-banner .ff-text .ff-sub {
+        font-size: 12px;
+        opacity: 0.9;
+        display: block;
+        margin-top: 2px;
+    }
+    .focus-focus-banner .ff-close {
+        background: rgba(255, 255, 255, 0.18);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: #ffffff;
+        border-radius: 8px;
+        padding: 8px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+    .focus-focus-banner .ff-close:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: translateY(-1px);
+    }
+
+    @keyframes focusBannerIn {
+        from { opacity: 0; transform: translateY(-16px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes focusIconPulse {
+        0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255,255,255,0.4); }
+        50%      { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(255,255,255,0); }
+    }
+
+    /* ============================================
+       HIGHLIGHTED PDF CARD
+       ============================================ */
+    .pdf-card.focus-highlight {
+        border: 3px solid var(--primary) !important;
+        box-shadow:
+            0 0 0 6px rgba(255, 49, 56, 0.18),
+            0 12px 40px rgba(255, 49, 56, 0.35) !important;
+        transform: translateY(-6px) scale(1.01);
+        position: relative;
+        z-index: 10;
+        animation: focusCardPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1),
+                   focusCardGlow 2s ease-in-out 0.6s 3;
+    }
+
+    .pdf-card.focus-highlight::before {
+        content: '';
+        position: absolute;
+        inset: -3px;
+        border-radius: var(--radius);
+        background: linear-gradient(135deg, var(--primary), #B91C1C, var(--primary));
+        background-size: 200% 200%;
+        z-index: -1;
+        opacity: 0.4;
+        animation: focusBorderFlow 3s linear infinite;
+    }
+
+    .pdf-card.focus-highlight::after {
+        content: '🎯 SUGGESTED';
+        position: absolute;
+        top: -12px;
+        right: 14px;
+        background: linear-gradient(135deg, var(--primary), #B91C1C);
+        color: #ffffff;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 1px;
+        padding: 5px 14px;
+        border-radius: 20px;
+        box-shadow: 0 4px 14px rgba(255, 49, 56, 0.45);
+        z-index: 11;
+        animation: focusBadgeIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both;
+    }
+
+    @keyframes focusCardPop {
+        0%   { transform: translateY(0) scale(1); }
+        50%  { transform: translateY(-10px) scale(1.03); }
+        100% { transform: translateY(-6px) scale(1.01); }
+    }
+    @keyframes focusCardGlow {
+        0%, 100% {
+            box-shadow:
+                0 0 0 6px rgba(255, 49, 56, 0.18),
+                0 12px 40px rgba(255, 49, 56, 0.35);
+        }
+        50% {
+            box-shadow:
+                0 0 0 12px rgba(255, 49, 56, 0.08),
+                0 16px 48px rgba(255, 49, 56, 0.45);
+        }
+    }
+    @keyframes focusBorderFlow {
+        0%   { background-position: 0% 50%; }
+        50%  { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    @keyframes focusBadgeIn {
+        from { opacity: 0; transform: translateY(6px) scale(0.7); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Legacy pulse (kept for backward compat) */
+    .pdf-card.pulse-once {
+        animation: focusCardGlow 1.2s ease-in-out 2;
+    }
+
+    /* ============================================
+       EXISTING STYLES (unchanged)
+       ============================================ */
     .btn-premium {
         background: linear-gradient(135deg, #FF3138, #B91C1C) !important;
         color: white !important;
@@ -60,11 +227,6 @@
         box-shadow: var(--shadow-md);
     }
 
-    .pdf-card.focus-highlight {
-        box-shadow: 0 0 0 4px var(--primary), 0 12px 32px rgba(255,49,56,0.28);
-        transform: translateY(-3px);
-    }
-
     .pdf-actions-row {
         display: flex;
         flex-wrap: wrap;
@@ -105,6 +267,12 @@
         text-transform: uppercase;
         letter-spacing: 0.3px;
         z-index: 2;
+    }
+    /* If a card is both premium and focus-highlighted, offset the SUGGESTED tag */
+    .pdf-card.focus-highlight.pdf-card-premium::after {
+        top: -12px;
+        right: auto;
+        left: 14px;
     }
     .pdf-card-premium .premium-lock {
         position: absolute;
@@ -169,11 +337,54 @@
         position: relative;
         overflow: hidden;
     }
+
+    /* Dark mode tweaks */
+    [data-theme="dark"] .pdf-card.focus-highlight {
+        box-shadow:
+            0 0 0 6px rgba(255, 107, 112, 0.25),
+            0 12px 40px rgba(255, 107, 112, 0.35) !important;
+    }
+    [data-theme="dark"] .focus-focus-banner {
+        background: linear-gradient(135deg, #8B1A1A 0%, #5A0F0F 100%);
+    }
+
+    /* Mobile */
+    @media (max-width: 640px) {
+        .focus-focus-banner {
+            flex-direction: column;
+            align-items: stretch;
+            text-align: center;
+            padding: 14px;
+            top: 66px;
+        }
+        .focus-focus-banner .ff-icon { align-self: center; }
+        .focus-focus-banner .ff-text .ff-title { white-space: normal; }
+        .focus-focus-banner .ff-close { justify-content: center; }
+        .pdf-card.focus-highlight::after {
+            font-size: 10px;
+            padding: 4px 10px;
+            top: -10px;
+        }
+    }
 </style>
 {% endblock %}
 
 {% block dashboard_content %}
 <div style="max-width: 100%;">
+
+    <!-- FOCUS BANNER (shown only when arriving from /focus) -->
+    <div id="focusBanner" class="focus-focus-banner" aria-live="polite">
+        <span class="ff-icon">🎯</span>
+        <div class="ff-text">
+            <span class="ff-label">From your Focus suggestions</span>
+            <span class="ff-title" id="focusBannerTitle">—</span>
+            <span class="ff-sub" id="focusBannerSub">Highlighted below</span>
+        </div>
+        <button type="button" class="ff-close" onclick="clearFocusHighlight()">
+            <i class="fas fa-times"></i> Clear highlight
+        </button>
+    </div>
+
     <div class="breadcrumb">
         <a href="{{ url_for('dashboard.home') if is_logged_in else '#' }}">{{ _('nav.dashboard') }}</a>
         <span class="separator">/</span>
@@ -208,7 +419,7 @@
         </div>
     </div>
 
-    <!-- Search & Filters – Tier-aware -->
+    <!-- Search & Filters -->
     <div style="display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
         {% if search_level == 0 or not is_logged_in %}
             <div class="pdf-locked-search" style="flex: 1; min-width: 200px; position: relative;"
@@ -269,10 +480,13 @@
 
     <!-- PDFs Grid -->
     {% if pdfs %}
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+        <div id="pdfGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
             {% for pdf in pdfs %}
                 <div class="{% if pdf.is_premium %}pdf-card-premium{% endif %} {% if not is_logged_in %}login-required{% endif %} pdf-card"
                      data-code="{{ pdf.code }}"
+                     data-title="{{ pdf.title }}"
+                     data-subject="{{ pdf.subject or '' }}"
+                     id="pdf-{{ pdf.code }}"
                      style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow-sm); transition: var(--transition); display: flex; flex-direction: column; position: relative;">
 
                     {% if pdf.is_premium %}
@@ -324,7 +538,6 @@
                         {% set has_url = pdf.file_url is not none and pdf.file_url != '' %}
                         {% set logged_in = is_logged_in|default(false) %}
 
-                        <!-- 1. Read (Direct) – Pro only, if URL exists -->
                         {% if has_url %}
                             {% if tier == 'pro' and logged_in %}
                                 <a href="{{ url_for('pdfs.view_pdf', pdf_id=pdf.id) }}"
@@ -343,7 +556,6 @@
                             {% endif %}
                         {% endif %}
 
-                        <!-- 2. Download (Direct) – Pro only, if URL exists -->
                         {% if has_url %}
                             {% if tier == 'pro' and logged_in %}
                                 <a href="{{ url_for('pdfs.download_pdf', pdf_id=pdf.id) }}"
@@ -362,7 +574,6 @@
                             {% endif %}
                         {% endif %}
 
-                        <!-- 3. Preview (Telegram stream) – Premium and Pro only -->
                         {% if tier in ['premium', 'pro'] and logged_in %}
                             <a href="{{ url_for('pdfs.preview_telegram', code=pdf.code) }}"
                                class="btn {% if tier == 'pro' %}btn-premium{% else %}btn-info{% endif %} btn-sm"
@@ -381,7 +592,6 @@
                             </button>
                         {% endif %}
 
-                        <!-- 4. Get PDF (Telegram download) – All tiers -->
                         {% set bot_username = config.TELEGRAM_BOT_USERNAME or 'nuunplatformbot' %}
                         <a href="https://t.me/{{ bot_username }}?start={{ pdf.code }}"
                            target="_blank"
@@ -404,43 +614,72 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const searchInput = document.getElementById('searchInput');
-    const subjectFilter = document.getElementById('subjectFilter');
-    const classFilter = document.getElementById('classFilter');
-    const curriculumFilter = document.getElementById('curriculumFilter');
-    const searchForm = document.getElementById('searchForm');
+(function () {
+    'use strict';
 
-    if (searchForm) {
-        let debounceTimer;
-        function autoSubmit() {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(function() {
-                searchForm.submit();
-            }, 500);
-        }
-        if (searchInput) searchInput.addEventListener('input', autoSubmit);
-        if (subjectFilter) subjectFilter.addEventListener('change', function() { searchForm.submit(); });
-        if (classFilter) classFilter.addEventListener('change', function() { searchForm.submit(); });
-        if (curriculumFilter) curriculumFilter.addEventListener('change', function() { searchForm.submit(); });
-    }
+    // ============================================
+    // FOCUS HIGHLIGHT
+    // ============================================
 
-    // ── Focus-page highlight ──
-    // /pdfs?highlight=XXXX-XXXX — scroll to and pulse the matching card.
     const params = new URLSearchParams(window.location.search);
     const highlightCode = params.get('highlight');
-    if (highlightCode) {
-        const card = document.querySelector('.pdf-card[data-code="' + highlightCode + '"]');
-        if (card) {
-            setTimeout(function () {
-                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                card.classList.add('focus-highlight');
-                setTimeout(function () {
-                    card.classList.remove('focus-highlight');
-                }, 3200);
-            }, 250);
-        }
-    }
-});
+
+    if (!highlightCode) return;
+
+    const card = document.querySelector('.pdf-card[data-code="' + CSS.escape(highlightCode) + '"]');
+    if (!card) return;
+
+    // Pull title from the card (for the banner)
+    const title = card.dataset.title || highlightCode;
+    const subject = card.dataset.subject || '';
+    const pagesFromUrl = params.get('pages') || '';
+    const missesFromUrl = params.get('misses') || '';
+
+    // Build the banner
+    const banner = document.getElementById('focusBanner');
+    document.getElementById('focusBannerTitle').textContent = title;
+    const subParts = [];
+    if (subject) subParts.push('📚 ' + subject);
+    if (missesFromUrl) subParts.push('❌ ' + missesFromUrl + ' missed question' + (missesFromUrl === '1' ? '' : 's'));
+    if (pagesFromUrl) subParts.push('📑 pages ' + pagesFromUrl);
+    if (subParts.length === 0) subParts.push('Highlighted below');
+    document.getElementById('focusBannerSub').textContent = subParts.join(' · ');
+
+    banner.classList.add('visible');
+
+    // Apply the highlight class
+    card.classList.add('focus-highlight');
+
+    // Scroll the card into view (account for sticky banner + navbar)
+    setTimeout(function () {
+        const rect = card.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const bannerHeight = banner.offsetHeight || 0;
+        const navbarOffset = 80;
+        const targetY = rect.top + scrollTop - bannerHeight - navbarOffset - 24;
+
+        window.scrollTo({ top: targetY, behavior: 'smooth' });
+    }, 120);
+
+    // Clean URL so refresh doesn't re-trigger
+    try {
+        const cleanUrl = window.location.pathname +
+            window.location.search.replace(/([?&])highlight=[^&]*/g, '$1').replace(/[?&]$/, '').replace(/&&/g, '&');
+        history.replaceState({}, '', cleanUrl || window.location.pathname);
+    } catch (e) { /* ignore */ }
+
+    // Clean button handler
+    window.clearFocusHighlight = function () {
+        card.classList.remove('focus-highlight');
+        banner.classList.remove('visible');
+        setTimeout(function () {
+            banner.style.display = 'none';
+        }, 200);
+    };
+
+})();
+
+// Keep the fallback for callers that still call the legacy name
+window.clearFocusHighlight = window.clearFocusHighlight || function () {};
 </script>
 {% endblock %}

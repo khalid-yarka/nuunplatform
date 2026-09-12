@@ -2,14 +2,16 @@
 # ---------------------------------------------------------------
 # Focus feature service.
 #
-# Aggregates data from the user's wrong answers to power:
-#   - Suggested study sources (PDFs)
-#   - Performance analytics (subject bars, accuracy line, etc.)
-#   - Focus tips (rule-based narrative for level 3)
+# Aggregates data from:
+#   - Wrong answers (quiz_attempts + questions.pdf_code)
+#   - Saved questions   (question_interactions 'save')
+#   - Liked questions   (question_interactions 'like')
 #
-# Two entitlements gate the output:
-#   - focus_suggestions (quota) -> how many PDF cards shown
-#   - focus_analytics  (level)  -> chart depth
+# to power:
+#   - Suggested study sources (PDFs)
+#   - Bookmarks (saved + liked questions)
+#   - Performance analytics (subject bars, accuracy line, etc.)
+#   - Focus tips (level 3 narrative)
 # ---------------------------------------------------------------
 
 import json
@@ -30,9 +32,7 @@ logger = logging.getLogger(__name__)
 def _collect_misses(user_id: int) -> Dict[int, Dict[str, Any]]:
     """
     Parse every quiz attempt and collect wrong answers.
-
-    Returns dict:
-        { question_id: {'count': int, 'last_miss': ISO string} }
+    Returns { question_id: {'count': int, 'last_miss': ISO} }
     """
     try:
         cursor = execute_with_retry("""
@@ -75,11 +75,9 @@ def _collect_misses(user_id: int) -> Dict[int, Dict[str, Any]]:
             if qid not in misses:
                 misses[qid] = {
                     'count': 0,
-                    'last_miss': row['completed_at'] or ''
+                    'last_miss': row['completed_at'] or '',
                 }
             misses[qid]['count'] += 1
-            # Since attempts are sorted DESC, first-seen is most-recent.
-            # No update needed after initial set.
 
     return misses
 
@@ -93,15 +91,12 @@ def get_suggested_sources(user_id: int,
                           days: Optional[int] = None) -> List[Dict[str, Any]]:
     """
     Return PDFs to re-read, sorted by miss_count DESC, last_miss DESC.
-
-    limit: max results (None = unlimited)
-    days:  restrict to misses within N days (None = all-time)
+    limit=None -> unlimited (caller enforces quota)
     """
     misses = _collect_misses(user_id)
     if not misses:
         return []
 
-    # Optional time window
     if days:
         cutoff = (datetime.now() - timedelta(days=days)).isoformat()
         misses = {qid: m for qid, m in misses.items()
@@ -166,10 +161,17 @@ def get_suggested_sources(user_id: int,
         main = get_main_pdf(code)
         bot = get_bot_pdf_by_code(code) if not main else None
         resolved = main or bot or {}
+
+        subject_name = ''
+        subject_codes = list(g['subjects'])
+        if subject_codes:
+            subj = get_subject(subject_codes[0])
+            subject_name = subj['name'] if subj else subject_codes[0]
+
         result.append({
             'pdf_code': code,
             'title': resolved.get('title') or code,
-            'subject': resolved.get('subject') or '',
+            'subject': resolved.get('subject') or subject_name,
             'is_premium': bool(resolved.get('is_premium', 0)),
             'miss_count': g['miss_count'],
             'pages': sorted(g['pages']),
@@ -177,13 +179,92 @@ def get_suggested_sources(user_id: int,
             'resolvable': bool(main or bot),
         })
 
-    # Sort: miss_count DESC, then last_miss DESC
     result.sort(key=lambda x: (x['miss_count'], x['last_miss'] or ''), reverse=True)
 
     if limit is not None and limit > 0:
         result = result[:limit]
 
     return result
+
+
+# ============================================
+# BOOKMARKS (saved + liked)
+# ============================================
+
+def get_bookmarks(user_id: int, limit: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Return bookmarks = unique questions the user has saved and/or liked.
+
+    Returns:
+        {
+            'items': [ ... up to `limit` ... ],
+            'total': int,           # total unique questions
+            'saved_count': int,
+            'liked_count': int,
+            'more_count': int,      # total - len(items), 0 if unlimited
+        }
+
+    Each item:
+        {
+            question_id, question_text, subject_code, subject_name, subject_icon,
+            chapter, difficulty, pdf_code, pdf_page,
+            is_saved, is_liked,
+            saved_at, liked_at, last_interaction
+        }
+    """
+    try:
+        cursor = execute_with_retry("""
+            SELECT
+                q.id                AS question_id,
+                q.question_text     AS question_text,
+                q.subject_code      AS subject_code,
+                q.chapter           AS chapter,
+                q.difficulty        AS difficulty,
+                q.pdf_code          AS pdf_code,
+                q.pdf_page          AS pdf_page,
+                MAX(CASE WHEN qi.interaction_type = 'save' THEN 1 ELSE 0 END) AS is_saved,
+                MAX(CASE WHEN qi.interaction_type = 'like' THEN 1 ELSE 0 END) AS is_liked,
+                MAX(CASE WHEN qi.interaction_type = 'save' THEN qi.created_at END) AS saved_at,
+                MAX(CASE WHEN qi.interaction_type = 'like' THEN qi.created_at END) AS liked_at,
+                MAX(qi.created_at) AS last_interaction
+            FROM question_interactions qi
+            JOIN questions q ON qi.question_id = q.id
+            WHERE qi.user_id = ?
+              AND qi.interaction_type IN ('save', 'like')
+            GROUP BY q.id
+            ORDER BY last_interaction DESC
+        """, (user_id,))
+        rows = cursor.fetchall()
+    except Exception as e:
+        logger.error(f"get_bookmarks query failed: {e}")
+        return {'items': [], 'total': 0, 'saved_count': 0, 'liked_count': 0, 'more_count': 0}
+
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        d = dict(row)
+        subj = get_subject(d.get('subject_code'))
+        d['subject_name'] = subj['name'] if subj else (d.get('subject_code') or '')
+        d['subject_icon'] = subj.get('icon', '📚') if subj else '📚'
+        d['is_saved'] = bool(d.get('is_saved'))
+        d['is_liked'] = bool(d.get('is_liked'))
+        items.append(d)
+
+    total = len(items)
+    saved_count = sum(1 for x in items if x['is_saved'])
+    liked_count = sum(1 for x in items if x['is_liked'])
+
+    more_count = 0
+    if limit is not None and limit > 0 and len(items) > limit:
+        more_count = len(items) - limit
+        items = items[:limit]
+
+    return {
+        'items': items,
+        'total': total,
+        'saved_count': saved_count,
+        'liked_count': liked_count,
+        'more_count': more_count,
+    }
 
 
 # ============================================
@@ -317,7 +398,6 @@ def get_focus_tips(user_id: int) -> List[Dict[str, str]]:
                 f"across <strong>{unique_qs}</strong> unique problems."
     })
 
-    # Weakest subject
     perf = _subject_breakdown(user_id)
     if perf:
         worst = min(perf, key=lambda x: x.get('avg_score', 100))
@@ -330,7 +410,6 @@ def get_focus_tips(user_id: int) -> List[Dict[str, str]]:
                         f"at {score:.0f}%."
             })
 
-    # Difficulty pattern
     diff = _difficulty_breakdown(user_id)
     if diff:
         easy = sum(d['miss_count'] for d in diff if d['difficulty'] <= 2)
@@ -348,10 +427,7 @@ def get_focus_tips(user_id: int) -> List[Dict[str, str]]:
                         "— that's normal. Keep practicing."
             })
 
-    # Top suggestion pointer
-    from services import entitlement_service
-    sl = entitlement_service.get_limit(user_id, 'focus_suggestions')
-    sources = get_suggested_sources(user_id, sl if sl else None)
+    sources = get_suggested_sources(user_id, 1)
     if sources:
         top = sources[0]
         tips.append({
@@ -364,11 +440,10 @@ def get_focus_tips(user_id: int) -> List[Dict[str, str]]:
 
 
 # ============================================
-# COVERAGE (for admin)
+# ADMIN: coverage stats
 # ============================================
 
 def get_coverage_stats() -> List[Dict[str, Any]]:
-    """Per-subject PDF-link coverage for admin dashboards."""
     try:
         cursor = execute_with_retry("""
             SELECT

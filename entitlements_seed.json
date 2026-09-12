@@ -350,6 +350,51 @@
         "pro":     { "is_enabled": 1, "level_value": 2 }
       }
     },
+    {
+      "feature_key": "focus_suggestions",
+      "display_name": "Focus Suggestions",
+      "description": "Number of suggested study sources shown on the Focus page.",
+      "category": "dashboard",
+      "policy_type": "quota",
+      "unit_hint": "sources",
+      "sort_order": 370,
+      "notes": "Sourced from the user's wrong answers linked to PDFs.",
+      "policies": {
+        "free":    { "is_enabled": 1, "limit_value": 3,   "limit_unit": "sources" },
+        "premium": { "is_enabled": 1, "limit_value": 10,  "limit_unit": "sources" },
+        "pro":     { "is_enabled": 1, "limit_value": 30,  "limit_unit": "sources" }
+      }
+    },
+    {
+      "feature_key": "focus_analytics",
+      "display_name": "Focus Analytics",
+      "description": "Depth of performance charts and analysis on the Focus page.",
+      "category": "dashboard",
+      "policy_type": "level",
+      "unit_hint": null,
+      "sort_order": 371,
+      "notes": "1 = basic charts, 2 = full charts, 3 = charts + narrative tips.",
+      "policies": {
+        "free":    { "is_enabled": 1, "level_value": 1 },
+        "premium": { "is_enabled": 1, "level_value": 2 },
+        "pro":     { "is_enabled": 1, "level_value": 3 }
+      }
+    },
+    {
+      "feature_key": "focus_bookmarks",
+      "display_name": "Focus Bookmarks",
+      "description": "How many saved and liked questions appear on the Focus page.",
+      "category": "dashboard",
+      "policy_type": "quota",
+      "unit_hint": "items",
+      "sort_order": 372,
+      "notes": "Combined quota for saved + liked questions shown on Focus.",
+      "policies": {
+        "free":    { "is_enabled": 1, "limit_value": 10,  "limit_unit": "items" },
+        "premium": { "is_enabled": 1, "limit_value": 50,  "limit_unit": "items" },
+        "pro":     { "is_enabled": 1, "limit_value": 200, "limit_unit": "items" }
+      }
+    },
 
     {
       "feature_key": "achievements",
@@ -610,38 +655,6 @@
         "free":    { "is_enabled": 0 },
         "premium": { "is_enabled": 0 },
         "pro":     { "is_enabled": 1 }
-      }
-    },
-  
-    {
-      "feature_key": "focus_suggestions",
-      "display_name": "Focus Suggestions",
-      "description": "Number of suggested study sources shown on the Focus page.",
-      "category": "dashboard",
-      "policy_type": "quota",
-      "unit_hint": "sources",
-      "sort_order": 370,
-      "notes": "Sourced from the user's wrong answers linked to PDFs.",
-      "policies": {
-        "free":    { "is_enabled": 1, "limit_value": 3,    "limit_unit": "sources" },
-        "premium": { "is_enabled": 1, "limit_value": 10,   "limit_unit": "sources" },
-        "pro":     { "is_enabled": 1, "limit_value": null, "limit_unit": "sources" }
-      }
-    },
-    
-    {
-      "feature_key": "focus_analytics",
-      "display_name": "Focus Analytics",
-      "description": "Depth of performance charts and analysis on the Focus page.",
-      "category": "dashboard",
-      "policy_type": "level",
-      "unit_hint": null,
-      "sort_order": 371,
-      "notes": "1 = basic charts, 2 = full charts, 3 = charts + narrative tips.",
-      "policies": {
-        "free":    { "is_enabled": 1, "level_value": 1 },
-        "premium": { "is_enabled": 1, "level_value": 2 },
-        "pro":     { "is_enabled": 1, "level_value": 3 }
       }
     }
   ]

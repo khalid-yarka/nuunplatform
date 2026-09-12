@@ -12,144 +12,296 @@
 
 <div class="focus-page">
 
-    <!-- HERO -->
+    <!-- ============================================
+         HERO
+         ============================================ -->
     <div class="focus-hero">
-        <div class="focus-hero-inner">
-            <div class="focus-hero-text">
-                <h1>🎯 {{ _('focus.title') }}</h1>
-                <p>{{ _('focus.subtitle') }}</p>
+        <div class="focus-hero-left">
+            <h1>🎯 Your Focus</h1>
+            <p>What your activity reveals — and what to do about it</p>
+        </div>
+        <div class="focus-hero-right">
+            {% if has_sources_access %}
+            <div class="fh-stat">
+                <span class="fhs-num">{{ sources|length }}</span>
+                <span class="fhs-lbl">Sources</span>
             </div>
-            {% if has_access %}
-                <div class="focus-hero-stats">
-                    {% if has_suggestions %}
-                    <div class="fh-stat">
-                        <span class="fh-num">{{ total_suggestions }}</span>
-                        <span class="fh-lbl">{{ _('focus.stat_sources') }}</span>
-                    </div>
-                    {% endif %}
-                    <div class="fh-stat">
-                        <span class="fh-num">
-                            {% if analytics_level == 1 %}1
-                            {% elif analytics_level == 2 %}2
-                            {% elif analytics_level >= 3 %}3
-                            {% else %}0{% endif %}
-                        </span>
-                        <span class="fh-lbl">{{ _('focus.stat_analytics_level') }}</span>
-                    </div>
-                </div>
+            {% endif %}
+            {% if has_bookmarks_access %}
+            <div class="fh-stat">
+                <span class="fhs-num">{{ bookmarks|length }}</span>
+                <span class="fhs-lbl">Bookmarks</span>
+            </div>
+            {% endif %}
+            {% if has_analytics_access %}
+            <div class="fh-stat">
+                <span class="fhs-num">L{{ analytics_level }}</span>
+                <span class="fhs-lbl">Analytics</span>
+            </div>
             {% endif %}
         </div>
     </div>
 
-    {% if not has_access %}
-        <!-- FULL LOCK STATE -->
-        <div class="focus-lock-card">
+    {% if not has_any_access %}
+
+        <!-- ============================================
+             FULL LOCK
+             ============================================ -->
+        <div class="focus-lock">
             <div class="focus-lock-icon">🔒</div>
-            <h2>{{ _('focus.locked.title') }}</h2>
-            <p>{{ _('focus.locked.desc') }}</p>
+            <h2>Focus is locked</h2>
+            <p>Upgrade to unlock personalized study suggestions, bookmarks, and performance analytics built from your activity.</p>
             <button type="button" class="btn btn-primary"
                     onclick="openUpgradeSheet({ feature: 'focus_analytics', requiredTier: 'premium' })">
-                <i class="fas fa-arrow-up"></i> {{ _('focus.locked.cta') }}
+                <i class="fas fa-arrow-up"></i> Upgrade to unlock
             </button>
         </div>
+
     {% else %}
 
-        <!-- SECTION 1: SUGGESTED SOURCES -->
-        {% if has_suggestions %}
-        <section class="focus-section">
-            <div class="focus-section-head">
-                <h2><i class="fas fa-book-open"></i> {{ _('focus.suggestions.title') }}</h2>
-                <span class="focus-section-hint">
-                    {% if suggestion_limit is none %}
-                        {{ _('focus.suggestions.unlimited') }}
+        <!-- ============================================
+             SECTION: SUGGESTED SOURCES
+             ============================================ -->
+        {% if has_sources_access %}
+        <section class="focus-section" id="sources">
+            <header class="focus-section-head">
+                <div class="fsh-left">
+                    <span class="fsh-icon fsh-icon-primary">📚</span>
+                    <div class="fsh-text">
+                        <h2>Suggested Sources</h2>
+                        <p>PDFs to re-read based on your missed questions</p>
+                    </div>
+                </div>
+                <span class="fsh-count">
+                    {% if sources_unlimited %}
+                        {{ sources|length }}
                     {% else %}
-                        {{ _('focus.suggestions.limited', n=suggestion_limit) }}
+                        {{ sources|length }} <span class="fsh-count-sep">/</span> {{ sources_quota }}
                     {% endif %}
                 </span>
-            </div>
+            </header>
 
-            {% if suggestions %}
-                <div class="focus-source-list">
-                    {% for s in suggestions %}
-                    <a class="focus-source-card {% if s.is_premium %}premium{% endif %}"
-                       href="{{ url_for('pdfs.list_pdfs') }}?highlight={{ s.pdf_code }}"
-                       title="{{ _('focus.suggestions.open_hint') }}">
-                        <div class="fsc-icon">
-                            {% if s.is_premium %}💎{% else %}📄{% endif %}
-                        </div>
-                        <div class="fsc-body">
-                            <div class="fsc-title">{{ s.title }}</div>
-                            <div class="fsc-meta">
-                                {% if s.subject %}<span>📚 {{ s.subject }}</span>{% endif %}
-                                {% if s.pages %}
-                                    <span class="fsc-pages">
-                                        {% for p in s.pages[:5] %}
-                                            <span class="page-chip">{{ p }}</span>
-                                        {% endfor %}
-                                        {% if s.pages|length > 5 %}
-                                            <span class="page-chip more">+{{ s.pages|length - 5 }}</span>
-                                        {% endif %}
-                                    </span>
-                                {% endif %}
+            {% if sources %}
+                <div class="focus-list {% if sources|length > sources_displayed %}collapsed{% endif %}" id="sources-list">
+                    {% for s in sources %}
+                        <a class="focus-card-item source-card"
+                           href="{{ url_for('pdfs.list_pdfs') }}?highlight={{ s.pdf_code }}{% if s.pages %}&pages={{ s.pages|join(',') }}{% endif %}{% if s.miss_count %}&misses={{ s.miss_count }}{% endif %}"
+                           title="Open {{ s.title }} in the PDF library">
+                            <div class="sc-icon">
+                                {% if s.is_premium %}💎{% else %}📄{% endif %}
                             </div>
-                            <div class="fsc-stats">
-                                <span class="fsc-miss">
-                                    ❌ <strong>{{ s.miss_count }}</strong>
-                                    {{ _('focus.suggestions.misses') }}
-                                </span>
-                                {% if s.last_miss %}
-                                <span class="fsc-when">
-                                    🕐 {{ s.last_miss[:10] }}
-                                </span>
-                                {% endif %}
+                            <div class="sc-body">
+                                <div class="sc-title">{{ s.title }}</div>
+                                <div class="sc-meta">
+                                    {% if s.subject %}<span>📚 {{ s.subject }}</span>{% endif %}
+                                    {% if s.pages %}
+                                        <span class="sc-pages">
+                                            📑
+                                            {% for p in s.pages[:4] %}
+                                                <span class="page-chip">{{ p }}</span>
+                                            {% endfor %}
+                                            {% if s.pages|length > 4 %}
+                                                <span class="page-chip more">+{{ s.pages|length - 4 }}</span>
+                                            {% endif %}
+                                        </span>
+                                    {% endif %}
+                                </div>
+                                <div class="sc-stats">
+                                    <span class="sc-miss">❌ <strong>{{ s.miss_count }}</strong> missed</span>
+                                    {% if s.last_miss %}
+                                        <span class="sc-when">{{ s.last_miss[:10] }}</span>
+                                    {% endif %}
+                                </div>
                             </div>
-                        </div>
-                        <div class="fsc-arrow">
-                            <i class="fas fa-arrow-right"></i>
-                        </div>
-                    </a>
+                            <div class="sc-arrow"><i class="fas fa-arrow-right"></i></div>
+                        </a>
                     {% endfor %}
                 </div>
 
-                {% if more_available > 0 %}
-                <div class="focus-more-cta">
-                    <span>
-                        {{ _('focus.suggestions.more_available', n=more_available) }}
-                    </span>
-                    <button type="button" class="btn btn-sm btn-primary"
-                            onclick="openUpgradeSheet({ feature: 'focus_suggestions', requiredTier: 'premium' })">
-                        {{ _('focus.suggestions.unlock_more') }}
+                {% if sources|length > sources_displayed %}
+                    <button type="button" class="focus-show-all"
+                            data-expand-target="sources-list"
+                            onclick="focusExpandSection('sources-list', this)">
+                        <i class="fas fa-chevron-down"></i>
+                        Show all {{ sources|length }}
                     </button>
-                </div>
                 {% endif %}
+
+                {% if sources_more_count > 0 %}
+                    <div class="focus-more-card">
+                        <div class="fmc-icon">🔒</div>
+                        <div class="fmc-text">
+                            <strong>{{ sources_more_count }} more source{{ '' if sources_more_count == 1 else 's' }}</strong>
+                            <span>Upgrade to unlock your full study list</span>
+                        </div>
+                        <button type="button" class="btn btn-primary btn-sm"
+                                onclick="openUpgradeSheet({ feature: 'focus_suggestions', requiredTier: 'premium' })">
+                            Upgrade <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                {% endif %}
+
             {% else %}
                 <div class="focus-empty">
                     <span class="focus-empty-icon">📚</span>
-                    <h3>{{ _('focus.suggestions.empty_title') }}</h3>
-                    <p>{{ _('focus.suggestions.empty_desc') }}</p>
+                    <h3>No suggestions yet</h3>
+                    <p>Take quizzes and get questions wrong — sources for your mistakes will appear here as study materials get linked.</p>
                     <a href="{{ url_for('quiz.index') }}" class="btn btn-primary">
-                        <i class="fas fa-rocket"></i> {{ _('focus.suggestions.empty_cta') }}
+                        <i class="fas fa-rocket"></i> Take a quiz
                     </a>
                 </div>
             {% endif %}
         </section>
         {% endif %}
 
-        <!-- SECTION 2: PERFORMANCE ANALYTICS -->
-        {% if has_analytics %}
-        <section class="focus-section">
-            <div class="focus-section-head">
-                <h2><i class="fas fa-chart-line"></i> {{ _('focus.analytics.title') }}</h2>
-                <span class="focus-section-hint">
-                    {{ _('focus.analytics.level', n=analytics_level) }}
+        <!-- ============================================
+             SECTION: BOOKMARKS
+             ============================================ -->
+        {% if has_bookmarks_access %}
+        <section class="focus-section" id="bookmarks">
+            <header class="focus-section-head">
+                <div class="fsh-left">
+                    <span class="fsh-icon fsh-icon-amber">🔖</span>
+                    <div class="fsh-text">
+                        <h2>Bookmarks</h2>
+                        <p>Questions you've saved or liked</p>
+                    </div>
+                </div>
+                <span class="fsh-count">
+                    {% if bookmarks_unlimited %}
+                        {{ bookmark_stats.total }}
+                    {% else %}
+                        {{ bookmark_stats.total }} <span class="fsh-count-sep">/</span> {{ bookmarks_quota }}
+                    {% endif %}
                 </span>
-            </div>
+            </header>
+
+            {% if bookmarks %}
+                {% if bookmark_stats.saved_count > 0 and bookmark_stats.liked_count > 0 %}
+                <div class="focus-chips" id="bookmarkChips">
+                    <button type="button" class="focus-chip active" data-filter="all">
+                        All <span class="chip-count">{{ bookmark_stats.total }}</span>
+                    </button>
+                    <button type="button" class="focus-chip" data-filter="saved">
+                        🔖 Saved <span class="chip-count">{{ bookmark_stats.saved_count }}</span>
+                    </button>
+                    <button type="button" class="focus-chip" data-filter="liked">
+                        ❤️ Liked <span class="chip-count">{{ bookmark_stats.liked_count }}</span>
+                    </button>
+                </div>
+                {% endif %}
+
+                <div class="focus-list {% if bookmarks|length > bookmarks_displayed %}collapsed{% endif %}" id="bookmarks-list">
+                    {% for b in bookmarks %}
+                        {% set has_source = b.pdf_code %}
+                        {% if has_source %}
+                            {% set href = url_for('pdfs.list_pdfs') ~ '?highlight=' ~ b.pdf_code ~ ('&pages=' ~ b.pdf_page if b.pdf_page else '') %}
+                            <a class="focus-card-item bookmark-card"
+                               data-saved="{{ '1' if b.is_saved else '0' }}"
+                               data-liked="{{ '1' if b.is_liked else '0' }}"
+                               href="{{ href }}"
+                               title="Open source PDF">
+                        {% else %}
+                            <div class="focus-card-item bookmark-card no-source"
+                                 data-saved="{{ '1' if b.is_saved else '0' }}"
+                                 data-liked="{{ '1' if b.is_liked else '0' }}">
+                        {% endif %}
+
+                            <div class="bc-body">
+                                <div class="bc-title">{{ b.question_text }}</div>
+
+                                <div class="bc-meta">
+                                    <span class="bc-subject">{{ b.subject_icon }} {{ b.subject_name }}</span>
+                                    {% if b.chapter %}<span>· {{ b.chapter }}</span>{% endif %}
+                                    <span>· <span class="stars">{% for i in range(1, 6) %}{% if i <= b.difficulty %}⭐{% else %}☆{% endif %}{% endfor %}</span></span>
+                                    {% if b.pdf_page %}<span>· 📄 p.{{ b.pdf_page }}</span>{% endif %}
+                                </div>
+
+                                <div class="bc-status">
+                                    {% if b.is_saved %}
+                                        <span class="bc-chip saved"><i class="fas fa-bookmark"></i> Saved</span>
+                                    {% endif %}
+                                    {% if b.is_liked %}
+                                        <span class="bc-chip liked"><i class="fas fa-heart"></i> Liked</span>
+                                    {% endif %}
+                                    {% if not has_source %}
+                                        <span class="bc-chip muted">No source</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            {% if has_source %}
+                            <div class="bc-action">
+                                <span>Read</span>
+                                <i class="fas fa-arrow-right"></i>
+                            </div>
+                            {% endif %}
+
+                        {% if has_source %}
+                            </a>
+                        {% else %}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+
+                {% if bookmarks|length > bookmarks_displayed %}
+                    <button type="button" class="focus-show-all"
+                            data-expand-target="bookmarks-list"
+                            onclick="focusExpandSection('bookmarks-list', this)">
+                        <i class="fas fa-chevron-down"></i>
+                        Show all {{ bookmarks|length }}
+                    </button>
+                {% endif %}
+
+                {% if bookmarks_more_count > 0 %}
+                    <div class="focus-more-card">
+                        <div class="fmc-icon">🔒</div>
+                        <div class="fmc-text">
+                            <strong>{{ bookmarks_more_count }} more bookmark{{ '' if bookmarks_more_count == 1 else 's' }}</strong>
+                            <span>Upgrade to unlock your full library</span>
+                        </div>
+                        <button type="button" class="btn btn-primary btn-sm"
+                                onclick="openUpgradeSheet({ feature: 'focus_bookmarks', requiredTier: 'premium' })">
+                            Upgrade <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                {% endif %}
+
+            {% else %}
+                <div class="focus-empty">
+                    <span class="focus-empty-icon">🔖</span>
+                    <h3>No bookmarks yet</h3>
+                    <p>Save or like questions during quizzes to build your personal study library.</p>
+                    <a href="{{ url_for('quiz.index') }}" class="btn btn-primary">
+                        <i class="fas fa-rocket"></i> Take a quiz
+                    </a>
+                </div>
+            {% endif %}
+        </section>
+        {% endif %}
+
+        <!-- ============================================
+             SECTION: PERFORMANCE (analytics)
+             ============================================ -->
+        {% if has_analytics_access %}
+        <section class="focus-section" id="analytics">
+            <header class="focus-section-head">
+                <div class="fsh-left">
+                    <span class="fsh-icon fsh-icon-blue">📊</span>
+                    <div class="fsh-text">
+                        <h2>Your Performance</h2>
+                        <p>Charts and trends from your quiz history</p>
+                    </div>
+                </div>
+                <span class="fsh-count">Level {{ analytics_level }}</span>
+            </header>
 
             <!-- Level 1+: Subject bars -->
             {% if analytics.subject_performance %}
             <div class="focus-card">
                 <div class="focus-card-head">
-                    <h3><i class="fas fa-bullseye"></i> {{ _('focus.analytics.subjects') }}</h3>
+                    <h3><i class="fas fa-bullseye"></i> Subject Strength</h3>
                 </div>
                 <div class="focus-card-body">
                     {% for s in analytics.subject_performance[:8] %}
@@ -171,7 +323,7 @@
             {% if analytics.accuracy_over_time and analytics.accuracy_over_time.labels %}
             <div class="focus-card">
                 <div class="focus-card-head">
-                    <h3><i class="fas fa-chart-line"></i> {{ _('focus.analytics.accuracy') }}</h3>
+                    <h3><i class="fas fa-chart-line"></i> Accuracy Over Time</h3>
                 </div>
                 <div class="focus-card-body">
                     <div class="focus-chart-wrap">
@@ -185,7 +337,7 @@
             {% if analytics.miss_by_subject %}
             <div class="focus-card">
                 <div class="focus-card-head">
-                    <h3><i class="fas fa-times-circle"></i> {{ _('focus.analytics.misses_by_subject') }}</h3>
+                    <h3><i class="fas fa-times-circle"></i> Misses by Subject</h3>
                 </div>
                 <div class="focus-card-body">
                     <div class="focus-chart-wrap">
@@ -199,7 +351,7 @@
             {% if analytics.difficulty_breakdown %}
             <div class="focus-card">
                 <div class="focus-card-head">
-                    <h3><i class="fas fa-signal"></i> {{ _('focus.analytics.difficulty') }}</h3>
+                    <h3><i class="fas fa-signal"></i> Difficulty Breakdown</h3>
                 </div>
                 <div class="focus-card-body">
                     <div class="focus-diff-grid">
@@ -209,22 +361,42 @@
                                 {{ '⭐' * d.difficulty }}{{ '☆' * (5 - d.difficulty) }}
                             </span>
                             <span class="fd-count">{{ d.miss_count }}</span>
-                            <span class="fd-label">{{ _('focus.analytics.misses') }}</span>
+                            <span class="fd-label">misses</span>
                         </div>
                         {% endfor %}
                     </div>
                 </div>
             </div>
             {% endif %}
+
+            {% if not analytics.subject_performance and not analytics.accuracy_over_time %}
+                <div class="focus-empty">
+                    <span class="focus-empty-icon">📊</span>
+                    <h3>Not enough data yet</h3>
+                    <p>Complete a few quizzes to unlock performance charts and trends.</p>
+                    <a href="{{ url_for('quiz.index') }}" class="btn btn-primary">
+                        <i class="fas fa-rocket"></i> Take a quiz
+                    </a>
+                </div>
+            {% endif %}
         </section>
         {% endif %}
 
-        <!-- SECTION 3: FOCUS TIPS (level 3) -->
+        <!-- ============================================
+             SECTION: FOCUS TIPS (level 3)
+             ============================================ -->
         {% if analytics_level >= 3 and tips %}
-        <section class="focus-section">
-            <div class="focus-section-head">
-                <h2><i class="fas fa-lightbulb"></i> {{ _('focus.tips.title') }}</h2>
-            </div>
+        <section class="focus-section" id="tips">
+            <header class="focus-section-head">
+                <div class="fsh-left">
+                    <span class="fsh-icon fsh-icon-purple">💡</span>
+                    <div class="fsh-text">
+                        <h2>Focus Tips</h2>
+                        <p>Personalised insights from your patterns</p>
+                    </div>
+                </div>
+            </header>
+
             <div class="focus-tips">
                 {% for tip in tips %}
                 <div class="focus-tip">
@@ -240,7 +412,7 @@
 
 </div>
 
-<!-- Data bridge for JS charts -->
+<!-- Data bridge for charts -->
 <script id="focusData" type="application/json">
 {
   "accuracy": {{ (analytics.accuracy_over_time or {'labels': [], 'values': []})|tojson }},

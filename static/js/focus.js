@@ -1,10 +1,83 @@
 // static/js/focus.js
-// Focus page charts (subject misses + accuracy over time).
+// Focus page interactions:
+//   - Expand/collapse sections ("Show all")
+//   - Filter bookmarks by type (all / saved / liked)
+//   - Render analytics charts (accuracy line, miss bar)
 
 (function () {
     'use strict';
 
-    document.addEventListener('DOMContentLoaded', function () {
+    // ============================================
+    // EXPAND SECTION (Show all)
+    // ============================================
+    window.focusExpandSection = function (listId, btn) {
+        const list = document.getElementById(listId);
+        if (!list) return;
+
+        const isCollapsed = list.classList.contains('collapsed');
+
+        if (isCollapsed) {
+            list.classList.remove('collapsed');
+            // Fade-in the newly revealed items
+            const items = list.querySelectorAll('.focus-card-item');
+            items.forEach(function (item, idx) {
+                if (idx < 5) return;
+                item.style.opacity = '0';
+                item.style.transform = 'translateY(8px)';
+                requestAnimationFrame(function () {
+                    setTimeout(function () {
+                        item.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                        item.style.opacity = '1';
+                        item.style.transform = 'translateY(0)';
+                    }, (idx - 5) * 30);
+                });
+            });
+            if (btn) btn.style.display = 'none';
+        }
+    };
+
+    // ============================================
+    // BOOKMARK FILTER CHIPS
+    // ============================================
+    function initBookmarkChips() {
+        const container = document.getElementById('bookmarkChips');
+        const list = document.getElementById('bookmarks-list');
+        if (!container || !list) return;
+
+        const chips = container.querySelectorAll('.focus-chip');
+        const cards = list.querySelectorAll('.bookmark-card');
+
+        chips.forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                const filter = this.dataset.filter;
+
+                chips.forEach(function (c) { c.classList.remove('active'); });
+                this.classList.add('active');
+
+                let visibleCount = 0;
+                cards.forEach(function (card) {
+                    const isSaved = card.dataset.saved === '1';
+                    const isLiked = card.dataset.liked === '1';
+
+                    let show = true;
+                    if (filter === 'saved') show = isSaved;
+                    else if (filter === 'liked') show = isLiked;
+
+                    card.style.display = show ? '' : 'none';
+                    if (show) visibleCount++;
+                });
+
+                // Re-apply collapsed state after filtering
+                // (only reveal first 5 of the newly filtered set)
+                list.classList.add('collapsed');
+            });
+        });
+    }
+
+    // ============================================
+    // CHART RENDERING
+    // ============================================
+    function initCharts() {
         const el = document.getElementById('focusData');
         if (!el || typeof Chart === 'undefined') return;
 
@@ -22,7 +95,7 @@
 
         // ---------- Accuracy line ----------
         const accCanvas = document.getElementById('focusAccuracyChart');
-        if (accCanvas && payload.accuracy && payload.accuracy.labels?.length) {
+        if (accCanvas && payload.accuracy && payload.accuracy.labels && payload.accuracy.labels.length) {
             const prettyLabels = payload.accuracy.labels.map(function (d) {
                 try {
                     const dt = new Date(d + 'T00:00:00');
@@ -93,7 +166,7 @@
             });
         }
 
-        // ---------- Miss count by subject (horizontal bar) ----------
+        // ---------- Miss count by subject ----------
         const missCanvas = document.getElementById('focusMissChart');
         if (missCanvas && Array.isArray(payload.miss_by_subject) && payload.miss_by_subject.length) {
             const labels = payload.miss_by_subject.map(function (x) { return x.subject_name; });
@@ -153,5 +226,14 @@
                 }
             });
         }
+    }
+
+    // ============================================
+    // BOOT
+    // ============================================
+    document.addEventListener('DOMContentLoaded', function () {
+        initBookmarkChips();
+        initCharts();
     });
+
 })();

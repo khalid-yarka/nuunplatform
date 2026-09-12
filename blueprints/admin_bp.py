@@ -74,9 +74,18 @@ def admin_required(f):
 
 
 def validate_csrf():
+    """Form endpoints: abort(403) on failure. Never returns a value."""
     token = request.form.get('csrf_token') or request.headers.get('X-CSRF-Token')
     if not token or token != session.get('csrf_token'):
         abort(403, 'CSRF token validation failed')
+
+
+def _csrf_valid() -> bool:
+    """Pure CSRF check for JSON endpoints. Returns True or False. Never aborts."""
+    token = request.form.get('csrf_token') or request.headers.get('X-CSRF-Token')
+    if not token:
+        return False
+    return token == session.get('csrf_token')
 
 
 # ============================================
@@ -86,7 +95,6 @@ def validate_csrf():
 _PDF_CODE_RE = re.compile(r'^[A-Z0-9]{4}-[A-Z0-9]{4}$')
 _PDF_SIZE_CAP_BYTES = 20 * 1024 * 1024  # 20 MB (Telegram getFile cap)
 
-# In-memory cache for Telegram file sizes (avoid hammering the API)
 _PDF_SIZE_CACHE = {}
 _PDF_SIZE_CACHE_TTL = 300  # seconds
 
@@ -712,7 +720,7 @@ def delete_question_route(question_id):
 
 
 # ============================================
-# PDF LOOKUP — used by edit page & bulk page
+# PDF INFO — single-code lookup (edit page + bulk page)
 # ============================================
 
 @admin_bp.route('/questions/pdf-info', methods=['POST'])
@@ -722,7 +730,9 @@ def pdf_info():
     Given a single PDF code, return full status:
         {valid, exists, source, title, is_premium, size_mb, can_preview, preview_url, reason}
     """
-    validate_csrf()
+    if not _csrf_valid():
+        return jsonify({'error': 'Invalid session. Refresh the page.'}), 403
+
     data = request.get_json(silent=True) or {}
     code = _normalize_pdf_code(data.get('code'))
 
@@ -759,7 +769,6 @@ def pdf_info():
 
         file_url = main_pdf.get('file_url')
         if file_url:
-            # HTTP-hosted → preview always allowed
             out['can_preview'] = True
             out['preview_url'] = file_url
             return jsonify(out)
@@ -817,7 +826,7 @@ def pdf_info():
 
 
 # ============================================
-# BULK IMPORT — POST + preview
+# BULK IMPORT — POST + GET
 # ============================================
 
 @admin_bp.route('/bulk-import', methods=['GET', 'POST'])
@@ -827,7 +836,7 @@ def bulk_import():
     all_subject_codes = get_all_subject_codes()
 
     if request.method == 'POST':
-        if not validate_csrf():
+        if not _csrf_valid():
             flash('Invalid session. Please refresh the page and try again.', 'error')
             return redirect(url_for('admin.bulk_import'))
 
@@ -836,7 +845,6 @@ def bulk_import():
         input_method = request.form.get('input_method', 'paste')
 
         # ---------- 1. Parse JSON ----------
-        raw_text = ''
         if input_method == 'file':
             if file_data and file_data.filename:
                 try:
@@ -944,7 +952,6 @@ def bulk_import():
                                    'error': 'Duplicate question'})
                 continue
 
-            # Per-question pdf_page (only meaningful if we have a code)
             pdf_page = _normalize_pdf_page(q.get('pdf_page'))
             if pdf_page and not pdf_code:
                 warnings.append({
@@ -1018,7 +1025,6 @@ def bulk_import():
             )
             return redirect(url_for('admin.admin_questions'))
 
-        # Imported == 0 but no validation errors → real failure
         detail = failed[0].get('error') if failed else 'unknown error'
         flash(f'❌ Import failed — nothing was inserted. Reason: {detail}', 'error')
         return redirect(url_for('admin.bulk_import'))
@@ -1041,7 +1047,7 @@ def bulk_preview():
     from subjects_config import get_all_subject_codes
     all_subject_codes = get_all_subject_codes()
 
-    if not validate_csrf():
+    if not _csrf_valid():
         return jsonify({'error': 'Invalid session. Refresh the page.'}), 403
 
     json_data = (request.form.get('json_data') or '').strip()
@@ -1077,7 +1083,6 @@ def bulk_preview():
 
     if pdf_code:
         if _validate_pdf_code_format(pdf_code):
-            # Full lookup via the same logic as /questions/pdf-info
             lookup = check_pdf_codes_exist([pdf_code])
             info = lookup.get(pdf_code, {})
             pdf_info_payload = {
@@ -1089,7 +1094,6 @@ def bulk_preview():
                 'is_premium': info.get('is_premium', False),
             }
 
-            # If exists in bot, try to get size for can_preview
             if info.get('exists') and info.get('source') == 'bot':
                 try:
                     from bot.db import get_bot_pdf_by_code
@@ -1105,7 +1109,6 @@ def bulk_preview():
                 except Exception:
                     pdf_info_payload['can_preview'] = False
             elif info.get('exists') and info.get('source') == 'main':
-                # Look for file_url on main
                 try:
                     main_pdf = get_pdf_by_code(pdf_code)
                     if main_pdf and main_pdf.get('file_url'):
