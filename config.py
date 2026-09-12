@@ -175,6 +175,7 @@ class Config:
     TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
     TELEGRAM_BOT_USERNAME = os.getenv('TELEGRAM_BOT_USERNAME', 'nuunplatform_bot')
     TELEGRAM_ADMIN_IDS = os.getenv('TELEGRAM_ADMIN_IDS', '')
+    TELEGRAM_SUPER_ADMIN_IDS = os.getenv('TELEGRAM_SUPER_ADMIN_IDS', '')
     BASE_URL = os.getenv('BASE_URL', 'https://yourdomain.com')
 
     # ============================================

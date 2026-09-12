@@ -1,5 +1,5 @@
 # blueprints/admin_bp.py
-# Advanced admin: question management (list/edit/add), bulk import with live preview,
+# Admin: questions (list/edit/new), bulk import with live preview + PDF preview,
 # users, groups, PDFs, reports, announcements.
 
 from flask import (
@@ -16,7 +16,6 @@ from db import (
     execute_with_retry,
     get_user_subject_list, get_student_by_id, get_group_by_id,
     get_group_categories_with_count,
-    # Focus / question management helpers
     get_questions_paginated, get_question_stats, get_questions_filter_options,
     check_pdf_codes_exist,
 )
@@ -24,6 +23,8 @@ from error_models import get_error_stats
 from functools import wraps
 import json
 import re
+import time
+import logging
 from subjects_config import get_all_subjects, get_subject
 from services.tier_service import get_user_tier, set_user_tier, get_current_user_tier
 from services.notification_service import send_notification_to_all
@@ -33,17 +34,14 @@ from services.group_service import (
     toggle_active, toggle_featured, get_group_stats, get_group_audit_log,
 )
 from activity_logger import log_admin_action
-
 from db import (
     get_all_pdfs, get_pdf_by_id, get_pdf_by_code, create_main_pdf,
     delete_main_pdf,
 )
-
 from services.interaction_service import (
     get_pending_reports, get_all_reports, count_reports,
     resolve_report, dismiss_report, get_report_by_id,
 )
-
 from admin_users_db import (
     ensure_admin_user_schema,
     get_users_admin, get_users_admin_export, get_users_admin_stats,
@@ -53,11 +51,13 @@ from admin_users_db import (
     get_user_recent_live_quizzes, bulk_user_action, log_admin_user_action,
 )
 
+logger = logging.getLogger(__name__)
+
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
 
 # ============================================
-# DECORATORS / GUARDS
+# GUARDS
 # ============================================
 
 def admin_required(f):
@@ -84,6 +84,11 @@ def validate_csrf():
 # ============================================
 
 _PDF_CODE_RE = re.compile(r'^[A-Z0-9]{4}-[A-Z0-9]{4}$')
+_PDF_SIZE_CAP_BYTES = 20 * 1024 * 1024  # 20 MB (Telegram getFile cap)
+
+# In-memory cache for Telegram file sizes (avoid hammering the API)
+_PDF_SIZE_CACHE = {}
+_PDF_SIZE_CACHE_TTL = 300  # seconds
 
 
 def _normalize_pdf_code(raw):
@@ -107,11 +112,33 @@ def _normalize_pdf_page(raw):
     return page if page > 0 else None
 
 
+def _get_telegram_file_size(file_id: str):
+    """Return file size (bytes) via Telegram, or None. Cached 5 min."""
+    if not file_id:
+        return None
+    now = time.time()
+    cached = _PDF_SIZE_CACHE.get(file_id)
+    if cached and (now - cached['fetched_at']) < _PDF_SIZE_CACHE_TTL:
+        return cached['size_bytes']
+    try:
+        from bot.utils import get_bot
+        bot = get_bot()
+        file_info = bot.get_file(file_id)
+        size = getattr(file_info, 'file_size', None)
+        if size:
+            size = int(size)
+            _PDF_SIZE_CACHE[file_id] = {'size_bytes': size, 'fetched_at': now}
+            return size
+        return None
+    except Exception as e:
+        logger.warning(f"Could not get Telegram file size: {e}")
+        return None
+
+
 def _resolve_pdf_for_import(q, default_code):
     """
-    Returns (code, page, orphan_page_dropped, invalid_format).
-    Precedence: explicit override > inherit default.
-    An explicit empty string clears inheritance.
+    Returns (code, page, orphan_dropped, invalid_format).
+    Precedence: explicit per-question override > batch default.
     """
     page = _normalize_pdf_page(q.get('pdf_page'))
 
@@ -176,7 +203,7 @@ def dashboard():
 
 
 # ============================================
-# USERS (unchanged — abbreviated for brevity in this answer)
+# USERS
 # ============================================
 
 @admin_bp.route('/users')
@@ -260,8 +287,9 @@ def admin_user_detail(user_id):
 def admin_user_set_note(user_id):
     validate_csrf()
     note = (request.form.get('note') or '').strip()
-    flash('Admin note saved.' if set_user_admin_note(user_id, note, session['user_id'])
-          else 'Failed to save note.', 'success' if set_user_admin_note(user_id, note, session['user_id']) else 'error')
+    ok = set_user_admin_note(user_id, note, session['user_id'])
+    flash('Admin note saved.' if ok else 'Failed to save note.',
+          'success' if ok else 'error')
     return redirect(url_for('admin.admin_user_detail', user_id=user_id))
 
 
@@ -285,9 +313,10 @@ def admin_user_toggle_admin(user_id):
         flash('You cannot change your own admin status.', 'error')
         return redirect(url_for('admin.admin_user_detail', user_id=user_id))
     new_state = toggle_user_admin_admin(user_id, session['user_id'])
-    flash('Admin privileges granted.' if new_state else 'Admin privileges revoked.'
-          if new_state is not None else 'Failed to change admin status.',
-          'success' if new_state is not None else 'error')
+    if new_state is None:
+        flash('Failed to change admin status.', 'error')
+    else:
+        flash('Admin privileges granted.' if new_state else 'Admin privileges revoked.', 'success')
     return redirect(url_for('admin.admin_user_detail', user_id=user_id))
 
 
@@ -325,8 +354,9 @@ def admin_user_reset_password(user_id):
 @admin_required
 def admin_user_force_logout(user_id):
     validate_csrf()
-    flash('User will be logged out on next request.' if force_user_logout(user_id, session['user_id'])
-          else 'Failed to force logout.', 'success' if force_user_logout(user_id, session['user_id']) else 'error')
+    ok = force_user_logout(user_id, session['user_id'])
+    flash('User will be logged out on next request.' if ok else 'Failed to force logout.',
+          'success' if ok else 'error')
     return redirect(url_for('admin.admin_user_detail', user_id=user_id))
 
 
@@ -453,7 +483,7 @@ def restore_deleted_user(deleted_id):
 
 
 # ============================================
-# QUESTIONS — MAIN LIST
+# QUESTIONS — LIST
 # ============================================
 
 @admin_bp.route('/questions')
@@ -461,8 +491,8 @@ def restore_deleted_user(deleted_id):
 def admin_questions():
     search = (request.args.get('search') or '').strip()
     subject_code = (request.args.get('subject') or '').strip()
-    pdf_filter = (request.args.get('pdf') or '').strip()      # linked | unlinked
-    status_filter = (request.args.get('status') or '').strip()  # active | archived
+    pdf_filter = (request.args.get('pdf') or '').strip()
+    status_filter = (request.args.get('status') or '').strip()
     sort = (request.args.get('sort') or 'newest').strip()
     page = max(1, int(request.args.get('page') or 1))
     per_page = 20
@@ -475,7 +505,6 @@ def admin_questions():
     filter_options = get_questions_filter_options()
     total_pages = (total + per_page - 1) // per_page if total > 0 else 1
 
-    # Resolve PDF titles for the visible questions (single batch lookup)
     codes_in_page = [q['pdf_code'] for q in questions if q.get('pdf_code')]
     pdf_map = check_pdf_codes_exist(codes_in_page) if codes_in_page else {}
 
@@ -490,7 +519,7 @@ def admin_questions():
 
 
 # ============================================
-# QUESTIONS — ADD
+# QUESTIONS — NEW
 # ============================================
 
 @admin_bp.route('/questions/new', methods=['GET', 'POST'])
@@ -523,7 +552,6 @@ def admin_question_new():
     pdf_code = _normalize_pdf_code(request.form.get('pdf_code'))
     pdf_page = _normalize_pdf_page(request.form.get('pdf_page'))
 
-    # Validation
     errors = []
     if not subject_code or not get_subject(subject_code):
         errors.append('Invalid or missing subject.')
@@ -533,9 +561,8 @@ def admin_question_new():
         errors.append('Options A, B, and C are required.')
     if correct_answer not in ('A', 'B', 'C', 'D', 'E', 'F'):
         errors.append('Please select the correct answer.')
-
     if pdf_code and not _validate_pdf_code_format(pdf_code):
-        errors.append('Invalid PDF code format. Expected XXXX-XXXX (e.g. A3B9-X7K2).')
+        errors.append('Invalid PDF code format. Expected XXXX-XXXX.')
     if pdf_page and not pdf_code:
         pdf_page = None
         flash('Page number was ignored because no PDF code was provided.', 'warning')
@@ -629,7 +656,7 @@ def admin_question_edit(question_id):
     if correct_answer not in ('A', 'B', 'C', 'D', 'E', 'F'):
         errors.append('Please select the correct answer.')
     if pdf_code and not _validate_pdf_code_format(pdf_code):
-        errors.append('Invalid PDF code format. Expected XXXX-XXXX.')
+        errors.append('Invalid PDF code format.')
     if pdf_page and not pdf_code:
         pdf_page = None
         flash('Page number was ignored because no PDF code was provided.', 'warning')
@@ -685,30 +712,112 @@ def delete_question_route(question_id):
 
 
 # ============================================
-# PDF CODE LOOKUP (AJAX — for edit + bulk)
+# PDF LOOKUP — used by edit page & bulk page
 # ============================================
 
-@admin_bp.route('/questions/pdf-lookup', methods=['POST'])
+@admin_bp.route('/questions/pdf-info', methods=['POST'])
 @admin_required
-def pdf_lookup():
+def pdf_info():
+    """
+    Given a single PDF code, return full status:
+        {valid, exists, source, title, is_premium, size_mb, can_preview, preview_url, reason}
+    """
     validate_csrf()
     data = request.get_json(silent=True) or {}
-    codes = data.get('codes') or []
-    if not isinstance(codes, list):
-        codes = [codes]
+    code = _normalize_pdf_code(data.get('code'))
 
-    normalized = [_normalize_pdf_code(c) for c in codes]
-    normalized = [c for c in normalized if c]
+    out = {
+        'code': code or '',
+        'valid': False,
+        'exists': False,
+        'source': None,
+        'title': '',
+        'is_premium': False,
+        'size_mb': None,
+        'can_preview': False,
+        'preview_url': None,
+        'reason': None,
+    }
 
-    if not normalized:
-        return jsonify({'results': {}})
+    if not code:
+        out['reason'] = 'no_code'
+        return jsonify(out)
 
-    results = check_pdf_codes_exist(normalized)
-    return jsonify({'results': results})
+    if not _validate_pdf_code_format(code):
+        out['reason'] = 'invalid_format'
+        return jsonify(out)
+
+    out['valid'] = True
+
+    # --- Main DB ---
+    main_pdf = get_pdf_by_code(code)
+    if main_pdf:
+        out['exists'] = True
+        out['source'] = 'main'
+        out['title'] = main_pdf.get('title') or code
+        out['is_premium'] = bool(main_pdf.get('is_premium', 0))
+
+        file_url = main_pdf.get('file_url')
+        if file_url:
+            # HTTP-hosted → preview always allowed
+            out['can_preview'] = True
+            out['preview_url'] = file_url
+            return jsonify(out)
+
+        # No file_url on main → try bot for a file_id
+        try:
+            from bot.db import get_bot_pdf_by_code
+            bot_pdf = get_bot_pdf_by_code(code)
+            if bot_pdf:
+                size = _get_telegram_file_size(bot_pdf['file_id'])
+                if size:
+                    out['size_mb'] = round(size / (1024 * 1024), 2)
+                    if size <= _PDF_SIZE_CAP_BYTES:
+                        out['can_preview'] = True
+                        out['preview_url'] = url_for('pdfs.preview_telegram', code=code)
+                    else:
+                        out['reason'] = 'too_large'
+                else:
+                    out['reason'] = 'size_unknown'
+            else:
+                out['reason'] = 'no_file'
+        except Exception as e:
+            logger.warning(f"pdf_info main→bot fallback failed: {e}")
+            out['reason'] = 'lookup_error'
+
+        return jsonify(out)
+
+    # --- Bot DB only ---
+    try:
+        from bot.db import get_bot_pdf_by_code
+        bot_pdf = get_bot_pdf_by_code(code)
+        if bot_pdf:
+            out['exists'] = True
+            out['source'] = 'bot'
+            out['title'] = bot_pdf.get('title') or code
+            out['is_premium'] = bool(bot_pdf.get('is_premium', 0))
+
+            size = _get_telegram_file_size(bot_pdf['file_id'])
+            if size:
+                out['size_mb'] = round(size / (1024 * 1024), 2)
+                if size <= _PDF_SIZE_CAP_BYTES:
+                    out['can_preview'] = True
+                    out['preview_url'] = url_for('pdfs.preview_telegram', code=code)
+                else:
+                    out['reason'] = 'too_large'
+            else:
+                out['reason'] = 'size_unknown'
+        else:
+            out['reason'] = 'not_found'
+    except Exception as e:
+        logger.warning(f"pdf_info bot lookup failed: {e}")
+        out['reason'] = 'lookup_error'
+
+    return jsonify(out)
 
 
 # ============================================
-# BULK IMPORT
+# BULK IMPORT — POST + preview
 # ============================================
 
 @admin_bp.route('/bulk-import', methods=['GET', 'POST'])
@@ -718,224 +827,375 @@ def bulk_import():
     all_subject_codes = get_all_subject_codes()
 
     if request.method == 'POST':
-        validate_csrf()
+        if not validate_csrf():
+            flash('Invalid session. Please refresh the page and try again.', 'error')
+            return redirect(url_for('admin.bulk_import'))
 
-        json_data = request.form.get('json_data', '').strip()
+        json_data = (request.form.get('json_data') or '').strip()
         file_data = request.files.get('json_file')
+        input_method = request.form.get('input_method', 'paste')
 
-        if file_data and file_data.filename:
-            try:
-                data = json.loads(file_data.read().decode('utf-8'))
-            except Exception as e:
-                flash(f'Error reading file: {str(e)}', 'error')
-                return render_template('dashboard/admin/bulk_import.html')
-        elif json_data:
-            try:
-                data = json.loads(json_data)
-            except json.JSONDecodeError as e:
-                flash(f'Invalid JSON format: {str(e)}', 'error')
-                return render_template('dashboard/admin/bulk_import.html')
+        # ---------- 1. Parse JSON ----------
+        raw_text = ''
+        if input_method == 'file':
+            if file_data and file_data.filename:
+                try:
+                    raw_text = file_data.read().decode('utf-8')
+                except Exception as e:
+                    flash(f'Error reading file: {e}', 'error')
+                    return redirect(url_for('admin.bulk_import'))
+            else:
+                flash('Please upload a JSON file.', 'error')
+                return redirect(url_for('admin.bulk_import'))
         else:
+            raw_text = json_data
+
+        if not raw_text:
             flash('Please paste JSON or upload a file.', 'error')
-            return render_template('dashboard/admin/bulk_import.html')
+            return redirect(url_for('admin.bulk_import'))
 
-        if 'metadata' not in data:
-            flash('Missing "metadata" section.', 'error')
-            return render_template('dashboard/admin/bulk_import.html')
-        if 'questions' not in data or not data['questions']:
-            flash('Missing or empty "questions" array.', 'error')
-            return render_template('dashboard/admin/bulk_import.html')
+        try:
+            data = json.loads(raw_text)
+        except json.JSONDecodeError as e:
+            flash(f'Invalid JSON: {e}', 'error')
+            return redirect(url_for('admin.bulk_import'))
 
-        subject_code = data['metadata'].get('subject_code', '').strip()
+        if not isinstance(data, dict):
+            flash('JSON root must be an object.', 'error')
+            return redirect(url_for('admin.bulk_import'))
+
+        # ---------- 2. Metadata ----------
+        metadata = data.get('metadata') or {}
+        if not isinstance(metadata, dict):
+            flash('"metadata" must be an object.', 'error')
+            return redirect(url_for('admin.bulk_import'))
+
+        subject_code = (metadata.get('subject_code') or '').strip()
+        chapter = (metadata.get('chapter') or '').strip()
+
         if not subject_code:
-            flash('subject_code is required.', 'error')
-            return render_template('dashboard/admin/bulk_import.html')
+            flash('subject_code is required in metadata.', 'error')
+            return redirect(url_for('admin.bulk_import'))
         if subject_code not in all_subject_codes:
             available = ', '.join(all_subject_codes)
             flash(f'Subject code "{subject_code}" not found. Available: {available}', 'error')
-            return render_template('dashboard/admin/bulk_import.html')
+            return redirect(url_for('admin.bulk_import'))
 
-        chapter = data['metadata'].get('chapter', '').strip()
-        default_pdf_code = _normalize_pdf_code(data['metadata'].get('pdf_code'))
+        questions_raw = data.get('questions') or []
+        if not isinstance(questions_raw, list) or not questions_raw:
+            flash('"questions" must be a non-empty array.', 'error')
+            return redirect(url_for('admin.bulk_import'))
 
-        if default_pdf_code and not _validate_pdf_code_format(default_pdf_code):
-            flash(f'Invalid PDF code format in metadata: "{default_pdf_code}".', 'error')
-            return render_template('dashboard/admin/bulk_import.html')
+        # ---------- 3. PDF code (separate top-level form field) ----------
+        pdf_code_raw = (request.form.get('pdf_code') or '').strip().upper()
+        pdf_code = pdf_code_raw or None
 
+        if pdf_code and not _validate_pdf_code_format(pdf_code):
+            flash(f'Invalid PDF code format: "{pdf_code}". Expected XXXX-XXXX.', 'error')
+            return redirect(url_for('admin.bulk_import'))
+
+        # ---------- 4. Validate each question ----------
         questions_to_import = []
         errors = []
         duplicates = []
         warnings = []
 
-        for idx, q in enumerate(data['questions'], 1):
-            if not q.get('question', '').strip():
-                errors.append({'index': idx, 'question': 'Unknown', 'error': 'Question text is required'})
+        for idx, q in enumerate(questions_raw, 1):
+            if not isinstance(q, dict):
+                errors.append({'index': idx, 'question': '—',
+                               'error': 'Question must be an object'})
                 continue
-            if not q.get('options') or len(q['options']) < 3:
-                errors.append({'index': idx, 'question': q.get('question', 'Unknown'), 'error': 'Minimum 3 options required'})
+
+            q_text = (q.get('question') or '').strip()
+            if not q_text:
+                errors.append({'index': idx, 'question': '—',
+                               'error': 'Question text is required'})
                 continue
-            if len(q['options']) > 6:
-                errors.append({'index': idx, 'question': q.get('question', 'Unknown'), 'error': 'Maximum 6 options allowed'})
+
+            opts = q.get('options')
+            if not isinstance(opts, list):
+                errors.append({'index': idx, 'question': q_text[:50],
+                               'error': '"options" must be an array'})
                 continue
-            if not q.get('correct') or q['correct'] < 1 or q['correct'] > len(q['options']):
-                errors.append({'index': idx, 'question': q.get('question', 'Unknown'), 'error': 'Invalid correct answer index'})
+            if len(opts) < 3:
+                errors.append({'index': idx, 'question': q_text[:50],
+                               'error': 'Minimum 3 options required'})
                 continue
-            difficulty = q.get('difficulty', 1)
+            if len(opts) > 6:
+                errors.append({'index': idx, 'question': q_text[:50],
+                               'error': 'Maximum 6 options allowed'})
+                continue
+
+            correct_idx = q.get('correct')
+            if not isinstance(correct_idx, int) or correct_idx < 1 or correct_idx > len(opts):
+                errors.append({'index': idx, 'question': q_text[:50],
+                               'error': 'Invalid "correct" index'})
+                continue
+
+            try:
+                difficulty = int(q.get('difficulty', 1))
+            except (ValueError, TypeError):
+                difficulty = 1
             if difficulty < 1 or difficulty > 5:
-                errors.append({'index': idx, 'question': q.get('question', 'Unknown'), 'error': 'Difficulty must be 1-5'})
+                difficulty = 3
+
+            if check_question_exists(q_text, subject_code):
+                duplicates.append({'index': idx, 'question': q_text,
+                                   'error': 'Duplicate question'})
                 continue
 
-            question_text = q['question'].strip()
-            if check_question_exists(question_text, subject_code):
-                duplicates.append({'index': idx, 'question': question_text, 'error': 'Duplicate question'})
-                continue
-
-            pdf_code, pdf_page, orphan, invalid = _resolve_pdf_for_import(q, default_pdf_code)
-            if invalid:
-                errors.append({
+            # Per-question pdf_page (only meaningful if we have a code)
+            pdf_page = _normalize_pdf_page(q.get('pdf_page'))
+            if pdf_page and not pdf_code:
+                warnings.append({
                     'index': idx,
-                    'question': question_text[:60],
-                    'error': 'Invalid PDF code format (expected XXXX-XXXX)'
+                    'message': f'Q{idx}: pdf_page set but no PDF code — page dropped'
                 })
-                continue
-            if orphan:
-                warnings.append({'index': idx, 'message': f'Q{idx}: pdf_page set without pdf_code — page dropped'})
+                pdf_page = None
 
-            option_labels = ['A', 'B', 'C', 'D', 'E', 'F']
-            options_dict = {option_labels[i]: opt.strip()
-                            for i, opt in enumerate(q['options']) if i < len(option_labels)}
+            labels = ['A', 'B', 'C', 'D', 'E', 'F']
+            options_dict = {
+                labels[i]: str(opts[i]).strip()
+                for i in range(len(opts)) if i < len(labels)
+            }
 
             questions_to_import.append({
                 'subject_code': subject_code,
-                'question_text': question_text,
+                'question_text': q_text,
                 'options': options_dict,
-                'correct_answer': option_labels[q['correct'] - 1],
+                'correct_answer': labels[correct_idx - 1],
                 'difficulty': difficulty,
                 'chapter': chapter,
-                'tags': ','.join(q.get('tags', [])),
-                'explanation': q.get('explanation', '').strip(),
+                'tags': ','.join(q.get('tags', [])) if isinstance(q.get('tags'), list)
+                        else str(q.get('tags', '') or ''),
+                'explanation': (q.get('explanation') or '').strip(),
                 'pdf_code': pdf_code,
                 'pdf_page': pdf_page,
                 'created_by': session['user_id'],
                 'updated_by': session['user_id'],
             })
 
+        # ---------- 5. Stop if validation failed ----------
         if errors or duplicates:
-            return render_template('dashboard/admin/bulk_import.html',
-                                 preview=True,
-                                 valid_questions=questions_to_import,
-                                 errors=errors, duplicates=duplicates,
-                                 warnings=warnings, subject_code=subject_code,
-                                 chapter=chapter, default_pdf_code=default_pdf_code,
-                                 total_questions=len(data['questions']))
+            return render_template(
+                'dashboard/admin/bulk_import.html',
+                preview=True,
+                valid_questions=questions_to_import,
+                errors=errors, duplicates=duplicates, warnings=warnings,
+                subject_code=subject_code, chapter=chapter,
+                pdf_code=pdf_code,
+                total_questions=len(questions_raw),
+            )
 
-        if questions_to_import:
-            result = bulk_create_questions(questions_to_import, session['user_id'])
-            if result['imported'] > 0:
-                flash(f'✅ {result["imported"]} questions imported!', 'success')
-            if result['errors']:
-                flash(f'⚠️ {len(result["errors"])} questions failed.', 'error')
-            if warnings:
-                flash(f'⚠️ {len(warnings)} warning(s).', 'warning')
-            return redirect(url_for('admin.admin_questions'))
-        else:
+        if not questions_to_import:
             flash('No valid questions to import.', 'error')
+            return redirect(url_for('admin.bulk_import'))
 
+        # ---------- 6. Do the import ----------
+        try:
+            result = bulk_create_questions(questions_to_import, session['user_id'])
+        except Exception as e:
+            logger.error(f"bulk_create_questions raised: {e}", exc_info=True)
+            flash(f'Import crashed: {e}', 'error')
+            return redirect(url_for('admin.bulk_import'))
+
+        imported = result.get('imported', 0)
+        failed = result.get('errors') or []
+
+        if imported > 0:
+            flash(f'✅ {imported} questions imported successfully!', 'success')
+            if warnings:
+                flash(f'⚠️ {len(warnings)} warning(s) — some page numbers were dropped.', 'warning')
+            if failed:
+                flash(f'⚠️ {len(failed)} question(s) failed to insert.', 'error')
+                for err in failed[:5]:
+                    flash(f'• {err.get("error", "unknown error")}', 'error')
+            log_admin_action(
+                'question.bulk_import',
+                f"Imported {imported} questions for {subject_code}"
+                + (f" · PDF {pdf_code}" if pdf_code else ""),
+                'info'
+            )
+            return redirect(url_for('admin.admin_questions'))
+
+        # Imported == 0 but no validation errors → real failure
+        detail = failed[0].get('error') if failed else 'unknown error'
+        flash(f'❌ Import failed — nothing was inserted. Reason: {detail}', 'error')
+        return redirect(url_for('admin.bulk_import'))
+
+    # GET
     return render_template('dashboard/admin/bulk_import.html')
 
+
+# ============================================
+# BULK PREVIEW (AJAX — live panel)
+# ============================================
 
 @admin_bp.route('/bulk-preview', methods=['POST'])
 @admin_required
 def bulk_preview():
     """
-    Lightweight preview endpoint used by the live preview panel.
-    Returns per-question enrichment including PDF existence checks.
+    Live preview endpoint. Accepts JSON + the separate pdf_code field.
+    Returns per-question enrichment + PDF existence/size info.
     """
     from subjects_config import get_all_subject_codes
     all_subject_codes = get_all_subject_codes()
 
-    json_data = request.form.get('json_data', '').strip()
+    if not validate_csrf():
+        return jsonify({'error': 'Invalid session. Refresh the page.'}), 403
+
+    json_data = (request.form.get('json_data') or '').strip()
     if not json_data:
         return jsonify({'error': 'No JSON data provided'}), 400
 
     try:
         data = json.loads(json_data)
     except json.JSONDecodeError as e:
-        return jsonify({'error': f'Invalid JSON: {str(e)}'}), 400
+        return jsonify({'error': f'Invalid JSON: {e}'}), 400
 
+    if not isinstance(data, dict):
+        return jsonify({'error': 'JSON root must be an object'}), 400
     if 'metadata' not in data:
         return jsonify({'error': 'Missing metadata section'}), 400
-    if 'questions' not in data or not data['questions']:
+    if 'questions' not in data or not isinstance(data['questions'], list) or not data['questions']:
         return jsonify({'error': 'Missing or empty questions array'}), 400
 
-    subject_code = data['metadata'].get('subject_code', '').strip()
+    metadata = data.get('metadata') or {}
+    subject_code = (metadata.get('subject_code') or '').strip()
+    chapter = (metadata.get('chapter') or '').strip()
+
     if not subject_code:
         return jsonify({'error': 'subject_code is required'}), 400
     if subject_code not in all_subject_codes:
         return jsonify({'error': f'Subject code "{subject_code}" not found.'}), 400
 
-    default_pdf_code = _normalize_pdf_code(data['metadata'].get('pdf_code'))
-    default_valid = (not default_pdf_code) or _validate_pdf_code_format(default_pdf_code)
+    # Separate pdf_code field
+    pdf_code_raw = (request.form.get('pdf_code') or '').strip().upper()
+    pdf_code = pdf_code_raw or None
+    pdf_code_valid = True
+    pdf_info_payload = None
 
-    # Collect PDF codes used in questions and check them all at once
-    used_codes = set()
-    if default_pdf_code:
-        used_codes.add(default_pdf_code)
-    for q in data['questions']:
-        code = _normalize_pdf_code(q.get('pdf_code'))
-        if code:
-            used_codes.add(code)
-    pdf_lookup = check_pdf_codes_exist(list(used_codes)) if used_codes else {}
+    if pdf_code:
+        if _validate_pdf_code_format(pdf_code):
+            # Full lookup via the same logic as /questions/pdf-info
+            lookup = check_pdf_codes_exist([pdf_code])
+            info = lookup.get(pdf_code, {})
+            pdf_info_payload = {
+                'code': pdf_code,
+                'valid': True,
+                'exists': info.get('exists', False),
+                'source': info.get('source'),
+                'title': info.get('title', ''),
+                'is_premium': info.get('is_premium', False),
+            }
 
+            # If exists in bot, try to get size for can_preview
+            if info.get('exists') and info.get('source') == 'bot':
+                try:
+                    from bot.db import get_bot_pdf_by_code
+                    bot_pdf = get_bot_pdf_by_code(pdf_code)
+                    if bot_pdf:
+                        size = _get_telegram_file_size(bot_pdf['file_id'])
+                        if size:
+                            pdf_info_payload['size_mb'] = round(size / (1024 * 1024), 2)
+                            pdf_info_payload['can_preview'] = size <= _PDF_SIZE_CAP_BYTES
+                        else:
+                            pdf_info_payload['can_preview'] = False
+                            pdf_info_payload['reason'] = 'size_unknown'
+                except Exception:
+                    pdf_info_payload['can_preview'] = False
+            elif info.get('exists') and info.get('source') == 'main':
+                # Look for file_url on main
+                try:
+                    main_pdf = get_pdf_by_code(pdf_code)
+                    if main_pdf and main_pdf.get('file_url'):
+                        pdf_info_payload['can_preview'] = True
+                    else:
+                        pdf_info_payload['can_preview'] = False
+                        pdf_info_payload['reason'] = 'no_file'
+                except Exception:
+                    pdf_info_payload['can_preview'] = False
+            else:
+                pdf_info_payload['can_preview'] = False
+                pdf_info_payload['reason'] = 'not_found'
+        else:
+            pdf_code_valid = False
+            pdf_info_payload = {
+                'code': pdf_code,
+                'valid': False,
+                'exists': False,
+                'reason': 'invalid_format',
+            }
+
+    # Per-question preview
     preview = []
-    linked_count = 0
     unknown_codes = set()
+    linked_count = 0
+    total = len(data['questions'])
 
     for idx, q in enumerate(data['questions'], 1):
-        code, page, orphan, invalid = _resolve_pdf_for_import(q, default_pdf_code)
-        q_text = q.get('question', '') or ''
+        if not isinstance(q, dict):
+            preview.append({
+                'index': idx, 'question': '(invalid entry)',
+                'difficulty': 1, 'options_count': 0,
+                'has_explanation': False, 'tags': '',
+                'pdf_code': '', 'pdf_page': None,
+                'pdf_exists': False, 'pdf_title': '', 'pdf_source': None,
+                'orphan': False, 'invalid_code': False,
+            })
+            continue
+
+        q_text = (q.get('question') or '') or ''
         q_short = q_text[:70] + ('…' if len(q_text) > 70 else '')
+
+        page = _normalize_pdf_page(q.get('pdf_page'))
+        orphan = bool(page and not pdf_code)
+        if orphan:
+            page = None
 
         entry = {
             'index': idx,
             'question': q_short,
-            'difficulty': q.get('difficulty', 1),
-            'options_count': len(q.get('options', [])),
-            'has_explanation': bool(q.get('explanation', '').strip()),
-            'tags': ', '.join(q.get('tags', []))[:40] if q.get('tags') else '',
-            'pdf_code': code or '',
+            'difficulty': int(q.get('difficulty', 1) or 1) if str(q.get('difficulty', 1)).isdigit() else 1,
+            'options_count': len(q.get('options', []) or []),
+            'has_explanation': bool((q.get('explanation') or '').strip()),
+            'tags': ', '.join(q.get('tags', []))[:40] if isinstance(q.get('tags'), list) else str(q.get('tags', ''))[:40],
+            'pdf_code': pdf_code or '',
             'pdf_page': page,
             'pdf_exists': False,
             'pdf_title': '',
             'pdf_source': None,
             'orphan': orphan,
-            'invalid_code': invalid,
+            'invalid_code': not pdf_code_valid,
         }
 
-        if code:
-            info = pdf_lookup.get(code)
-            if info and info['exists']:
-                entry['pdf_exists'] = True
-                entry['pdf_title'] = info['title']
-                entry['pdf_source'] = info['source']
-            else:
-                unknown_codes.add(code)
+        if pdf_code and pdf_info_payload:
+            entry['pdf_exists'] = pdf_info_payload.get('exists', False)
+            entry['pdf_title'] = pdf_info_payload.get('title', '')
+            entry['pdf_source'] = pdf_info_payload.get('source')
+            if not entry['pdf_exists']:
+                unknown_codes.add(pdf_code)
             linked_count += 1
 
         preview.append(entry)
 
     return jsonify({
         'subject_code': subject_code,
-        'chapter': data['metadata'].get('chapter', ''),
-        'default_pdf_code': default_pdf_code or '',
-        'default_valid': default_valid,
-        'total': len(data['questions']),
+        'chapter': chapter,
+        'pdf_code': pdf_code or '',
+        'pdf_code_valid': pdf_code_valid,
+        'pdf_info': pdf_info_payload,
+        'total': total,
         'linked_count': linked_count,
         'unknown_codes': sorted(unknown_codes),
         'preview': preview[:30],
-        'truncated': len(preview) > 30,
+        'truncated': total > 30,
     })
 
+
+# ============================================
+# BULK TEMPLATE
+# ============================================
 
 @admin_bp.route('/bulk-template')
 @admin_required
@@ -943,23 +1203,22 @@ def bulk_template():
     template = {
         "metadata": {
             "subject_code": "geography",
-            "chapter": "Chapter 1: Introduction",
-            "pdf_code": "GEO1-CH01"
+            "chapter": "Chapter 1: Introduction"
         },
         "questions": [
             {"tags": ["geography", "capitals"], "difficulty": 2,
              "question": "What is the capital of Somalia?",
-             "options": ["Mogadishu", "Hargeisa", "Kismayo", "Garowe"],
+             "options": ["Mogadishu", "Hargeisa", "Kismayo"],
              "correct": 1,
              "explanation": "Mogadishu has been the capital since 1960.",
              "pdf_page": 12},
             {"tags": ["geography", "rivers"], "difficulty": 3,
              "question": "Which river flows through Mogadishu?",
-             "options": ["Shabelle", "Jubba", "Nile", "Tana"],
+             "options": ["Shabelle", "Jubba", "Nile"],
              "correct": 1, "pdf_page": 14},
             {"tags": ["geography"], "difficulty": 1,
              "question": "How many regions does Somalia have?",
-             "options": ["18", "15", "20", "12"],
+             "options": ["18", "15", "20"],
              "correct": 0},
         ]
     }
@@ -970,7 +1229,7 @@ def bulk_template():
 
 
 # ============================================
-# GROUPS (unchanged)
+# GROUPS
 # ============================================
 
 @admin_bp.route('/groups/api', methods=['POST'])
@@ -1015,7 +1274,9 @@ def api_delete_group(group_id):
 @admin_required
 def api_get_group(group_id):
     group = get_group_by_id(group_id)
-    return jsonify(group) if group else (jsonify({'error': 'Group not found'}), 404)
+    if not group:
+        return jsonify({'error': 'Group not found'}), 404
+    return jsonify(group)
 
 
 @admin_bp.route('/groups/api/<int:group_id>/toggle-active', methods=['POST'])
@@ -1109,7 +1370,7 @@ def groups_audit():
 
 
 # ============================================
-# PDFS (unchanged)
+# PDFS
 # ============================================
 
 @admin_bp.route('/pdfs')
@@ -1232,7 +1493,7 @@ def resolve_report_route(report_id):
 def dismiss_report_route(report_id):
     validate_csrf()
     reply = request.form.get('reply', '').strip()
-    flash('Report dismissed.' if dismiss_report(report_id, session['user_id'], reply)
-          else 'Failed to dismiss report.',
-          'success' if dismiss_report(report_id, session['user_id'], reply) else 'error')
+    ok = dismiss_report(report_id, session['user_id'], reply)
+    flash('Report dismissed.' if ok else 'Failed to dismiss report.',
+          'success' if ok else 'error')
     return redirect(url_for('admin.reports', status='pending'))

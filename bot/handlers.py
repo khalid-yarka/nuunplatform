@@ -1,17 +1,43 @@
 # bot/handlers.py
-# Message and callback handlers for telebot
+# Message and callback handlers for telebot.
+#
+# NOTE — protect_content policy:
+#   • Regular users AND regular admins → protect_content=True  (no forward, no save)
+#   • Super admins only                → protect_content=False (full access)
+#
+# The rule lives in one place: `_protect(user_id)`.
 
 import logging
 import telebot
 from telebot import types
 
 from bot.utils import (
-    is_duplicate_in_bot, save_pending_pdf, is_admin
+    is_duplicate_in_bot, save_pending_pdf,
+    is_admin, is_super_admin,
 )
 from bot.db import count_pending_pdfs, get_pending_pdf_list, get_bot_pdf_by_code
 from config import Config
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================
+# PROTECT CONTENT POLICY
+# ============================================
+
+def _protect(user_id: int) -> bool:
+    """
+    Return the value to pass as `protect_content` for this recipient.
+
+    Super admins → False  (they may forward / save / screenshot)
+    Everyone else (regular users + regular admins) → True
+    """
+    return not is_super_admin(user_id)
+
+
+# ============================================
+# UPDATE ROUTER
+# ============================================
 
 def process_telegram_update(bot: telebot.TeleBot, update_data: dict):
     try:
@@ -25,6 +51,7 @@ def process_telegram_update(bot: telebot.TeleBot, update_data: dict):
     except Exception as e:
         logger.error(f"Error processing update: {e}", exc_info=True)
 
+
 def handle_message(bot, message):
     if message.text:
         if message.text.startswith('/start'):
@@ -35,14 +62,19 @@ def handle_message(bot, message):
         elif message.text.startswith('/help'):
             handle_help(bot, message)
         else:
-            # Other text messages
             pass
     elif message.document:
         handle_document(bot, message)
 
+
 def handle_callback(bot, call):
     if call.data.startswith('pdf_admin_'):
         handle_admin_pending(bot, call)
+
+
+# ============================================
+# /start  (no code)
+# ============================================
 
 def handle_start(bot, message):
     user_id = message.from_user.id
@@ -61,25 +93,30 @@ def handle_start(bot, message):
         markup.add(types.InlineKeyboardButton("📚 Pending PDFs", callback_data="pdf_admin_pending"))
     bot.send_message(message.chat.id, text, reply_markup=markup)
 
+
+# ============================================
+# /start <code>  (delivers a stored PDF)
+# ============================================
+
 def handle_start_with_code(bot, message):
     """Handle /start <code> to send a PDF with rich description and button."""
+    user_id = message.from_user.id
     text = message.text
     parts = text.split(maxsplit=1)
+
     if len(parts) == 2:
         code = parts[1].strip()
         bot_pdf = get_bot_pdf_by_code(code)
         if bot_pdf:
             try:
                 file_id = bot_pdf['file_id']
-                
-                # Build rich caption
+
                 caption = f"📄 *{bot_pdf['title']}*\n\n"
                 if bot_pdf.get('description'):
                     caption += f"{bot_pdf['description']}\n\n"
                 caption += f"📌 *Code:* `{code}`\n"
                 caption += f"🔗 *Available on our platform with more study materials!*"
-                
-                # Build inline keyboard with "More PDFs" button
+
                 base_url = Config.BASE_URL.rstrip('/')
                 markup = types.InlineKeyboardMarkup()
                 markup.add(
@@ -88,23 +125,33 @@ def handle_start_with_code(bot, message):
                         url=f"{base_url}/pdfs"
                     )
                 )
-                
-                # Send with protect_content=True (prevents forwarding, saving, screenshotting)
+
+                protect = _protect(user_id)
+
                 bot.send_document(
                     message.chat.id,
                     file_id,
                     caption=caption,
                     parse_mode='Markdown',
                     reply_markup=markup,
-                    protect_content=True
+                    protect_content=protect
                 )
                 return
             except Exception as e:
                 logger.error(f"Error sending PDF with code {code}: {e}")
-                bot.reply_to(message, "❌ Sorry, I couldn't retrieve the PDF. Please try again later.")
+                bot.reply_to(
+                    message,
+                    "❌ Sorry, I couldn't retrieve the PDF. Please try again later.",
+                    protect_content=_protect(user_id)
+                )
                 return
-    # If no code or invalid, show help
+
     handle_start(bot, message)
+
+
+# ============================================
+# /help
+# ============================================
 
 def handle_help(bot, message):
     bot.send_message(
@@ -116,32 +163,46 @@ def handle_help(bot, message):
         "Admins: Use the Pending PDFs button to manage uploads."
     )
 
+
+# ============================================
+# Document intake
+# ============================================
+
 def handle_document(bot, message):
+    user_id = message.from_user.id
+    protect = _protect(user_id)
+
     document = message.document
     if not document:
-        bot.reply_to(message, "❌ Please send a document file (PDF).")
+        bot.reply_to(
+            message,
+            "❌ Please send a document file (PDF).",
+            protect_content=protect
+        )
         return
 
     if document.mime_type != 'application/pdf' and not document.file_name.endswith('.pdf'):
-        bot.reply_to(message, "❌ Only PDF files are accepted.")
+        bot.reply_to(
+            message,
+            "❌ Only PDF files are accepted.",
+            protect_content=protect
+        )
         return
 
     file_id = document.file_id
     file_unique_id = document.file_unique_id
     filename = document.file_name or 'unknown.pdf'
-    user_id = message.from_user.id
 
     if is_duplicate_in_bot(file_unique_id):
         bot.reply_to(
             message,
             "⚠️ This PDF is already in the system (either already published or pending review).",
-            protect_content=True
+            protect_content=protect
         )
         return
 
     pending_id = save_pending_pdf(file_id, file_unique_id, filename, user_id)
     if pending_id:
-        # Build rich confirmation with "More PDFs" button
         base_url = Config.BASE_URL.rstrip('/')
         markup = types.InlineKeyboardMarkup()
         markup.add(
@@ -150,7 +211,7 @@ def handle_document(bot, message):
                 url=f"{base_url}/pdfs"
             )
         )
-        
+
         bot.reply_to(
             message,
             f"✅ PDF received and is pending admin review.\n\n"
@@ -159,14 +220,19 @@ def handle_document(bot, message):
             f"🔗 *Available on our platform with more study materials!*",
             parse_mode='Markdown',
             reply_markup=markup,
-            protect_content=True
+            protect_content=protect
         )
     else:
         bot.reply_to(
             message,
             "❌ Failed to save the PDF. Please try again later.",
-            protect_content=True
+            protect_content=protect
         )
+
+
+# ============================================
+# Admin: pending list callback
+# ============================================
 
 def handle_admin_pending(bot, call):
     user_id = call.from_user.id
@@ -184,10 +250,15 @@ def handle_admin_pending(bot, call):
             for p in pending_list:
                 text += f"• {p['filename']} (ID: {p['id']}) - uploaded {p['uploaded_at']}\n"
             text += "\nUse the web admin panel to process them.\n"
-            # Get the admin panel URL
             base_url = Config.BASE_URL.rstrip('/')
             secret_path = Config.PDF_ADMIN_SECRET_PATH or '/pdf-admin'
             text += f"Web panel: {base_url}{secret_path}"
         else:
             text += "No pending PDFs."
-        bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=None)
+
+        bot.edit_message_text(
+            text,
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=None
+        )

@@ -618,41 +618,44 @@ def create_question(data: dict):
 
 
 def bulk_create_questions(questions_data: list, admin_id: int):
+    """
+    Insert many questions in one transaction. Returns:
+        {'imported': int, 'errors': [ {...} ], 'total': int, 'validation_failed': bool}
+    Columns match the `questions` table exactly (14 + pdf_code + pdf_page = 16).
+    Never raises — all errors are returned in the `errors` list.
+    """
     imported_count = 0
     errors = []
     total = len(questions_data)
     if total == 0:
-        return {'imported': 0, 'errors': [], 'total': 0}
+        return {'imported': 0, 'errors': [], 'total': 0, 'validation_failed': False}
 
     try:
+        # ---------- Pre-validate ----------
         valid_questions = []
         validation_errors = []
         for idx, q in enumerate(questions_data, 1):
             if not q.get('question_text', '').strip():
                 validation_errors.append({
-                    'index': idx,
-                    'question': 'Unknown',
+                    'index': idx, 'question': 'Unknown',
                     'error': 'Question text is required'
                 })
                 continue
             if not q.get('options') or len(q['options']) < 3:
                 validation_errors.append({
-                    'index': idx,
-                    'question': q.get('question_text', 'Unknown')[:50],
+                    'index': idx, 'question': q.get('question_text', 'Unknown')[:50],
                     'error': 'Minimum 3 options required'
                 })
                 continue
             if len(q['options']) > 6:
                 validation_errors.append({
-                    'index': idx,
-                    'question': q.get('question_text', 'Unknown')[:50],
+                    'index': idx, 'question': q.get('question_text', 'Unknown')[:50],
                     'error': 'Maximum 6 options allowed'
                 })
                 continue
             if not q.get('correct_answer'):
                 validation_errors.append({
-                    'index': idx,
-                    'question': q.get('question_text', 'Unknown')[:50],
+                    'index': idx, 'question': q.get('question_text', 'Unknown')[:50],
                     'error': 'Correct answer is required'
                 })
                 continue
@@ -663,11 +666,21 @@ def bulk_create_questions(questions_data: list, admin_id: int):
                 'imported': 0,
                 'errors': validation_errors,
                 'total': total,
-                'validation_failed': True
+                'validation_failed': True,
             }
 
+        # ---------- Batch insert ----------
         batch_size = BULK_INSERT_BATCH_SIZE
         total_valid = len(valid_questions)
+
+        INSERT_SQL = """
+            INSERT INTO questions (
+                subject_code, question_text, options, correct_answer,
+                difficulty, chapter, tags, explanation,
+                pdf_code, pdf_page,
+                created_by, updated_by, status, version, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
 
         for i in range(0, total_valid, batch_size):
             batch = valid_questions[i:i + batch_size]
@@ -688,35 +701,29 @@ def bulk_create_questions(questions_data: list, admin_id: int):
                         q.get('chapter', ''),
                         q.get('tags', ''),
                         q.get('explanation', ''),
-                        q.get('pdf_code'),      # NEW
-                        q.get('pdf_page'),      # NEW
+                        q.get('pdf_code'),        # may be None
+                        q.get('pdf_page'),        # may be None
                         admin_id,
                         admin_id,
                         'active',
                         1,
                         now(),
-                        now()
+                        now(),
                     ))
 
-                cursor.executemany("""
-                    INSERT INTO questions (
-                        subject_code, question_text, options, correct_answer,
-                        difficulty, chapter, tags, explanation,
-                        created_by, updated_by, status, version, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, batch_params)
+                cursor.executemany(INSERT_SQL, batch_params)
                 conn.commit()
                 imported_count += len(batch)
 
                 try:
                     current_app.logger.info(
-                        f"Bulk import: Batch {batch_start}-{batch_end} of {total_valid} "
-                        f"completed ({imported_count}/{total_valid} total)"
+                        f"Bulk import: batch {batch_start}-{batch_end} of "
+                        f"{total_valid} inserted ({imported_count}/{total_valid})"
                     )
                 except RuntimeError:
                     logger.info(
-                        f"Bulk import: Batch {batch_start}-{batch_end} of {total_valid} "
-                        f"completed ({imported_count}/{total_valid} total)"
+                        f"Bulk import: batch {batch_start}-{batch_end} of "
+                        f"{total_valid} inserted ({imported_count}/{total_valid})"
                     )
             except Exception as e:
                 try:
@@ -726,17 +733,19 @@ def bulk_create_questions(questions_data: list, admin_id: int):
                 error_msg = str(e)
                 try:
                     current_app.logger.error(
-                        f"Bulk import batch {batch_start}-{batch_end} failed: {error_msg}"
+                        f"Bulk import batch {batch_start}-{batch_end} failed: {error_msg}",
+                        exc_info=True
                     )
                 except RuntimeError:
                     logger.error(
-                        f"Bulk import batch {batch_start}-{batch_end} failed: {error_msg}"
+                        f"Bulk import batch {batch_start}-{batch_end} failed: {error_msg}",
+                        exc_info=True
                     )
                 for idx, q in enumerate(batch, start=batch_start):
                     errors.append({
                         'index': idx,
                         'question': q.get('question_text', 'Unknown')[:50],
-                        'error': f'Batch insert failed: {error_msg}'
+                        'error': f'Insert failed: {error_msg}',
                     })
                 continue
 
@@ -744,20 +753,20 @@ def bulk_create_questions(questions_data: list, admin_id: int):
             'imported': imported_count,
             'errors': errors,
             'total': total,
-            'validation_failed': False
+            'validation_failed': False,
         }
+
     except Exception as e:
         try:
-            current_app.logger.error(f"Bulk import failed: {e}", exc_info=True)
+            current_app.logger.error(f"Bulk import fatal: {e}", exc_info=True)
         except RuntimeError:
-            logger.error(f"Bulk import failed: {e}", exc_info=True)
+            logger.error(f"Bulk import fatal: {e}", exc_info=True)
         return {
             'imported': imported_count,
             'errors': [{'error': str(e), 'question': 'Fatal error'}],
             'total': total,
-            'validation_failed': True
+            'validation_failed': True,
         }
-
 
 def update_question(question_id: int, data: dict):
     try:
@@ -3038,7 +3047,8 @@ def get_questions_filter_options() -> dict:
 
 def check_pdf_codes_exist(codes: list) -> dict:
     """
-    Given a list of PDF codes, return { code: {exists: bool, title: str, source: 'main'|'bot'|None} }.
+    Given a list of PDF codes, return:
+        { code: {exists: bool, title: str, source: 'main'|'bot'|None, is_premium: bool} }
     Never raises.
     """
     result = {}
@@ -3046,10 +3056,13 @@ def check_pdf_codes_exist(codes: list) -> dict:
         return result
 
     unique = list({str(c).strip().upper() for c in codes if c})
-
     for code in unique:
-        result[code] = {'exists': False, 'title': '', 'source': None}
+        result[code] = {'exists': False, 'title': '', 'source': None, 'is_premium': False}
 
+    if not unique:
+        return result
+
+    # Main DB
     try:
         placeholders = ','.join('?' * len(unique))
         cursor = execute_with_retry(
@@ -3066,7 +3079,7 @@ def check_pdf_codes_exist(codes: list) -> dict:
     except Exception as e:
         logger.warning(f"check_pdf_codes_exist (main) failed: {e}")
 
-    # Fall back to bot DB for unresolved codes
+    # Bot DB fallback
     remaining = [c for c, v in result.items() if not v['exists']]
     if remaining:
         try:

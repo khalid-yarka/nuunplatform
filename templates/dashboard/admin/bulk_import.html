@@ -5,7 +5,7 @@
 
 {% block dashboard_content %}
 <style>
-    .bi-layout { display: grid; grid-template-columns: 1fr 400px; gap: 20px; align-items: start; }
+    .bi-layout { display: grid; grid-template-columns: 1fr 420px; gap: 20px; align-items: start; }
     @media (max-width: 1100px) { .bi-layout { grid-template-columns: 1fr; } }
 
     .bi-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow-sm); }
@@ -13,9 +13,8 @@
     .bi-card h3 i { color: var(--primary); }
 
     .bi-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-    .bi-tabs label { padding: 8px 16px; border-radius: var(--radius-sm); background: var(--background); border: 1px solid var(--border); font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text-secondary); }
+    .bi-tabs label { padding: 8px 16px; border-radius: var(--radius-sm); background: var(--background); border: 1px solid var(--border); font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text-secondary); user-select: none; }
     .bi-tabs input[type="radio"] { display: none; }
-    .bi-tabs input[type="radio"]:checked + span { color: var(--primary); }
     .bi-tabs label:has(input:checked) { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
 
     .bi-textarea { width: 100%; min-height: 380px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: 'Courier New', monospace; font-size: 13px; background: var(--surface); color: var(--text); tab-size: 2; line-height: 1.5; resize: vertical; }
@@ -24,11 +23,33 @@
     .bi-drop { border: 2px dashed var(--border); border-radius: var(--radius-sm); padding: 40px 20px; text-align: center; background: var(--background); transition: var(--transition); }
     .bi-drop.dragover { border-color: var(--primary); background: var(--primary-light); }
 
-    .bi-guide { background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.6; }
-    .bi-guide code { background: var(--surface); padding: 1px 6px; border-radius: 4px; font-size: 12px; color: var(--primary); border: 1px solid var(--border); }
-    .bi-guide pre { background: var(--surface); border-radius: var(--radius-sm); padding: 12px; margin: 8px 0 0; border: 1px solid var(--border); overflow-x: auto; font-size: 12px; line-height: 1.5; }
+    /* PDF code panel */
+    .bi-pdf-code-panel { background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 16px; }
+    .bi-pdf-code-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .bi-pdf-code-row input[type="text"] {
+        flex: 1; min-width: 200px; padding: 10px 14px;
+        border: 2px solid var(--border); border-radius: var(--radius-sm);
+        font-family: 'Courier New', monospace; font-size: 15px;
+        font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+        background: var(--surface); color: var(--text);
+    }
+    .bi-pdf-code-row input[type="text"]:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(255,49,56,0.08); }
+    .bi-pdf-code-row input[type="text"].ok { border-color: #10B981; background: #F0FDF4; }
+    .bi-pdf-code-row input[type="text"].warn { border-color: #F59E0B; background: #FFFBEB; }
+    .bi-pdf-code-row input[type="text"].err { border-color: #EF4444; background: #FEF2F2; }
 
-    /* Live preview panel */
+    .bi-pdf-status { margin-top: 10px; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .bi-pdf-status.hidden { display: none; }
+    .bi-pdf-status.ok { background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; }
+    .bi-pdf-status.warn { background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; }
+    .bi-pdf-status.err { background: #FEF2F2; color: #991B1B; border: 1px solid #FCA5A5; }
+    .bi-pdf-status .tag { font-size: 10px; background: rgba(0,0,0,0.1); padding: 2px 6px; border-radius: 6px; font-weight: 700; text-transform: uppercase; }
+    .bi-pdf-status .preview-link { margin-left: auto; }
+
+    .bi-btn-preview { padding: 6px 14px; background: #10B981; color: white; border: none; border-radius: var(--radius-sm); font-size: 12px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: var(--transition); }
+    .bi-btn-preview:hover { background: #059669; color: white; }
+
+    /* Right panel */
     .bi-preview { position: sticky; top: 90px; }
     .bi-pv-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
     .bi-pv-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
@@ -38,13 +59,7 @@
     .bi-pv-stat.green .n { color: #10B981; }
     .bi-pv-stat.amber .n { color: #F59E0B; }
 
-    .bi-pv-codes { margin-bottom: 14px; }
-    .bi-pv-code-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 4px; }
-    .bi-pv-code-row.ok { background: #ECFDF5; color: #065F46; }
-    .bi-pv-code-row.warn { background: #FEF3C7; color: #92400E; }
-    .bi-pv-code-row code { font-family: monospace; font-weight: 700; }
-
-    .bi-pv-list { max-height: 400px; overflow-y: auto; }
+    .bi-pv-list { max-height: 480px; overflow-y: auto; }
     .bi-pv-item { padding: 8px 10px; border-bottom: 1px solid var(--border-light); font-size: 12px; }
     .bi-pv-item:last-child { border-bottom: none; }
     .bi-pv-item .qi { font-weight: 700; color: var(--text-muted); margin-right: 4px; }
@@ -55,14 +70,12 @@
     .bi-pv-item .qc.warn { background: #FEF3C7; color: #92400E; }
     .bi-pv-item .qc.none { background: transparent; color: var(--text-muted); font-style: italic; font-weight: 400; }
     .bi-pv-item.warn { background: #FFFBEB; }
-    .bi-pv-item.err { background: #FEF2F2; }
 
     .bi-pv-empty { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; }
     .bi-pv-empty i { font-size: 32px; opacity: 0.3; margin-bottom: 8px; display: block; }
 
-    .bi-warnings { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #92400E; }
-    .bi-warnings .w-title { font-weight: 700; margin-bottom: 4px; }
-    .bi-warnings .w-item { padding: 2px 0; }
+    .bi-guide { background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+    .bi-guide code { background: var(--surface); padding: 1px 6px; border-radius: 4px; font-size: 12px; color: var(--primary); border: 1px solid var(--border); }
 </style>
 
 <div>
@@ -97,7 +110,7 @@
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             {% for category, message in messages %}
-                <div class="flash-message flash-{{ category }}">
+                <div class="flash-message flash-{{ category }}" style="margin-bottom: 10px;">
                     <i class="fas {% if category == 'success' %}fa-check-circle{% elif category == 'error' %}fa-exclamation-circle{% elif category == 'warning' %}fa-exclamation-triangle{% else %}fa-info-circle{% endif %}"></i>
                     {{ message }}
                     <button class="flash-close" onclick="this.parentElement.remove()">&times;</button>
@@ -113,6 +126,27 @@
 
             <!-- LEFT: INPUT -->
             <div>
+                <div class="bi-card" style="margin-bottom: 20px;">
+                    <h3><i class="fas fa-file-pdf"></i> Source PDF (optional)</h3>
+                    <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px;">
+                        All questions in this batch will link to this PDF. Leave empty for unlinked questions.
+                    </p>
+
+                    <div class="bi-pdf-code-panel">
+                        <div class="bi-pdf-code-row">
+                            <input type="text" name="pdf_code" id="pdfCodeInput"
+                                   placeholder="A3B9-X7K2"
+                                   maxlength="9"
+                                   autocomplete="off" spellcheck="false">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="clearPdfCode()" title="Clear">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+
+                        <div id="pdfStatus" class="bi-pdf-status hidden"></div>
+                    </div>
+                </div>
+
                 <div class="bi-card" style="margin-bottom: 20px;">
                     <h3><i class="fas fa-code"></i> JSON Input</h3>
 
@@ -133,13 +167,12 @@
 {
     "metadata": {
         "subject_code": "geography",
-        "chapter": "Chapter 1",
-        "pdf_code": "GEO1-CH01"
+        "chapter": "Chapter 1"
     },
     "questions": [
         {
             "question": "What is the capital of Somalia?",
-            "options": ["Mogadishu", "Hargeisa", "Kismayo", "Garowe"],
+            "options": ["Mogadishu", "Hargeisa", "Kismayo"],
             "correct": 1,
             "pdf_page": 12
         }
@@ -159,22 +192,21 @@
                     </div>
                 </div>
 
-                <!-- Format guide -->
-                <div class="bi-card">
+                <div class="bi-card" style="margin-bottom: 20px;">
                     <h3><i class="fas fa-book"></i> Format Guide</h3>
                     <div class="bi-guide">
-                        <strong>Required:</strong> <code>subject_code</code> (metadata), <code>question</code>, <code>options</code> (3-6), <code>correct</code> (1-based), <code>difficulty</code> (1-5).
+                        <strong>metadata:</strong> <code>subject_code</code> (required), <code>chapter</code> (optional).
+                        The PDF code is entered <strong>above</strong>, not in metadata.
                         <br><br>
-                        <strong>Optional:</strong>
-                        <code>pdf_code</code> (metadata, format <code>XXXX-XXXX</code>) — links all questions to one PDF.<br>
-                        <code>pdf_page</code> (per question) — the exact page in that PDF.
-                        <br><br>
-                        <strong>Tip:</strong> Leave <code>pdf_code</code> empty for unlinked questions. Add <code>pdf_page</code> only when a PDF is linked.
+                        <strong>Each question:</strong> <code>question</code>, <code>options</code> (array of 3–6),
+                        <code>correct</code> (1-based index), <code>difficulty</code> (1–5),
+                        <code>pdf_page</code> (optional — page in the source PDF),
+                        <code>tags</code>, <code>explanation</code>.
                     </div>
                 </div>
 
-                <div class="bi-card" style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button type="submit" class="btn btn-primary">
+                <div class="bi-card" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
                         <i class="fas fa-upload"></i> Import Questions
                     </button>
                     <button type="button" class="btn btn-secondary" onclick="clearAll()">
@@ -215,11 +247,15 @@
     const fileNameEl = document.getElementById('fileName');
     const pvContent = document.getElementById('pvContent');
     const pvStatus = document.getElementById('pvStatus');
+    const codeInput = document.getElementById('pdfCodeInput');
+    const pdfStatus = document.getElementById('pdfStatus');
     const CSRF = document.querySelector('input[name="csrf_token"]').value;
 
     let debounceTimer = null;
-    let lastJSON = '';
+    let lastKey = '';
     let inflight = false;
+    let pdfCheckTimer = null;
+    let lastPdfChecked = '';
 
     // ── Input method toggle ──
     window.toggleInputMethod = function () {
@@ -227,6 +263,139 @@
         document.getElementById('pasteArea').style.display = paste ? 'block' : 'none';
         document.getElementById('fileArea').style.display = paste ? 'none' : 'block';
     };
+
+    // ── Clear ──
+    window.clearAll = function () {
+        if (!confirm('Clear input, PDF code, and preview?')) return;
+        textarea.value = '';
+        codeInput.value = '';
+        lastKey = '';
+        lastPdfChecked = '';
+        if (fileInput) fileInput.value = '';
+        fileNameEl.style.display = 'none';
+        hidePdfStatus();
+        runPreview();
+    };
+
+    window.clearPdfCode = function () {
+        codeInput.value = '';
+        lastPdfChecked = '';
+        hidePdfStatus();
+        schedulePreview(true);
+    };
+
+    // ── PDF code: auto-format XXXX-XXXX ──
+    codeInput.addEventListener('input', function () {
+        let v = this.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+        if (v.length > 4 && v[4] !== '-') {
+            v = v.slice(0, 4) + '-' + v.slice(4);
+        }
+        v = v.slice(0, 9);
+        this.value = v;
+        schedulePdfCheck();
+        schedulePreview(false);
+    });
+
+    // ── PDF code: verify on debounce ──
+    function schedulePdfCheck() {
+        if (pdfCheckTimer) clearTimeout(pdfCheckTimer);
+        pdfCheckTimer = setTimeout(runPdfCheck, 450);
+    }
+
+    function runPdfCheck() {
+        const code = (codeInput.value || '').trim();
+        codeInput.classList.remove('ok', 'warn', 'err');
+
+        if (!code) {
+            hidePdfStatus();
+            return;
+        }
+
+        if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) {
+            codeInput.classList.add('err');
+            showPdfStatus('err', '<i class="fas fa-exclamation-triangle"></i> Invalid format. Expected XXXX-XXXX.');
+            return;
+        }
+
+        if (code === lastPdfChecked) return;
+        lastPdfChecked = code;
+
+        showPdfStatus('', '<i class="fas fa-spinner fa-spin"></i> Checking PDF…', 'pending');
+
+        fetch('{{ url_for("admin.pdf_info") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': CSRF
+            },
+            body: JSON.stringify({ code: code })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            codeInput.classList.remove('ok', 'warn', 'err');
+
+            if (!data.valid) {
+                codeInput.classList.add('err');
+                showPdfStatus('err', '<i class="fas fa-times-circle"></i> Invalid code format.');
+                return;
+            }
+
+            if (!data.exists) {
+                codeInput.classList.add('warn');
+                showPdfStatus('warn',
+                    '<i class="fas fa-exclamation-triangle"></i> ' +
+                    'PDF not found in the library. ' +
+                    'You can still import — the link resolves once the PDF is uploaded.');
+                return;
+            }
+
+            // Exists
+            codeInput.classList.add('ok');
+            var title = data.title || data.code;
+            var sourceTag = data.source === 'main' ? 'published' : 'bot';
+            var premium = data.is_premium ? ' 💎' : '';
+
+            var html = '<i class="fas fa-check-circle"></i> ' +
+                       '<span><strong>' + escapeHtml(title) + '</strong>' + premium + '</span>' +
+                       '<span class="tag">' + escapeHtml(sourceTag) + '</span>';
+
+            if (data.size_mb) {
+                html += '<span style="font-size: 11px; opacity: 0.8;">· ' + data.size_mb + ' MB</span>';
+            }
+
+            if (data.can_preview && data.preview_url) {
+                html += ' <a class="bi-btn-preview preview-link" target="_blank" href="' +
+                        data.preview_url + '" rel="noopener">' +
+                        '<i class="fas fa-external-link-alt"></i> Preview PDF</a>';
+            } else {
+                var reason = data.reason;
+                var msg = '';
+                if (reason === 'too_large') msg = '· too large to preview (>20 MB)';
+                else if (reason === 'no_file') msg = '· no file attached';
+                else if (reason === 'size_unknown') msg = '· size unknown';
+                if (msg) {
+                    html += '<span style="font-size: 11px; opacity: 0.75; margin-left: 6px;">' + msg + '</span>';
+                }
+            }
+
+            showPdfStatus('ok', html);
+        })
+        .catch(function () {
+            codeInput.classList.add('warn');
+            showPdfStatus('warn', '<i class="fas fa-exclamation-triangle"></i> Could not verify PDF (network).');
+        });
+    }
+
+    function showPdfStatus(kind, html, extraClass) {
+        pdfStatus.className = 'bi-pdf-status' + (kind ? ' ' + kind : '');
+        if (extraClass) pdfStatus.classList.add(extraClass);
+        pdfStatus.innerHTML = html;
+    }
+
+    function hidePdfStatus() {
+        pdfStatus.className = 'bi-pdf-status hidden';
+        pdfStatus.innerHTML = '';
+    }
 
     // ── File handling ──
     function handleFile(file) {
@@ -262,7 +431,7 @@
                 fileInput.files = e.dataTransfer.files;
                 handleFile(f);
             } else {
-                showStatus('Only .json files accepted', 'err');
+                setPvStatus('Only .json files accepted', 'err');
             }
         });
     }
@@ -273,7 +442,7 @@
         debounceTimer = setTimeout(runPreview, immediate ? 50 : 600);
     }
 
-    function showStatus(text, kind) {
+    function setPvStatus(text, kind) {
         pvStatus.textContent = text;
         pvStatus.style.color =
             kind === 'err' ? '#DC2626' :
@@ -284,16 +453,23 @@
 
     function runPreview() {
         const raw = (textarea.value || '').trim();
+        const code = (codeInput.value || '').trim();
+
         if (!raw) {
             pvContent.innerHTML = '<div class="bi-pv-empty"><i class="fas fa-file-code"></i>Paste JSON to see a live preview here.</div>';
-            showStatus('idle', '');
+            setPvStatus('idle', '');
             return;
         }
-        if (raw === lastJSON) return;
 
+        const key = raw + '||' + code;
+        if (key === lastKey) return;
         if (inflight) return;
+
         inflight = true;
-        showStatus('checking…', '');
+        setPvStatus('checking…', '');
+
+        const body = 'json_data=' + encodeURIComponent(raw) +
+                     '&pdf_code=' + encodeURIComponent(code);
 
         fetch('{{ url_for("admin.bulk_preview") }}', {
             method: 'POST',
@@ -301,31 +477,24 @@
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'X-CSRF-Token': CSRF
             },
-            body: 'json_data=' + encodeURIComponent(raw)
+            body: body
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {
             inflight = false;
             if (data.error) {
-                showStatus('error', 'err');
+                setPvStatus('error', 'err');
                 pvContent.innerHTML = '<div class="bi-pv-empty" style="color: #DC2626;"><i class="fas fa-exclamation-triangle" style="color: #DC2626;"></i>' + escapeHtml(data.error) + '</div>';
                 return;
             }
-            lastJSON = raw;
-            showStatus('up to date', 'ok');
+            lastKey = key;
+            setPvStatus('up to date', 'ok');
             renderPreview(data);
         })
-        .catch(function (err) {
+        .catch(function () {
             inflight = false;
-            showStatus('network error', 'err');
+            setPvStatus('network error', 'err');
             pvContent.innerHTML = '<div class="bi-pv-empty" style="color: #DC2626;"><i class="fas fa-times-circle" style="color: #DC2626;"></i>Could not fetch preview.</div>';
-        });
-    }
-
-    function escapeHtml(s) {
-        if (s == null) return '';
-        return String(s).replace(/[&<>"']/g, function (c) {
-            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
     }
 
@@ -337,49 +506,50 @@
 
         let html = '';
 
-        // Stats
         html += '<div class="bi-pv-stats">';
         html += '  <div class="bi-pv-stat"><div class="n">' + total + '</div><div class="l">Total</div></div>';
         html += '  <div class="bi-pv-stat green"><div class="n">' + linked + '</div><div class="l">Linked</div></div>';
         html += '  <div class="bi-pv-stat amber"><div class="n">' + unlinked + '</div><div class="l">Unlinked</div></div>';
         html += '</div>';
 
-        // Subject / chapter
         html += '<div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">';
         html += '<div><strong>Subject:</strong> ' + escapeHtml(data.subject_code) + '</div>';
         if (data.chapter) html += '<div><strong>Chapter:</strong> ' + escapeHtml(data.chapter) + '</div>';
-        if (data.default_pdf_code) {
-            const okDefault = data.default_valid;
-            html += '<div><strong>Batch PDF:</strong> <code>' + escapeHtml(data.default_pdf_code) + '</code> ' + (okDefault ? '✓' : '⚠ invalid format') + '</div>';
+        if (data.pdf_code) {
+            const ok = data.pdf_code_valid && data.pdf_info && data.pdf_info.exists;
+            const warn = data.pdf_code_valid && (!data.pdf_info || !data.pdf_info.exists);
+            const err = !data.pdf_code_valid;
+            const color = ok ? '#10B981' : warn ? '#F59E0B' : '#EF4444';
+            const icon = ok ? '✓' : warn ? '⚠' : '✗';
+            html += '<div><strong>PDF code:</strong> <code style="color: ' + color + ';">' + escapeHtml(data.pdf_code) + ' ' + icon + '</code></div>';
         }
         html += '</div>';
 
-        // Unknown codes warning
         if (unknown.length) {
-            html += '<div class="bi-warnings">';
-            html += '<div class="w-title">⚠ PDF codes not found in library:</div>';
+            html += '<div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 12px; color: #92400E;">';
+            html += '<div style="font-weight: 700; margin-bottom: 4px;">⚠ PDF code not found in library:</div>';
             unknown.forEach(function (c) {
-                html += '<div class="w-item">• <code>' + escapeHtml(c) + '</code></div>';
+                html += '<div>• <code>' + escapeHtml(c) + '</code></div>';
             });
-            html += '<div style="margin-top: 6px; font-size: 11px; opacity: 0.85;">You can still import — links resolve once the PDFs exist.</div>';
+            html += '<div style="margin-top: 6px; font-size: 11px; opacity: 0.85;">You can still import.</div>';
             html += '</div>';
         }
 
-        // Per-question list
         html += '<div class="bi-pv-list">';
         (data.preview || []).forEach(function (q) {
             let cls = 'bi-pv-item';
-            if (q.orphan || q.invalid_code) cls += ' err';
-            else if (q.pdf_code && !q.pdf_exists) cls += ' warn';
+            if (q.orphan || q.invalid_code) cls += ' warn';
 
             let pdfChip = '';
             if (q.pdf_code) {
                 if (q.pdf_exists) {
-                    pdfChip = '<span class="qc ok" title="' + escapeHtml(q.pdf_title) + '">📄 ' + escapeHtml(q.pdf_code) + (q.pdf_page ? ' · p.' + q.pdf_page : '') + '</span>';
+                    pdfChip = '<span class="qc ok" title="' + escapeHtml(q.pdf_title) + '">📄 ' +
+                              escapeHtml(q.pdf_code) + (q.pdf_page ? ' · p.' + q.pdf_page : '') + '</span>';
                 } else if (q.invalid_code) {
                     pdfChip = '<span class="qc warn">⚠ invalid format</span>';
                 } else {
-                    pdfChip = '<span class="qc warn">⚠ ' + escapeHtml(q.pdf_code) + (q.pdf_page ? ' · p.' + q.pdf_page : '') + ' not found</span>';
+                    pdfChip = '<span class="qc warn">⚠ ' + escapeHtml(q.pdf_code) +
+                              (q.pdf_page ? ' · p.' + q.pdf_page : '') + ' not found</span>';
                 }
             } else {
                 pdfChip = '<span class="qc none">no source</span>';
@@ -406,19 +576,20 @@
         pvContent.innerHTML = html;
     }
 
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
     // ── Textarea input → schedule preview ──
     textarea.addEventListener('input', function () { schedulePreview(false); });
     textarea.addEventListener('paste', function () { setTimeout(function () { schedulePreview(true); }, 20); });
 
-    // ── Clear ──
-    window.clearAll = function () {
-        if (!confirm('Clear all input and preview?')) return;
-        textarea.value = '';
-        lastJSON = '';
-        if (fileInput) fileInput.value = '';
-        fileNameEl.style.display = 'none';
-        runPreview();
-    };
+    // ── Initial check on load (if browser preserved values) ──
+    if (codeInput.value.trim()) runPdfCheck();
+    if (textarea.value.trim()) runPreview();
 
 })();
 </script>

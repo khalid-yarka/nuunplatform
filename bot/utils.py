@@ -49,9 +49,27 @@ def get_admin_ids():
         return [int(x.strip()) for x in ids_str.split(',') if x.strip()]
     return []
 
+def get_super_admin_ids():
+    """
+    Parse and return a list of SUPER admin Telegram user IDs.
+
+    Falls back to TELEGRAM_ADMIN_IDS if TELEGRAM_SUPER_ADMIN_IDS is not set,
+    so the bot keeps working on installs that never configured the new var.
+    """
+    ids_str = getattr(Config, 'TELEGRAM_SUPER_ADMIN_IDS', '') or ''
+    if ids_str.strip():
+        return [int(x.strip()) for x in ids_str.split(',') if x.strip()]
+    # Fallback: if super-admins are not explicitly configured,
+    # treat the existing admin list as the super-admin list.
+    return get_admin_ids()
+
 def is_admin(user_id: int) -> bool:
     """Check if a Telegram user ID is an admin."""
     return user_id in get_admin_ids()
+
+def is_super_admin(user_id: int) -> bool:
+    """Check if a Telegram user ID is a super admin."""
+    return user_id in get_super_admin_ids()
 
 # ============================================
 # Re‑export DB functions for convenience
@@ -59,12 +77,13 @@ def is_admin(user_id: int) -> bool:
 
 save_pending_pdf = insert_pending_pdf
 
-# Make these available at the module level
 __all__ = [
     'get_bot',
     'get_bot_token',
     'get_admin_ids',
+    'get_super_admin_ids',
     'is_admin',
+    'is_super_admin',
     'save_pending_pdf',
     'get_pending_pdf_by_id',
     'get_pending_pdf_list',
