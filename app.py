@@ -77,7 +77,7 @@ from blueprints.settings_bp import settings_bp
 from blueprints.profile_bp import profile_bp
 from blueprints.interactions_bp import interactions_bp
 from blueprints.history_bp import history_bp
-from blueprints.pdf_admin_bp import pdf_admin_bp
+
 
 from history_logger import recover_pending_entries
 from activity_logger import (
@@ -613,13 +613,6 @@ app.register_blueprint(history_bp)
 
 register_admin_blueprints(app)
 
-PDF_ADMIN_SECRET = Config.PDF_ADMIN_SECRET_PATH
-if not PDF_ADMIN_SECRET:
-    PDF_ADMIN_SECRET = '/pdf-admin-' + os.urandom(8).hex()
-elif not PDF_ADMIN_SECRET.startswith('/'):
-    PDF_ADMIN_SECRET = '/' + PDF_ADMIN_SECRET
-app.register_blueprint(pdf_admin_bp, url_prefix=PDF_ADMIN_SECRET)
-logger.info(f"PDF Admin panel mounted at {PDF_ADMIN_SECRET}")
 
 
 register_error_handlers(app)

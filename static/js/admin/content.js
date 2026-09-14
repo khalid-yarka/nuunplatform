@@ -473,6 +473,69 @@
     }
 
     // ------------------------------------------------------------
+    // PDF STAGING — bulk publish selector
+    // ------------------------------------------------------------
+    function initPdfStaging() {
+        const master = document.getElementById('stagingSelectAll');
+        const rows = document.querySelectorAll('.pdf-staging-checkbox');
+        const countEl = document.getElementById('stagingCount');
+        const publishBtn = document.getElementById('stagingPublishBtn');
+    
+        if (!rows.length || !publishBtn) return;
+    
+        function update() {
+            const checked = document.querySelectorAll('.pdf-staging-checkbox:checked');
+            const n = checked.length;
+            if (countEl) countEl.textContent = n;
+            publishBtn.disabled = n === 0;
+            if (master) {
+                master.checked = n > 0 && n === rows.length;
+                master.indeterminate = n > 0 && n < rows.length;
+            }
+        }
+    
+        if (master) {
+            master.addEventListener('change', function () {
+                rows.forEach(function (cb) { cb.checked = master.checked; });
+                update();
+            });
+        }
+    
+        rows.forEach(function (cb) {
+            cb.addEventListener('change', update);
+        });
+    
+        publishBtn.addEventListener('click', function (e) {
+            const n = document.querySelectorAll('.pdf-staging-checkbox:checked').length;
+            if (!n) { e.preventDefault(); return; }
+            if (!confirm('Publish ' + n + ' PDF' + (n === 1 ? '' : 's') +
+                         ' to the platform? This makes them visible to all students.')) {
+                e.preventDefault();
+            }
+        });
+    
+        update();
+    }
+    
+    // ------------------------------------------------------------
+    // PDF STAGING — individual delete
+    // ------------------------------------------------------------
+    function initStagingDelete() {
+        document.querySelectorAll('[data-staging-delete]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const id = this.getAttribute('data-staging-delete');
+                const title = this.getAttribute('data-staging-title') || 'this PDF';
+                if (!confirm('Delete staging PDF "' + title + '"? This cannot be undone.')) return;
+    
+                const form = document.getElementById('staging-delete-' + id);
+                if (form) {
+                    form.submit();
+                }
+            });
+        });
+    }
+  
+    // ------------------------------------------------------------
     // BOOT
     // ------------------------------------------------------------
     function boot() {

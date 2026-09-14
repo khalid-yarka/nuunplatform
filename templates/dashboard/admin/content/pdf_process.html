@@ -1,43 +1,42 @@
 {# ============================================================
    templates/dashboard/admin/content/pdf_process.html
-   Fulfil one pending PDF — metadata form + preview.
+   Process one pending Telegram upload — metadata + preview.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
 {% block admin_title_icon %}<i class="fas fa-clipboard-check header-icon"></i>{% endblock %}
-{% block admin_title %}Process Pending PDF{% endblock %}
+{% block admin_title %}Process PDF{% endblock %}
 {% block admin_subtitle %}
-    Fill in the metadata, then publish to the library.
+    {{ pending.filename or 'unknown.pdf' }} · uploaded {{ (pending.uploaded_at or '')[:16] }}
 {% endblock %}
 
 {% block admin_breadcrumb %}
     <span class="sep">/</span>
-    <a href="{{ url_for('admin_content.pdfs') }}">PDF Library</a>
-    <span class="sep">/</span>
-    <a href="{{ url_for('pdf_admin.pending_list') }}">Pending</a>
+    <a href="{{ url_for('admin_content.pdfs', tab='intake') }}">Intake</a>
     <span class="sep">/</span>
     <span class="current">#{{ pending.id }}</span>
 {% endblock %}
 
 {% block admin_actions %}
-    <a href="{{ url_for('pdf_admin.pending_list') }}" class="admin-btn secondary">
-        <i class="fas fa-arrow-left"></i> Back
+    <a href="{{ url_for('admin_content.pdfs', tab='intake') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back to intake
     </a>
 {% endblock %}
 
 {% block admin_content %}
 
-<form method="POST" id="processForm"
-      action="{{ url_for('pdf_admin.process_pending', pending_id=pending.id) }}">
+<form method="POST" id="pdfProcessForm"
+      action="{{ url_for('admin_content.pdf_intake_process', pending_id=pending.id) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
     <div class="pdf-process-layout">
 
-        {# ─────── LEFT: INFO + PREVIEW ─────── #}
-        <div>
+        {# ─────── LEFT: FILE INFO + PREVIEW ─────── #}
+        <div class="pdf-process-left">
+
             <section class="admin-card">
                 <div class="admin-card-head">
-                    <h3><i class="fas fa-info-circle"></i> File Information</h3>
+                    <h3><i class="fas fa-info-circle"></i> File information</h3>
                 </div>
                 <div class="admin-card-body">
                     <div class="pdf-info-grid">
@@ -54,10 +53,8 @@
                             <span class="v">{{ pending.uploaded_by or '—' }}</span>
                         </div>
                         <div class="pdf-info-item">
-                            <span class="k">Unique ID</span>
-                            <span class="v" style="font-family:monospace;">
-                                {{ (pending.file_unique_id or '')[:12] }}…
-                            </span>
+                            <span class="k">File unique ID</span>
+                            <span class="v mono">{{ (pending.file_unique_id or '')[:12] }}…</span>
                         </div>
                     </div>
                 </div>
@@ -66,40 +63,44 @@
             <section class="admin-card" style="margin-top:16px;">
                 <div class="admin-card-head">
                     <h3><i class="fas fa-eye"></i> Preview</h3>
-                    <span class="hint">First pages — confirm it's the right file</span>
+                    <span class="hint">Confirm it's the right file before staging</span>
                 </div>
                 <div class="admin-card-body">
                     <iframe
-                        src="{{ url_for('pdf_admin.preview_pdf', pending_id=pending.id) }}"
+                        src="{{ url_for('admin_content.pdf_intake_preview', pending_id=pending.id) }}"
                         class="pdf-process-iframe"
                         frameborder="0"></iframe>
                 </div>
             </section>
+
         </div>
 
         {# ─────── RIGHT: METADATA FORM ─────── #}
-        <div>
+        <div class="pdf-process-right">
+
             <section class="admin-card">
                 <div class="admin-card-head">
                     <h3><i class="fas fa-pen"></i> Metadata</h3>
+                    <span class="hint">All required fields</span>
                 </div>
                 <div class="admin-card-body">
 
                     <div class="admin-form-group">
-                        <label>PDF Code <span style="color:var(--primary);">*</span></label>
-                        <div style="display:flex;gap:8px;align-items:center;">
-                            <input type="text" id="code" name="code" class="admin-input"
-                                   value="{{ code or '' }}"
+                        <label>PDF code <span style="color:var(--primary);">*</span></label>
+                        <div class="pdf-code-row">
+                            <input type="text" id="code" name="code"
+                                   class="admin-input pdf-code-input"
+                                   value="{{ auto_code }}"
                                    placeholder="XXXX-XXXX"
                                    maxlength="9" required
-                                   style="font-family:monospace;font-size:16px;letter-spacing:2px;text-transform:uppercase;">
-                            <button type="button" onclick="regenerateCode()" class="admin-btn secondary sm">
+                                   autocomplete="off" spellcheck="false">
+                            <button type="button" id="regenerateCodeBtn"
+                                    class="admin-btn secondary">
                                 <i class="fas fa-sync"></i> New
                             </button>
                         </div>
                         <div class="hint">
-                            This code is how students will be given the file on Telegram.
-                            Must be unique.
+                            Students retrieve the file via Telegram using this code. Must be unique.
                         </div>
                     </div>
 
@@ -117,16 +118,16 @@
                                   maxlength="500"></textarea>
                     </div>
 
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-                        <div class="admin-form-group">
+                    <div class="pdf-form-row">
+                        <div class="admin-form-group" style="margin-bottom:0;">
                             <label>Curriculum <span style="color:var(--primary);">*</span></label>
                             <select name="curriculum" class="admin-select" required>
-                                {% for c in curricula %}
-                                    <option value="{{ c }}">{{ c }}</option>
+                                {% for code, label in curricula %}
+                                    <option value="{{ code }}">{{ label }}</option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="admin-form-group">
+                        <div class="admin-form-group" style="margin-bottom:0;">
                             <label>Class</label>
                             <select name="class" class="admin-select">
                                 <option value="">— None —</option>
@@ -137,8 +138,8 @@
                         </div>
                     </div>
 
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-                        <div class="admin-form-group">
+                    <div class="pdf-form-row" style="margin-top:14px;">
+                        <div class="admin-form-group" style="margin-bottom:0;">
                             <label>Subject <span style="color:var(--primary);">*</span></label>
                             <select name="subject" class="admin-select" required>
                                 <option value="">— Select —</option>
@@ -147,37 +148,41 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="admin-form-group">
+                        <div class="admin-form-group" style="margin-bottom:0;">
                             <label>Chapter</label>
                             <input type="text" name="chapter" class="admin-input"
                                    placeholder="e.g. Chapter 5" maxlength="100">
                         </div>
                     </div>
 
-                    <div class="admin-form-group">
-                        <label>Tags (comma-separated)</label>
+                    <div class="admin-form-group" style="margin-top:14px;">
+                        <label>Tags (comma separated)</label>
                         <input type="text" name="tags" class="admin-input"
                                placeholder="e.g. biology, exam, revision" maxlength="200">
                     </div>
 
-                    <div class="admin-form-group">
-                        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-                            <input type="checkbox" name="is_premium" value="1"
-                                   style="width:18px;height:18px;accent-color:var(--primary);">
-                            <span>💎 Premium content</span>
+                    <div class="admin-form-group" style="margin-bottom:0;">
+                        <label class="pdf-toggle-row">
+                            <input type="checkbox" name="is_premium" value="1">
+                            <div class="pdf-toggle-body">
+                                <div class="pdf-toggle-title">💎 Premium content</div>
+                                <div class="pdf-toggle-desc">
+                                    Only users on premium tier or higher will see this file.
+                                </div>
+                            </div>
                         </label>
-                        <div class="hint">Only users with premium tier or higher will see this file.</div>
                     </div>
 
                 </div>
             </section>
 
-            <div style="display:flex;gap:10px;margin-top:16px;">
-                <a href="{{ url_for('pdf_admin.pending_list') }}" class="admin-btn secondary lg" style="flex:1;justify-content:center;">
+            <div class="pdf-process-actions">
+                <a href="{{ url_for('admin_content.pdfs', tab='intake') }}"
+                   class="admin-btn secondary lg">
                     Cancel
                 </a>
-                <button type="submit" class="admin-btn primary lg" style="flex:2;justify-content:center;">
-                    <i class="fas fa-check"></i> Fulfil & Publish
+                <button type="submit" class="admin-btn primary lg">
+                    <i class="fas fa-check"></i> Fulfil &amp; stage
                 </button>
             </div>
 
@@ -190,23 +195,67 @@
 
 {% block admin_js %}
 <script>
-function regenerateCode() {
-    fetch("{{ url_for('pdf_admin.generate_code_ajax') }}")
-        .then(r => r.json())
-        .then(data => {
-            if (data.code) {
-                document.getElementById('code').value = data.code;
+(function () {
+    'use strict';
+
+    var input = document.getElementById('code');
+    var btn   = document.getElementById('regenerateCodeBtn');
+
+    if (input) {
+        // Auto-format: XXXX-XXXX
+        input.addEventListener('input', function () {
+            var v = (this.value || '').toUpperCase().replace(/[^A-Z0-9-]/g, '');
+            if (v.length > 4 && v.charAt(4) !== '-') {
+                v = v.slice(0, 4) + '-' + v.slice(4);
             }
-        })
-        .catch(() => {
-            // Local fallback
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789';
-            let c = '';
-            for (let i = 0; i < 4; i++) c += chars[Math.floor(Math.random() * chars.length)];
-            c += '-';
-            for (let i = 0; i < 4; i++) c += chars[Math.floor(Math.random() * chars.length)];
-            document.getElementById('code').value = c;
+            this.value = v.slice(0, 9);
         });
-}
+    }
+
+    if (btn) {
+        btn.addEventListener('click', function () {
+            btn.disabled = true;
+            var original = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            // Build a fresh code client-side and verify it via the pdf-info
+            // endpoint to make sure it isn't taken.
+            var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789';
+            var code = '';
+            for (var i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+            code += '-';
+            for (var j = 0; j < 4; j++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+
+            var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+            fetch('{{ url_for("admin_content.pdf_info") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+                body: JSON.stringify({ code: code })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                // If it already exists, try again once — very unlikely
+                if (data && data.exists) {
+                    return fetch('{{ url_for("admin_content.pdf_info") }}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+                        body: JSON.stringify({ code: '' })
+                    });
+                }
+                return data;
+            })
+            .then(function () {
+                if (input) input.value = code;
+            })
+            .catch(function () {
+                if (input) input.value = code;
+            })
+            .finally(function () {
+                btn.disabled = false;
+                btn.innerHTML = original;
+            });
+        });
+    }
+})();
 </script>
 {% endblock %}

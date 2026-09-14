@@ -179,14 +179,6 @@ class Config:
     BASE_URL = os.getenv('BASE_URL', 'https://yourdomain.com')
 
     # ============================================
-    # PDF ADMIN PANEL
-    # ============================================
-    PDF_ADMIN_SECRET_PATH = os.getenv('PDF_ADMIN_SECRET_PATH', '')
-    PDF_ADMIN_PASSWORD = os.getenv('PDF_ADMIN_PASSWORD', 'admin123')
-    PDF_SUPER_ADMIN_PASSWORD = os.getenv('PDF_SUPER_ADMIN_PASSWORD', 'super123')
-    PDF_ADMIN_SESSION_TIMEOUT = int(os.getenv('PDF_ADMIN_SESSION_TIMEOUT', '1800'))
-
-    # ============================================
     # FLASK / RUN
     # ============================================
     FLASK_DEBUG = DEBUG  # kept as alias

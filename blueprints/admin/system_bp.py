@@ -16,6 +16,10 @@
 # included in the pulse ONLY when is_super_admin() is true. Regular
 # admins receive pulse without revenue keys and the template hides
 # those tiles anyway.
+#
+# NOTE: The standalone PDF intake panel (pdf_admin) is no longer
+# referenced from admin UI. All PDF work flows through /admin/pdfs
+# using the admin session.
 # ============================================================
 
 import os
@@ -364,7 +368,13 @@ def _build_recent_actions():
 
 
 def _build_pending_work():
-    """Regular-admin workbench: pending items only, no revenue."""
+    """
+    Regular-admin workbench: pending items only, no revenue.
+
+    NOTE: The standalone PDF intake panel (pdf_admin) is no longer
+    surfaced here. PDF work is handled through /admin/pdfs using the
+    same admin session.
+    """
     items = []
 
     try:
@@ -379,20 +389,6 @@ def _build_pending_work():
                 'description': 'Flagged by users, awaiting resolution.',
                 'count': n,
                 'link': url_for('admin_community.reports'),
-            })
-    except Exception:
-        pass
-
-    try:
-        from bot.db import count_pending_pdfs
-        n = count_pending_pdfs()
-        if n > 0:
-            items.append({
-                'icon': '📄',
-                'label': 'PDFs waiting for intake',
-                'description': 'Telegram uploads not yet processed.',
-                'count': n,
-                'link': url_for('pdf_admin.pending_list'),
             })
     except Exception:
         pass

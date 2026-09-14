@@ -1,6 +1,11 @@
 # ============================================================
 # blueprints/admin/content_bp.py
-# Content domain — questions, PDFs, bulk import, intake.
+# Content domain — questions, PDFs (library / intake / staging).
+#
+# PDF flow (unified in the admin system):
+#   Telegram bot uploads  →  pending_pdfs (bot.db)
+#   Admin processes       →  pdfs         (bot.db)  ← "staging"
+#   Super admin publishes →  pdfs         (main db) ← "library"
 #
 # Routes:
 #   GET  /admin/questions                            → list
@@ -16,20 +21,32 @@
 #   POST /admin/bulk-import                          → apply import
 #   GET  /admin/bulk-template                        → download template
 #   POST /admin/bulk-preview                         → AJAX preview
-#   GET  /admin/pdfs                                 → library grid
-#   GET  /admin/pdfs/<id>/edit                       → edit form
-#   POST /admin/pdfs/<id>/edit                       → update
-#   POST /admin/pdfs/<id>/delete                     → delete
+#
+#   GET  /admin/pdfs                                 → workspace (library/intake/staging)
+#   GET  /admin/pdfs/<id>/edit                       → edit library PDF
+#   POST /admin/pdfs/<id>/edit                       → update library PDF
+#   POST /admin/pdfs/<id>/delete                     → delete library PDF
 #   GET  /admin/pdfs/broken                          → missing PDF codes
+#   GET  /admin/pdfs/intake/<id>/process             → process pending
+#   POST /admin/pdfs/intake/<id>/process             → fulfil pending
+#   GET  /admin/pdfs/intake/<id>/preview             → stream pending file
+#   GET  /admin/pdfs/staging/<id>/edit               → edit staged PDF
+#   POST /admin/pdfs/staging/<id>/edit               → save staged PDF
+#   POST /admin/pdfs/staging/<id>/delete             → delete staged PDF
+#   POST /admin/pdfs/staging/publish                 → publish selected
+#   POST /admin/pdfs/staging/publish-all             → publish all staged
 # ============================================================
 
 from flask import (
     Blueprint, render_template, request, session, flash,
-    redirect, url_for, abort, jsonify, Response,
+    redirect, url_for, abort, jsonify, Response, send_file,
 )
+import io
 import json
 import logging
 import re
+import secrets
+import string
 import time
 
 from urllib.parse import urlencode
@@ -56,6 +73,7 @@ from db import (
     get_pdf_distinct_subjects,
     get_pdf_distinct_classes,
     get_pdf_distinct_curricula,
+    publish_bot_pdf_to_main,
 )
 from subjects_config import get_all_subjects, get_subject, get_all_subject_codes
 from utils import validate_csrf
@@ -72,7 +90,7 @@ admin_content_bp = Blueprint('admin_content', __name__, url_prefix='/admin')
 # ============================================================
 
 _PDF_CODE_RE = re.compile(r'^[A-Z0-9]{4}-[A-Z0-9]{4}$')
-_PDF_SIZE_CAP_BYTES = 20 * 1024 * 1024  # 20 MB cap for Telegram preview
+_PDF_SIZE_CAP_BYTES = 20 * 1024 * 1024
 
 _PDF_SIZE_CACHE = {}
 _PDF_SIZE_CACHE_TTL = 300
@@ -138,6 +156,20 @@ def _int_or_none(raw):
         return None
 
 
+def _generate_staging_pdf_code():
+    """Generate a unique PDF code not used in either DB."""
+    from bot.db import get_bot_pdf_by_code
+    chars = string.ascii_uppercase + '123456789'
+    for _ in range(50):
+        code = ''.join(secrets.choice(chars) for _ in range(4)) + '-' + \
+               ''.join(secrets.choice(chars) for _ in range(4))
+        if not get_bot_pdf_by_code(code) and not get_pdf_by_code(code):
+            return code
+    # Extremely unlikely fallback
+    return ''.join(secrets.choice(chars) for _ in range(4)) + '-' + \
+           ''.join(secrets.choice(chars) for _ in range(4))
+
+
 # ============================================================
 # QUESTIONS — LIST (with advanced filters)
 # ============================================================
@@ -146,7 +178,6 @@ def _int_or_none(raw):
                         endpoint='questions')
 @admin_can('questions.view')
 def questions():
-    # ---- Simple filters ----
     search = (request.args.get('search') or '').strip()
     subject_code = (request.args.get('subject') or '').strip()
     pdf_filter = (request.args.get('pdf') or '').strip()
@@ -159,11 +190,9 @@ def questions():
     date_to = (request.args.get('to') or '').strip()
     sort = (request.args.get('sort') or 'newest').strip()
 
-    # ---- Difficulty range ----
     difficulty_min = _int_or_none(request.args.get('difficulty_min'))
     difficulty_max = _int_or_none(request.args.get('difficulty_max'))
 
-    # ---- Pagination ----
     page = max(1, int(request.args.get('page') or 1))
     per_page = 20
 
@@ -192,7 +221,6 @@ def questions():
     codes_in_page = [q['pdf_code'] for q in questions_list if q.get('pdf_code')]
     pdf_map = check_pdf_codes_exist(codes_in_page) if codes_in_page else {}
 
-    # ---- Active filter chips (server-built so the template stays simple) ----
     active_filters = _build_active_filters(
         search=search, subject_code=subject_code,
         pdf_filter=pdf_filter, pdf_code=pdf_code,
@@ -213,7 +241,6 @@ def questions():
         subjects=get_all_subjects(),
         filter_options=filter_options,
         pdf_map=pdf_map,
-        # filter values (for the toolbar to remember state)
         search=search,
         subject_code=subject_code,
         pdf_filter=pdf_filter,
@@ -232,14 +259,6 @@ def questions():
 
 
 def _build_active_filters(**kw):
-    """
-    Return a list of chips describing active filters.
-    Each chip includes:
-      - label    : display label ("Subject")
-      - value    : display value ("Geography")
-      - param    : query-string key (for metadata only)
-      - clear_url: full URL to navigate to when the chip is cleared
-    """
     chips = []
 
     def add(param, label, value, remove_keys=None, extra_params=None):
@@ -261,8 +280,7 @@ def _build_active_filters(**kw):
 
     if kw.get('subject_code'):
         subj = get_subject(kw['subject_code'])
-        add('subject', 'Subject',
-            subj['name'] if subj else kw['subject_code'])
+        add('subject', 'Subject', subj['name'] if subj else kw['subject_code'])
 
     if kw.get('pdf_filter'):
         label = 'PDF linked' if kw['pdf_filter'] == 'linked' else 'PDF unlinked'
@@ -284,8 +302,7 @@ def _build_active_filters(**kw):
             'has_likes':   'Has likes',
             'clean':       'No interactions',
         }
-        add('interactions', 'Interactions',
-            labels.get(kw['interactions'], kw['interactions']))
+        add('interactions', 'Interactions', labels.get(kw['interactions'], kw['interactions']))
 
     if kw.get('miss_filter'):
         labels = {
@@ -295,8 +312,7 @@ def _build_active_filters(**kw):
             'any':    'Has any miss',
             'never':  'Never attempted',
         }
-        add('miss', 'Miss rate',
-            labels.get(kw['miss_filter'], kw['miss_filter']))
+        add('miss', 'Miss rate', labels.get(kw['miss_filter'], kw['miss_filter']))
 
     dmin = kw.get('difficulty_min')
     dmax = kw.get('difficulty_max')
@@ -317,8 +333,7 @@ def _build_active_filters(**kw):
 # QUESTIONS — NEW
 # ============================================================
 
-@admin_content_bp.route('/questions/new', methods=['GET'],
-                        endpoint='question_new')
+@admin_content_bp.route('/questions/new', methods=['GET'], endpoint='question_new')
 @admin_can('questions.create')
 def question_new():
     return render_template(
@@ -328,8 +343,7 @@ def question_new():
     )
 
 
-@admin_content_bp.route('/questions/new', methods=['POST'],
-                        endpoint='question_create')
+@admin_content_bp.route('/questions/new', methods=['POST'], endpoint='question_create')
 @admin_can('questions.create')
 def question_create():
     if not validate_csrf():
@@ -404,12 +418,8 @@ def question_create():
             action='question.create',
             target_type='question',
             before=None,
-            after={
-                'subject_code': subject_code,
-                'pdf_code': pdf_code,
-                'difficulty': difficulty,
-                'status': status,
-            },
+            after={'subject_code': subject_code, 'pdf_code': pdf_code,
+                   'difficulty': difficulty, 'status': status},
             severity='info',
         )
         flash('Question added successfully.', 'success')
@@ -491,8 +501,7 @@ def question_update(question_id):
     if errors:
         for e in errors:
             flash(e, 'error')
-        return redirect(url_for('admin_content.question_edit',
-                                question_id=question_id))
+        return redirect(url_for('admin_content.question_edit', question_id=question_id))
 
     try:
         difficulty = int(difficulty_raw)
@@ -524,24 +533,17 @@ def question_update(question_id):
             action='question.update',
             target_type='question',
             target_id=question_id,
-            before={
-                'subject_code': question.get('subject_code'),
-                'pdf_code': question.get('pdf_code'),
-                'status': question.get('status'),
-            },
-            after={
-                'subject_code': subject_code,
-                'pdf_code': pdf_code,
-                'status': status,
-            },
+            before={'subject_code': question.get('subject_code'),
+                    'pdf_code': question.get('pdf_code'),
+                    'status': question.get('status')},
+            after={'subject_code': subject_code, 'pdf_code': pdf_code, 'status': status},
             severity='info',
         )
         flash('Question updated.', 'success')
         return redirect(url_for('admin_content.questions'))
 
     flash('Error updating question.', 'error')
-    return redirect(url_for('admin_content.question_edit',
-                            question_id=question_id))
+    return redirect(url_for('admin_content.question_edit', question_id=question_id))
 
 
 # ============================================================
@@ -559,7 +561,7 @@ def question_archive(question_id):
     if not question:
         abort(404)
 
-    if delete_question(question_id):  # sets status='archived'
+    if delete_question(question_id):
         write_audit(
             action='question.archive',
             target_type='question',
@@ -579,8 +581,7 @@ def question_archive(question_id):
 # QUESTIONS — BROKEN PDF LINKS
 # ============================================================
 
-@admin_content_bp.route('/questions/broken', methods=['GET'],
-                        endpoint='questions_broken')
+@admin_content_bp.route('/questions/broken', methods=['GET'], endpoint='questions_broken')
 @admin_can('questions.view')
 def questions_broken():
     cursor = execute_with_retry("""
@@ -603,18 +604,14 @@ def questions_broken():
             c['subject_name'] = subj['name'] if subj else c['subject_code']
             rows.append(c)
 
-    return render_template(
-        'dashboard/admin/content/question_broken.html',
-        rows=rows,
-    )
+    return render_template('dashboard/admin/content/question_broken.html', rows=rows)
 
 
 # ============================================================
 # QUESTIONS — HIGH MISS-RATE
 # ============================================================
 
-@admin_content_bp.route('/questions/hard', methods=['GET'],
-                        endpoint='questions_hard')
+@admin_content_bp.route('/questions/hard', methods=['GET'], endpoint='questions_hard')
 @admin_can('questions.view')
 def questions_hard():
     rows = []
@@ -638,18 +635,14 @@ def questions_hard():
     except Exception as e:
         logger.warning(f"questions_hard query failed: {e}")
 
-    return render_template(
-        'dashboard/admin/content/question_hard.html',
-        rows=rows,
-    )
+    return render_template('dashboard/admin/content/question_hard.html', rows=rows)
 
 
 # ============================================================
 # PDF INFO LOOKUP (AJAX)
 # ============================================================
 
-@admin_content_bp.route('/questions/pdf-info', methods=['POST'],
-                        endpoint='pdf_info')
+@admin_content_bp.route('/questions/pdf-info', methods=['POST'], endpoint='pdf_info')
 @admin_can('questions.view')
 def pdf_info():
     if not _csrf_ok():
@@ -674,14 +667,12 @@ def pdf_info():
     if not code:
         out['reason'] = 'no_code'
         return jsonify(out)
-
     if not _validate_pdf_code_format(code):
         out['reason'] = 'invalid_format'
         return jsonify(out)
 
     out['valid'] = True
 
-    # --- Main DB ---
     main_pdf = get_pdf_by_code(code)
     if main_pdf:
         out['exists'] = True
@@ -693,7 +684,6 @@ def pdf_info():
             out['can_preview'] = True
             out['preview_url'] = file_url
             return jsonify(out)
-
         try:
             from bot.db import get_bot_pdf_by_code
             bot_pdf = get_bot_pdf_by_code(code)
@@ -703,8 +693,7 @@ def pdf_info():
                     out['size_mb'] = round(size / (1024 * 1024), 2)
                     if size <= _PDF_SIZE_CAP_BYTES:
                         out['can_preview'] = True
-                        out['preview_url'] = url_for('pdfs.preview_telegram',
-                                                     code=code)
+                        out['preview_url'] = url_for('pdfs.preview_telegram', code=code)
                     else:
                         out['reason'] = 'too_large'
                 else:
@@ -714,10 +703,8 @@ def pdf_info():
         except Exception as e:
             logger.warning(f"pdf_info main→bot fallback failed: {e}")
             out['reason'] = 'lookup_error'
-
         return jsonify(out)
 
-    # --- Bot DB only ---
     try:
         from bot.db import get_bot_pdf_by_code
         bot_pdf = get_bot_pdf_by_code(code)
@@ -731,8 +718,7 @@ def pdf_info():
                 out['size_mb'] = round(size / (1024 * 1024), 2)
                 if size <= _PDF_SIZE_CAP_BYTES:
                     out['can_preview'] = True
-                    out['preview_url'] = url_for('pdfs.preview_telegram',
-                                                 code=code)
+                    out['preview_url'] = url_for('pdfs.preview_telegram', code=code)
                 else:
                     out['reason'] = 'too_large'
             else:
@@ -750,15 +736,13 @@ def pdf_info():
 # BULK IMPORT
 # ============================================================
 
-@admin_content_bp.route('/bulk-import', methods=['GET'],
-                        endpoint='bulk_import')
+@admin_content_bp.route('/bulk-import', methods=['GET'], endpoint='bulk_import')
 @admin_can('questions.bulk_import')
 def bulk_import():
     return render_template('dashboard/admin/content/bulk_import.html')
 
 
-@admin_content_bp.route('/bulk-import', methods=['POST'],
-                        endpoint='bulk_import_apply')
+@admin_content_bp.route('/bulk-import', methods=['POST'], endpoint='bulk_import_apply')
 @admin_can('questions.bulk_import')
 def bulk_import_apply():
     if not validate_csrf():
@@ -823,28 +807,20 @@ def bulk_import_apply():
 
     for idx, q in enumerate(questions_raw, 1):
         if not isinstance(q, dict):
-            errors.append({'index': idx, 'question': '—',
-                           'error': 'Question must be an object'})
+            errors.append({'index': idx, 'question': '—', 'error': 'Question must be an object'})
             continue
-
         q_text = (q.get('question') or '').strip()
         if not q_text:
-            errors.append({'index': idx, 'question': '—',
-                           'error': 'Question text is required'})
+            errors.append({'index': idx, 'question': '—', 'error': 'Question text is required'})
             continue
-
         opts = q.get('options')
         if not isinstance(opts, list) or len(opts) < 3 or len(opts) > 6:
-            errors.append({'index': idx, 'question': q_text[:50],
-                           'error': '3–6 options required'})
+            errors.append({'index': idx, 'question': q_text[:50], 'error': '3–6 options required'})
             continue
-
         correct_idx = q.get('correct')
         if not isinstance(correct_idx, int) or not (1 <= correct_idx <= len(opts)):
-            errors.append({'index': idx, 'question': q_text[:50],
-                           'error': 'Invalid "correct" index'})
+            errors.append({'index': idx, 'question': q_text[:50], 'error': 'Invalid "correct" index'})
             continue
-
         try:
             difficulty = int(q.get('difficulty', 1))
         except (ValueError, TypeError):
@@ -853,8 +829,7 @@ def bulk_import_apply():
             difficulty = 3
 
         if check_question_exists(q_text, subject_code):
-            duplicates.append({'index': idx, 'question': q_text,
-                               'error': 'Duplicate question'})
+            duplicates.append({'index': idx, 'question': q_text, 'error': 'Duplicate question'})
             continue
 
         pdf_page = _normalize_pdf_page(q.get('pdf_page'))
@@ -864,10 +839,7 @@ def bulk_import_apply():
             pdf_page = None
 
         labels = ['A', 'B', 'C', 'D', 'E', 'F']
-        options_dict = {
-            labels[i]: str(opts[i]).strip()
-            for i in range(len(opts))
-        }
+        options_dict = {labels[i]: str(opts[i]).strip() for i in range(len(opts))}
 
         questions_to_import.append({
             'subject_code': subject_code,
@@ -890,13 +862,9 @@ def bulk_import_apply():
             'dashboard/admin/content/bulk_import.html',
             preview=True,
             valid_questions=questions_to_import,
-            errors=errors,
-            duplicates=duplicates,
-            warnings=warnings,
-            subject_code=subject_code,
-            chapter=chapter,
-            pdf_code=pdf_code,
-            total_questions=len(questions_raw),
+            errors=errors, duplicates=duplicates, warnings=warnings,
+            subject_code=subject_code, chapter=chapter,
+            pdf_code=pdf_code, total_questions=len(questions_raw),
         )
 
     if not questions_to_import:
@@ -904,8 +872,7 @@ def bulk_import_apply():
         return redirect(url_for('admin_content.bulk_import'))
 
     try:
-        result = bulk_create_questions(questions_to_import,
-                                        session.get('user_id'))
+        result = bulk_create_questions(questions_to_import, session.get('user_id'))
     except Exception as e:
         logger.error(f"bulk_create_questions raised: {e}", exc_info=True)
         flash(f'Import crashed: {e}', 'error')
@@ -919,17 +886,12 @@ def bulk_import_apply():
             action='question.bulk_import',
             target_type='question',
             before=None,
-            after={
-                'subject_code': subject_code,
-                'imported': imported,
-                'pdf_code': pdf_code,
-            },
+            after={'subject_code': subject_code, 'imported': imported, 'pdf_code': pdf_code},
             severity='info',
         )
         flash(f'✅ {imported} questions imported successfully!', 'success')
         if warnings:
-            flash(f'⚠️ {len(warnings)} warning(s) — some fields were dropped.',
-                  'warning')
+            flash(f'⚠️ {len(warnings)} warning(s) — some fields were dropped.', 'warning')
         if failed:
             flash(f'⚠️ {len(failed)} question(s) failed to insert.', 'error')
         return redirect(url_for('admin_content.questions'))
@@ -939,19 +901,11 @@ def bulk_import_apply():
     return redirect(url_for('admin_content.bulk_import'))
 
 
-# ============================================================
-# BULK TEMPLATE DOWNLOAD
-# ============================================================
-
-@admin_content_bp.route('/bulk-template', methods=['GET'],
-                        endpoint='bulk_template')
+@admin_content_bp.route('/bulk-template', methods=['GET'], endpoint='bulk_template')
 @admin_can('questions.bulk_import')
 def bulk_template():
     template = {
-        "metadata": {
-            "subject_code": "geography",
-            "chapter": "Chapter 1: Introduction"
-        },
+        "metadata": {"subject_code": "geography", "chapter": "Chapter 1: Introduction"},
         "questions": [
             {"tags": ["geography", "capitals"], "difficulty": 2,
              "question": "What is the capital of Somalia?",
@@ -959,32 +913,14 @@ def bulk_template():
              "correct": 1,
              "explanation": "Mogadishu has been the capital since 1960.",
              "pdf_page": 12},
-            {"tags": ["geography", "rivers"], "difficulty": 3,
-             "question": "Which river flows through Mogadishu?",
-             "options": ["Shabelle", "Jubba", "Nile"],
-             "correct": 1, "pdf_page": 14},
-            {"tags": ["geography"], "difficulty": 1,
-             "question": "How many regions does Somalia have?",
-             "options": ["18", "15", "20"],
-             "correct": 0},
         ]
     }
     body = json.dumps(template, indent=2, ensure_ascii=False)
-    return Response(
-        body,
-        mimetype='application/json',
-        headers={
-            'Content-Disposition': 'attachment; filename=bulk_template.json'
-        },
-    )
+    return Response(body, mimetype='application/json',
+                    headers={'Content-Disposition': 'attachment; filename=bulk_template.json'})
 
 
-# ============================================================
-# BULK PREVIEW (AJAX)
-# ============================================================
-
-@admin_content_bp.route('/bulk-preview', methods=['POST'],
-                        endpoint='bulk_preview')
+@admin_content_bp.route('/bulk-preview', methods=['POST'], endpoint='bulk_preview')
 @admin_can('questions.bulk_import')
 def bulk_preview():
     if not _csrf_ok():
@@ -1023,8 +959,7 @@ def bulk_preview():
             lookup = check_pdf_codes_exist([pdf_code])
             info = lookup.get(pdf_code, {})
             pdf_info_payload = {
-                'code': pdf_code,
-                'valid': True,
+                'code': pdf_code, 'valid': True,
                 'exists': info.get('exists', False),
                 'source': info.get('source'),
                 'title': info.get('title', ''),
@@ -1032,12 +967,8 @@ def bulk_preview():
             }
         else:
             pdf_code_valid = False
-            pdf_info_payload = {
-                'code': pdf_code,
-                'valid': False,
-                'exists': False,
-                'reason': 'invalid_format',
-            }
+            pdf_info_payload = {'code': pdf_code, 'valid': False,
+                                'exists': False, 'reason': 'invalid_format'}
 
     preview = []
     unknown_codes = set()
@@ -1046,38 +977,32 @@ def bulk_preview():
 
     for idx, q in enumerate(data['questions'], 1):
         if not isinstance(q, dict):
-            preview.append({
-                'index': idx, 'question': '(invalid entry)',
-                'difficulty': 1, 'options_count': 0,
-                'has_explanation': False, 'tags': '',
-                'pdf_code': '', 'pdf_page': None,
-                'pdf_exists': False, 'pdf_title': '', 'pdf_source': None,
-                'orphan': False, 'invalid_code': False,
-            })
+            preview.append({'index': idx, 'question': '(invalid entry)',
+                            'difficulty': 1, 'options_count': 0,
+                            'has_explanation': False, 'tags': '',
+                            'pdf_code': '', 'pdf_page': None,
+                            'pdf_exists': False, 'pdf_title': '', 'pdf_source': None,
+                            'orphan': False, 'invalid_code': False})
             continue
 
         q_text = (q.get('question') or '') or ''
         q_short = q_text[:70] + ('…' if len(q_text) > 70 else '')
-
         page = _normalize_pdf_page(q.get('pdf_page'))
         orphan = bool(page and not pdf_code)
         if orphan:
             page = None
 
         entry = {
-            'index': idx,
-            'question': q_short,
+            'index': idx, 'question': q_short,
             'difficulty': int(q.get('difficulty', 1) or 1) if str(q.get('difficulty', 1)).isdigit() else 1,
             'options_count': len(q.get('options', []) or []),
             'has_explanation': bool((q.get('explanation') or '').strip()),
-            'tags': ', '.join(q.get('tags', []))[:40] if isinstance(q.get('tags'), list) else str(q.get('tags', ''))[:40],
+            'tags': ', '.join(q.get('tags', []))[:40] if isinstance(q.get('tags'), list)
+                    else str(q.get('tags', ''))[:40],
             'pdf_code': pdf_code or '',
             'pdf_page': page,
-            'pdf_exists': False,
-            'pdf_title': '',
-            'pdf_source': None,
-            'orphan': orphan,
-            'invalid_code': not pdf_code_valid,
+            'pdf_exists': False, 'pdf_title': '', 'pdf_source': None,
+            'orphan': orphan, 'invalid_code': not pdf_code_valid,
         }
 
         if pdf_code and pdf_info_payload:
@@ -1091,42 +1016,89 @@ def bulk_preview():
         preview.append(entry)
 
     return jsonify({
-        'subject_code': subject_code,
-        'chapter': chapter,
+        'subject_code': subject_code, 'chapter': chapter,
         'pdf_code': pdf_code or '',
         'pdf_code_valid': pdf_code_valid,
         'pdf_info': pdf_info_payload,
-        'total': total,
-        'linked_count': linked_count,
+        'total': total, 'linked_count': linked_count,
         'unknown_codes': sorted(unknown_codes),
-        'preview': preview[:30],
-        'truncated': total > 30,
+        'preview': preview[:30], 'truncated': total > 30,
     })
 
 
 # ============================================================
-# PDFs — LIBRARY GRID
+# PDFs — WORKSPACE (library / intake / staging)
 # ============================================================
 
 @admin_content_bp.route('/pdfs', methods=['GET'], endpoint='pdfs')
 @admin_can('pdfs.view')
 def pdfs():
+    """
+    Unified PDF workspace with three tabs:
+        library  — published PDFs on the main platform
+        intake   — pending Telegram uploads (pdfs.intake)
+        staging  — fulfilled bot PDFs awaiting publish (pdfs.intake or pdfs.publish)
+
+    If a tab is not permitted for the current admin, its tab button is
+    hidden entirely, and the tab defaults back to 'library'.
+    """
+    can_intake = admin_can('pdfs.intake')
+    can_publish = admin_can('pdfs.publish')
+    can_edit = admin_can('pdfs.edit')
+    can_delete = admin_can('pdfs.delete')
+
+    tab = (request.args.get('tab') or 'library').strip().lower()
+    if tab not in ('library', 'intake', 'staging'):
+        tab = 'library'
+    if tab == 'intake' and not can_intake:
+        tab = 'library'
+    if tab == 'staging' and not (can_intake or can_publish):
+        tab = 'library'
+
+    # ---------- Library (existing grid) ----------
     search = (request.args.get('search') or '').strip()
     subject_filter = (request.args.get('subject') or '').strip()
     curriculum_filter = (request.args.get('curriculum') or '').strip()
     class_filter = (request.args.get('class') or '').strip()
 
     pdf_list = get_all_pdfs(
-        limit=200,
-        offset=0,
+        limit=200, offset=0,
         search=search,
         subject=subject_filter,
         curriculum=curriculum_filter,
         class_filter=class_filter,
     )
 
+    # ---------- Intake (pending) ----------
+    pending_list = []
+    pending_count = 0
+    if can_intake:
+        try:
+            from bot.db import get_pending_pdf_list, count_pending_pdfs
+            pending_count = count_pending_pdfs()
+            pending_list = get_pending_pdf_list(limit=60, offset=0)
+        except Exception as e:
+            logger.warning(f"pending list load failed: {e}")
+
+    # ---------- Staging (bot pdfs) ----------
+    staging_list = []
+    staging_count = 0
+    if can_intake or can_publish:
+        try:
+            from bot.db import get_bot_pdfs, count_bot_pdfs
+            staging_count = count_bot_pdfs()
+            staging_list = get_bot_pdfs(limit=60, offset=0)
+        except Exception as e:
+            logger.warning(f"staging list load failed: {e}")
+
     return render_template(
         'dashboard/admin/content/pdfs.html',
+        tab=tab,
+        can_intake=can_intake,
+        can_publish=can_publish,
+        can_edit=can_edit,
+        can_delete=can_delete,
+        # library
         pdfs=pdf_list,
         subjects=get_all_subjects(),
         curricula=get_pdf_distinct_curricula(),
@@ -1135,21 +1107,25 @@ def pdfs():
         subject_filter=subject_filter,
         curriculum_filter=curriculum_filter,
         class_filter=class_filter,
+        # intake
+        pending_list=pending_list,
+        pending_count=pending_count,
+        # staging
+        staging_list=staging_list,
+        staging_count=staging_count,
     )
 
 
 # ============================================================
-# PDFs — EDIT
+# PDFs — LIBRARY EDIT (existing)
 # ============================================================
 
-@admin_content_bp.route('/pdfs/<int:pdf_id>/edit', methods=['GET'],
-                        endpoint='pdf_edit')
+@admin_content_bp.route('/pdfs/<int:pdf_id>/edit', methods=['GET'], endpoint='pdf_edit')
 @admin_can('pdfs.edit')
 def pdf_edit(pdf_id):
     pdf = get_pdf_by_id(pdf_id)
     if not pdf:
         abort(404)
-
     return render_template(
         'dashboard/admin/content/pdf_edit.html',
         pdf=pdf,
@@ -1159,13 +1135,11 @@ def pdf_edit(pdf_id):
     )
 
 
-@admin_content_bp.route('/pdfs/<int:pdf_id>/edit', methods=['POST'],
-                        endpoint='pdf_update')
+@admin_content_bp.route('/pdfs/<int:pdf_id>/edit', methods=['POST'], endpoint='pdf_update')
 @admin_can('pdfs.edit')
 def pdf_update(pdf_id):
     if not validate_csrf():
         abort(403)
-
     pdf = get_pdf_by_id(pdf_id)
     if not pdf:
         abort(404)
@@ -1189,88 +1163,355 @@ def pdf_update(pdf_id):
                 title = ?, description = ?, curriculum = ?, class = ?,
                 subject = ?, chapter = ?, tags = ?, is_premium = ?
             WHERE id = ?
-        """, (
-            title, description, curriculum, class_filter,
-            subject, chapter, tags, is_premium, pdf_id,
-        ), commit=True)
+        """, (title, description, curriculum, class_filter,
+              subject, chapter, tags, is_premium, pdf_id), commit=True)
 
         write_audit(
-            action='pdf.update',
-            target_type='pdf',
-            target_id=pdf_id,
+            action='pdf.update', target_type='pdf', target_id=pdf_id,
             before={'title': pdf.get('title'), 'subject': pdf.get('subject')},
             after={'title': title, 'subject': subject},
             severity='info',
         )
         flash('PDF updated.', 'success')
         return redirect(url_for('admin_content.pdfs'))
-
     except Exception as e:
         logger.error(f"pdf_update failed: {e}")
         flash('Error updating PDF.', 'error')
         return redirect(url_for('admin_content.pdf_edit', pdf_id=pdf_id))
 
 
-# ============================================================
-# PDFs — DELETE
-# ============================================================
-
-@admin_content_bp.route('/pdfs/<int:pdf_id>/delete', methods=['POST'],
-                        endpoint='pdf_delete')
+@admin_content_bp.route('/pdfs/<int:pdf_id>/delete', methods=['POST'], endpoint='pdf_delete')
 @admin_can('pdfs.delete')
 def pdf_delete(pdf_id):
     if not validate_csrf():
         abort(403)
-
     pdf = get_pdf_by_id(pdf_id)
     if not pdf:
         abort(404)
-
     if delete_main_pdf(pdf_id):
         write_audit(
-            action='pdf.delete',
-            target_type='pdf',
-            target_id=pdf_id,
+            action='pdf.delete', target_type='pdf', target_id=pdf_id,
             before={'title': pdf.get('title'), 'code': pdf.get('code')},
-            after=None,
-            severity='warning',
+            after=None, severity='warning',
         )
         flash('PDF deleted.', 'success')
     else:
         flash('Error deleting PDF.', 'error')
-
     return redirect(url_for('admin_content.pdfs'))
 
 
-# ============================================================
-# PDFs — BROKEN (question links to missing PDF code)
-# ============================================================
-
-@admin_content_bp.route('/pdfs/broken', methods=['GET'],
-                        endpoint='pdfs_broken')
+@admin_content_bp.route('/pdfs/broken', methods=['GET'], endpoint='pdfs_broken')
 @admin_can('pdfs.view')
 def pdfs_broken():
     cursor = execute_with_retry("""
-        SELECT pdf_code, COUNT(*) AS count,
-               MIN(question_text) AS sample_question
+        SELECT pdf_code, COUNT(*) AS count, MIN(question_text) AS sample_question
         FROM questions
         WHERE status = 'active'
-          AND pdf_code IS NOT NULL
-          AND pdf_code != ''
+          AND pdf_code IS NOT NULL AND pdf_code != ''
         GROUP BY pdf_code
     """)
     candidates = [dict(r) for r in cursor.fetchall()]
-
     codes = [c['pdf_code'] for c in candidates]
     pdf_map = check_pdf_codes_exist(codes) if codes else {}
+    rows = [c for c in candidates if not pdf_map.get(c['pdf_code'], {}).get('exists')]
+    return render_template('dashboard/admin/content/pdf_broken.html', rows=rows)
 
-    rows = []
-    for c in candidates:
-        info = pdf_map.get(c['pdf_code'], {})
-        if not info.get('exists'):
-            rows.append(c)
+
+# ============================================================
+# PDFs — INTAKE (pending) — process + preview
+# ============================================================
+
+@admin_content_bp.route('/pdfs/intake/<int:pending_id>/process',
+                        methods=['GET', 'POST'],
+                        endpoint='pdf_intake_process')
+@admin_can('pdfs.intake')
+def pdf_intake_process(pending_id):
+    from bot.db import (
+        get_pending_pdf_by_id, get_bot_pdf_by_code,
+        insert_bot_pdf, delete_pending_pdf,
+    )
+
+    pending = get_pending_pdf_by_id(pending_id)
+    if not pending:
+        flash('Pending PDF not found.', 'error')
+        return redirect(url_for('admin_content.pdfs', tab='intake'))
+
+    if request.method == 'POST':
+        if not validate_csrf():
+            abort(403)
+
+        code = (request.form.get('code') or '').strip().upper()
+        title = (request.form.get('title') or '').strip()
+        description = (request.form.get('description') or '').strip()
+        curriculum = (request.form.get('curriculum') or 'PL').strip()
+        class_filter = (request.form.get('class') or '').strip()
+        subject = (request.form.get('subject') or '').strip()
+        chapter = (request.form.get('chapter') or '').strip()
+        tags = (request.form.get('tags') or '').strip()
+        is_premium = 1 if request.form.get('is_premium') == 'on' else 0
+
+        errors = []
+        if not code or not _validate_pdf_code_format(code):
+            errors.append('Valid PDF code is required (format XXXX-XXXX).')
+        elif get_bot_pdf_by_code(code) or get_pdf_by_code(code):
+            errors.append(f'Code {code} is already taken.')
+        if not title:
+            errors.append('Title is required.')
+        if not subject:
+            errors.append('Subject is required.')
+        if curriculum not in ('PL', 'SO', 'SL'):
+            errors.append('Invalid curriculum.')
+        if class_filter and class_filter not in ('7aad', '8aad', 'F3', 'F4'):
+            errors.append('Invalid class.')
+
+        if errors:
+            for e in errors:
+                flash(e, 'error')
+            return redirect(url_for('admin_content.pdf_intake_process',
+                                    pending_id=pending_id))
+
+        bot_pdf_id = insert_bot_pdf({
+            'code': code,
+            'title': title,
+            'description': description,
+            'curriculum': curriculum,
+            'class': class_filter,
+            'subject': subject,
+            'chapter': chapter,
+            'tags': tags,
+            'is_premium': is_premium,
+            'file_id': pending['file_id'],
+            'file_unique_id': pending['file_unique_id'],
+            'uploaded_by': pending['uploaded_by'],
+        })
+
+        if not bot_pdf_id:
+            flash('Failed to stage PDF. Please try again.', 'error')
+            return redirect(url_for('admin_content.pdf_intake_process',
+                                    pending_id=pending_id))
+
+        delete_pending_pdf(pending_id)
+
+        write_audit(
+            action='pdf.intake.processed',
+            target_type='pdf_staging',
+            target_id=bot_pdf_id,
+            before={'pending_id': pending_id, 'filename': pending.get('filename')},
+            after={'code': code, 'title': title, 'subject': subject},
+            severity='info',
+        )
+
+        flash(f'PDF staged with code {code}.', 'success')
+        return redirect(url_for('admin_content.pdfs', tab='staging'))
+
+    # GET — build a fresh code
+    auto_code = _generate_staging_pdf_code()
 
     return render_template(
-        'dashboard/admin/content/pdf_broken.html',
-        rows=rows,
+        'dashboard/admin/content/pdf_process.html',
+        pending=pending,
+        auto_code=auto_code,
+        subjects=get_all_subjects(),
+        curricula=[('PL', 'Puntland'), ('SO', 'Somalia'), ('SL', 'Somaliland')],
+        classes=['7aad', '8aad', 'F3', 'F4'],
     )
+
+
+@admin_content_bp.route('/pdfs/intake/<int:pending_id>/preview',
+                        endpoint='pdf_intake_preview')
+@admin_can('pdfs.intake')
+def pdf_intake_preview(pending_id):
+    from bot.db import get_pending_pdf_by_id
+    pending = get_pending_pdf_by_id(pending_id)
+    if not pending:
+        abort(404)
+    try:
+        from bot.utils import get_bot
+        bot = get_bot()
+        file_info = bot.get_file(pending['file_id'])
+        downloaded = bot.download_file(file_info.file_path)
+        return send_file(
+            io.BytesIO(downloaded),
+            mimetype='application/pdf',
+            as_attachment=False,
+            download_name=pending.get('filename', 'document.pdf'),
+        )
+    except Exception as e:
+        logger.error(f"Preview failed for pending #{pending_id}: {e}")
+        abort(500)
+
+
+# ============================================================
+# PDFs — STAGING (bot pdfs) — edit / delete
+# ============================================================
+
+@admin_content_bp.route('/pdfs/staging/<int:staging_id>/edit',
+                        methods=['GET', 'POST'],
+                        endpoint='pdf_staging_edit')
+@admin_can('pdfs.edit')
+def pdf_staging_edit(staging_id):
+    from bot.db import get_bot_pdf_by_id, update_bot_pdf
+
+    bot_pdf = get_bot_pdf_by_id(staging_id)
+    if not bot_pdf:
+        abort(404)
+
+    if request.method == 'POST':
+        if not validate_csrf():
+            abort(403)
+
+        data = {
+            'title': (request.form.get('title') or '').strip(),
+            'description': (request.form.get('description') or '').strip(),
+            'curriculum': (request.form.get('curriculum') or 'PL').strip(),
+            'class': (request.form.get('class') or '').strip(),
+            'subject': (request.form.get('subject') or '').strip(),
+            'chapter': (request.form.get('chapter') or '').strip(),
+            'tags': (request.form.get('tags') or '').strip(),
+            'is_premium': 1 if request.form.get('is_premium') == 'on' else 0,
+        }
+
+        if not data['title'] or not data['subject']:
+            flash('Title and Subject are required.', 'error')
+            return redirect(url_for('admin_content.pdf_staging_edit',
+                                    staging_id=staging_id))
+
+        if update_bot_pdf(staging_id, data):
+            write_audit(
+                action='pdf.staging.updated',
+                target_type='pdf_staging',
+                target_id=staging_id,
+                before={'title': bot_pdf.get('title'), 'subject': bot_pdf.get('subject')},
+                after={'title': data['title'], 'subject': data['subject']},
+                severity='info',
+            )
+            flash('Staging PDF updated.', 'success')
+            return redirect(url_for('admin_content.pdfs', tab='staging'))
+
+        flash('Failed to update staging PDF.', 'error')
+        return redirect(url_for('admin_content.pdf_staging_edit',
+                                staging_id=staging_id))
+
+    return render_template(
+        'dashboard/admin/content/pdf_staging_edit.html',
+        pdf=bot_pdf,
+        subjects=get_all_subjects(),
+        curricula=[('PL', 'Puntland'), ('SO', 'Somalia'), ('SL', 'Somaliland')],
+        classes=['7aad', '8aad', 'F3', 'F4'],
+    )
+
+
+@admin_content_bp.route('/pdfs/staging/<int:staging_id>/delete',
+                        methods=['POST'], endpoint='pdf_staging_delete')
+@admin_can('pdfs.delete')
+def pdf_staging_delete(staging_id):
+    if not validate_csrf():
+        abort(403)
+
+    from bot.db import get_bot_pdf_by_id, delete_bot_pdf
+    bot_pdf = get_bot_pdf_by_id(staging_id)
+    if not bot_pdf:
+        abort(404)
+
+    if delete_bot_pdf(staging_id):
+        write_audit(
+            action='pdf.staging.deleted',
+            target_type='pdf_staging',
+            target_id=staging_id,
+            before={'code': bot_pdf.get('code'), 'title': bot_pdf.get('title')},
+            after=None,
+            severity='warning',
+        )
+        flash('Staging PDF deleted.', 'success')
+    else:
+        flash('Failed to delete staging PDF.', 'error')
+
+    return redirect(url_for('admin_content.pdfs', tab='staging'))
+
+
+# ============================================================
+# PDFs — STAGING — publish to platform (SUPER ADMIN ONLY)
+# ============================================================
+
+@admin_content_bp.route('/pdfs/staging/publish',
+                        methods=['POST'], endpoint='pdf_staging_publish')
+@admin_can('pdfs.publish')
+def pdf_staging_publish():
+    if not validate_csrf():
+        abort(403)
+
+    ids = request.form.getlist('staging_ids')
+    if not ids:
+        flash('No PDFs selected.', 'error')
+        return redirect(url_for('admin_content.pdfs', tab='staging'))
+
+    succeeded = 0
+    failed = 0
+    failures = []
+
+    for sid in ids:
+        try:
+            sid_int = int(sid)
+        except (ValueError, TypeError):
+            failed += 1
+            continue
+        ok, msg = publish_bot_pdf_to_main(sid_int)
+        if ok:
+            succeeded += 1
+        else:
+            failed += 1
+            failures.append(f'#{sid_int}: {msg}')
+
+    if succeeded:
+        write_audit(
+            action='pdf.publish_bulk',
+            target_type='pdf',
+            before=None,
+            after={'succeeded': succeeded, 'failed': failed, 'ids': ids},
+            severity='warning',
+        )
+        flash(f'{succeeded} PDF{"s" if succeeded != 1 else ""} published to the platform.', 'success')
+    if failed:
+        first = failures[0] if failures else 'unknown error'
+        flash(f'{failed} failed. First: {first}', 'error')
+
+    return redirect(url_for('admin_content.pdfs', tab='staging'))
+
+
+@admin_content_bp.route('/pdfs/staging/publish-all',
+                        methods=['POST'], endpoint='pdf_staging_publish_all')
+@admin_can('pdfs.publish')
+def pdf_staging_publish_all():
+    if not validate_csrf():
+        abort(403)
+
+    from bot.db import get_bot_pdfs
+    try:
+        all_pdfs = get_bot_pdfs(limit=10000, offset=0)
+    except Exception as e:
+        logger.error(f"publish-all load failed: {e}")
+        flash('Could not load staging PDFs.', 'error')
+        return redirect(url_for('admin_content.pdfs', tab='staging'))
+
+    succeeded = 0
+    failed = 0
+    for p in all_pdfs:
+        ok, _ = publish_bot_pdf_to_main(p['id'])
+        if ok:
+            succeeded += 1
+        else:
+            failed += 1
+
+    if succeeded:
+        write_audit(
+            action='pdf.publish_all',
+            target_type='pdf',
+            before=None,
+            after={'succeeded': succeeded, 'failed': failed},
+            severity='warning',
+        )
+        flash(f'{succeeded} PDF{"s" if succeeded != 1 else ""} published.', 'success')
+    if failed:
+        flash(f'{failed} already existed or failed to publish.', 'info')
+
+    return redirect(url_for('admin_content.pdfs', tab='staging'))

@@ -1,135 +1,352 @@
 {# ============================================================
    templates/dashboard/admin/content/pdfs.html
-   Main PDF library — grid of published PDFs.
-
-   NOTE: The standalone PDF intake panel (pdf_admin) is no longer
-   linked from this page. All PDF work happens right here using the
-   admin session.
+   Unified PDF workspace — Library / Intake / Staging tabs.
+   Tabs and actions are hidden when the current admin lacks the
+   corresponding capability.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
 {% block admin_title_icon %}<i class="fas fa-file-pdf header-icon"></i>{% endblock %}
-{% block admin_title %}PDF Library{% endblock %}
+{% block admin_title %}PDFs{% endblock %}
 {% block admin_subtitle %}
-    {{ pdfs|length }} PDF{{ '' if pdfs|length == 1 else 's' }} in the main library.
+    {% if tab == 'library' %}
+        Browse and manage the published PDF library.
+    {% elif tab == 'intake' %}
+        {{ pending_count }} file{{ '' if pending_count == 1 else 's' }} waiting for review.
+    {% elif tab == 'staging' %}
+        {{ staging_count }} staged PDF{{ '' if staging_count == 1 else 's' }} awaiting publish to the platform.
+    {% else %}
+        Manage library, intake, and staging in one place.
+    {% endif %}
 {% endblock %}
 
 {% block admin_breadcrumb %}
     <span class="sep">/</span>
-    <span class="current">PDF Library</span>
+    <span class="current">PDFs</span>
 {% endblock %}
 
 {% block admin_actions %}
-    <a href="{{ url_for('admin_content.pdfs_broken') }}" class="admin-btn secondary">
-        <i class="fas fa-link-slash"></i> Broken Links
-    </a>
+    {% if tab == 'library' and can_intake %}
+        <a href="{{ url_for('admin_content.pdfs', tab='intake') }}" class="admin-btn secondary">
+            <i class="fas fa-inbox"></i> Intake
+            {% if pending_count > 0 %}<span class="admin-chip amber" style="margin-left:6px;">{{ pending_count }}</span>{% endif %}
+        </a>
+    {% endif %}
+    {% if tab == 'staging' and can_publish and staging_count > 0 %}
+        <form method="POST"
+              action="{{ url_for('admin_content.pdf_staging_publish_all') }}"
+              onsubmit="return confirm('Publish ALL {{ staging_count }} staged PDFs to the platform?');"
+              style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="admin-btn primary">
+                <i class="fas fa-cloud-upload-alt"></i> Publish all ({{ staging_count }})
+            </button>
+        </form>
+    {% endif %}
 {% endblock %}
 
 {% block admin_content %}
 
-{# ─────── FILTER BAR ─────── #}
-<form method="GET" class="admin-toolbar" style="margin-bottom:20px;">
-    <div class="admin-search">
-        <i class="fas fa-search"></i>
-        <input type="text" name="search" value="{{ search or '' }}"
-               data-search-form
-               placeholder="Search title, code, subject…"
-               autocomplete="off" spellcheck="false">
-    </div>
+{# ───────────── TABS ───────────── #}
+<nav class="pdf-tabs" role="tablist">
+    <a href="{{ url_for('admin_content.pdfs', tab='library') }}"
+       class="pdf-tab {% if tab == 'library' %}active{% endif %}"
+       role="tab">
+        <i class="fas fa-book"></i>
+        <span>Library</span>
+        <span class="pdf-tab-count">{{ pdfs|length }}</span>
+    </a>
 
-    <select name="subject" class="admin-select" data-autofilter>
-        <option value="">All subjects</option>
-        {% for s in subjects %}
-            <option value="{{ s.code }}" {% if subject_filter == s.code %}selected{% endif %}>
-                {{ s.name }}
-            </option>
-        {% endfor %}
-    </select>
-
-    <select name="curriculum" class="admin-select" data-autofilter>
-        <option value="">All curricula</option>
-        {% for c in curricula %}
-            <option value="{{ c }}" {% if curriculum_filter == c %}selected{% endif %}>{{ c }}</option>
-        {% endfor %}
-    </select>
-
-    <select name="class" class="admin-select" data-autofilter>
-        <option value="">All classes</option>
-        {% for c in classes %}
-            <option value="{{ c }}" {% if class_filter == c %}selected{% endif %}>{{ c }}</option>
-        {% endfor %}
-    </select>
-
-    {% if search or subject_filter or curriculum_filter or class_filter %}
-        <a href="{{ url_for('admin_content.pdfs') }}" class="admin-btn secondary">
-            <i class="fas fa-times"></i> Clear
+    {% if can_intake %}
+        <a href="{{ url_for('admin_content.pdfs', tab='intake') }}"
+           class="pdf-tab {% if tab == 'intake' %}active{% endif %}"
+           role="tab">
+            <i class="fas fa-inbox"></i>
+            <span>Intake</span>
+            {% if pending_count > 0 %}
+                <span class="pdf-tab-count pending">{{ pending_count }}</span>
+            {% endif %}
         </a>
     {% endif %}
-</form>
 
-{# ─────── GRID ─────── #}
-{% if pdfs %}
-<div class="pdf-grid">
-    {% for p in pdfs %}
-    <div class="pdf-card">
-        <div class="pdf-head">
-            <div class="pdf-icon">
-                <i class="fas fa-file-pdf"></i>
-            </div>
-            <div class="pdf-title">
-                <div class="t">{{ p.title }}</div>
-                <div class="code">{{ p.code }}</div>
-            </div>
+    {% if can_intake or can_publish %}
+        <a href="{{ url_for('admin_content.pdfs', tab='staging') }}"
+           class="pdf-tab {% if tab == 'staging' %}active{% endif %}"
+           role="tab">
+            <i class="fas fa-layer-group"></i>
+            <span>Staging</span>
+            {% if staging_count > 0 %}
+                <span class="pdf-tab-count">{{ staging_count }}</span>
+            {% endif %}
+        </a>
+    {% endif %}
+</nav>
+
+{# ═══════════════════════════════════════════════════════════
+   LIBRARY TAB
+   ═══════════════════════════════════════════════════════════ #}
+{% if tab == 'library' %}
+
+    <form method="GET" class="admin-toolbar" style="margin-bottom:18px;">
+        <input type="hidden" name="tab" value="library">
+        <div class="admin-search">
+            <i class="fas fa-search"></i>
+            <input type="text" name="search" value="{{ search }}"
+                   placeholder="Search title, code, subject…"
+                   autocomplete="off" spellcheck="false">
         </div>
-
-        <div class="pdf-tags">
-            {% if p.subject %}<span class="pdf-tag">{{ p.subject }}</span>{% endif %}
-            {% if p.curriculum %}<span class="pdf-tag">{{ p.curriculum }}</span>{% endif %}
-            {% if p.class %}<span class="pdf-tag">{{ p.class }}</span>{% endif %}
-            {% if p.is_premium %}<span class="pdf-tag premium">💎 Premium</span>{% endif %}
-        </div>
-
-        {% if p.description %}
-            <div class="pdf-desc">{{ p.description }}</div>
+        <select name="subject" class="admin-select" data-autofilter>
+            <option value="">All subjects</option>
+            {% for s in subjects %}
+                <option value="{{ s.code }}" {% if subject_filter == s.code %}selected{% endif %}>
+                    {{ s.name }}
+                </option>
+            {% endfor %}
+        </select>
+        <select name="curriculum" class="admin-select" data-autofilter>
+            <option value="">All curricula</option>
+            {% for c in curricula %}
+                <option value="{{ c }}" {% if curriculum_filter == c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+        </select>
+        <select name="class" class="admin-select" data-autofilter>
+            <option value="">All classes</option>
+            {% for c in classes %}
+                <option value="{{ c }}" {% if class_filter == c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+        </select>
+        {% if search or subject_filter or curriculum_filter or class_filter %}
+            <a href="{{ url_for('admin_content.pdfs', tab='library') }}" class="admin-btn secondary">
+                <i class="fas fa-times"></i> Clear
+            </a>
         {% endif %}
+    </form>
 
-        <div class="pdf-meta">
-            <span><i class="fas fa-eye"></i> {{ p.view_count or 0 }}</span>
-            <span>{{ (p.uploaded_at or '')[:10] }}</span>
+    {% if pdfs %}
+        <div class="pdf-grid">
+            {% for p in pdfs %}
+                <div class="pdf-card">
+                    <div class="pdf-head">
+                        <div class="pdf-icon"><i class="fas fa-file-pdf"></i></div>
+                        <div class="pdf-title">
+                            <div class="t">{{ p.title }}</div>
+                            <div class="code">{{ p.code }}</div>
+                        </div>
+                    </div>
+
+                    <div class="pdf-tags">
+                        {% if p.subject %}<span class="pdf-tag">{{ p.subject }}</span>{% endif %}
+                        {% if p.curriculum %}<span class="pdf-tag">{{ p.curriculum }}</span>{% endif %}
+                        {% if p.class %}<span class="pdf-tag">{{ p.class }}</span>{% endif %}
+                        {% if p.is_premium %}<span class="pdf-tag premium">💎 Premium</span>{% endif %}
+                    </div>
+
+                    {% if p.description %}
+                        <div class="pdf-desc">{{ p.description }}</div>
+                    {% endif %}
+
+                    <div class="pdf-meta">
+                        <span><i class="fas fa-eye"></i> {{ p.view_count or 0 }}</span>
+                        <span>{{ (p.uploaded_at or '')[:10] }}</span>
+                    </div>
+
+                    <div class="pdf-actions">
+                        {% if can_edit %}
+                            <a href="{{ url_for('admin_content.pdf_edit', pdf_id=p.id) }}"
+                               class="admin-btn secondary sm">
+                                <i class="fas fa-pen"></i> Edit
+                            </a>
+                        {% endif %}
+                        {% if can_delete %}
+                            <form method="POST"
+                                  action="{{ url_for('admin_content.pdf_delete', pdf_id=p.id) }}"
+                                  style="display:inline;flex:1;"
+                                  onsubmit="return confirm('Delete {{ p.title }}? This cannot be undone.');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit" class="admin-btn danger sm" style="width:100%;justify-content:center;">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
         </div>
-
-        <div class="pdf-actions">
-            {% if admin_can('pdfs.edit') %}
-                <a href="{{ url_for('admin_content.pdf_edit', pdf_id=p.id) }}"
-                   class="admin-btn secondary sm">
-                    <i class="fas fa-pen"></i> Edit
+    {% else %}
+        <div class="admin-empty">
+            <span class="empty-icon">📄</span>
+            <h3>No PDFs found</h3>
+            <p>Try clearing the filters, or publish some from the Staging tab.</p>
+            {% if can_intake %}
+                <a href="{{ url_for('admin_content.pdfs', tab='intake') }}" class="admin-btn primary">
+                    <i class="fas fa-inbox"></i> View Intake
                 </a>
             {% endif %}
-            {% if admin_can('pdfs.delete') %}
-                <form method="POST"
-                      action="{{ url_for('admin_content.pdf_delete', pdf_id=p.id) }}"
-                      style="display:inline;flex:1;"
-                      onsubmit="return confirm('Delete {{ p.title }}? This cannot be undone.');">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="admin-btn danger sm" style="width:100%;justify-content:center;">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </form>
+        </div>
+    {% endif %}
+
+{% endif %}
+
+{# ═══════════════════════════════════════════════════════════
+   INTAKE TAB
+   ═══════════════════════════════════════════════════════════ #}
+{% if tab == 'intake' and can_intake %}
+
+    {% if pending_list %}
+        <div class="pdf-intake-list">
+            {% for p in pending_list %}
+                <div class="pdf-intake-row">
+                    <div class="pdf-intake-icon">
+                        <i class="fas fa-file-pdf"></i>
+                    </div>
+
+                    <div class="pdf-intake-body">
+                        <div class="pdf-intake-title">
+                            {{ p.filename or 'unknown.pdf' }}
+                        </div>
+                        <div class="pdf-intake-meta">
+                            {% if p.uploaded_by %}
+                                <span class="pdf-meta-chip">TG #{{ p.uploaded_by }}</span>
+                            {% endif %}
+                            <span>{{ (p.uploaded_at or '')[:16] }}</span>
+                        </div>
+                    </div>
+
+                    <div class="pdf-intake-actions">
+                        <a href="{{ url_for('admin_content.pdf_intake_preview', pending_id=p.id) }}"
+                           target="_blank" rel="noopener"
+                           class="admin-btn secondary sm">
+                            <i class="fas fa-eye"></i> Preview
+                        </a>
+                        <a href="{{ url_for('admin_content.pdf_intake_process', pending_id=p.id) }}"
+                           class="admin-btn primary sm">
+                            <i class="fas fa-arrow-right"></i> Process
+                        </a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="admin-empty">
+            <span class="empty-icon">🎉</span>
+            <h3>Inbox is empty</h3>
+            <p>The intake queue is clear. New Telegram uploads will appear here automatically.</p>
+        </div>
+    {% endif %}
+
+{% endif %}
+
+{# ═══════════════════════════════════════════════════════════
+   STAGING TAB
+   ═══════════════════════════════════════════════════════════ #}
+{% if tab == 'staging' and (can_intake or can_publish) %}
+
+    {% if staging_list %}
+
+        {% if can_publish %}
+            <form method="POST"
+                  action="{{ url_for('admin_content.pdf_staging_publish') }}"
+                  id="stagingForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {% endif %}
+
+        <div class="pdf-staging-toolbar">
+            {% if can_publish %}
+                <label class="pdf-staging-check">
+                    <input type="checkbox" id="stagingSelectAll">
+                    <span>Select all</span>
+                </label>
+                <span class="pdf-staging-count">
+                    <strong id="stagingCount">0</strong> selected
+                </span>
+                <div class="pdf-staging-spacer"></div>
+                <button type="submit" class="admin-btn primary" id="stagingPublishBtn" disabled>
+                    <i class="fas fa-cloud-upload-alt"></i> Publish selected
+                </button>
+            {% else %}
+                <span class="pdf-staging-count">
+                    {{ staging_count }} staged PDF{{ '' if staging_count == 1 else 's' }}
+                    · waiting for a super admin to publish
+                </span>
             {% endif %}
         </div>
-    </div>
-    {% endfor %}
-</div>
 
-{% else %}
-<div class="admin-empty">
-    <span class="empty-icon">📄</span>
-    <h3>No PDFs found</h3>
-    <p>Try clearing the filters, or browse the public PDF library to see what students see.</p>
-    <a href="{{ url_for('pdfs.list_pdfs') }}" class="admin-btn primary" target="_blank" rel="noopener">
-        <i class="fas fa-external-link-alt"></i> View public library
-    </a>
-</div>
+        <div class="pdf-staging-list">
+            {% for p in staging_list %}
+                <div class="pdf-staging-row">
+                    {% if can_publish %}
+                        <label class="pdf-staging-check">
+                            <input type="checkbox"
+                                   name="staging_ids"
+                                   value="{{ p.id }}"
+                                   class="pdf-staging-checkbox">
+                        </label>
+                    {% endif %}
+
+                    <div class="pdf-staging-code">{{ p.code }}</div>
+
+                    <div class="pdf-staging-body">
+                        <div class="pdf-staging-title">{{ p.title }}</div>
+                        <div class="pdf-staging-meta">
+                            {% if p.subject %}<span>{{ p.subject }}</span>{% endif %}
+                            {% if p.curriculum %}<span>{{ p.curriculum }}</span>{% endif %}
+                            {% if p.class %}<span>{{ p.class }}</span>{% endif %}
+                            {% if p.is_premium %}<span class="pdf-meta-chip premium">💎 Premium</span>{% endif %}
+                            <span class="pdf-staging-date">{{ (p.uploaded_at or '')[:10] }}</span>
+                        </div>
+                    </div>
+
+                    <div class="pdf-staging-actions">
+                        {% if can_edit %}
+                            <a href="{{ url_for('admin_content.pdf_staging_edit', staging_id=p.id) }}"
+                               class="admin-btn secondary sm" title="Edit metadata">
+                                <i class="fas fa-pen"></i>
+                            </a>
+                        {% endif %}
+                        {% if can_delete %}
+                            <button type="button"
+                                    class="admin-btn danger sm"
+                                    data-staging-delete="{{ p.id }}"
+                                    data-staging-title="{{ p.title }}"
+                                    title="Delete staging PDF">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        {% if can_publish %}
+            </form>
+
+            {# Individual delete forms live OUTSIDE the publish form
+               to avoid nested form submission issues. #}
+            {% if can_delete %}
+                {% for p in staging_list %}
+                    <form method="POST"
+                          action="{{ url_for('admin_content.pdf_staging_delete', staging_id=p.id) }}"
+                          id="staging-delete-{{ p.id }}"
+                          style="display:none;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    </form>
+                {% endfor %}
+            {% endif %}
+        {% endif %}
+
+    {% else %}
+        <div class="admin-empty">
+            <span class="empty-icon">📭</span>
+            <h3>Nothing staged yet</h3>
+            <p>Process pending uploads from the Intake tab to populate staging.</p>
+            {% if can_intake %}
+                <a href="{{ url_for('admin_content.pdfs', tab='intake') }}" class="admin-btn primary">
+                    <i class="fas fa-inbox"></i> Open Intake
+                </a>
+            {% endif %}
+        </div>
+    {% endif %}
+
 {% endif %}
 
 {% endblock %}
