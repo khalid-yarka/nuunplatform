@@ -232,15 +232,15 @@ class Config:
     # GROUP JOIN RULES
     # ============================================
     GROUP_JOIN_RULES = """
-📋 **Group Participation Rules**
+📋 Qodobadan akhri intadan ku biirin groupyda!
 
-1. **Be Respectful** – Treat all members with kindness and respect.
-2. **Stay On Topic** – Keep discussions relevant to the group's subject.
-3. **No Spam** – Do not share irrelevant links or advertisements.
-4. **Help Others** – Share knowledge and support fellow learners.
-5. **Follow Platform Guidelines** – Abide by the general terms of service.
+1. Groupka ujeedkiisu waa wxbarasho kaliya.
+2. Lama ogola wax kabaxsan wax barasho iyo kla faidaysi.
+3. Wax " link " lagama ogola in laisla wadaago.
+4. Anshaxa waxbarasho ha baal marin.
+5. Wasarada waxbarashada xeerarka ka yaal imtixanadka meel loma dhaafo.
 
-By proceeding, you agree to these rules.
+Taabo proceeding, hadad u hogaansamayso.
     """
 
 

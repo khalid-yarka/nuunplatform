@@ -2,33 +2,21 @@
 # blueprints/admin/community_bp.py
 # Community domain — groups, reports, achievements, leaderboard.
 #
-# Routes:
+# Routes (groups):
 #   GET  /admin/groups                             → list
+#   GET  /admin/groups/new                         → create form
+#   GET  /admin/groups/<id>/edit                   → edit form
 #   GET  /admin/groups/analytics                   → analytics
-#   GET  /admin/groups/audit                       → audit
-#   GET  /admin/groups/<id>/edit                   → placeholder (no template)
+#   GET  /admin/groups/audit                       → audit log
 #   POST /admin/groups/api                         → create (JSON)
-#   PUT  /admin/groups/api/<id>                    → update (JSON via POST fallback)
-#   POST /admin/groups/api/<id>/update             → update (POST)
+#   POST /admin/groups/api/<id>                    → update (JSON)
 #   DELETE /admin/groups/api/<id>                  → delete
 #   GET  /admin/groups/api/<id>                    → get single
 #   POST /admin/groups/api/<id>/toggle-active      → toggle active
 #   POST /admin/groups/api/<id>/toggle-featured    → toggle featured
 #   POST /admin/groups/api/bulk                    → bulk action
 #
-#   GET  /admin/reports                            → list
-#   POST /admin/reports/<id>/resolve               → resolve
-#   POST /admin/reports/<id>/dismiss               → dismiss
-#
-#   GET  /admin/achievements                       → catalog
-#   GET  /admin/achievements/new                   → new form
-#   POST /admin/achievements/new                   → create
-#   GET  /admin/achievements/<id>/edit             → edit form
-#   POST /admin/achievements/<id>/edit             → update
-#   POST /admin/achievements/<id>/delete           → delete
-#
-#   GET  /admin/leaderboard                        → leaderboard admin
-#   POST /admin/leaderboard/reset-points/<uid>     → reset points
+# Reports / Achievements / Leaderboard unchanged from prior version.
 # ============================================================
 
 from flask import (
@@ -84,6 +72,20 @@ def _csrf_ok():
     return bool(token) and token == session.get('csrf_token')
 
 
+CURRICULUM_OPTIONS = [
+    {'code': '',   'label': 'Any curriculum',  'flag': '🌍'},
+    {'code': 'PL', 'label': 'Puntland',        'flag': '🇸🇴'},
+    {'code': 'SO', 'label': 'Somalia',         'flag': '🇸🇴'},
+    {'code': 'SL', 'label': 'Somaliland',      'flag': '🇸🇴'},
+]
+
+TIER_OPTIONS = [
+    {'code': 'free',    'label': 'Free',    'icon': '🔓'},
+    {'code': 'premium', 'label': 'Premium', 'icon': '🔑'},
+    {'code': 'pro',     'label': 'Pro',     'icon': '⭐'},
+]
+
+
 # ============================================================
 # GROUPS — LIST
 # ============================================================
@@ -91,11 +93,11 @@ def _csrf_ok():
 @admin_community_bp.route('/groups', methods=['GET'], endpoint='groups')
 @admin_can('groups.view')
 def groups():
-    search = (request.args.get('search') or '').strip()
+    search   = (request.args.get('search') or '').strip()
     platform = (request.args.get('platform') or '').strip()
     category = (request.args.get('category') or '').strip()
-    status = (request.args.get('status') or '').strip()
-    page = max(1, int(request.args.get('page') or 1))
+    status   = (request.args.get('status') or '').strip()
+    page     = max(1, int(request.args.get('page') or 1))
     per_page = 20
 
     groups_list, total = get_admin_group_list(
@@ -122,6 +124,45 @@ def groups():
         status=status,
         page=page,
         total_pages=total_pages,
+        total=total,
+    )
+
+
+# ============================================================
+# GROUPS — CREATE (full page)
+# ============================================================
+
+@admin_community_bp.route('/groups/new', methods=['GET'],
+                          endpoint='group_new')
+@admin_can('groups.create')
+def group_new():
+    return render_template(
+        'dashboard/admin/community/group_edit.html',
+        group=None,
+        curricula=CURRICULUM_OPTIONS,
+        tier_options=TIER_OPTIONS,
+        categories=get_group_categories_with_count(),
+    )
+
+
+# ============================================================
+# GROUPS — EDIT (full page)
+# ============================================================
+
+@admin_community_bp.route('/groups/<int:group_id>/edit', methods=['GET'],
+                          endpoint='group_edit')
+@admin_can('groups.edit')
+def group_edit(group_id):
+    group = get_group_by_id(group_id)
+    if not group:
+        abort(404)
+
+    return render_template(
+        'dashboard/admin/community/group_edit.html',
+        group=group,
+        curricula=CURRICULUM_OPTIONS,
+        tier_options=TIER_OPTIONS,
+        categories=get_group_categories_with_count(),
     )
 
 
@@ -165,16 +206,13 @@ def groups_audit():
 
     logs = get_group_audit_log(group_id=group_id, admin_id=admin_id, limit=200)
 
-    # Attach group name to each log entry
     for log in logs:
         g = get_group_by_id(log['group_id']) if log.get('group_id') else None
         log['group_name'] = g['name'] if g else None
 
-    # Filter by action if requested
     if action_filter:
         logs = [l for l in logs if l.get('action') == action_filter]
 
-    # Filter by search term
     if search:
         s = search.lower()
         logs = [
@@ -196,39 +234,6 @@ def groups_audit():
 
 
 # ============================================================
-# GROUPS — EDIT (placeholder until a form template exists)
-# ============================================================
-
-@admin_community_bp.route('/groups/<int:group_id>/edit', methods=['GET'],
-                          endpoint='group_edit')
-@admin_can('groups.edit')
-def group_edit(group_id):
-    group = get_group_by_id(group_id)
-    if not group:
-        abort(404)
-
-    # No dedicated template yet — send the admin back with a notice.
-    flash(
-        f'Inline editor for "{group["name"]}" is not yet available. '
-        f'Use the API or wait for the group edit form.',
-        'info',
-    )
-    return redirect(url_for('admin_community.groups'))
-
-
-@admin_community_bp.route('/groups/new', methods=['GET'],
-                          endpoint='group_new')
-@admin_can('groups.create')
-def group_new():
-    flash(
-        'Group creation form is not yet available. '
-        'Use the API endpoint POST /admin/groups/api.',
-        'info',
-    )
-    return redirect(url_for('admin_community.groups'))
-
-
-# ============================================================
 # GROUPS — API (JSON)
 # ============================================================
 
@@ -243,6 +248,9 @@ def group_api_create():
     for field in ('name', 'platform', 'invite_link'):
         if not data.get(field):
             return jsonify({'error': f'{field} is required'}), 400
+
+    if data.get('platform') not in ('whatsapp', 'telegram'):
+        return jsonify({'error': 'Invalid platform'}), 400
 
     data['created_by'] = session.get('user_id')
     success, group_id = create_group(session.get('user_id'), data)
@@ -260,6 +268,7 @@ def group_api_create():
             'success': True,
             'message': 'Group created',
             'group_id': group_id,
+            'redirect': url_for('admin_community.groups'),
         })
 
     return jsonify({'error': 'Failed to create group'}), 500
@@ -289,7 +298,11 @@ def group_api_update(group_id):
             after={'name': data.get('name', before.get('name'))},
             severity='info',
         )
-        return jsonify({'success': True, 'message': 'Group updated'})
+        return jsonify({
+            'success': True,
+            'message': 'Group updated',
+            'redirect': url_for('admin_community.groups'),
+        })
 
     return jsonify({'error': 'Failed to update group'}), 500
 
@@ -351,7 +364,11 @@ def group_api_toggle_active(group_id):
             after={'is_active': after.get('is_active') if after else None},
             severity='info',
         )
-        return jsonify({'success': True, 'message': 'Status toggled'})
+        return jsonify({
+            'success': True,
+            'is_active': after.get('is_active') if after else None,
+            'message': 'Status toggled',
+        })
 
     return jsonify({'error': 'Failed to toggle status'}), 500
 
@@ -378,7 +395,11 @@ def group_api_toggle_featured(group_id):
             after={'is_featured': after.get('is_featured') if after else None},
             severity='info',
         )
-        return jsonify({'success': True, 'message': 'Featured toggled'})
+        return jsonify({
+            'success': True,
+            'is_featured': after.get('is_featured') if after else None,
+            'message': 'Featured toggled',
+        })
 
     return jsonify({'error': 'Failed to toggle featured'}), 500
 
@@ -438,7 +459,7 @@ def group_api_bulk():
 
 
 # ============================================================
-# REPORTS — LIST
+# REPORTS (unchanged)
 # ============================================================
 
 @admin_community_bp.route('/reports', methods=['GET'], endpoint='reports')
@@ -471,10 +492,6 @@ def reports():
         total=total,
     )
 
-
-# ============================================================
-# REPORTS — RESOLVE
-# ============================================================
 
 @admin_community_bp.route('/reports/<int:report_id>/resolve', methods=['POST'],
                           endpoint='report_resolve')
@@ -517,10 +534,6 @@ def report_resolve(report_id):
     return jsonify({'error': 'Failed to resolve report'}), 500
 
 
-# ============================================================
-# REPORTS — DISMISS
-# ============================================================
-
 @admin_community_bp.route('/reports/<int:report_id>/dismiss', methods=['POST'],
                           endpoint='report_dismiss')
 @admin_can('reports.dismiss')
@@ -549,7 +562,7 @@ def report_dismiss(report_id):
 
 
 # ============================================================
-# ACHIEVEMENTS — CATALOG
+# ACHIEVEMENTS (unchanged)
 # ============================================================
 
 @admin_community_bp.route('/achievements', methods=['GET'],
@@ -557,10 +570,8 @@ def report_dismiss(report_id):
 @admin_required
 def achievements():
     ensure_achievements_seeded()
-
     all_ach = get_all_achievements()
 
-    # Attach unlock counts (how many users have unlocked each)
     total_unlocks = 0
     for a in all_ach:
         cursor = execute_with_retry(
@@ -577,10 +588,6 @@ def achievements():
         total_unlocks=total_unlocks,
     )
 
-
-# ============================================================
-# ACHIEVEMENTS — NEW
-# ============================================================
 
 @admin_community_bp.route('/achievements/new', methods=['GET'],
                           endpoint='achievement_new')
@@ -635,10 +642,6 @@ def achievement_create():
         flash('Error creating achievement.', 'error')
         return redirect(url_for('admin_community.achievement_new'))
 
-
-# ============================================================
-# ACHIEVEMENTS — EDIT
-# ============================================================
 
 @admin_community_bp.route('/achievements/<int:achievement_id>/edit',
                           methods=['GET'],
@@ -719,10 +722,6 @@ def achievement_update(achievement_id):
                                 achievement_id=achievement_id))
 
 
-# ============================================================
-# ACHIEVEMENTS — DELETE
-# ============================================================
-
 @admin_community_bp.route('/achievements/<int:achievement_id>/delete',
                           methods=['POST'],
                           endpoint='achievement_delete')
@@ -762,15 +761,13 @@ def achievement_delete(achievement_id):
 
 
 # ============================================================
-# LEADERBOARD — ADMIN VIEW
+# LEADERBOARD (unchanged)
 # ============================================================
 
 @admin_community_bp.route('/leaderboard', methods=['GET'],
                           endpoint='leaderboard')
 @admin_required
 def leaderboard():
-    # Fetch the same top-50 the public leaderboard uses,
-    # plus id so we can wire up reset actions.
     rows = []
     try:
         cursor = execute_with_retry("""
@@ -790,10 +787,6 @@ def leaderboard():
         leaders=rows,
     )
 
-
-# ============================================================
-# LEADERBOARD — RESET POINTS
-# ============================================================
 
 @admin_community_bp.route('/leaderboard/reset-points/<int:user_id>',
                           methods=['POST'],

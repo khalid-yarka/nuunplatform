@@ -3,6 +3,10 @@
    Dual-mode admin home.
      - Super admin → command centre (pulse + alerts + revenue)
      - Regular admin → workbench (pending items, own activity)
+
+   NOTE: The standalone PDF intake panel is no longer linked from
+   here. PDF work flows through /admin/pdfs using the same admin
+   session.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -535,8 +539,8 @@
             <span class="hint">Actions that need your attention</span>
         </div>
         <div class="admin-card-body" style="padding: 6px 0;">
-            {% if pending.total > 0 %}
-                {% for item in pending.items %}
+            {% if pending['total'] > 0 %}
+                {% for item in pending['items'] %}
                 <a href="{{ item.link }}"
                    style="display:flex;align-items:center;gap:14px;padding:14px 20px;
                           text-decoration:none;color:inherit;
@@ -568,37 +572,42 @@
         </div>
     </section>
 
-    {# Quick actions #}
+    {# Quick actions — points to /admin/pdfs, not the standalone panel #}
     <section class="admin-card">
         <div class="admin-card-head">
             <h3><i class="fas fa-bolt"></i> Quick actions</h3>
         </div>
         <div class="admin-card-body">
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-                {% if admin_can('pdfs.intake') %}
-                <a href="{{ url_for('pdf_admin.pending_list') }}" class="admin-btn secondary lg"
-                   style="justify-content:flex-start;padding:16px 18px;">
-                    <i class="fas fa-file-pdf" style="font-size:18px;"></i> Process PDFs
-                </a>
-                {% endif %}
+
                 {% if admin_can('reports.view') %}
                 <a href="{{ url_for('admin_community.reports') }}" class="admin-btn secondary lg"
                    style="justify-content:flex-start;padding:16px 18px;">
                     <i class="fas fa-flag" style="font-size:18px;"></i> View reports
                 </a>
                 {% endif %}
+
                 {% if admin_can('questions.create') %}
                 <a href="{{ url_for('admin_content.question_new') }}" class="admin-btn secondary lg"
                    style="justify-content:flex-start;padding:16px 18px;">
                     <i class="fas fa-plus" style="font-size:18px;"></i> New question
                 </a>
                 {% endif %}
+
+                {% if admin_can('pdfs.view') %}
+                <a href="{{ url_for('admin_content.pdfs') }}" class="admin-btn secondary lg"
+                   style="justify-content:flex-start;padding:16px 18px;">
+                    <i class="fas fa-file-pdf" style="font-size:18px;"></i> PDF library
+                </a>
+                {% endif %}
+
                 {% if admin_can('groups.create') %}
                 <a href="{{ url_for('admin_community.groups') }}" class="admin-btn secondary lg"
                    style="justify-content:flex-start;padding:16px 18px;">
                     <i class="fas fa-users" style="font-size:18px;"></i> Groups
                 </a>
                 {% endif %}
+
             </div>
         </div>
     </section>

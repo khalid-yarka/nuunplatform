@@ -671,7 +671,10 @@ def telegram_webhook(token):
         logger.error(f"Webhook error: {e}", exc_info=True)
         return jsonify({'error': 'Internal error'}), 500
 
-
+@app.route('/telegram/webhook', methods=['POST'])
+def telegram_webhook_legacy():
+    """Legacy path — returns 200 so Telegram stops retrying. No-op."""
+    return jsonify({'ok': True}), 200
 # ============================================
 # ROUTES
 # ============================================

@@ -1,6 +1,10 @@
 {# ============================================================
    templates/dashboard/admin/content/pdfs.html
    Main PDF library — grid of published PDFs.
+
+   NOTE: The standalone PDF intake panel (pdf_admin) is no longer
+   linked from this page. All PDF work happens right here using the
+   admin session.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -18,9 +22,6 @@
 {% block admin_actions %}
     <a href="{{ url_for('admin_content.pdfs_broken') }}" class="admin-btn secondary">
         <i class="fas fa-link-slash"></i> Broken Links
-    </a>
-    <a href="{{ url_for('pdf_admin.dashboard') }}" class="admin-btn secondary">
-        <i class="fas fa-inbox"></i> Pending Intake
     </a>
 {% endblock %}
 
@@ -124,9 +125,9 @@
 <div class="admin-empty">
     <span class="empty-icon">📄</span>
     <h3>No PDFs found</h3>
-    <p>Try clearing the filters, or publish a PDF from the pending intake queue.</p>
-    <a href="{{ url_for('pdf_admin.dashboard') }}" class="admin-btn primary">
-        <i class="fas fa-inbox"></i> Open Pending Intake
+    <p>Try clearing the filters, or browse the public PDF library to see what students see.</p>
+    <a href="{{ url_for('pdfs.list_pdfs') }}" class="admin-btn primary" target="_blank" rel="noopener">
+        <i class="fas fa-external-link-alt"></i> View public library
     </a>
 </div>
 {% endif %}
