@@ -1,0 +1,82 @@
+{# ============================================================
+   templates/dashboard/admin/_base.html
+   Shared shell for every admin page.
+   Auto-loads the domain CSS based on the URL path.
+   ============================================================ #}
+{% extends "dashboard_base.html" %}
+
+{% block dashboard_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/core.css') }}" />
+
+{% set p = request.path %}
+{% if   '/admin/admins'         in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/access.css') }}" />
+{% elif '/admin/impersonate'    in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/access.css') }}" />
+{% elif '/admin/deleted-users'  in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/access.css') }}" />
+{% elif '/admin/users'          in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/access.css') }}" />
+{% elif '/admin/questions'      in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/content.css') }}" />
+{% elif '/admin/bulk-'          in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/content.css') }}" />
+{% elif '/admin/pdfs'           in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/content.css') }}" />
+{% elif '/admin/groups'         in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/community.css') }}" />
+{% elif '/admin/reports'        in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/community.css') }}" />
+{% elif '/admin/achievements'   in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/community.css') }}" />
+{% elif '/admin/leaderboard'    in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/community.css') }}" />
+{% elif '/admin/logs'           in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/ops.css') }}" />
+{% elif '/admin/cache'          in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/ops.css') }}" />
+{% elif '/admin/sessions'       in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/ops.css') }}" />
+{% elif '/admin/system-info'    in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/ops.css') }}" />
+{% elif '/admin/system'         in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/system.css') }}" />
+{% elif '/admin/tasks'          in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/ops.css') }}" />
+{% elif '/admin/errors'         in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/ops.css') }}" />
+{% elif '/admin/activity'       in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/ops.css') }}" />
+{% elif '/admin/backups'        in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/ops.css') }}" />
+{% elif '/admin/backup'         in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/ops.css') }}" />
+{% elif '/admin/config'         in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/ops.css') }}" />
+{% elif '/admin/platform'       in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/ops.css') }}" />
+{% elif '/admin/entitlements'   in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/policy.css') }}" />
+{% elif '/upgrade/admin'        in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/revenue.css') }}" />
+{% elif '/admin/broadcast'      in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/system.css') }}" />
+{% elif '/admin/announcement'   in p %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/system.css') }}" />
+{% endif %}
+
+{% block admin_css %}{% endblock %}
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="admin-page">
+
+    {# ─────── BREADCRUMB ─────── #}
+    <nav class="admin-breadcrumb" aria-label="Breadcrumb">
+        <a href="{{ url_for('admin_system.dashboard') }}">
+            <i class="fas fa-shield-alt" style="font-size: 11px;"></i> Admin
+        </a>
+        {% block admin_breadcrumb %}{% endblock %}
+    </nav>
+
+    {# ─────── PAGE HEADER ─────── #}
+    <header class="admin-page-header">
+        <div>
+            <h1>
+                {% block admin_title_icon %}{% endblock %}
+                {% block admin_title %}Admin{% endblock %}
+            </h1>
+            <p class="admin-subtitle">{% block admin_subtitle %}{% endblock %}</p>
+        </div>
+        <div class="admin-page-actions">
+            {% block admin_actions %}{% endblock %}
+        </div>
+    </header>
+
+    {# ─────── MAIN CONTENT ─────── #}
+    <main class="admin-content">
+        {% block admin_content %}{% endblock %}
+    </main>
+
+</div>
+{% endblock %}
+
+{% block dashboard_js %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/admin/core.js') }}"></script>
+{% block admin_js %}{% endblock %}
+{% endblock %}

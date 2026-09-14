@@ -1,0 +1,94 @@
+{# ============================================================
+   templates/dashboard/admin/content/question_hard.html
+   Highest miss-rate questions — candidates for review.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-fire header-icon"></i>{% endblock %}
+{% block admin_title %}High Miss-Rate Questions{% endblock %}
+{% block admin_subtitle %}
+    Questions most often answered incorrectly in the last 30 days.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_content.questions') }}">Questions</a>
+    <span class="sep">/</span>
+    <span class="current">Hard Questions</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_content.questions') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+{% if rows %}
+<section class="admin-table-wrap">
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Question</th>
+                    <th class="hide-mobile">Subject</th>
+                    <th style="text-align:center;">Difficulty</th>
+                    <th style="text-align:center;">Misses</th>
+                    <th style="text-align:center;">Miss rate</th>
+                    <th style="text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td>
+                        <div style="font-weight:600;color:var(--text);max-width:420px;">
+                            {{ r.question_text[:90] }}{% if r.question_text|length > 90 %}…{% endif %}
+                        </div>
+                        <div style="font-size:11px;color:var(--text-muted);font-family:monospace;">
+                            #{{ r.id }}
+                        </div>
+                    </td>
+                    <td class="hide-mobile">{{ r.subject_name }}</td>
+                    <td style="text-align:center;">{{ '⭐' * r.difficulty }}</td>
+                    <td style="text-align:center;">
+                        <strong>{{ r.misses }}</strong>
+                        <span style="color:var(--text-muted);">/ {{ r.attempts }}</span>
+                    </td>
+                    <td style="text-align:center;">
+                        {% set cls = 'red' if r.miss_rate >= 70 else 'amber' if r.miss_rate >= 40 else 'neutral' %}
+                        <span class="admin-chip {{ cls }}">{{ r.miss_rate }}%</span>
+                    </td>
+                    <td style="text-align:right;">
+                        {% if admin_can('questions.edit') %}
+                            <a href="{{ url_for('admin_content.question_edit', question_id=r.id) }}"
+                               class="admin-btn secondary sm">
+                                <i class="fas fa-pen"></i> Review
+                            </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<div style="margin-top:16px;padding:14px 18px;background:var(--background);
+            border-radius:var(--radius-sm);font-size:13px;color:var(--text-secondary);line-height:1.6;">
+    <i class="fas fa-lightbulb" style="color:#F59E0B;"></i>
+    A high miss rate isn't always a problem — hard questions are meant to be missed.
+    But if a question's miss rate is above 70% with a difficulty of 1–2, consider rewording it
+    or linking a source PDF to give students context.
+</div>
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">📊</span>
+    <h3>Not enough data yet</h3>
+    <p>This view fills up once students have taken enough quizzes to reveal patterns.</p>
+</div>
+{% endif %}
+
+{% endblock %}

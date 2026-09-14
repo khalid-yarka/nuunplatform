@@ -1,0 +1,426 @@
+{# ============================================================
+   templates/dashboard/admin/policy/entitlement_import.html
+   Import / export entitlement policies as JSON.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-file-import header-icon"></i>{% endblock %}
+{% block admin_title %}Import / Export Entitlements{% endblock %}
+{% block admin_subtitle %}
+    Download the current policy as JSON, or upload a new one.
+    A live diff preview shows what will change before applying.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_policy.entitlements') }}">Entitlements</a>
+    <span class="sep">/</span>
+    <span class="current">Import / Export</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_policy.entitlements') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="pol-import-layout">
+
+    {# ─────── LEFT: IMPORT ─────── #}
+    <div>
+        <section class="admin-card">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-upload"></i> Import JSON</h3>
+                <span class="hint">Paste or drop a JSON file</span>
+            </div>
+            <div class="admin-card-body">
+
+                <div class="pol-tabs">
+                    <button type="button" class="pol-tab active" data-mode="paste">📝 Paste</button>
+                    <button type="button" class="pol-tab" data-mode="file">📁 Upload file</button>
+                </div>
+
+                <div id="polPasteArea">
+                    <textarea id="polJsonData" class="pol-textarea"
+                              placeholder='{
+  "version": 1,
+  "features": [
+    {
+      "feature_key": "quiz_attempts",
+      "policies": {
+        "free":    {"is_enabled": true, "limit_value": 5,   "limit_unit": "/day"},
+        "premium": {"is_enabled": true, "limit_value": 30,  "limit_unit": "/day"},
+        "pro":     {"is_enabled": true, "limit_value": null,"limit_unit": "/day"}
+      }
+    }
+  ]
+}'></textarea>
+                </div>
+
+                <div id="polFileArea" style="display:none;">
+                    <div class="pol-drop" id="polDropZone">
+                        <span class="pol-drop-icon">📤</span>
+                        <p class="pol-drop-text">Drop a JSON file here, or</p>
+                        <button type="button"
+                                onclick="document.getElementById('polJsonFile').click()"
+                                class="admin-btn secondary sm">
+                            Browse files
+                        </button>
+                        <input type="file" id="polJsonFile" accept=".json" style="display:none;">
+                        <div id="polFileName" class="pol-file-name" style="display:none;"></div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <section class="admin-card" style="margin-top:16px;">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-exclamation-triangle"></i> Important</h3>
+            </div>
+            <div class="admin-card-body" style="font-size:13px;line-height:1.7;color:var(--text-secondary);">
+                <ul style="padding-left:20px;margin:0;">
+                    <li>Imports are <strong>additive</strong> — features not in the file are untouched.</li>
+                    <li>Existing features in the file are <strong>updated</strong>.</li>
+                    <li>Unknown feature keys are rejected to prevent injection.</li>
+                    <li>Each change is audited with the current admin as the actor.</li>
+                </ul>
+            </div>
+        </section>
+
+        <div class="pol-import-actions">
+            <button type="button" id="applyImportBtn" class="admin-btn primary lg" disabled>
+                <i class="fas fa-check"></i> Apply import
+            </button>
+            <button type="button" id="clearImportBtn" class="admin-btn secondary lg">
+                <i class="fas fa-times"></i> Clear
+            </button>
+        </div>
+    </div>
+
+    {# ─────── RIGHT: DIFF PREVIEW ─────── #}
+    <div>
+        <section class="admin-card pol-preview">
+            <div class="pol-preview-head">
+                <h3><i class="fas fa-eye"></i> Diff preview</h3>
+                <span id="diffStatus" class="status">idle</span>
+            </div>
+            <div class="pol-preview-body" id="diffContent">
+                <div class="pol-diff-empty">
+                    <span class="icon">📄</span>
+                    Paste JSON to see a live diff.
+                </div>
+            </div>
+        </section>
+
+        <section class="admin-card" style="margin-top:16px;">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-download"></i> Export current policy</h3>
+            </div>
+            <div class="admin-card-body">
+                <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;line-height:1.5;">
+                    Download the current entitlement policy as JSON. The file includes
+                    every feature and its effective per-tier policy
+                    (registry default + overrides).
+                </p>
+                <a href="{{ url_for('admin_policy.entitlements_export') }}" class="admin-btn primary">
+                    <i class="fas fa-download"></i> Download JSON
+                </a>
+            </div>
+        </section>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/core.js') }}"></script>
+<script>
+(function () {
+    'use strict';
+
+    var CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+    var textarea = document.getElementById('polJsonData');
+    var fileInput = document.getElementById('polJsonFile');
+    var dropZone = document.getElementById('polDropZone');
+    var fileNameEl = document.getElementById('polFileName');
+    var diffContent = document.getElementById('diffContent');
+    var diffStatus = document.getElementById('diffStatus');
+    var applyBtn = document.getElementById('applyImportBtn');
+    var clearBtn = document.getElementById('clearImportBtn');
+
+    var previewTimer = null;
+    var inflight = false;
+    var lastKey = '';
+
+    // ─── Tabs ───
+    document.querySelectorAll('.pol-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            document.querySelectorAll('.pol-tab').forEach(function (t) {
+                t.classList.remove('active');
+            });
+            this.classList.add('active');
+            var mode = this.getAttribute('data-mode');
+            document.getElementById('polPasteArea').style.display = (mode === 'paste') ? '' : 'none';
+            document.getElementById('polFileArea').style.display = (mode === 'file') ? '' : 'none';
+        });
+    });
+
+    // ─── File handling ───
+    if (fileInput) {
+        fileInput.addEventListener('change', function () {
+            var f = this.files[0];
+            if (f) handleFile(f);
+        });
+    }
+    if (dropZone) {
+        ['dragenter', 'dragover'].forEach(function (evt) {
+            dropZone.addEventListener(evt, function (e) {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+        });
+        ['dragleave', 'drop'].forEach(function (evt) {
+            dropZone.addEventListener(evt, function (e) {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+            });
+        });
+        dropZone.addEventListener('drop', function (e) {
+            var f = e.dataTransfer.files[0];
+            if (f && f.name.toLowerCase().endsWith('.json')) {
+                handleFile(f);
+                if (fileInput) fileInput.files = e.dataTransfer.files;
+            } else if (typeof AdminCore !== 'undefined') {
+                AdminCore.toast('Only .json files are accepted.', 'warning');
+            }
+        });
+    }
+
+    function handleFile(file) {
+        if (!textarea) return;
+        if (fileNameEl) {
+            fileNameEl.textContent = '📄 ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+            fileNameEl.style.display = 'block';
+        }
+        var reader = new FileReader();
+        reader.onload = function (e) {
+            textarea.value = e.target.result;
+            schedulePreview(true);
+        };
+        reader.readAsText(file);
+    }
+
+    // ─── Live diff ───
+    function schedulePreview(immediate) {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(runPreview, immediate ? 60 : 600);
+    }
+
+    function setStatus(text, tone) {
+        diffStatus.textContent = text;
+        diffStatus.style.color =
+            tone === 'err'  ? '#DC2626' :
+            tone === 'warn' ? '#D97706' :
+            tone === 'ok'   ? '#10B981' :
+            'var(--text-muted)';
+    }
+
+    function runPreview() {
+        if (!textarea) return;
+        var raw = (textarea.value || '').trim();
+
+        if (!raw) {
+            diffContent.innerHTML =
+                '<div class="pol-diff-empty">' +
+                '<span class="icon">📄</span>' +
+                'Paste JSON to see a live diff.' +
+                '</div>';
+            setStatus('idle', '');
+            applyBtn.disabled = true;
+            return;
+        }
+
+        if (raw === lastKey || inflight) return;
+
+        inflight = true;
+        setStatus('checking…', '');
+
+        fetch('{{ url_for("admin_policy.entitlements_import_preview") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': CSRF
+            },
+            body: JSON.stringify({ json_data: raw })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            inflight = false;
+            if (data.error) {
+                setStatus('error', 'err');
+                diffContent.innerHTML =
+                    '<div class="pol-diff-empty" style="color:#DC2626;">' +
+                    '<span class="icon">⚠️</span>' +
+                    AdminCore.escapeHtml(data.error) +
+                    '</div>';
+                applyBtn.disabled = true;
+                return;
+            }
+
+            lastKey = raw;
+
+            if (data.total_changes === 0) {
+                setStatus('no changes', 'ok');
+                diffContent.innerHTML =
+                    '<div class="pol-diff-empty">' +
+                    '<span class="icon">✅</span>' +
+                    'No changes detected — the file matches the current policy.' +
+                    '</div>';
+                applyBtn.disabled = true;
+                return;
+            }
+
+            setStatus(data.total_changes + ' change' + (data.total_changes === 1 ? '' : 's'), 'warn');
+            renderDiff(data);
+            applyBtn.disabled = false;
+        })
+        .catch(function () {
+            inflight = false;
+            setStatus('network error', 'err');
+            diffContent.innerHTML =
+                '<div class="pol-diff-empty" style="color:#DC2626;">' +
+                '<span class="icon">⚠️</span>' +
+                'Could not compute preview.' +
+                '</div>';
+            applyBtn.disabled = true;
+        });
+    }
+
+    function renderDiff(data) {
+        var html = '';
+
+        html += '<div class="pol-diff-stats">';
+        html += '<div class="pol-diff-stat added">' +
+                '<div class="stat-num">' + (data.added || 0) + '</div>' +
+                '<div class="stat-lbl">Added</div>' +
+                '</div>';
+        html += '<div class="pol-diff-stat updated">' +
+                '<div class="stat-num">' + (data.updated || 0) + '</div>' +
+                '<div class="stat-lbl">Updated</div>' +
+                '</div>';
+        html += '<div class="pol-diff-stat unknown">' +
+                '<div class="stat-num">' + (data.unknown || 0) + '</div>' +
+                '<div class="stat-lbl">Unknown</div>' +
+                '</div>';
+        html += '</div>';
+
+        if (data.unknown_keys && data.unknown_keys.length) {
+            html += '<div class="pol-unknown-banner">';
+            html += '<div class="pol-unknown-title">⚠ Unknown feature keys (rejected):</div>';
+            data.unknown_keys.forEach(function (k) {
+                html += '<div>• <code>' + AdminCore.escapeHtml(k) + '</code></div>';
+            });
+            html += '</div>';
+        }
+
+        html += '<div style="max-height:480px;overflow-y:auto;">';
+        (data.changes || []).forEach(function (c) {
+            var isAdd = c.kind === 'add';
+            html += '<div class="pol-change-item">';
+            html += '<div class="pol-change-head ' + (isAdd ? 'add' : 'upd') + '">';
+            html += (isAdd ? '➕ ' : '✏️ ') +
+                    AdminCore.escapeHtml(c.feature_key) + ' · ' +
+                    AdminCore.escapeHtml(c.tier);
+            html += '</div>';
+            html += '<div class="pol-change-fields">';
+            Object.keys(c.fields || {}).forEach(function (field) {
+                var f = c.fields[field];
+                html += '<span><strong>' + field + ':</strong> ';
+                html += '<span class="before">' + AdminCore.escapeHtml(String(f.before)) + '</span>';
+                html += ' → ';
+                html += '<span class="after">' + AdminCore.escapeHtml(String(f.after)) + '</span>';
+                html += '</span>';
+            });
+            html += '</div></div>';
+        });
+        html += '</div>';
+
+        diffContent.innerHTML = html;
+    }
+
+    // ─── Apply ───
+    applyBtn.addEventListener('click', function () {
+        if (!textarea) return;
+        var raw = (textarea.value || '').trim();
+        if (!raw) return;
+
+        AdminCore.confirm({
+            title: 'Apply import?',
+            message: 'The policy will be updated based on the file. All changes are audited.',
+            confirm: 'Apply import'
+        }).then(function (ok) {
+            if (!ok) return;
+
+            applyBtn.disabled = true;
+            applyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Applying…';
+
+            fetch('{{ url_for("admin_policy.entitlements_import_apply") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': CSRF
+                },
+                body: JSON.stringify({ json_data: raw })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    AdminCore.toast('Imported ' + (data.changed || 0) + ' change' +
+                                    ((data.changed === 1) ? '' : 's') + '.', 'success');
+                    setTimeout(function () {
+                        window.location.href = '{{ url_for("admin_policy.entitlements") }}';
+                    }, 900);
+                } else {
+                    AdminCore.toast(data.error || 'Import failed.', 'error');
+                    applyBtn.disabled = false;
+                    applyBtn.innerHTML = '<i class="fas fa-check"></i> Apply import';
+                }
+            })
+            .catch(function () {
+                AdminCore.toast('Network error.', 'error');
+                applyBtn.disabled = false;
+                applyBtn.innerHTML = '<i class="fas fa-check"></i> Apply import';
+            });
+        });
+    });
+
+    // ─── Clear ───
+    clearBtn.addEventListener('click', function () {
+        if (!textarea) return;
+        textarea.value = '';
+        lastKey = '';
+        if (fileNameEl) {
+            fileNameEl.style.display = 'none';
+            fileNameEl.textContent = '';
+        }
+        if (fileInput) fileInput.value = '';
+        runPreview();
+    });
+
+    // ─── Input listener ───
+    if (textarea) {
+        textarea.addEventListener('input', function () { schedulePreview(false); });
+        textarea.addEventListener('paste', function () {
+            setTimeout(function () { schedulePreview(true); }, 30);
+        });
+        if (textarea.value.trim()) runPreview();
+    }
+
+})();
+</script>
+{% endblock %}

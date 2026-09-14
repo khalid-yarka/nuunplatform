@@ -1,0 +1,241 @@
+/* ============================================================
+   static/css/admin/system.css
+   Styles for templates/dashboard/admin/system/*.html
+     - announcement.html
+     - maintenance.html
+     - admin_broadcast.html
+   Uses only design tokens from style.css. Works in light + dark.
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   PAGE CONTAINER
+   ------------------------------------------------------------ */
+.sys-page {
+    max-width: 680px;
+    margin: 0 auto;
+}
+
+/* ------------------------------------------------------------
+   INFO / WARNING BANNERS AT THE TOP OF A FORM
+   ------------------------------------------------------------ */
+.sys-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 18px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 20px;
+    font-size: 13px;
+    line-height: 1.6;
+    border: 1px solid transparent;
+}
+.sys-banner i {
+    font-size: 16px;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+.sys-banner strong { font-weight: 700; }
+
+.sys-banner.info {
+    background: #EFF6FF;
+    border-color: #BFDBFE;
+    border-left: 4px solid #3B82F6;
+    color: #1E40AF;
+}
+.sys-banner.info i { color: #3B82F6; }
+
+.sys-banner.warn {
+    background: #FFFBEB;
+    border-color: #FDE68A;
+    border-left: 4px solid #F59E0B;
+    color: #92400E;
+}
+.sys-banner.warn i { color: #F59E0B; }
+
+.sys-banner.success {
+    background: #ECFDF5;
+    border-color: #A7F3D0;
+    border-left: 4px solid #10B981;
+    color: #065F46;
+}
+.sys-banner.success i { color: #10B981; }
+
+.sys-banner.danger {
+    background: #FEF2F2;
+    border-color: #FCA5A5;
+    border-left: 4px solid #EF4444;
+    color: #991B1B;
+}
+.sys-banner.danger i { color: #EF4444; }
+
+/* ------------------------------------------------------------
+   STATE BANNER (maintenance on/off)
+   ------------------------------------------------------------ */
+.sys-state {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 20px 24px;
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    border: 2px solid transparent;
+}
+.sys-state .state-icon {
+    font-size: 32px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+.sys-state .state-body { flex: 1; min-width: 0; }
+.sys-state .state-title {
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+.sys-state .state-sub {
+    font-size: 13px;
+    line-height: 1.5;
+    margin-top: 4px;
+}
+
+.sys-state.danger {
+    background: #FEF2F2;
+    border-color: #FCA5A5;
+}
+.sys-state.danger .state-title,
+.sys-state.danger .state-sub { color: #991B1B; }
+
+.sys-state.success {
+    background: #ECFDF5;
+    border-color: #A7F3D0;
+}
+.sys-state.success .state-title,
+.sys-state.success .state-sub { color: #065F46; }
+
+/* ------------------------------------------------------------
+   TOGGLE ROW
+   ------------------------------------------------------------ */
+.sys-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.sys-toggle-row:hover {
+    border-color: var(--primary);
+    background: var(--primary-light);
+}
+.sys-toggle-row input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--primary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.sys-toggle-row .toggle-body { flex: 1; min-width: 0; }
+.sys-toggle-row .toggle-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+.sys-toggle-row .toggle-sub {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+/* ------------------------------------------------------------
+   PREVIEW CARD
+   ------------------------------------------------------------ */
+.sys-preview {
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+.sys-preview .preview-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+    line-height: 1;
+    width: 32px;
+    text-align: center;
+}
+.sys-preview .preview-body { flex: 1; min-width: 0; }
+.sys-preview .preview-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+}
+.sys-preview .preview-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 3px;
+    line-height: 1.5;
+    word-wrap: break-word;
+}
+.sys-preview .preview-link {
+    font-size: 11px;
+    color: var(--primary);
+    margin-top: 6px;
+    font-family: 'Courier New', monospace;
+}
+
+/* ------------------------------------------------------------
+   ACTION ROW
+   ------------------------------------------------------------ */
+.sys-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+.sys-actions .admin-btn {
+    flex: 1;
+    justify-content: center;
+}
+.sys-actions .primary-2x { flex: 2; }
+
+/* ------------------------------------------------------------
+   EMOJI INPUT (announcement + broadcast)
+   ------------------------------------------------------------ */
+.sys-emoji-input {
+    font-size: 22px !important;
+    text-align: center;
+    max-width: 80px;
+}
+
+/* ------------------------------------------------------------
+   RESPONSIVE
+   ------------------------------------------------------------ */
+@media (max-width: 480px) {
+    .sys-actions { flex-direction: column; }
+    .sys-actions .admin-btn { flex: 1; }
+    .sys-actions .primary-2x { flex: 1; }
+}
+
+/* ------------------------------------------------------------
+   DARK MODE
+   ------------------------------------------------------------ */
+[data-theme="dark"] .sys-banner.info    { background: #1A2A4A; border-color: #1E40AF; color: #BFDBFE; }
+[data-theme="dark"] .sys-banner.info i  { color: #60A5FA; }
+[data-theme="dark"] .sys-banner.warn    { background: #3A2E1A; border-color: #92400E; color: #FCD34D; }
+[data-theme="dark"] .sys-banner.warn i  { color: #FBBF24; }
+[data-theme="dark"] .sys-banner.success { background: #1A3A2E; border-color: #065F46; color: #A7F3D0; }
+[data-theme="dark"] .sys-banner.success i { color: #34D399; }
+[data-theme="dark"] .sys-banner.danger  { background: #3A1A1A; border-color: #991B1B; color: #FECACA; }
+[data-theme="dark"] .sys-banner.danger i { color: #F87171; }
+
+[data-theme="dark"] .sys-state.danger   { background: #3A1A1A; border-color: #EF4444; }
+[data-theme="dark"] .sys-state.danger .state-title,
+[data-theme="dark"] .sys-state.danger .state-sub { color: #FECACA; }
+
+[data-theme="dark"] .sys-state.success  { background: #1A3A2E; border-color: #10B981; }
+[data-theme="dark"] .sys-state.success .state-title,
+[data-theme="dark"] .sys-state.success .state-sub { color: #A7F3D0; }

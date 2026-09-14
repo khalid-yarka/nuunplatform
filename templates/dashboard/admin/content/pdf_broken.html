@@ -1,0 +1,85 @@
+{# ============================================================
+   templates/dashboard/admin/content/pdf_broken.html
+   PDFs referenced by questions but missing from the library.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-link-slash header-icon"></i>{% endblock %}
+{% block admin_title %}Missing PDFs{% endblock %}
+{% block admin_subtitle %}
+    Codes referenced by active questions that don't exist in the library.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_content.pdfs') }}">PDF Library</a>
+    <span class="sep">/</span>
+    <span class="current">Missing</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_content.pdfs') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back to Library
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+{% if rows %}
+<section class="admin-table-wrap">
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Missing PDF Code</th>
+                    <th style="text-align:center;">Questions using it</th>
+                    <th class="hide-mobile">Sample question</th>
+                    <th style="text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td>
+                        <code style="font-family:monospace;background:#FEF3C7;color:#92400E;
+                                     padding:2px 8px;border-radius:6px;font-size:13px;">
+                            {{ r.pdf_code }}
+                        </code>
+                    </td>
+                    <td style="text-align:center;">
+                        <strong>{{ r.count }}</strong>
+                    </td>
+                    <td class="hide-mobile" style="font-size:13px;color:var(--text-secondary);max-width:400px;">
+                        {{ r.sample_question[:90] }}{% if r.sample_question|length > 90 %}…{% endif %}
+                    </td>
+                    <td style="text-align:right;">
+                        <a href="{{ url_for('admin_content.questions') }}?search={{ r.pdf_code }}"
+                           class="admin-btn secondary sm">
+                            <i class="fas fa-search"></i> View questions
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<div style="margin-top:16px;padding:14px 18px;background:#FFFBEB;
+            border:1px solid #FDE68A;border-radius:var(--radius-sm);
+            font-size:13px;color:#92400E;line-height:1.6;">
+    <i class="fas fa-info-circle"></i>
+    To fix a missing code: either upload a PDF with that code via
+    <a href="{{ url_for('pdf_admin.dashboard') }}" style="color:#92400E;font-weight:700;">pending intake</a>,
+    or edit the questions to remove the broken link.
+</div>
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">✅</span>
+    <h3>All PDF links are healthy</h3>
+    <p>Every question-referenced PDF code resolves to a file in the library.</p>
+</div>
+{% endif %}
+
+{% endblock %}

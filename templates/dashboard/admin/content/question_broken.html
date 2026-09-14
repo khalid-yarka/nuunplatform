@@ -1,0 +1,85 @@
+{# ============================================================
+   templates/dashboard/admin/content/question_broken.html
+   Questions whose pdf_code does not resolve to any PDF.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-link-slash header-icon"></i>{% endblock %}
+{% block admin_title %}Broken PDF Links{% endblock %}
+{% block admin_subtitle %}
+    Active questions pointing to a PDF code that doesn't exist in the library.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_content.questions') }}">Questions</a>
+    <span class="sep">/</span>
+    <span class="current">Broken Links</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_content.questions') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+{% if rows %}
+<section class="admin-table-wrap">
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Question</th>
+                    <th class="hide-mobile">Subject</th>
+                    <th>PDF Code</th>
+                    <th class="hide-mobile">Created</th>
+                    <th style="text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td>
+                        <div style="font-weight:600;color:var(--text);max-width:420px;">
+                            {{ r.question_text[:90] }}{% if r.question_text|length > 90 %}…{% endif %}
+                        </div>
+                        <div style="font-size:11px;color:var(--text-muted);font-family:monospace;">
+                            #{{ r.id }}
+                        </div>
+                    </td>
+                    <td class="hide-mobile">{{ r.subject_name }}</td>
+                    <td>
+                        <code style="font-family:monospace;background:#FEF3C7;color:#92400E;
+                                     padding:2px 8px;border-radius:6px;font-size:12px;">
+                            {{ r.pdf_code }}
+                        </code>
+                    </td>
+                    <td class="hide-mobile" style="font-size:12px;color:var(--text-secondary);">
+                        {{ (r.created_at or '')[:10] }}
+                    </td>
+                    <td style="text-align:right;">
+                        {% if admin_can('questions.edit') %}
+                            <a href="{{ url_for('admin_content.question_edit', question_id=r.id) }}"
+                               class="admin-btn primary sm">
+                                <i class="fas fa-pen"></i> Fix
+                            </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">✅</span>
+    <h3>No broken links</h3>
+    <p>Every active question with a PDF code points to a real PDF. Nothing to fix.</p>
+</div>
+{% endif %}
+
+{% endblock %}

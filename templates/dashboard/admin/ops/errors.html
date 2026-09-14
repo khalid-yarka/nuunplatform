@@ -1,0 +1,168 @@
+{# ============================================================
+   templates/dashboard/admin/ops/errors.html
+   Error log — filter by severity/state, resolve, dismiss.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-exclamation-triangle header-icon"></i>{% endblock %}
+{% block admin_title %}Errors{% endblock %}
+{% block admin_subtitle %}
+    Application errors. The list auto-cleans entries older than the retention window.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Errors</span>
+{% endblock %}
+
+{% block admin_actions %}
+    {% if admin_can('errors.clear') %}
+        <form method="POST" action="{{ url_for('admin_errors.clear_resolved') }}"
+              style="display:inline;"
+              onsubmit="return confirm('Delete every resolved error permanently?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="admin-btn secondary">
+                <i class="fas fa-broom"></i> Clear resolved
+            </button>
+        </form>
+    {% endif %}
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="admin-stats">
+    <div class="admin-stat tone-red">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-fire"></i></span></div>
+        <span class="stat-value">{{ stats.critical or 0 }}</span>
+        <span class="stat-label">Critical</span>
+    </div>
+    <div class="admin-stat tone-amber">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-exclamation"></i></span></div>
+        <span class="stat-value">{{ stats.error or 0 }}</span>
+        <span class="stat-label">Error</span>
+    </div>
+    <div class="admin-stat tone-blue">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-info"></i></span></div>
+        <span class="stat-value">{{ stats.warning or 0 }}</span>
+        <span class="stat-label">Warning</span>
+    </div>
+    <div class="admin-stat tone-green">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-check-circle"></i></span></div>
+        <span class="stat-value">{{ stats.resolved or 0 }}</span>
+        <span class="stat-label">Resolved</span>
+    </div>
+</div>
+
+<form method="GET" class="admin-toolbar" style="margin-top:18px;">
+    <div class="admin-search">
+        <i class="fas fa-search"></i>
+        <input type="text" name="search" value="{{ search }}"
+               data-search-form
+               placeholder="Search message, type, URL, request ID…"
+               autocomplete="off" spellcheck="false">
+    </div>
+
+    <select name="severity" class="admin-select" data-autofilter>
+        <option value="">All severities</option>
+        <option value="CRITICAL" {% if severity == 'CRITICAL' %}selected{% endif %}>Critical</option>
+        <option value="ERROR"    {% if severity == 'ERROR' %}selected{% endif %}>Error</option>
+        <option value="WARNING"  {% if severity == 'WARNING' %}selected{% endif %}>Warning</option>
+    </select>
+
+    <select name="resolved" class="admin-select" data-autofilter>
+        <option value="">Any state</option>
+        <option value="0" {% if resolved == '0' %}selected{% endif %}>Unresolved</option>
+        <option value="1" {% if resolved == '1' %}selected{% endif %}>Resolved</option>
+    </select>
+
+    {% if search or severity or resolved %}
+        <a href="{{ url_for('admin_errors.index') }}" class="admin-btn secondary">
+            <i class="fas fa-times"></i> Clear
+        </a>
+    {% endif %}
+
+    <span class="toolbar-meta"><strong>{{ total }}</strong> entries</span>
+</form>
+
+{% if errors %}
+<section class="admin-table-wrap" style="margin-top:14px;">
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Severity</th>
+                    <th>Type</th>
+                    <th class="hide-mobile">Message</th>
+                    <th class="hide-mobile">Request</th>
+                    <th style="text-align:center;">State</th>
+                    <th style="text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in errors %}
+                <tr>
+                    <td style="white-space:nowrap;font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;">
+                        {{ (e.timestamp or '')[:16] }}
+                    </td>
+                    <td>
+                        <span class="severity-badge {{ e.severity|lower }}">{{ e.severity }}</span>
+                    </td>
+                    <td style="font-size:13px;font-weight:600;">
+                        {{ e.error_type or 'Unknown' }}
+                        {% if e.occurrence_count and e.occurrence_count > 1 %}
+                            <span class="admin-chip red" style="margin-left:4px;">×{{ e.occurrence_count }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="hide-mobile" style="font-size:12px;color:var(--text-secondary);
+                            max-width:340px;word-break:break-word;">
+                        {{ (e.error_message or '')[:100] }}{% if e.error_message and e.error_message|length > 100 %}…{% endif %}
+                    </td>
+                    <td class="hide-mobile" style="font-size:11px;font-family:monospace;color:var(--text-muted);">
+                        {{ e.request_id or '—' }}
+                    </td>
+                    <td style="text-align:center;">
+                        {% if e.resolved %}
+                            <span class="status-badge resolved">Resolved</span>
+                        {% elif e.dismissed %}
+                            <span class="status-badge dismissed">Dismissed</span>
+                        {% else %}
+                            <span class="status-badge unresolved">Open</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align:right;">
+                        <a href="{{ url_for('admin_errors.detail', error_id=e.id) }}"
+                           class="admin-btn secondary sm">
+                            <i class="fas fa-eye"></i> Detail
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% if total_pages > 1 %}
+<div class="admin-pagination">
+    {% set base_params = 'severity=' ~ (severity or '') ~ '&resolved=' ~ (resolved or '') ~ '&search=' ~ (search or '') %}
+    <a href="?page=1&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}"><i class="fas fa-angle-double-left"></i></a>
+    <a href="?page={{ page - 1 }}&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}"><i class="fas fa-angle-left"></i></a>
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}<span class="active">{{ p }}</span>
+        {% elif p <= page + 2 and p >= page - 2 %}<a href="?page={{ p }}&{{ base_params }}">{{ p }}</a>{% endif %}
+    {% endfor %}
+    <a href="?page={{ page + 1 }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}"><i class="fas fa-angle-right"></i></a>
+    <a href="?page={{ total_pages }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}"><i class="fas fa-angle-double-right"></i></a>
+</div>
+{% endif %}
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">✨</span>
+    <h3>No errors</h3>
+    <p>Nothing to see here. The platform is running clean.</p>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,74 @@
+{# ============================================================
+   templates/dashboard/admin/ops/sessions.html
+   Active sessions viewer.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-users-cog header-icon"></i>{% endblock %}
+{% block admin_title %}Sessions{% endblock %}
+{% block admin_subtitle %}
+    Logged-in users. Force-logout bumps session_version.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Sessions</span>
+{% endblock %}
+
+{% block admin_actions %}
+    {% if admin_can('sessions.manage') %}
+        <button type="button" class="admin-btn danger" id="revokeAllSessionsBtn">
+            <i class="fas fa-power-off"></i> Force logout everyone
+        </button>
+    {% endif %}
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="cache-metric-grid">
+    <div class="cache-metric">
+        <div class="num primary">{{ count or 0 }}</div>
+        <div class="lbl">Active sessions</div>
+    </div>
+    <div class="cache-metric">
+        <div class="num">{{ disk_usage_mb or 0 }} MB</div>
+        <div class="lbl">Session storage</div>
+    </div>
+</div>
+
+<section class="admin-table-wrap" style="margin-top:20px;">
+    {% if sessions %}
+        {% for s in sessions %}
+        <div class="session-row">
+            <div class="user-info">
+                <div class="avatar-sm">{{ (s.first_name or '?')[0] }}</div>
+                <div>
+                    <div class="n">{{ s.first_name or 'Unknown' }} {{ s.last_name or '' }}</div>
+                    <div class="p">#{{ s.public_id or '----' }}</div>
+                </div>
+            </div>
+            <div class="time">{{ (s.last_login_at or '')[:16] }}</div>
+            {% if admin_can('sessions.manage') %}
+                <button type="button"
+                        class="admin-btn danger sm"
+                        data-revoke-user="{{ s.id }}"
+                        data-revoke-name="{{ s.first_name }} {{ s.last_name or '' }}">
+                    <i class="fas fa-power-off"></i> Force logout
+                </button>
+            {% else %}
+                <span></span>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+        <div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px;">
+            No active sessions recorded.
+        </div>
+    {% endif %}
+</section>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/ops.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,286 @@
+{# ============================================================
+   templates/dashboard/admin/revenue/discounts.html
+   Discount codes — list, filters, bulk actions.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-tags header-icon"></i>{% endblock %}
+{% block admin_title %}Discount Codes{% endblock %}
+{% block admin_subtitle %}
+    Promo codes applied during upgrade checkout. Percent or fixed amount.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('upgrade.admin_list') }}">Upgrades</a>
+    <span class="sep">/</span>
+    <span class="current">Discounts</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('upgrade.admin_list') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back to Upgrades
+    </a>
+    {% if admin_can('discounts.create') %}
+        <a href="{{ url_for('upgrade.admin_discount_create') }}" class="admin-btn primary">
+            <i class="fas fa-plus"></i> New Code
+        </a>
+    {% endif %}
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── STATS ─────── #}
+<div class="admin-stats">
+    <div class="admin-stat tone-blue">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-tags"></i></span></div>
+        <span class="stat-value">{{ stats.total or 0 }}</span>
+        <span class="stat-label">Total codes</span>
+    </div>
+    <div class="admin-stat tone-green">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-check-circle"></i></span></div>
+        <span class="stat-value">{{ stats.active or 0 }}</span>
+        <span class="stat-label">Active</span>
+    </div>
+    <div class="admin-stat tone-amber">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-hourglass-end"></i></span></div>
+        <span class="stat-value">{{ stats.expired or 0 }}</span>
+        <span class="stat-label">Expired</span>
+    </div>
+    <div class="admin-stat tone-purple">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-fire"></i></span></div>
+        <span class="stat-value">{{ stats.total_uses or 0 }}</span>
+        <span class="stat-label">Total uses</span>
+    </div>
+</div>
+
+{# ─────── TOOLBAR ─────── #}
+<form method="GET" class="admin-toolbar" style="margin-top:18px;">
+    <div class="admin-search">
+        <i class="fas fa-search"></i>
+        <input type="text" name="search" value="{{ search }}"
+               data-search-form
+               placeholder="Search by code…"
+               autocomplete="off" spellcheck="false">
+    </div>
+
+    <select name="filter" class="admin-select" data-autofilter>
+        <option value="">All states</option>
+        <option value="active"    {% if filter_status == 'active' %}selected{% endif %}>✅ Active</option>
+        <option value="inactive"  {% if filter_status == 'inactive' %}selected{% endif %}>💤 Inactive</option>
+        <option value="expired"   {% if filter_status == 'expired' %}selected{% endif %}>⏰ Expired</option>
+        <option value="exhausted" {% if filter_status == 'exhausted' %}selected{% endif %}>🔥 Exhausted</option>
+    </select>
+
+    {% if search or filter_status %}
+        <a href="{{ url_for('upgrade.admin_discounts') }}" class="admin-btn secondary">
+            <i class="fas fa-times"></i> Clear
+        </a>
+    {% endif %}
+
+    <span class="toolbar-meta">
+        <strong>{{ discounts|length }}</strong> shown
+    </span>
+</form>
+
+{# ─────── BULK FORM ─────── #}
+{% if discounts %}
+<form method="POST" action="{{ url_for('upgrade.admin_discount_bulk') }}" id="bulkForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" id="bulkActionInput" value="">
+{% endif %}
+
+{% if discounts %}
+<div class="admin-toolbar" style="margin-top:14px;margin-bottom:0;">
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;font-weight:600;color:var(--text-secondary);">
+        <input type="checkbox" id="bulkSelectAll" style="accent-color:var(--primary);cursor:pointer;">
+        Select all
+    </label>
+    <span class="toolbar-meta"><strong id="bulkCount">0</strong> selected</span>
+    <div class="toolbar-spacer"></div>
+    <button type="button" class="admin-btn success sm" data-bulk-action="activate" disabled>
+        <i class="fas fa-check"></i> Activate
+    </button>
+    <button type="button" class="admin-btn secondary sm" data-bulk-action="deactivate" disabled>
+        <i class="fas fa-power-off"></i> Deactivate
+    </button>
+    <button type="button" class="admin-btn danger sm" data-bulk-action="delete" disabled>
+        <i class="fas fa-trash"></i> Delete
+    </button>
+</div>
+{% endif %}
+
+{# ─────── TABLE ─────── #}
+{% if discounts %}
+<section class="admin-table-wrap" style="border-radius:0 0 var(--radius) var(--radius);">
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th class="cell-check"></th>
+                    <th>Code</th>
+                    <th>Value</th>
+                    <th class="hide-mobile">Applies to</th>
+                    <th style="text-align:center;">Uses</th>
+                    <th class="hide-mobile">Expires</th>
+                    <th style="text-align:center;">Status</th>
+                    <th style="text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in discounts %}
+                <tr>
+                    <td class="cell-check">
+                        <input type="checkbox" name="discount_ids" value="{{ d.id }}" data-check-row>
+                    </td>
+
+                    <td>
+                        <span class="rev-code">{{ d.code }}</span>
+                    </td>
+
+                    <td style="font-weight:600;">
+                        {% if d.discount_type == 'percentage' %}
+                            {{ d.discount_value }}% off
+                        {% else %}
+                            ${{ '%.2f'|format((d.discount_value or 0) / 100) }} off
+                        {% endif %}
+                    </td>
+
+                    <td class="hide-mobile">
+                        {% if d.applies_to == 'all' %}
+                            <span class="admin-chip neutral">All tiers</span>
+                        {% else %}
+                            <span class="admin-pill {{ d.applies_to }}">{{ d.applies_to }}</span>
+                        {% endif %}
+                    </td>
+
+                    <td style="text-align:center;font-variant-numeric:tabular-nums;">
+                        <strong>{{ d.used_count or 0 }}</strong>
+                        {% if d.max_uses %}
+                            <span style="color:var(--text-muted);">/ {{ d.max_uses }}</span>
+                        {% else %}
+                            <span style="color:var(--text-muted);">/ ∞</span>
+                        {% endif %}
+                    </td>
+
+                    <td class="hide-mobile" style="font-size:12px;color:var(--text-secondary);">
+                        {% if d.expires_at %}
+                            {{ d.expires_at[:10] }}
+                        {% else %}
+                            <span style="color:var(--text-muted);">Never</span>
+                        {% endif %}
+                    </td>
+
+                    <td style="text-align:center;">
+                        {% if d.computed_status == 'active' %}
+                            <span class="rev-status-chip active">✅ Active</span>
+                        {% elif d.computed_status == 'expired' %}
+                            <span class="rev-status-chip expired">⏰ Expired</span>
+                        {% elif d.computed_status == 'exhausted' %}
+                            <span class="rev-status-chip exhausted">🔥 Exhausted</span>
+                        {% else %}
+                            <span class="rev-status-chip inactive">💤 Inactive</span>
+                        {% endif %}
+                    </td>
+
+                    <td style="text-align:right;">
+                        {% if admin_can('discounts.edit') %}
+                            <a href="{{ url_for('upgrade.admin_discount_edit', discount_id=d.id) }}"
+                               class="admin-btn secondary sm" title="Edit">
+                                <i class="fas fa-pen"></i>
+                            </a>
+                        {% endif %}
+                        {% if admin_can('discounts.delete') %}
+                            <form method="POST"
+                                  action="{{ url_for('upgrade.admin_discount_delete', discount_id=d.id) }}"
+                                  style="display:inline;"
+                                  onsubmit="return confirm('Delete code {{ d.code }}?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit" class="admin-btn danger sm" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+</form>
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">🏷️</span>
+    <h3>No discount codes</h3>
+    <p>Create the first code to give students a discount on upgrades.</p>
+    {% if admin_can('discounts.create') %}
+        <a href="{{ url_for('upgrade.admin_discount_create') }}" class="admin-btn primary">
+            <i class="fas fa-plus"></i> New Code
+        </a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/core.js') }}"></script>
+<script>
+(function () {
+    'use strict';
+
+    var master = document.getElementById('bulkSelectAll');
+    var rows = document.querySelectorAll('[data-check-row]');
+    var countEl = document.getElementById('bulkCount');
+    var actionBtns = document.querySelectorAll('[data-bulk-action]');
+    var actionInput = document.getElementById('bulkActionInput');
+    var bulkForm = document.getElementById('bulkForm');
+    if (!bulkForm) return;
+
+    function update() {
+        var checked = document.querySelectorAll('[data-check-row]:checked');
+        var n = checked.length;
+        if (countEl) countEl.textContent = n;
+        actionBtns.forEach(function (b) { b.disabled = n === 0; });
+        if (master) {
+            master.checked = n > 0 && n === rows.length;
+            master.indeterminate = n > 0 && n < rows.length;
+        }
+    }
+
+    if (master) {
+        master.addEventListener('change', function () {
+            rows.forEach(function (cb) { cb.checked = master.checked; });
+            update();
+        });
+    }
+    rows.forEach(function (cb) { cb.addEventListener('change', update); });
+
+    actionBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var action = this.getAttribute('data-bulk-action');
+            var n = document.querySelectorAll('[data-check-row]:checked').length;
+            if (!n) return;
+
+            var verb = action === 'activate' ? 'Activate' :
+                       action === 'deactivate' ? 'Deactivate' : 'Delete';
+
+            AdminCore.confirm({
+                title: verb + ' ' + n + ' code' + (n === 1 ? '' : 's') + '?',
+                confirm: verb,
+                danger: action === 'delete'
+            }).then(function (ok) {
+                if (!ok) return;
+                actionInput.value = action;
+                bulkForm.requestSubmit ? bulkForm.requestSubmit() : bulkForm.submit();
+            });
+        });
+    });
+
+    update();
+})();
+</script>
+{% endblock %}

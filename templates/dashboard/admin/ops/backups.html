@@ -1,0 +1,133 @@
+{# ============================================================
+   templates/dashboard/admin/ops/backups.html
+   Backup dashboard — create, verify, restore, delete.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-database header-icon"></i>{% endblock %}
+{% block admin_title %}Backups{% endblock %}
+{% block admin_subtitle %}
+    Database snapshots. Restore requires the admin password.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Backups</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_backup.settings') }}" class="admin-btn secondary">
+        <i class="fas fa-cog"></i> Settings
+    </a>
+    {% if admin_can('backups.create') %}
+        <button type="button" class="admin-btn primary" id="createBackupBtn">
+            <i class="fas fa-plus"></i> Create backup now
+        </button>
+    {% endif %}
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── SUMMARY STRIP ─────── #}
+<div class="backup-summary">
+    <div class="backup-summary-tile">
+        <div class="num">{{ health.total_backups or 0 }}</div>
+        <div class="lbl">Total backups</div>
+    </div>
+    <div class="backup-summary-tile">
+        <div class="num green">{{ health.valid_backups or 0 }}</div>
+        <div class="lbl">Valid</div>
+    </div>
+    <div class="backup-summary-tile">
+        <div class="num {% if health.invalid_backups %}red{% endif %}">{{ health.invalid_backups or 0 }}</div>
+        <div class="lbl">Invalid</div>
+    </div>
+    <div class="backup-summary-tile">
+        <div class="num {% if health.disk_free_mb < 200 %}amber{% else %}green{% endif %}">
+            {{ health.disk_free_mb|round(0) }} MB
+        </div>
+        <div class="lbl">Disk free</div>
+    </div>
+    <div class="backup-summary-tile">
+        <div class="num">{{ health.total_size_mb|round(1) }} MB</div>
+        <div class="lbl">Backup storage</div>
+    </div>
+</div>
+
+{# ─────── HEALTH ISSUES ─────── #}
+{% if health.issues %}
+<div style="margin-bottom:16px;padding:14px 18px;background:#FFFBEB;border:1px solid #FDE68A;
+            border-left:4px solid #F59E0B;border-radius:var(--radius-sm);font-size:13px;color:#92400E;line-height:1.6;">
+    <strong>⚠️ {{ health.issues|length }} issue{{ '' if health.issues|length == 1 else 's' }}</strong>
+    <ul style="margin:8px 0 0 20px;padding:0;">
+        {% for issue in health.issues %}
+            <li>{{ issue }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{# ─────── LIST ─────── #}
+<section class="admin-table-wrap">
+    {% if backups %}
+        {% for b in backups %}
+        <div class="backup-row">
+            <div class="fname">{{ b.filename }}</div>
+            <span class="btype">{{ b.type or 'manual' }}</span>
+            <span class="bsize">{{ (b.size_bytes / 1024)|round(1) }} KB</span>
+            <span class="btime">{{ (b.timestamp or '')[:16] }}</span>
+            <div class="bstatus">
+                {% if b.integrity_status == 'valid' %}
+                    <span class="status-badge resolved">Valid</span>
+                {% elif b.integrity_status == 'invalid' %}
+                    <span class="status-badge unresolved">Invalid</span>
+                {% else %}
+                    <span class="status-badge dismissed">{{ b.integrity_status or 'unknown' }}</span>
+                {% endif %}
+            </div>
+            <div style="display:flex;gap:4px;">
+                {% if admin_can('backups.restore') %}
+                    <button type="button"
+                            class="admin-btn secondary sm"
+                            data-verify-backup="{{ b.filename }}"
+                            title="Verify">
+                        <i class="fas fa-check"></i>
+                    </button>
+                {% endif %}
+                <a href="{{ url_for('admin_backup.download_backup', filename=b.filename) }}"
+                   class="admin-btn secondary sm" title="Download">
+                    <i class="fas fa-download"></i>
+                </a>
+                {% if admin_can('backups.restore') %}
+                    <button type="button"
+                            class="admin-btn danger sm"
+                            data-restore-backup="{{ b.filename }}"
+                            title="Restore">
+                        <i class="fas fa-undo"></i>
+                    </button>
+                {% endif %}
+                {% if admin_can('backups.delete') %}
+                    <button type="button"
+                            class="admin-btn danger sm"
+                            data-delete-backup="{{ b.filename }}"
+                            title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="admin-empty">
+            <span class="empty-icon">💾</span>
+            <h3>No backups yet</h3>
+            <p>Create the first snapshot to protect the platform's data.</p>
+        </div>
+    {% endif %}
+</section>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/ops.js') }}"></script>
+{% endblock %}

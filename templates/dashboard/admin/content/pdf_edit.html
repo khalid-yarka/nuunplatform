@@ -1,0 +1,153 @@
+{# ============================================================
+   templates/dashboard/admin/content/pdf_edit.html
+   Edit an existing library PDF's metadata.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-pen header-icon"></i>{% endblock %}
+{% block admin_title %}Edit PDF{% endblock %}
+{% block admin_subtitle %}
+    Code <code style="font-family:monospace;color:var(--primary);">{{ pdf.code }}</code>
+    · {{ pdf.title }}
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_content.pdfs') }}">PDF Library</a>
+    <span class="sep">/</span>
+    <span class="current">{{ pdf.code }}</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_content.pdfs') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+<form method="POST" id="pdfEditForm"
+      action="{{ url_for('admin_content.pdf_edit', pdf_id=pdf.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <section class="admin-card">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-id-card"></i> Identity</h3>
+            <span class="hint">Code is immutable</span>
+        </div>
+        <div class="admin-card-body">
+            <div class="pdf-info-grid" style="margin-bottom:20px;">
+                <div class="pdf-info-item">
+                    <span class="k">Code</span>
+                    <span class="v" style="font-family:monospace;color:var(--primary);">{{ pdf.code }}</span>
+                </div>
+                <div class="pdf-info-item">
+                    <span class="k">Uploaded</span>
+                    <span class="v">{{ (pdf.uploaded_at or '')[:10] }}</span>
+                </div>
+                <div class="pdf-info-item">
+                    <span class="k">Views</span>
+                    <span class="v">{{ pdf.view_count or 0 }}</span>
+                </div>
+                <div class="pdf-info-item">
+                    <span class="k">Uploaded by</span>
+                    <span class="v">{{ pdf.uploaded_by or 'NUUN' }}</span>
+                </div>
+            </div>
+
+            <div class="admin-form-group">
+                <label>Title <span style="color:var(--primary);">*</span></label>
+                <input type="text" name="title" class="admin-input" required
+                       value="{{ pdf.title }}" maxlength="200">
+            </div>
+
+            <div class="admin-form-group">
+                <label>Description</label>
+                <textarea name="description" class="admin-textarea" rows="3"
+                          maxlength="500">{{ pdf.description or '' }}</textarea>
+            </div>
+        </div>
+    </section>
+
+    <section class="admin-card" style="margin-top:16px;">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-tags"></i> Classification</h3>
+        </div>
+        <div class="admin-card-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                <div class="admin-form-group">
+                    <label>Curriculum <span style="color:var(--primary);">*</span></label>
+                    <select name="curriculum" class="admin-select" required>
+                        {% for c in curricula %}
+                            <option value="{{ c }}" {% if pdf.curriculum == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="admin-form-group">
+                    <label>Class</label>
+                    <select name="class" class="admin-select">
+                        <option value="">— None —</option>
+                        {% for c in classes %}
+                            <option value="{{ c }}" {% if pdf.class == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                <div class="admin-form-group">
+                    <label>Subject <span style="color:var(--primary);">*</span></label>
+                    <select name="subject" class="admin-select" required>
+                        {% for s in subjects %}
+                            <option value="{{ s.code }}" {% if pdf.subject == s.code %}selected{% endif %}>
+                                {{ s.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="admin-form-group">
+                    <label>Chapter</label>
+                    <input type="text" name="chapter" class="admin-input"
+                           value="{{ pdf.chapter or '' }}" maxlength="100">
+                </div>
+            </div>
+
+            <div class="admin-form-group">
+                <label>Tags (comma-separated)</label>
+                <input type="text" name="tags" class="admin-input"
+                       value="{{ pdf.tags or '' }}" maxlength="200">
+            </div>
+
+            <div class="admin-form-group">
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+                    <input type="checkbox" name="is_premium" value="1"
+                           {% if pdf.is_premium %}checked{% endif %}
+                           style="width:18px;height:18px;accent-color:var(--primary);">
+                    <span>💎 Premium content</span>
+                </label>
+            </div>
+        </div>
+    </section>
+
+    <div style="display:flex;gap:10px;margin-top:20px;">
+        <a href="{{ url_for('admin_content.pdfs') }}" class="admin-btn secondary lg">Cancel</a>
+        <button type="submit" class="admin-btn primary lg">
+            <i class="fas fa-save"></i> Save Changes
+        </button>
+    </div>
+
+</form>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/core.js') }}"></script>
+<script>
+(function () {
+    var form = document.getElementById('pdfEditForm');
+    if (form) {
+        AdminCore.initDirtyForm(form, { barId: null });
+    }
+})();
+</script>
+{% endblock %}

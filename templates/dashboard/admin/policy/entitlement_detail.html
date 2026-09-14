@@ -1,0 +1,282 @@
+{# ============================================================
+   templates/dashboard/admin/policy/entitlement_detail.html
+   Edit one entitlement feature's policy grid.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-sliders-h header-icon"></i>{% endblock %}
+{% block admin_title %}{{ feature.display_name }}{% endblock %}
+{% block admin_subtitle %}
+    <code style="font-family:'Courier New',monospace;color:var(--primary);font-size:12px;">{{ feature.key }}</code>
+    · {{ feature.policy_type }} policy
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_policy.entitlements') }}">Entitlements</a>
+    <span class="sep">/</span>
+    <span class="current">{{ feature.display_name }}</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_policy.entitlements') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+    {% if admin_can('entitlements.write') and feature.override_count > 0 %}
+        <button type="button" id="resetFeatureBtn" class="admin-btn danger">
+            <i class="fas fa-undo"></i> Reset to default
+        </button>
+    {% endif %}
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── FEATURE HEADER ─────── #}
+<div class="admin-card">
+    <div class="admin-card-body">
+        <div class="pol-detail-head">
+            <div class="pol-meta-block">
+                <div class="pol-meta-label">Display name</div>
+                <div class="pol-meta-value">{{ feature.display_name }}</div>
+            </div>
+            <div class="pol-meta-block">
+                <div class="pol-meta-label">Category</div>
+                <div class="pol-meta-value">{{ feature.category|capitalize }}</div>
+            </div>
+            <div class="pol-meta-block">
+                <div class="pol-meta-label">Policy type</div>
+                <div class="pol-meta-value">
+                    <span class="admin-chip primary">{{ feature.policy_type }}</span>
+                </div>
+            </div>
+            <div class="pol-meta-block">
+                <div class="pol-meta-label">Override count</div>
+                <div class="pol-meta-value {% if feature.override_count > 0 %}override-flag{% endif %}">
+                    {{ feature.override_count }} field{{ '' if feature.override_count == 1 else 's' }}
+                </div>
+            </div>
+        </div>
+
+        {% if feature.description %}
+            <div class="pol-detail-desc">{{ feature.description }}</div>
+        {% endif %}
+    </div>
+</div>
+
+{# ─────── GLOBAL ACTIVE + POLICY GRID ─────── #}
+<form method="POST" id="entitlementForm"
+      action="{{ url_for('admin_policy.entitlement_save', feature_key=feature.key) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <section class="admin-card" style="margin-top:16px;">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-power-off"></i> Global active</h3>
+            <span class="hint">Disables this feature for everyone</span>
+        </div>
+        <div class="admin-card-body">
+            <label class="sys-toggle-row">
+                <input type="checkbox" name="is_global_active" value="1"
+                       {% if feature.is_global_active %}checked{% endif %}
+                       {% if not admin_can('entitlements.write') %}disabled{% endif %}>
+                <div class="toggle-body">
+                    <div class="toggle-title">Feature is enabled</div>
+                    <div class="toggle-sub">
+                        When unchecked, no tier can access this feature, regardless of the policy below.
+                    </div>
+                </div>
+            </label>
+        </div>
+    </section>
+
+    {# ─────── POLICY GRID ─────── #}
+    <section class="admin-card" style="margin-top:16px;">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-table"></i> Per-tier policy</h3>
+            <span class="hint">
+                Fields marked <span style="color:var(--primary);font-weight:800;">•</span>
+                differ from the registry default.
+            </span>
+        </div>
+        <div class="admin-card-body" style="padding:0;">
+
+            {% set tier_meta = {
+                'free':    {'icon': '🔓', 'label': 'Free'},
+                'premium': {'icon': '🔑', 'label': 'Premium'},
+                'pro':     {'icon': '⭐', 'label': 'Pro'}
+            } %}
+
+            <div class="pol-tiers-list">
+                {% for tier_key, tier_data in feature.tiers.items() %}
+                <div class="pol-tier-section">
+
+                    <div class="pol-tier-head">
+                        <span class="pol-tier-icon">{{ tier_meta[tier_key].icon }}</span>
+                        <span class="pol-tier-label">{{ tier_meta[tier_key].label }}</span>
+                        <span class="admin-pill {{ tier_key }}">{{ tier_key }}</span>
+                    </div>
+
+                    <div class="pol-tier-fields">
+
+                        {# ── is_enabled ── #}
+                        <div class="pol-field">
+                            <label class="pol-field-label">
+                                Enabled
+                                {% if tier_data.is_enabled_override %}
+                                    <span class="pol-override-dot">•</span>
+                                {% endif %}
+                            </label>
+                            <select name="tier_{{ tier_key }}_is_enabled" class="admin-select"
+                                    {% if not admin_can('entitlements.write') %}disabled{% endif %}>
+                                <option value="1" {% if tier_data.is_enabled %}selected{% endif %}>
+                                    Yes — tier can use it
+                                </option>
+                                <option value="0" {% if not tier_data.is_enabled %}selected{% endif %}>
+                                    No — disabled for this tier
+                                </option>
+                            </select>
+                        </div>
+
+                        {# ── level_value ── #}
+                        {% if feature.policy_type == 'level' %}
+                        <div class="pol-field">
+                            <label class="pol-field-label">
+                                Level (0–3)
+                                {% if tier_data.level_value_override %}
+                                    <span class="pol-override-dot">•</span>
+                                {% endif %}
+                            </label>
+                            <input type="number" name="tier_{{ tier_key }}_level_value"
+                                   class="admin-input"
+                                   value="{{ tier_data.level_value if tier_data.level_value is not none else '' }}"
+                                   min="0" max="3" step="1"
+                                   {% if not admin_can('entitlements.write') %}disabled{% endif %}>
+                        </div>
+                        {% endif %}
+
+                        {# ── limit_value ── #}
+                        {% if feature.policy_type == 'quota' %}
+                        <div class="pol-field">
+                            <label class="pol-field-label">
+                                Limit
+                                {% if tier_data.limit_value_override %}
+                                    <span class="pol-override-dot">•</span>
+                                {% endif %}
+                            </label>
+                            <input type="number" name="tier_{{ tier_key }}_limit_value"
+                                   class="admin-input"
+                                   value="{{ tier_data.limit_value if tier_data.limit_value is not none else '' }}"
+                                   min="0"
+                                   placeholder="Leave empty for unlimited"
+                                   {% if not admin_can('entitlements.write') %}disabled{% endif %}>
+                            <div class="hint">Empty = unlimited</div>
+                        </div>
+
+                        <div class="pol-field">
+                            <label class="pol-field-label">
+                                Unit
+                                {% if tier_data.limit_unit_override %}
+                                    <span class="pol-override-dot">•</span>
+                                {% endif %}
+                            </label>
+                            <input type="text" name="tier_{{ tier_key }}_limit_unit"
+                                   class="admin-input"
+                                   value="{{ tier_data.limit_unit or '' }}"
+                                   placeholder="e.g. /day, total"
+                                   maxlength="30"
+                                   {% if not admin_can('entitlements.write') %}disabled{% endif %}>
+                        </div>
+                        {% endif %}
+
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+        </div>
+    </section>
+
+    {# ─────── FLOATING SAVE BAR ─────── #}
+    {% if admin_can('entitlements.write') %}
+    <div class="admin-dirty-bar" id="featureDirtyBar">
+        <span class="dirty-text">
+            <span class="count">0</span> change<span class="plural">s</span> pending
+        </span>
+        <div class="dirty-actions">
+            <button type="button" class="admin-btn secondary" data-act="discard">Discard</button>
+            <button type="button" class="admin-btn primary" data-act="save">
+                <i class="fas fa-save"></i> Save
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</form>
+
+{# ─────── RESET MODAL ─────── #}
+{% if admin_can('entitlements.write') %}
+<div class="admin-modal-backdrop" id="resetFeatureModal">
+    <div class="admin-modal">
+        <div class="admin-modal-head">
+            <h3>⚠️ Reset {{ feature.display_name }}?</h3>
+            <div class="sub">
+                Every override for this feature will be removed. The policy will return
+                to the registry default for all tiers.
+            </div>
+        </div>
+        <div class="admin-modal-actions">
+            <button type="button" class="admin-btn secondary"
+                    onclick="document.getElementById('resetFeatureModal').classList.remove('is-open')">
+                Cancel
+            </button>
+            <form method="POST"
+                  action="{{ url_for('admin_policy.entitlement_reset', feature_key=feature.key) }}"
+                  style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="admin-btn danger">
+                    <i class="fas fa-undo"></i> Reset feature
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/core.js') }}"></script>
+<script>
+(function () {
+    'use strict';
+
+    var form = document.getElementById('entitlementForm');
+    if (form && typeof AdminCore !== 'undefined') {
+        AdminCore.initDirtyForm(form, { barId: 'featureDirtyBar' });
+    }
+
+    var resetBtn = document.getElementById('resetFeatureBtn');
+    var resetModal = document.getElementById('resetFeatureModal');
+    if (resetBtn && resetModal) {
+        resetBtn.addEventListener('click', function () {
+            resetModal.classList.add('is-open');
+        });
+        resetModal.addEventListener('click', function (e) {
+            if (e.target === resetModal) resetModal.classList.remove('is-open');
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') resetModal.classList.remove('is-open');
+        });
+    }
+
+    if (form) {
+        form.addEventListener('input', function () {
+            var count = document.querySelector('#featureDirtyBar .count');
+            var pluralEl = document.querySelector('#featureDirtyBar .plural');
+            if (count && pluralEl) {
+                var n = parseInt(count.textContent, 10) || 0;
+                pluralEl.textContent = (n === 1) ? '' : 's';
+            }
+        }, true);
+    }
+})();
+</script>
+{% endblock %}

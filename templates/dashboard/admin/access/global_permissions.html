@@ -1,0 +1,208 @@
+{# ============================================================
+   templates/dashboard/admin/access/global_permissions.html
+   Global capability defaults editor.
+   Super admin sets the enabled state for every capability that
+   applies to all admins without a per-admin override.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-sliders-h header-icon"></i>{% endblock %}
+{% block admin_title %}Global Defaults{% endblock %}
+{% block admin_subtitle %}
+    What every admin has, unless overridden individually.
+    Changes take effect on each admin's next request.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_access.roster') }}">Admins</a>
+    <span class="sep">/</span>
+    <span class="current">Global Defaults</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_access.roster') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+    <button type="button" id="resetGlobalBtn" class="admin-btn danger">
+        <i class="fas fa-undo"></i> Reset to defaults
+    </button>
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── TOOLBAR ─────── #}
+<div class="perm-toolbar">
+    <div class="search-wrap">
+        <i class="fas fa-search"></i>
+        <input type="text" id="permSearch"
+               placeholder="Search capabilities…"
+               autocomplete="off" spellcheck="false">
+    </div>
+    <div class="toolbar-meta">
+        <strong id="visibleCount">{{ groups|length }}</strong>
+        group{{ '' if groups|length == 1 else 's' }}
+    </div>
+</div>
+
+{# ─────── FORM ─────── #}
+<form id="globalForm" method="POST" action="{{ url_for('admin_access.global_permissions') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    {% for group in groups %}
+    <section class="perm-group" data-group-name="{{ group.name|lower }}">
+        <header class="perm-group-head">
+            <h3>{{ group.name }}</h3>
+            <span class="perm-group-count">
+                {{ group.capabilities|length }}
+                capabilit{{ 'y' if group.capabilities|length == 1 else 'ies' }}
+            </span>
+        </header>
+
+        <div class="perm-group-body">
+            {% for cap in group.capabilities %}
+            <div class="perm-row {% if cap.reserved %}reserved{% endif %}"
+                 data-cap-key="{{ cap.key }}"
+                 data-searchable="{{ cap.label|lower }} {{ cap.description|lower }}">
+
+                <label class="perm-row-main" {% if cap.reserved %}style="cursor: not-allowed;"{% endif %}>
+                    {% if cap.reserved %}
+                        <input type="checkbox" checked disabled>
+                    {% else %}
+                        <input type="checkbox" name="enabled" value="{{ cap.key }}"
+                               {% if cap.global_enabled %}checked{% endif %}>
+                    {% endif %}
+
+                    <span class="perm-row-text">
+                        <span class="perm-label">{{ cap.label }}</span>
+                        {% if cap.description %}
+                            <span class="perm-desc">{{ cap.description }}</span>
+                        {% endif %}
+                    </span>
+                </label>
+
+                <div class="perm-row-meta">
+                    {% if cap.reserved %}
+                        <span class="perm-reserved">
+                            <i class="fas fa-lock"></i> Reserved
+                        </span>
+                    {% elif cap.override_count > 0 %}
+                        <button type="button" class="perm-override-chip"
+                                data-popover="override-{{ cap.key }}">
+                            <span class="chip-count">+{{ cap.override_count }}</span>
+                            <span class="chip-label">override{{ '' if cap.override_count == 1 else 's' }}</span>
+                        </button>
+                        <div id="override-{{ cap.key }}" class="admin-popover">
+                            <div class="pop-title">Admins with an override</div>
+                            {% for o in cap.override_items %}
+                            <a class="pop-row"
+                               href="{{ url_for('admin_access.admin_overrides', admin_id=o.admin_id) }}">
+                                <span class="name">
+                                    {{ o.first_name }} {{ o.last_name or '' }}
+                                    <span class="pid">#{{ o.public_id or '----' }}</span>
+                                </span>
+                                <span class="pop-state {{ 'on' if o.is_enabled else 'off' }}">
+                                    {{ 'FORCED ON' if o.is_enabled else 'FORCED OFF' }}
+                                </span>
+                            </a>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+
+    {# ─────── FLOATING SAVE BAR ─────── #}
+    <div class="admin-dirty-bar" id="globalDirtyBar">
+        <span class="dirty-text">
+            <span class="count">0</span> change<span class="plural">s</span> pending
+        </span>
+        <div class="dirty-actions">
+            <button type="button" class="admin-btn secondary" data-act="discard">Discard</button>
+            <button type="button" class="admin-btn primary" data-act="save">
+                <i class="fas fa-save"></i> Save
+            </button>
+        </div>
+    </div>
+</form>
+
+{# ─────── RESET CONFIRMATION MODAL ─────── #}
+<div class="admin-modal-backdrop" id="resetModal">
+    <div class="admin-modal">
+        <div class="admin-modal-head">
+            <h3>⚠️ Reset to defaults</h3>
+            <div class="sub">
+                Every global default will be restored to what the app ships with.
+                Per-admin overrides are <strong>not</strong> touched.
+            </div>
+        </div>
+        <div class="admin-modal-body">
+            <p style="margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                This resets <strong>global defaults only</strong>. Individual admins who have
+                an override will keep their override. If you want a clean slate for everyone,
+                clear overrides on each admin's page afterwards.
+            </p>
+        </div>
+        <div class="admin-modal-actions">
+            <button type="button" class="admin-btn secondary" onclick="document.getElementById('resetModal').classList.remove('is-open')">
+                Cancel
+            </button>
+            <form method="POST" action="{{ url_for('admin_access.global_permissions_reset') }}" style="display: inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="admin-btn danger">
+                    <i class="fas fa-undo"></i> Reset defaults
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/access.js') }}"></script>
+<script>
+(function () {
+    'use strict';
+
+    // Init dirty form tracking on the global form
+    var form = document.getElementById('globalForm');
+    if (form) {
+        AdminCore.initDirtyForm(form, {
+            barId: 'globalDirtyBar',
+        });
+    }
+
+    // Reset confirmation modal
+    var resetBtn = document.getElementById('resetGlobalBtn');
+    var resetModal = document.getElementById('resetModal');
+    if (resetBtn && resetModal) {
+        resetBtn.addEventListener('click', function () {
+            resetModal.classList.add('is-open');
+        });
+        resetModal.addEventListener('click', function (e) {
+            if (e.target === resetModal) resetModal.classList.remove('is-open');
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') resetModal.classList.remove('is-open');
+        });
+    }
+
+    // Plural fix for the dirty count
+    var form2 = document.getElementById('globalForm');
+    if (form2) {
+        var pluralEl = document.querySelector('#globalDirtyBar .plural');
+        form2.addEventListener('input', function () {
+            var count = document.querySelector('#globalDirtyBar .count');
+            if (count && pluralEl) {
+                var n = parseInt(count.textContent, 10) || 0;
+                pluralEl.textContent = (n === 1) ? '' : 's';
+            }
+        }, true);
+    }
+})();
+</script>
+{% endblock %}

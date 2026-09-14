@@ -1,0 +1,180 @@
+{# ============================================================
+   templates/dashboard/admin/system/maintenance.html
+   Platform maintenance mode toggle. Super-admin only.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-tools header-icon"></i>{% endblock %}
+{% block admin_title %}Maintenance Mode{% endblock %}
+{% block admin_subtitle %}
+    When enabled, non-admin visitors see a maintenance page instead of the platform.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Maintenance</span>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="sys-page">
+
+    {# ─────── CURRENT STATE ─────── #}
+    {% if maintenance.enabled %}
+        <div class="sys-state danger">
+            <span class="state-icon">🚧</span>
+            <div class="state-body">
+                <div class="state-title">Maintenance mode is ON</div>
+                <div class="state-sub">
+                    All non-admin visitors are currently seeing the maintenance page.
+                    {% if maintenance.since %}
+                        Enabled since {{ maintenance.since[:16] }}.
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="sys-state success">
+            <span class="state-icon">✅</span>
+            <div class="state-body">
+                <div class="state-title">Platform is live</div>
+                <div class="state-sub">
+                    All users have normal access. Enable maintenance only during deploy windows.
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+    {# ─────── TOGGLE ─────── #}
+    <form method="POST" id="maintenanceForm"
+          action="{{ url_for('admin_system.maintenance_save') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <section class="admin-card">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-toggle-on"></i> Toggle</h3>
+            </div>
+            <div class="admin-card-body">
+
+                <div class="admin-form-group">
+                    <label class="sys-toggle-row">
+                        <input type="checkbox" name="enabled" value="1"
+                               id="maintenanceToggle"
+                               {% if maintenance.enabled %}checked{% endif %}>
+                        <div class="toggle-body">
+                            <div class="toggle-title">Enable maintenance mode</div>
+                            <div class="toggle-sub">Non-admins see a placeholder. Admins bypass.</div>
+                        </div>
+                    </label>
+                </div>
+
+                <div class="admin-form-group">
+                    <label>Title shown to users</label>
+                    <input type="text" name="title" class="admin-input"
+                           value="{{ maintenance.title or "We'll be back soon" }}"
+                           placeholder="We'll be back soon"
+                           maxlength="80">
+                    <div class="hint">Large headline on the maintenance page.</div>
+                </div>
+
+                <div class="admin-form-group">
+                    <label>Message shown to users</label>
+                    <textarea name="message" class="admin-textarea" rows="3"
+                              placeholder="We're performing scheduled maintenance. Please check back shortly."
+                              maxlength="400">{{ maintenance.message or '' }}</textarea>
+                    <div class="hint">Explain why the platform is unavailable.</div>
+                </div>
+
+                <div class="admin-form-group" style="margin-bottom:0;">
+                    <label>Expected return (optional)</label>
+                    <input type="text" name="eta" class="admin-input"
+                           value="{{ maintenance.eta or '' }}"
+                           placeholder="e.g. In about 30 minutes"
+                           maxlength="60">
+                </div>
+
+            </div>
+        </section>
+
+        <div class="sys-banner warn" style="margin-top:16px;">
+            <i class="fas fa-exclamation-triangle"></i>
+            <div>
+                <strong>Only super admin can toggle this.</strong>
+                Regular admins keep normal access during maintenance — they can still work.
+            </div>
+        </div>
+
+        <div class="sys-actions">
+            <button type="submit" class="admin-btn primary lg">
+                <i class="fas fa-save"></i> Save maintenance state
+            </button>
+        </div>
+    </form>
+
+</div>
+
+{% endblock %}
+
+{% block admin_js %}
+<script>
+(function () {
+    'use strict';
+    var form = document.getElementById('maintenanceForm');
+    var toggle = document.getElementById('maintenanceToggle');
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        var willEnable = toggle.checked;
+        var verb = willEnable ? 'Enable' : 'Disable';
+        var msg = willEnable
+            ? 'Non-admin visitors will see the maintenance page until you turn it off. Continue?'
+            : 'Visitors will regain access immediately. Continue?';
+
+        if (typeof AdminCore !== 'undefined') {
+            AdminCore.confirm({
+                title: verb + ' maintenance mode?',
+                message: msg,
+                confirm: verb,
+                danger: willEnable
+            }).then(function (ok) {
+                if (ok) submit();
+            });
+        } else {
+            if (window.confirm(msg)) submit();
+        }
+    });
+
+    function submit() {
+        var fd = new FormData(form);
+        if (!toggle.checked) fd.delete('enabled');
+
+        fetch('{{ url_for("admin_system.maintenance_save") }}', {
+            method: 'POST',
+            body: fd,
+            headers: {
+                'X-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')||{}).content || ''
+            }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.success) {
+                if (typeof AdminCore !== 'undefined') {
+                    AdminCore.toast(data.message || 'Saved.', 'success');
+                }
+                setTimeout(function () { window.location.reload(); }, 800);
+            } else {
+                if (typeof AdminCore !== 'undefined') {
+                    AdminCore.toast(data.error || 'Save failed.', 'error');
+                } else {
+                    alert(data.error || 'Save failed.');
+                }
+            }
+        })
+        .catch(function () {
+            if (typeof AdminCore !== 'undefined') AdminCore.toast('Network error.', 'error');
+        });
+    }
+})();
+</script>
+{% endblock %}

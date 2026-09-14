@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ title or "We'll be back soon" }} — NuunPlatform</title>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: var(--background);
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text);
+        }
+        .maint-card {
+            max-width: 560px;
+            width: 100%;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 48px 40px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.10);
+            position: relative;
+            overflow: hidden;
+        }
+        .maint-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), #B91C1C);
+        }
+        .maint-icon {
+            font-size: 72px;
+            display: block;
+            margin-bottom: 12px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50%      { transform: scale(1.06); }
+        }
+        .maint-title {
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--text);
+            margin: 0 0 12px 0;
+            letter-spacing: -0.3px;
+        }
+        .maint-message {
+            font-size: 15px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin: 0 auto 20px auto;
+            max-width: 420px;
+        }
+        .maint-eta {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 18px;
+            background: var(--primary-light);
+            color: var(--primary);
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 24px;
+        }
+        .maint-eta i {
+            font-size: 12px;
+        }
+        .maint-footer {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-light);
+            line-height: 1.6;
+        }
+        .maint-logo {
+            height: 40px;
+            width: auto;
+            margin-bottom: 24px;
+            opacity: 0.85;
+        }
+        .maint-refresh {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 4px;
+            font-size: 13px;
+            color: var(--text-muted);
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 8px;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+        .maint-refresh:hover {
+            color: var(--primary);
+            background: var(--primary-light);
+        }
+    </style>
+</head>
+<body>
+    <div class="maint-card">
+        <img src="{{ url_for('static', filename='images/logo.png') }}"
+             alt="NuunPlatform" class="maint-logo" />
+
+        <span class="maint-icon">🚧</span>
+
+        <h1 class="maint-title">{{ title or "We'll be back soon" }}</h1>
+
+        <p class="maint-message">
+            {{ message or "We're performing scheduled maintenance. Please check back shortly." }}
+        </p>
+
+        {% if eta %}
+            <div class="maint-eta">
+                <i class="fas fa-clock"></i>
+                <span>{{ eta }}</span>
+            </div>
+        {% endif %}
+
+        <div>
+            <a href="{{ url_for('maintenance_page') }}" class="maint-refresh">
+                <i class="fas fa-sync-alt"></i> Refresh page
+            </a>
+        </div>
+
+        <div class="maint-footer">
+            Thank you for your patience — we'll be back online as soon as possible.
+        </div>
+    </div>
+</body>
+</html>

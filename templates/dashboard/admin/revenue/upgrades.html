@@ -1,0 +1,318 @@
+{# ============================================================
+   templates/dashboard/admin/revenue/upgrades.html
+   Upgrade requests — pending / approved / rejected / cancelled.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-rocket header-icon"></i>{% endblock %}
+{% block admin_title %}Upgrade Requests{% endblock %}
+{% block admin_subtitle %}
+    User-submitted requests to upgrade their tier. Approve or reject each one.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Upgrades</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('upgrade.admin_discounts') }}" class="admin-btn secondary">
+        <i class="fas fa-tags"></i> Discount Codes
+    </a>
+    <a href="{{ url_for('upgrade.admin_revenue') }}" class="admin-btn secondary">
+        <i class="fas fa-chart-line"></i> Revenue
+    </a>
+    {% if admin_can('upgrades.export') %}
+        <a href="{{ url_for('upgrade.admin_export', status=status_filter, search=search) }}"
+           class="admin-btn secondary">
+            <i class="fas fa-download"></i> Export CSV
+        </a>
+    {% endif %}
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── STATS ─────── #}
+<div class="admin-stats">
+    <div class="admin-stat tone-amber">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-clock"></i></span></div>
+        <span class="stat-value">{{ stats.pending or 0 }}</span>
+        <span class="stat-label">Pending</span>
+        <span class="stat-sub">awaiting review</span>
+    </div>
+    <div class="admin-stat tone-green">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-check-circle"></i></span></div>
+        <span class="stat-value">{{ stats.approved or 0 }}</span>
+        <span class="stat-label">Approved</span>
+        <span class="stat-sub">all time</span>
+    </div>
+    <div class="admin-stat tone-red">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-times-circle"></i></span></div>
+        <span class="stat-value">{{ stats.rejected or 0 }}</span>
+        <span class="stat-label">Rejected</span>
+        <span class="stat-sub">all time</span>
+    </div>
+    <div class="admin-stat tone-blue">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-dollar-sign"></i></span></div>
+        <span class="stat-value">${{ '%.2f'|format(stats.revenue_dollars or 0) }}</span>
+        <span class="stat-label">Revenue</span>
+        <span class="stat-sub">from approvals</span>
+    </div>
+</div>
+
+{# ─────── TOOLBAR ─────── #}
+<form method="GET" class="admin-toolbar" style="margin-top:18px;">
+    <div class="admin-search">
+        <i class="fas fa-search"></i>
+        <input type="text" name="search" value="{{ search }}"
+               data-search-form
+               placeholder="Search by request ID, name, or phone…"
+               autocomplete="off" spellcheck="false">
+    </div>
+
+    <select name="status" class="admin-select" data-autofilter>
+        <option value="">All statuses</option>
+        <option value="pending"   {% if status_filter == 'pending' %}selected{% endif %}>⏳ Pending</option>
+        <option value="approved"  {% if status_filter == 'approved' %}selected{% endif %}>✅ Approved</option>
+        <option value="rejected"  {% if status_filter == 'rejected' %}selected{% endif %}>❌ Rejected</option>
+        <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>— Cancelled</option>
+    </select>
+
+    {% if search or status_filter %}
+        <a href="{{ url_for('upgrade.admin_list') }}" class="admin-btn secondary">
+            <i class="fas fa-times"></i> Clear
+        </a>
+    {% endif %}
+
+    <span class="toolbar-meta">
+        <strong>{{ total }}</strong> request{{ '' if total == 1 else 's' }}
+    </span>
+</form>
+
+{# ─────── BULK FORM ─────── #}
+{% if requests and admin_can('upgrades.bulk') %}
+<form method="POST" action="{{ url_for('upgrade.admin_bulk') }}" id="bulkForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" id="bulkActionInput" value="">
+{% endif %}
+
+{# ─────── BULK BAR ─────── #}
+{% if requests and admin_can('upgrades.bulk') %}
+<div class="admin-toolbar" style="margin-top:14px;margin-bottom:0;">
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;font-weight:600;color:var(--text-secondary);">
+        <input type="checkbox" id="bulkSelectAll" style="accent-color:var(--primary);cursor:pointer;">
+        Select all
+    </label>
+    <span class="toolbar-meta"><strong id="bulkCount">0</strong> selected</span>
+    <div class="toolbar-spacer"></div>
+    <button type="button" class="admin-btn success sm" data-bulk-action="approve" disabled>
+        <i class="fas fa-check"></i> Approve
+    </button>
+    <button type="button" class="admin-btn secondary sm" data-bulk-action="reject" disabled>
+        <i class="fas fa-times"></i> Reject
+    </button>
+    <button type="button" class="admin-btn danger sm" data-bulk-action="delete" disabled>
+        <i class="fas fa-trash"></i> Delete
+    </button>
+</div>
+{% endif %}
+
+{# ─────── TABLE ─────── #}
+{% if requests %}
+<section class="admin-table-wrap" style="border-radius:{% if admin_can('upgrades.bulk') %}0 0 var(--radius) var(--radius){% else %}var(--radius){% endif %};">
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    {% if admin_can('upgrades.bulk') %}
+                        <th class="cell-check"></th>
+                    {% endif %}
+                    <th>Request ID</th>
+                    <th>User</th>
+                    <th class="hide-mobile">Tier</th>
+                    <th class="hide-mobile">Duration</th>
+                    <th style="text-align:right;">Amount</th>
+                    <th class="hide-mobile">Submitted</th>
+                    <th style="text-align:center;">Status</th>
+                    <th style="text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in requests %}
+                <tr>
+                    {% if admin_can('upgrades.bulk') %}
+                        <td class="cell-check">
+                            {% if r.status == 'pending' %}
+                                <input type="checkbox" name="request_ids"
+                                       value="{{ r.request_id }}" data-check-row>
+                            {% endif %}
+                        </td>
+                    {% endif %}
+
+                    <td>
+                        <code style="font-family:'Courier New',monospace;font-size:12px;color:var(--primary);font-weight:600;">
+                            {{ r.request_id }}
+                        </code>
+                    </td>
+
+                    <td>
+                        <div class="rev-user-cell">
+                            <div class="ru-name">
+                                {{ r.first_name or 'Unknown' }} {{ r.last_name or '' }}
+                            </div>
+                            <div class="ru-meta">
+                                #{{ r.public_id or '----' }}
+                                {% if r.phone_number %} · {{ r.phone_number }}{% endif %}
+                            </div>
+                        </div>
+                    </td>
+
+                    <td class="hide-mobile">
+                        <span class="admin-pill {{ r.requested_tier }}">
+                            {{ r.requested_tier }}
+                        </span>
+                    </td>
+
+                    <td class="hide-mobile" style="font-size:13px;color:var(--text-secondary);">
+                        {{ r.duration|capitalize }}
+                    </td>
+
+                    <td style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">
+                        ${{ '%.2f'|format((r.final_price_cents or 0) / 100) }}
+                        {% if r.discount_amount_cents and r.discount_amount_cents > 0 %}
+                            <div style="font-size:10px;color:#10B981;font-weight:500;">
+                                -${{ '%.2f'|format(r.discount_amount_cents / 100) }}
+                            </div>
+                        {% endif %}
+                    </td>
+
+                    <td class="hide-mobile" style="font-size:12px;color:var(--text-secondary);">
+                        {{ (r.created_at or '')[:16] }}
+                    </td>
+
+                    <td style="text-align:center;">
+                        {% if r.status == 'pending' %}
+                            <span class="admin-chip amber">⏳ Pending</span>
+                        {% elif r.status == 'approved' %}
+                            <span class="admin-chip green">✅ Approved</span>
+                        {% elif r.status == 'rejected' %}
+                            <span class="admin-chip red">❌ Rejected</span>
+                        {% else %}
+                            <span class="admin-chip neutral">— Cancelled</span>
+                        {% endif %}
+                    </td>
+
+                    <td style="text-align:right;">
+                        <a href="{{ url_for('upgrade.admin_detail', request_id=r.request_id) }}"
+                           class="admin-btn primary sm">
+                            <i class="fas fa-eye"></i> View
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% if admin_can('upgrades.bulk') %}
+</form>
+{% endif %}
+
+{# ─────── PAGINATION ─────── #}
+{% if total_pages > 1 %}
+<div class="admin-pagination">
+    {% set base_params = 'status=' ~ status_filter ~ '&search=' ~ search %}
+    <a href="?page=1&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
+        <i class="fas fa-angle-double-left"></i>
+    </a>
+    <a href="?page={{ page - 1 }}&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
+        <i class="fas fa-angle-left"></i>
+    </a>
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+            <span class="active">{{ p }}</span>
+        {% elif p <= page + 2 and p >= page - 2 %}
+            <a href="?page={{ p }}&{{ base_params }}">{{ p }}</a>
+        {% endif %}
+    {% endfor %}
+    <a href="?page={{ page + 1 }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}">
+        <i class="fas fa-angle-right"></i>
+    </a>
+    <a href="?page={{ total_pages }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}">
+        <i class="fas fa-angle-double-right"></i>
+    </a>
+</div>
+{% endif %}
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">💸</span>
+    <h3>No upgrade requests</h3>
+    <p>
+        {% if status_filter == 'pending' %}Nothing waiting for review.{% else %}No requests match this filter.{% endif %}
+    </p>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/core.js') }}"></script>
+<script>
+(function () {
+    'use strict';
+
+    var master = document.getElementById('bulkSelectAll');
+    var rows = document.querySelectorAll('[data-check-row]');
+    var countEl = document.getElementById('bulkCount');
+    var actionBtns = document.querySelectorAll('[data-bulk-action]');
+    var actionInput = document.getElementById('bulkActionInput');
+    var bulkForm = document.getElementById('bulkForm');
+    if (!bulkForm) return;
+
+    function update() {
+        var checked = document.querySelectorAll('[data-check-row]:checked');
+        var n = checked.length;
+        if (countEl) countEl.textContent = n;
+        actionBtns.forEach(function (b) { b.disabled = n === 0; });
+        if (master) {
+            master.checked = n > 0 && n === rows.length;
+            master.indeterminate = n > 0 && n < rows.length;
+        }
+    }
+
+    if (master) {
+        master.addEventListener('change', function () {
+            rows.forEach(function (cb) { cb.checked = master.checked; });
+            update();
+        });
+    }
+    rows.forEach(function (cb) { cb.addEventListener('change', update); });
+
+    actionBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var action = this.getAttribute('data-bulk-action');
+            var n = document.querySelectorAll('[data-check-row]:checked').length;
+            if (!n) return;
+
+            var verb = action === 'approve' ? 'Approve' :
+                       action === 'reject' ? 'Reject' : 'Delete';
+
+            AdminCore.confirm({
+                title: verb + ' ' + n + ' request' + (n === 1 ? '' : 's') + '?',
+                message: 'This will apply to all selected pending requests.',
+                confirm: verb,
+                danger: action === 'delete'
+            }).then(function (ok) {
+                if (!ok) return;
+                actionInput.value = action;
+                bulkForm.requestSubmit ? bulkForm.requestSubmit() : bulkForm.submit();
+            });
+        });
+    });
+
+    update();
+})();
+</script>
+{% endblock %}

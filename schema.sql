@@ -624,7 +624,6 @@ CREATE INDEX IF NOT EXISTS idx_group_audit_log_group
 -- ENTITLEMENT SYSTEM (Phase 1c)
 -- ============================================
 
--- Feature definitions: one row per feature.
 CREATE TABLE IF NOT EXISTS entitlement_features (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     feature_key       TEXT NOT NULL UNIQUE,
@@ -645,7 +644,6 @@ CREATE TABLE IF NOT EXISTS entitlement_features (
 CREATE INDEX IF NOT EXISTS idx_entitlement_features_category
     ON entitlement_features(category, sort_order);
 
--- Per-tier policy: one row per feature × tier.
 CREATE TABLE IF NOT EXISTS entitlement_policies (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     feature_id   INTEGER NOT NULL,
@@ -663,7 +661,6 @@ CREATE TABLE IF NOT EXISTS entitlement_policies (
 CREATE INDEX IF NOT EXISTS idx_entitlement_policies_feature
     ON entitlement_policies(feature_id);
 
--- Admin change log for the entitlement system.
 CREATE TABLE IF NOT EXISTS entitlement_audit (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     admin_id     INTEGER NOT NULL,
@@ -686,3 +683,138 @@ CREATE INDEX IF NOT EXISTS idx_entitlement_audit_feature
     ON entitlement_audit(feature_key, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_entitlement_audit_admin
     ON entitlement_audit(admin_id, created_at DESC);
+
+-- ============================================
+-- ENTITLEMENT OVERRIDE SYSTEM (Phase A)
+-- ============================================
+-- The entitlement registry (entitlements_seed.json)
+-- defines default policies per feature per tier.
+-- These tables store only what the super admin
+-- has explicitly changed (registry + override pattern).
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS entitlement_overrides (
+    feature_key  TEXT     NOT NULL,
+    tier         TEXT     NOT NULL CHECK (tier IN ('free', 'premium', 'pro')),
+    field        TEXT     NOT NULL CHECK (field IN (
+                              'is_enabled', 'level_value',
+                              'limit_value', 'limit_unit'
+                          )),
+    value        TEXT,
+    updated_by   INTEGER,
+    updated_at   TEXT     DEFAULT (datetime('now', 'localtime')),
+    PRIMARY KEY (feature_key, tier, field),
+    FOREIGN KEY (updated_by) REFERENCES students(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_entitlement_overrides_feature
+    ON entitlement_overrides(feature_key);
+
+CREATE TABLE IF NOT EXISTS entitlement_version (
+    id       INTEGER  PRIMARY KEY CHECK (id = 1),
+    version  INTEGER  NOT NULL DEFAULT 1
+);
+
+INSERT OR IGNORE INTO entitlement_version (id, version) VALUES (1, 1);
+
+-- ============================================
+-- ADMIN CAPABILITY SYSTEM (Phase A)
+-- ============================================
+-- The capability registry lives in Python code
+-- (services/admin/registry.py). These tables hold
+-- only the runtime state: what is enabled, what
+-- overrides exist, and the audit trail.
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS admin_capability_grants (
+    capability_key  TEXT     PRIMARY KEY,
+    is_enabled      INTEGER  NOT NULL DEFAULT 0,
+    updated_by      INTEGER,
+    updated_at      TEXT     DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (updated_by) REFERENCES students(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_capability_overrides (
+    admin_id        INTEGER  NOT NULL,
+    capability_key  TEXT     NOT NULL,
+    is_enabled      INTEGER  NOT NULL,
+    granted_by      INTEGER,
+    granted_at      TEXT     DEFAULT (datetime('now', 'localtime')),
+    note            TEXT     DEFAULT '',
+    PRIMARY KEY (admin_id, capability_key),
+    FOREIGN KEY (admin_id)   REFERENCES students(id) ON DELETE CASCADE,
+    FOREIGN KEY (granted_by) REFERENCES students(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_capability_overrides_admin
+    ON admin_capability_overrides(admin_id);
+CREATE INDEX IF NOT EXISTS idx_admin_capability_overrides_key
+    ON admin_capability_overrides(capability_key);
+
+CREATE TABLE IF NOT EXISTS admin_capability_version (
+    id       INTEGER  PRIMARY KEY CHECK (id = 1),
+    version  INTEGER  NOT NULL DEFAULT 1
+);
+
+INSERT OR IGNORE INTO admin_capability_version (id, version) VALUES (1, 1);
+
+CREATE TABLE IF NOT EXISTS admin_capability_audit (
+    id              INTEGER  PRIMARY KEY AUTOINCREMENT,
+    scope           TEXT     NOT NULL CHECK (scope IN ('global', 'per_admin')),
+    admin_id        INTEGER,
+    capability_key  TEXT     NOT NULL,
+    old_value       INTEGER,
+    new_value       INTEGER,
+    actor_id        INTEGER,
+    actor_phone     TEXT,
+    note            TEXT     DEFAULT '',
+    created_at      TEXT     DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (actor_id) REFERENCES students(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_capability_audit_admin
+    ON admin_capability_audit(admin_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_capability_audit_key
+    ON admin_capability_audit(capability_key, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_capability_audit_actor
+    ON admin_capability_audit(actor_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_capability_audit_created
+    ON admin_capability_audit(created_at DESC);
+
+-- ============================================
+-- UNIFIED ADMIN AUDIT LOG (Phase A)
+-- ============================================
+-- Every write action by any admin goes here.
+-- Written by the @admin_action decorator
+-- (services/admin/audit.py::write_audit).
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+    id            INTEGER  PRIMARY KEY AUTOINCREMENT,
+    actor_id      INTEGER,
+    actor_role    TEXT     CHECK (actor_role IN ('super', 'admin', 'user')),
+    actor_phone   TEXT,
+    action        TEXT     NOT NULL,
+    target_type   TEXT,
+    target_id     INTEGER,
+    before_value  TEXT,
+    after_value   TEXT,
+    note          TEXT     DEFAULT '',
+    ip_address    TEXT,
+    user_agent    TEXT,
+    severity      TEXT     NOT NULL DEFAULT 'info'
+                          CHECK (severity IN ('info', 'warning', 'critical')),
+    created_at    TEXT     DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (actor_id) REFERENCES students(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_audit_log_actor
+    ON admin_audit_log(actor_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_log_target
+    ON admin_audit_log(target_type, target_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_log_action
+    ON admin_audit_log(action, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_log_severity
+    ON admin_audit_log(severity, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_log_created
+    ON admin_audit_log(created_at DESC);

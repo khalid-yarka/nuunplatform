@@ -1,0 +1,322 @@
+{# ============================================================
+   templates/dashboard/admin/access/user_detail.html
+   Full profile of a single user.
+   Includes identity, tier, points, recent activity, admin actions.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-user header-icon"></i>{% endblock %}
+{% block admin_title %}
+    {{ user.first_name }} {{ user.middle_name or '' }} {{ user.last_name or '' }}
+{% endblock %}
+{% block admin_subtitle %}
+    Joined {{ (user.created_at or '')[:10] }} · 
+    {% if user.is_admin %}Admin account{% else %}Student account{% endif %}
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_users.list_users') }}">Users</a>
+    <span class="sep">/</span>
+    <span class="current">#{{ user.public_id or user.id }}</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_users.list_users') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+    {% if user.phone_number %}
+        <a href="https://wa.me/{{ user.phone_number|replace('+','')|replace(' ','') }}"
+           target="_blank" rel="noopener"
+           class="admin-btn" style="background: #25D366; color: #fff;">
+            <i class="fab fa-whatsapp"></i> WhatsApp
+        </a>
+    {% endif %}
+    {% if admin_can('users.notify') %}
+        <button type="button" onclick="document.getElementById('notifyPanel').scrollIntoView({behavior:'smooth'})"
+                class="admin-btn primary">
+            <i class="fas fa-paper-plane"></i> Notify
+        </button>
+    {% endif %}
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── HERO CARD ─────── #}
+{% set tier = normalize_tier(user.tier or 'free') %}
+<div class="user-detail-hero">
+    <div class="avatar-lg">
+        {{ (user.first_name or '?')[0] }}{{ (user.last_name or '')[0] if user.last_name else '' }}
+    </div>
+    <div style="flex: 1; min-width: 200px;">
+        <h2 style="font-size: 22px; font-weight: 700; color: var(--text); margin: 0 0 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            {{ user.first_name }} {{ user.middle_name or '' }} {{ user.last_name or '' }}
+            {% if user.is_admin %}
+                <span class="admin-chip amber" style="font-size: 10px;">⭐ Admin</span>
+            {% endif %}
+        </h2>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px;">
+            {% if user.public_id and user.public_id != '----' %}
+                <span class="admin-chip primary" style="font-family: 'Courier New', monospace; font-weight: 700;">
+                    #{{ user.public_id }}
+                </span>
+            {% else %}
+                <span class="admin-chip amber">⏳ Pending ID</span>
+            {% endif %}
+            <span class="admin-pill {{ tier }}">{{ tier }}</span>
+            {% if user.is_verified %}
+                <span class="admin-chip green">✅ Verified</span>
+            {% else %}
+                <span class="admin-chip amber">⏳ Unverified</span>
+            {% endif %}
+        </div>
+        <div style="font-size: 13px; color: var(--text-secondary);">
+            📞 {{ user.phone_number or '—' }}
+            {% if user.location %} · 📍 {{ user.location }}{% endif %}
+            {% if user.city %} · 🌆 {{ user.city }}{% endif %}
+            {% if user.school %} · 🏫 {{ user.school }}{% endif %}
+        </div>
+    </div>
+</div>
+
+{# ─────── STATS ─────── #}
+<div class="admin-stats" style="margin-top: 16px;">
+    <div class="admin-stat tone-amber">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-star"></i></span>
+        </div>
+        <span class="stat-value">{{ user.total_points or 0 }}</span>
+        <span class="stat-label">Total points</span>
+    </div>
+    <div class="admin-stat tone-blue">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-pencil-alt"></i></span>
+        </div>
+        <span class="stat-value">{{ total_quizzes }}</span>
+        <span class="stat-label">Recent quizzes</span>
+    </div>
+    <div class="admin-stat tone-green">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-bullseye"></i></span>
+        </div>
+        <span class="stat-value">{{ avg_score }}%</span>
+        <span class="stat-label">Average score</span>
+    </div>
+    <div class="admin-stat tone-purple">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-bolt"></i></span>
+        </div>
+        <span class="stat-value">{{ live_quizzes|length }}</span>
+        <span class="stat-label">Live quizzes</span>
+    </div>
+</div>
+
+{# ─────── IDENTITY GRID ─────── #}
+<section class="admin-card">
+    <div class="admin-card-head">
+        <h3><i class="fas fa-id-card"></i> Profile information</h3>
+    </div>
+    <div class="admin-card-body">
+        <div class="user-kv-grid">
+            <div class="user-kv"><span class="k">First name</span><span class="v">{{ user.first_name or '—' }}</span></div>
+            <div class="user-kv"><span class="k">Middle name</span><span class="v">{{ user.middle_name or '—' }}</span></div>
+            <div class="user-kv"><span class="k">Last name</span><span class="v">{{ user.last_name or '—' }}</span></div>
+            <div class="user-kv"><span class="k">Public ID</span><span class="v">{{ user.public_id or '—' }}</span></div>
+            <div class="user-kv"><span class="k">Phone</span><span class="v">{{ user.phone_number or '—' }}</span></div>
+            <div class="user-kv"><span class="k">Location</span><span class="v">{{ user.location or '—' }}</span></div>
+            <div class="user-kv"><span class="k">City</span><span class="v">{{ user.city or '—' }}</span></div>
+            <div class="user-kv"><span class="k">School</span><span class="v">{{ user.school or '—' }}</span></div>
+            <div class="user-kv"><span class="k">Grade</span><span class="v">{{ user.grade or '—' }}</span></div>
+            <div class="user-kv"><span class="k">Curriculum</span><span class="v">{{ user.curriculum or '—' }}</span></div>
+            <div class="user-kv"><span class="k">Tier</span><span class="v">{{ tier|upper }}</span></div>
+            <div class="user-kv"><span class="k">Admin</span><span class="v">{{ 'Yes' if user.is_admin else 'No' }}</span></div>
+            <div class="user-kv"><span class="k">Joined</span><span class="v">{{ (user.created_at or '')[:16] }}</span></div>
+            <div class="user-kv"><span class="k">Last login</span><span class="v">{{ (user.last_login_at or 'Never')[:16] }}</span></div>
+        </div>
+    </div>
+</section>
+
+{# ─────── RECENT QUIZZES ─────── #}
+<section class="admin-card">
+    <div class="admin-card-head">
+        <h3><i class="fas fa-pencil-alt"></i> Recent quizzes</h3>
+        <span class="hint">{{ quizzes|length }} shown</span>
+    </div>
+    <div class="admin-card-body" style="padding: 0;">
+        {% if quizzes %}
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Subject</th>
+                    <th>Score</th>
+                    <th>Percent</th>
+                    <th>Completed</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for q in quizzes %}
+                <tr>
+                    <td>{{ q.subject_icon or '📚' }} {{ q.subject_name }}</td>
+                    <td><strong>{{ q.score }}</strong> / {{ q.total_questions }}</td>
+                    <td>
+                        {% set cls = 'green' if q.percentage >= 70 else 'amber' if q.percentage >= 40 else 'red' %}
+                        <span class="admin-chip {{ cls }}">{{ q.percentage }}%</span>
+                    </td>
+                    <td style="font-size: 12px; color: var(--text-secondary);">
+                        {{ (q.completed_at or '')[:16] }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div style="text-align: center; padding: 30px 20px; color: var(--text-muted); font-size: 13px;">
+            No quiz attempts recorded.
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+{# ─────── ADMIN ACTIONS ─────── #}
+{% if user.id != session.user_id and (admin_can('users.set_tier') or admin_can('users.toggle_admin') or admin_can('users.reset_password') or admin_can('users.force_logout') or admin_can('users.delete') or admin_can('users.impersonate')) %}
+<section class="admin-card">
+    <div class="admin-card-head">
+        <h3><i class="fas fa-bolt"></i> Admin actions</h3>
+    </div>
+    <div class="admin-card-body">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+
+            {% if admin_can('users.set_tier') %}
+                <a href="{{ url_for('admin_users.manage_user_tier', user_id=user.id) }}"
+                   class="admin-btn secondary lg" style="justify-content: flex-start;">
+                    <i class="fas fa-layer-group"></i> Change tier
+                </a>
+            {% endif %}
+
+            {% if admin_can('users.toggle_admin') %}
+                <form method="POST"
+                      action="{{ url_for('admin_users.toggle_admin', user_id=user.id) }}"
+                      onsubmit="return confirm('{{ 'Remove admin privileges?' if user.is_admin else 'Grant admin privileges?' }}');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit"
+                            class="admin-btn {{ 'danger' if user.is_admin else 'success' }} lg"
+                            style="width: 100%; justify-content: flex-start;">
+                        <i class="fas fa-{{ 'user-minus' if user.is_admin else 'user-shield' }}"></i>
+                        {{ 'Remove Admin' if user.is_admin else 'Make Admin' }}
+                    </button>
+                </form>
+            {% endif %}
+
+            {% if admin_can('users.impersonate') %}
+                <a href="{{ url_for('admin_access.impersonate', user_id=user.id) }}"
+                   class="admin-btn secondary lg" style="justify-content: flex-start;">
+                    <i class="fas fa-user-secret"></i> Impersonate
+                </a>
+            {% endif %}
+
+            {% if admin_can('users.force_logout') %}
+                <form method="POST"
+                      action="{{ url_for('admin_users.force_logout', user_id=user.id) }}"
+                      onsubmit="return confirm('Force logout this user from all sessions?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="admin-btn secondary lg" style="width: 100%; justify-content: flex-start;">
+                        <i class="fas fa-power-off"></i> Force logout
+                    </button>
+                </form>
+            {% endif %}
+
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{# ─────── NOTIFY PANEL ─────── #}
+{% if admin_can('users.notify') %}
+<section class="admin-card" id="notifyPanel">
+    <div class="admin-card-head">
+        <h3><i class="fas fa-paper-plane"></i> Send notification</h3>
+        <span class="hint">Delivered to this user only</span>
+    </div>
+    <form method="POST" action="{{ url_for('admin_users.notify', user_id=user.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="admin-card-body">
+            <div class="admin-form-group">
+                <label>Title <span style="color: var(--primary);">*</span></label>
+                <input type="text" name="title" class="admin-input"
+                       placeholder="e.g. Welcome to NuunPlatform"
+                       maxlength="100" required>
+            </div>
+            <div class="admin-form-group">
+                <label>Message <span style="color: var(--primary);">*</span></label>
+                <textarea name="body" class="admin-textarea" rows="4"
+                          placeholder="Type your message…" maxlength="500" required></textarea>
+            </div>
+        </div>
+        <div class="admin-modal-actions" style="border-top: none; padding-top: 0;">
+            <button type="submit" class="admin-btn primary">
+                <i class="fas fa-paper-plane"></i> Send
+            </button>
+        </div>
+    </form>
+</section>
+{% endif %}
+
+{# ─────── ADMIN NOTE ─────── #}
+<section class="admin-card">
+    <div class="admin-card-head">
+        <h3><i class="fas fa-sticky-note"></i> Admin note</h3>
+        <span class="hint">Private — visible to admins only</span>
+    </div>
+    <form method="POST" action="{{ url_for('admin_users.set_note', user_id=user.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="admin-card-body">
+            <div class="admin-form-group">
+                <textarea name="note" class="admin-textarea" rows="4"
+                          placeholder="Add a private note about this user…">{{ user.admin_note or '' }}</textarea>
+            </div>
+        </div>
+        <div class="admin-modal-actions" style="border-top: none; padding-top: 0;">
+            <button type="submit" class="admin-btn primary">
+                <i class="fas fa-save"></i> Save note
+            </button>
+        </div>
+    </form>
+</section>
+
+{# ─────── DANGER ZONE ─────── #}
+{% if user.id != session.user_id and admin_can('users.delete') %}
+<section class="admin-card" style="border-color: #FCA5A5;">
+    <div class="admin-card-head" style="background: #FEF2F2;">
+        <h3 style="color: #991B1B;"><i class="fas fa-exclamation-triangle"></i> Danger zone</h3>
+    </div>
+    <div class="admin-card-body">
+        <p style="font-size: 13px; color: #991B1B; margin: 0 0 14px; line-height: 1.5;">
+            Deleting a user moves them to <strong>Deleted Users</strong> where they can be
+            restored. Quiz attempts will be removed unless you uncheck the option.
+        </p>
+        <form method="POST" action="{{ url_for('admin_users.delete_user', user_id=user.id) }}"
+              onsubmit="return confirm('Delete {{ user.first_name }} {{ user.last_name }}? This moves them to Deleted Users.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; font-size: 13px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" name="keep_ratings" checked>
+                    <span>Keep ratings (HAA/MAY) in the system</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" name="delete_attempts" checked>
+                    <span>Delete quiz attempts and scores</span>
+                </label>
+            </div>
+            <button type="submit" class="admin-btn danger">
+                <i class="fas fa-trash"></i> Delete user
+            </button>
+        </form>
+    </div>
+</section>
+{% endif %}
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/access.js') }}"></script>
+{% endblock %}

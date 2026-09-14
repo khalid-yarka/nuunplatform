@@ -1,0 +1,108 @@
+{# ============================================================
+   templates/dashboard/admin/community/leaderboard_admin.html
+   Admin leaderboard view — with per-user point reset.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-medal header-icon"></i>{% endblock %}
+{% block admin_title %}Leaderboard Admin{% endblock %}
+{% block admin_subtitle %}
+    Top performers. Reset points for users where needed.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Leaderboard</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('quiz.leaderboard') }}" class="admin-btn secondary" target="_blank">
+        <i class="fas fa-external-link-alt"></i> View public board
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+{% if leaders %}
+<section class="admin-table-wrap">
+    <div class="admin-table-scroll">
+        <table class="admin-table lb-admin-table">
+            <thead>
+                <tr>
+                    <th style="text-align:center;width:60px;">#</th>
+                    <th>Student</th>
+                    <th class="hide-mobile">School</th>
+                    <th class="hide-mobile" style="text-align:center;">Public ID</th>
+                    <th style="text-align:right;">Points</th>
+                    <th style="text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in leaders %}
+                <tr>
+                    <td class="rank-cell {% if loop.index == 1 %}gold{% elif loop.index == 2 %}silver{% elif loop.index == 3 %}bronze{% endif %}">
+                        {% if loop.index == 1 %}
+                            <span class="medal">🥇</span>
+                        {% elif loop.index == 2 %}
+                            <span class="medal">🥈</span>
+                        {% elif loop.index == 3 %}
+                            <span class="medal">🥉</span>
+                        {% else %}
+                            {{ loop.index }}
+                        {% endif %}
+                    </td>
+                    <td class="name-cell">
+                        {{ s.first_name }} {{ s.middle_name or '' }} {{ s.last_name or '' }}
+                        {% if s.id == session.user_id %}
+                            <span class="you-tag">You</span>
+                        {% endif %}
+                    </td>
+                    <td class="school-cell hide-mobile">
+                        {{ s.school or '—' }}
+                    </td>
+                    <td class="pid-cell hide-mobile" style="text-align:center;">
+                        #{{ s.public_id or '----' }}
+                    </td>
+                    <td class="points-cell">{{ s.total_points or 0 }}</td>
+                    <td style="text-align:right;">
+                        {% if admin_can('users.set_tier') %}
+                            <button type="button"
+                                    class="admin-btn secondary sm"
+                                    data-reset-points="{{ s.id }}"
+                                    data-user-name="{{ s.first_name }} {{ s.last_name or '' }}"
+                                    title="Reset points to 0">
+                                <i class="fas fa-undo"></i> Reset
+                            </button>
+                        {% endif %}
+                        <a href="{{ url_for('admin_users.user_detail', user_id=s.id) }}"
+                           class="admin-btn primary sm" title="View profile">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<div style="margin-top:16px;padding:14px 18px;background:#FFFBEB;border:1px solid #FDE68A;
+            border-radius:var(--radius-sm);font-size:13px;color:#92400E;line-height:1.6;">
+    <i class="fas fa-info-circle"></i>
+    Resetting points sets a user's <code>total_points</code> to 0. Their quiz history
+    is preserved. Use this only for correcting data errors.
+</div>
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">🏆</span>
+    <h3>No scores yet</h3>
+    <p>Scores appear once students complete quizzes.</p>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/community.js') }}"></script>
+{% endblock %}

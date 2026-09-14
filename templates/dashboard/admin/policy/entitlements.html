@@ -1,0 +1,224 @@
+{# ============================================================
+   templates/dashboard/admin/policy/entitlements.html
+   Feature catalog — every entitlement feature with per-tier summary.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-gavel header-icon"></i>{% endblock %}
+{% block admin_title %}Entitlements{% endblock %}
+{% block admin_subtitle %}
+    What each user tier (free / premium / pro) is allowed to do.
+    Changes take effect on each user's next request.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Entitlements</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_policy.entitlements_audit') }}" class="admin-btn secondary">
+        <i class="fas fa-history"></i> Audit
+    </a>
+    {% if admin_can('entitlements.write') %}
+        <a href="{{ url_for('admin_policy.entitlements_import') }}" class="admin-btn secondary">
+            <i class="fas fa-file-import"></i> Import / Export
+        </a>
+    {% endif %}
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── STATS ─────── #}
+<div class="admin-stats">
+    <div class="admin-stat tone-blue">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-list"></i></span></div>
+        <span class="stat-value">{{ stats.total }}</span>
+        <span class="stat-label">Total features</span>
+    </div>
+    <div class="admin-stat tone-green">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-toggle-on"></i></span></div>
+        <span class="stat-value">{{ stats.active }}</span>
+        <span class="stat-label">Active</span>
+        <span class="stat-sub">globally enabled</span>
+    </div>
+    <div class="admin-stat tone-amber">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-pen"></i></span></div>
+        <span class="stat-value">{{ stats.modified }}</span>
+        <span class="stat-label">Modified</span>
+        <span class="stat-sub">differ from defaults</span>
+    </div>
+    <div class="admin-stat tone-slate">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-layer-group"></i></span></div>
+        <span class="stat-value">{{ stats.categories }}</span>
+        <span class="stat-label">Categories</span>
+    </div>
+</div>
+
+{# ─────── INFO BAR ─────── #}
+<div class="roster-info-bar">
+    <i class="fas fa-info-circle"></i>
+    <div>
+        Features marked <strong>Modified</strong> have been changed from the app defaults.
+        Click <em>Edit</em> on any feature to adjust its policy, or <em>Reset</em> to
+        revert it to what it ships with.
+    </div>
+</div>
+
+{# ─────── TOOLBAR ─────── #}
+<form method="GET" class="perm-toolbar">
+    <div class="search-wrap">
+        <i class="fas fa-search"></i>
+        <input type="text" name="search" value="{{ search }}"
+               data-search-form
+               placeholder="Search features by key or name…"
+               autocomplete="off" spellcheck="false">
+    </div>
+    <select name="category" class="admin-select" data-autofilter style="min-width:160px;">
+        <option value="">All categories</option>
+        {% for c in categories %}
+            <option value="{{ c }}" {% if category_filter == c %}selected{% endif %}>
+                {{ c|capitalize }}
+            </option>
+        {% endfor %}
+    </select>
+    <select name="modified" class="admin-select" data-autofilter style="min-width:140px;">
+        <option value="">All features</option>
+        <option value="1" {% if modified_filter == '1' %}selected{% endif %}>Modified only</option>
+        <option value="0" {% if modified_filter == '0' %}selected{% endif %}>Unmodified only</option>
+    </select>
+    {% if search or category_filter or modified_filter %}
+        <a href="{{ url_for('admin_policy.entitlements') }}" class="admin-btn secondary">
+            <i class="fas fa-times"></i> Clear
+        </a>
+    {% endif %}
+    <span class="toolbar-meta">
+        <strong>{{ features|length }}</strong> shown
+    </span>
+</form>
+
+{# ─────── FEATURE TABLE ─────── #}
+{% if features %}
+<section class="admin-table-wrap">
+    <div class="admin-table-scroll">
+        <table class="admin-table pol-table">
+            <thead>
+                <tr>
+                    <th style="width:38%;">Feature</th>
+                    <th style="width:10%;">Type</th>
+                    <th style="width:10%;text-align:center;">Free</th>
+                    <th style="width:10%;text-align:center;">Premium</th>
+                    <th style="width:10%;text-align:center;">Pro</th>
+                    <th style="width:11%;text-align:center;">Status</th>
+                    <th style="width:11%;text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in features %}
+                {% set per_tier = f.summary.split(' / ') %}
+                <tr>
+                    {# Feature #}
+                    <td class="pol-feature-cell">
+                        <div class="pol-key">{{ f.key }}</div>
+                        <div class="pol-name">{{ f.display_name }}</div>
+                        {% if f.description %}
+                            <div class="pol-desc">{{ f.description }}</div>
+                        {% endif %}
+                    </td>
+
+                    {# Type #}
+                    <td class="pol-type-cell">
+                        <span class="pol-policy-chip">{{ f.policy_type }}</span>
+                        {% if f.unit_hint %}
+                            <div class="pol-unit-hint">{{ f.unit_hint }}</div>
+                        {% endif %}
+                    </td>
+
+                    {# Free #}
+                    <td style="text-align:center;">
+                        <span class="pol-tier-chip
+                            {%- if per_tier[0] == '—' %} off
+                            {%- elif per_tier[0] == '∞' %} unlimited
+                            {%- else %} free
+                            {%- endif %}">
+                            {{ per_tier[0] }}
+                        </span>
+                    </td>
+
+                    {# Premium #}
+                    <td style="text-align:center;">
+                        <span class="pol-tier-chip
+                            {%- if per_tier[1] == '—' %} off
+                            {%- elif per_tier[1] == '∞' %} unlimited
+                            {%- else %} premium
+                            {%- endif %}">
+                            {{ per_tier[1] }}
+                        </span>
+                    </td>
+
+                    {# Pro #}
+                    <td style="text-align:center;">
+                        <span class="pol-tier-chip
+                            {%- if per_tier[2] == '—' %} off
+                            {%- elif per_tier[2] == '∞' %} unlimited
+                            {%- else %} pro
+                            {%- endif %}">
+                            {{ per_tier[2] }}
+                        </span>
+                    </td>
+
+                    {# Status #}
+                    <td class="pol-status-cell">
+                        {% if f.modified %}
+                            <span class="admin-chip amber">Modified</span>
+                        {% else %}
+                            <span class="admin-chip green">Default</span>
+                        {% endif %}
+                        {% if not f.is_global_active %}
+                            <div class="pol-status-note">Disabled</div>
+                        {% endif %}
+                    </td>
+
+                    {# Actions #}
+                    <td class="pol-actions-cell">
+                        <a href="{{ url_for('admin_policy.entitlement_detail', feature_key=f.key) }}"
+                           class="admin-btn primary sm">
+                            <i class="fas fa-pen"></i> Edit
+                        </a>
+                        {% if f.modified and admin_can('entitlements.write') %}
+                            <form method="POST"
+                                  action="{{ url_for('admin_policy.entitlement_reset', feature_key=f.key) }}"
+                                  onsubmit="return confirm('Reset {{ f.display_name }} to defaults?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit" class="admin-btn secondary sm"
+                                        title="Reset to defaults">
+                                    <i class="fas fa-undo"></i>
+                                </button>
+                            </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">🔍</span>
+    <h3>No matching features</h3>
+    <p>Try adjusting your search or clearing the filters.</p>
+    {% if search or category_filter or modified_filter %}
+        <a href="{{ url_for('admin_policy.entitlements') }}" class="admin-btn primary">
+            <i class="fas fa-times"></i> Clear filters
+        </a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/core.js') }}"></script>
+{% endblock %}

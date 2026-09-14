@@ -1,0 +1,224 @@
+{# ============================================================
+   templates/dashboard/admin/content/questions.html
+   Question list — paginated, filterable.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-question-circle header-icon"></i>{% endblock %}
+{% block admin_title %}Questions{% endblock %}
+{% block admin_subtitle %}
+    Browse and manage the question bank.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Questions</span>
+{% endblock %}
+
+{% block admin_actions %}
+    {% if admin_can('questions.bulk_import') %}
+        <a href="{{ url_for('admin_content.bulk_import') }}" class="admin-btn secondary">
+            <i class="fas fa-file-import"></i> Bulk Import
+        </a>
+    {% endif %}
+    {% if admin_can('questions.create') %}
+        <a href="{{ url_for('admin_content.question_new') }}" class="admin-btn primary">
+            <i class="fas fa-plus"></i> New Question
+        </a>
+    {% endif %}
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── MINI STATS ─────── #}
+<div class="q-list-header-stats">
+    <div class="q-stat-mini">
+        <div class="num primary">{{ stats.total }}</div>
+        <div class="lbl">Total</div>
+    </div>
+    <div class="q-stat-mini">
+        <div class="num green">{{ stats.active }}</div>
+        <div class="lbl">Active</div>
+    </div>
+    <div class="q-stat-mini">
+        <div class="num amber">{{ stats.archived }}</div>
+        <div class="lbl">Archived</div>
+    </div>
+    <div class="q-stat-mini">
+        <div class="num">{{ stats.linked }}</div>
+        <div class="lbl">PDF-linked</div>
+    </div>
+    <div class="q-stat-mini">
+        <div class="num">{{ stats.unlinked }}</div>
+        <div class="lbl">Unlinked</div>
+    </div>
+</div>
+
+{# ─────── TOOLBAR ─────── #}
+<form method="GET" class="q-list-toolbar">
+    <div class="admin-search">
+        <i class="fas fa-search"></i>
+        <input type="text" name="search" value="{{ search }}"
+               data-search-form
+               placeholder="Search question text, chapter, tags…"
+               autocomplete="off" spellcheck="false">
+    </div>
+
+    <select name="subject" class="q-filter" data-autofilter>
+        <option value="">All subjects</option>
+        {% for s in subjects %}
+            <option value="{{ s.code }}" {% if subject_code == s.code %}selected{% endif %}>
+                {{ s.icon or '📚' }} {{ s.name }}
+            </option>
+        {% endfor %}
+    </select>
+
+    <select name="pdf" class="q-filter" data-autofilter>
+        <option value="">Any PDF status</option>
+        <option value="linked"   {% if pdf_filter == 'linked' %}selected{% endif %}>PDF-linked</option>
+        <option value="unlinked" {% if pdf_filter == 'unlinked' %}selected{% endif %}>Unlinked</option>
+    </select>
+
+    <select name="status" class="q-filter" data-autofilter>
+        <option value="">Any state</option>
+        <option value="active"   {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+        <option value="archived" {% if status_filter == 'archived' %}selected{% endif %}>Archived</option>
+        <option value="draft"    {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+    </select>
+
+    <select name="sort" class="q-filter" data-autofilter>
+        <option value="newest"          {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
+        <option value="oldest"          {% if sort == 'oldest' %}selected{% endif %}>Oldest first</option>
+        <option value="difficulty_high" {% if sort == 'difficulty_high' %}selected{% endif %}>Hardest first</option>
+        <option value="difficulty_low"  {% if sort == 'difficulty_low' %}selected{% endif %}>Easiest first</option>
+    </select>
+
+    {% if search or subject_code or pdf_filter or status_filter %}
+        <a href="{{ url_for('admin_content.questions') }}" class="admin-btn secondary">
+            <i class="fas fa-times"></i> Clear
+        </a>
+    {% endif %}
+
+    <span class="toolbar-meta">
+        <strong>{{ total }}</strong> result{{ '' if total == 1 else 's' }}
+    </span>
+</form>
+
+{# ─────── LIST ─────── #}
+{% if questions %}
+<section class="admin-table-wrap">
+    {% for q in questions %}
+        {% set pdf = pdf_map.get(q.pdf_code) if q.pdf_code else None %}
+        {% set pdf_state = 'none' %}
+        {% if q.pdf_code %}
+            {% if not pdf %}
+                {% set pdf_state = 'pdf-warn' %}
+            {% else %}
+                {% set pdf_state = 'pdf' %}
+            {% endif %}
+        {% endif %}
+
+        <div class="q-row">
+            <div class="q-icon">
+                {% set subj = subjects | selectattr('code', 'equalto', q.subject_code) | first %}
+                {{ subj.icon if subj else '📚' }}
+            </div>
+
+            <div class="q-body">
+                <div class="q-text">{{ q.question_text }}</div>
+                <div class="q-meta">
+                    <span class="q-chip subject">{{ q.subject_name or q.subject_code }}</span>
+                    {% if q.chapter %}
+                        <span class="q-chip">📖 {{ q.chapter }}</span>
+                    {% endif %}
+                    <span class="q-chip stars">
+                        {% for i in range(1, 6) %}{% if i <= q.difficulty %}⭐{% else %}☆{% endif %}{% endfor %}
+                    </span>
+
+                    {% if q.pdf_code %}
+                        {% if pdf and pdf.exists %}
+                            <span class="q-chip pdf">📄 {{ q.pdf_code }}{% if q.pdf_page %} · p.{{ q.pdf_page }}{% endif %}</span>
+                        {% else %}
+                            <span class="q-chip pdf-warn">⚠ {{ q.pdf_code }} (not found)</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="q-chip pdf-none">No source</span>
+                    {% endif %}
+
+                    {% if q.status == 'active' %}
+                        <span class="q-chip active">✅ Active</span>
+                    {% elif q.status == 'archived' %}
+                        <span class="q-chip archived">📦 Archived</span>
+                    {% else %}
+                        <span class="q-chip draft">✏️ Draft</span>
+                    {% endif %}
+
+                    <span style="color:var(--text-muted);font-size:11px;">
+                        #{{ q.id }} · {{ (q.created_at or '')[:10] }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="q-actions">
+                {% if admin_can('questions.edit') %}
+                    <a href="{{ url_for('admin_content.question_edit', question_id=q.id) }}"
+                       class="admin-btn secondary sm" title="Edit">
+                        <i class="fas fa-pen"></i>
+                    </a>
+                {% endif %}
+                {% if admin_can('questions.archive') and q.status == 'active' %}
+                    <form method="POST"
+                          action="{{ url_for('admin_content.question_archive', question_id=q.id) }}"
+                          style="display:inline;"
+                          onsubmit="return confirm('Archive this question?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="admin-btn secondary sm" title="Archive">
+                            <i class="fas fa-box-archive"></i>
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    {% endfor %}
+</section>
+
+{# ─────── PAGINATION ─────── #}
+{% if total_pages > 1 %}
+<div class="admin-pagination">
+    {% set base_params = 'search=' ~ search ~ '&subject=' ~ subject_code ~ '&pdf=' ~ pdf_filter ~ '&status=' ~ status_filter ~ '&sort=' ~ sort %}
+    <a href="?page=1&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
+        <i class="fas fa-angle-double-left"></i>
+    </a>
+    <a href="?page={{ page - 1 }}&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
+        <i class="fas fa-angle-left"></i>
+    </a>
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+            <span class="active">{{ p }}</span>
+        {% elif p <= page + 2 and p >= page - 2 %}
+            <a href="?page={{ p }}&{{ base_params }}">{{ p }}</a>
+        {% endif %}
+    {% endfor %}
+    <a href="?page={{ page + 1 }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}">
+        <i class="fas fa-angle-right"></i>
+    </a>
+    <a href="?page={{ total_pages }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}">
+        <i class="fas fa-angle-double-right"></i>
+    </a>
+</div>
+{% endif %}
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">📭</span>
+    <h3>No questions found</h3>
+    <p>Try adjusting your filters, or create the first question for this subject.</p>
+    {% if admin_can('questions.create') %}
+        <a href="{{ url_for('admin_content.question_new') }}" class="admin-btn primary">
+            <i class="fas fa-plus"></i> New Question
+        </a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,82 @@
+{# ============================================================
+   templates/dashboard/admin/ops/system_info.html
+   Environment snapshot — Python, OS, disk, DB, cache.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-server header-icon"></i>{% endblock %}
+{% block admin_title %}System Info{% endblock %}
+{% block admin_subtitle %}
+    Runtime snapshot. Answers "is the problem environmental?"
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">System</span>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="sysinfo-grid">
+
+    <div class="sysinfo-tile">
+        <div class="lbl">Python</div>
+        <div class="val">{{ info.python_version or '—' }}</div>
+        <div class="sub">{{ info.platform or '' }}</div>
+    </div>
+
+    <div class="sysinfo-tile">
+        <div class="lbl">Flask</div>
+        <div class="val">{{ info.flask_version or '—' }}</div>
+        <div class="sub">debug = {{ 'on' if info.debug else 'off' }}</div>
+    </div>
+
+    <div class="sysinfo-tile">
+        <div class="lbl">Uptime</div>
+        <div class="val">{{ info.uptime or '—' }}</div>
+        <div class="sub">since process start</div>
+    </div>
+
+    <div class="sysinfo-tile">
+        <div class="lbl">CPU cores</div>
+        <div class="val">{{ info.cpu_count or '—' }}</div>
+    </div>
+
+    <div class="sysinfo-tile">
+        <div class="lbl">Memory</div>
+        <div class="val">{{ info.memory_used_mb or 0 }} MB</div>
+        <div class="sub">process RSS</div>
+    </div>
+
+    <div class="sysinfo-tile">
+        <div class="lbl">Disk free</div>
+        <div class="val">{{ info.disk_free_gb or 0 }} GB</div>
+        <div class="sub">{{ info.disk_used_pct or 0 }}% used</div>
+    </div>
+
+    <div class="sysinfo-tile">
+        <div class="lbl">Database</div>
+        <div class="val">{{ info.db_size_mb or 0 }} MB</div>
+        <div class="sub">WAL: {{ info.wal_size_mb or 0 }} MB</div>
+    </div>
+
+    <div class="sysinfo-tile">
+        <div class="lbl">Sessions</div>
+        <div class="val">{{ info.session_count or 0 }}</div>
+        <div class="sub">active</div>
+    </div>
+
+    <div class="sysinfo-tile">
+        <div class="lbl">Cache size</div>
+        <div class="val">{{ info.cache_size or 0 }}</div>
+        <div class="sub">entries</div>
+    </div>
+
+    <div class="sysinfo-tile">
+        <div class="lbl">Cache hit ratio</div>
+        <div class="val">{{ info.cache_hit_pct or 0 }}%</div>
+    </div>
+
+</div>
+
+{% endblock %}

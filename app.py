@@ -1,15 +1,19 @@
-# app.py – Complete file with auth blueprint + user state refresh + redesigned logging + Focus
+# app.py – Complete file with modular admin system + maintenance mode
 
 import os
 import sys
 import time
+import json
 import secrets
 import logging
 import atexit
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, g, flash
+from flask import (
+    Flask, render_template, request, redirect, url_for,
+    session, jsonify, g, flash,
+)
 
 from config import Config
 from db import (
@@ -47,47 +51,50 @@ def ensure_single_worker():
 ensure_single_worker()
 
 # ============================================
-# BLUEPRINT IMPORTS
+# BLUEPRINT IMPORTS — Core
 # ============================================
 from blueprints.auth_bp import auth_bp
 from blueprints.dashboard_bp import dashboard_bp
 from blueprints.groups_bp import groups_bp
 from blueprints.pdfs_bp import pdfs_bp
-from blueprints.admin_bp import admin_bp
-from blueprints.admin_errors_bp import admin_errors_bp
 from blueprints.quiz_bp import quiz_bp
 from blueprints.live_quiz_bp import live_quiz_bp
 from blueprints.notifications_bp import notifications_bp
 from blueprints.saved_content_bp import saved_content_bp
 from blueprints.achievements_bp import achievements_bp
-from blueprints.admin_activity_bp import admin_activity_bp
-from blueprints.admin_backup_bp import admin_backup_bp
-from blueprints.upgrade_bp import upgrade_bp
-from blueprints.admin_platform_bp import admin_platform_bp
 from blueprints.focus_bp import focus_bp
 
-# PDF admin + Telegram bot
+# ============================================
+# BLUEPRINT IMPORTS — Modular admin system
+# ============================================
+# Every admin blueprint lives in blueprints/admin/.
+# `register_admin_blueprints(app)` below registers all of them:
+#   - admin_shim, users, access, policy, content, community,
+#     upgrade (revenue), ops, system,
+#     activity, backup, errors, platform
+from blueprints.admin import register_admin_blueprints
+
+# ============================================
+# BLUEPRINT IMPORTS — Settings, Profile, PDF admin, Bot
+# ============================================
+from blueprints.settings_bp import settings_bp
+from blueprints.profile_bp import profile_bp
+from blueprints.interactions_bp import interactions_bp
+from blueprints.history_bp import history_bp
 from blueprints.pdf_admin_bp import pdf_admin_bp
+
 from bot.bot import start_bot, stop_bot, get_bot
 from bot.handlers import process_telegram_update
 from bot.db import init_bot_db
 
-# Interactions + history
-from blueprints.interactions_bp import interactions_bp
-from blueprints.history_bp import history_bp
+# ============================================
+# SUPPORTING SERVICES
+# ============================================
 from history_logger import recover_pending_entries
-
-# Settings + profile
-from blueprints.settings_bp import settings_bp
-from blueprints.profile_bp import profile_bp
-
-# Activity logger
 from activity_logger import (
     log_activity, log_admin_action, log_quiz_complete,
     log_backup_event, init_activity_logger,
 )
-
-# PHASE 3: i18n runtime
 from services.i18n_service import register_jinja as register_i18n
 
 # ============================================
@@ -103,7 +110,7 @@ if not os.path.exists(LOG_DIR):
         pass
 
 # ============================================
-# INSTANCE DIRECTORY (flag files)
+# INSTANCE DIRECTORY (flag files + maintenance state)
 # ============================================
 INSTANCE_DIR = os.path.join(BASE_DIR, 'instance')
 try:
@@ -123,25 +130,27 @@ if not os.path.exists(USER_STATE_FLAG):
 # LOGGING — Somali time formatter
 # ============================================
 def _format_somali_log_time(ts: float) -> str:
-    """Format a Unix timestamp as Somali time with AM/PM.
-    Example: 2026/9/11 2:32:01 PM
+    """Format a Unix timestamp as Somali time for log files.
+    Example: 2027/9/12 11:09:42 pm Mon
     """
     dt = datetime.fromtimestamp(ts, tz=timezone.utc).astimezone(SOMALI_TIMEZONE)
-    hour = dt.hour % 12
-    if hour == 0:
-        hour = 12
-    am_pm = "AM" if dt.hour < 12 else "PM"
-    return f"{dt.year}/{dt.month}/{dt.day} {hour}:{dt.minute:02d}:{dt.second:02d} {am_pm}"
+    hour12 = dt.hour % 12
+    if hour12 == 0:
+        hour12 = 12
+    am_pm = "am" if dt.hour < 12 else "pm"
+    weekday = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')[dt.weekday()]
+    return (
+        f"{dt.year}/{dt.month}/{dt.day} "
+        f"{hour12}:{dt.minute:02d}:{dt.second:02d} {am_pm} {weekday}"
+    )
 
 
 class SomaliFormatter(logging.Formatter):
-    """logging.Formatter subclass that uses Somali time for `%(asctime)s`."""
     def formatTime(self, record, datefmt=None):
         return _format_somali_log_time(record.created)
 
 
 class ModuleRoutingFilter(logging.Filter):
-    """Only allow records whose logger name starts with one of the prefixes."""
     def __init__(self, allow_prefixes):
         super().__init__()
         self.allow_prefixes = tuple(allow_prefixes)
@@ -151,7 +160,6 @@ class ModuleRoutingFilter(logging.Filter):
 
 
 class RequestIDFilter(logging.Filter):
-    """Attach the current request_id (or 'no-req' outside a request context)."""
     def filter(self, record):
         try:
             record.request_id = getattr(g, 'request_id', 'no-req')
@@ -172,10 +180,14 @@ _console_level = logging.DEBUG if Config.DEBUG else logging.ERROR
 _file_size = (5 * 1024 * 1024) if Config.DEBUG else Config.LOG_MAX_BYTES
 _file_backups = 5 if Config.DEBUG else Config.LOG_BACKUP_COUNT
 
-WEB_PREFIXES = ('blueprints.', 'services.', 'nuun.', 'app', 'utils', '__main__')
+WEB_PREFIXES = (
+    'blueprints.', 'services.', 'nuun.', 'app', 'utils', '__main__',
+    'templates.',
+)
 WORKER_PREFIXES = (
     'db', 'cache', 'live_quiz_state', 'history_logger',
     'activity_logger', 'platform_activity', 'redis_state', 'bot.',
+    'startup', 'migrate',
 )
 
 
@@ -328,10 +340,22 @@ app.config['SESSION_COOKIE_SECURE'] = Config.SESSION_COOKIE_SECURE
 app.config['SESSION_COOKIE_HTTPONLY'] = Config.SESSION_COOKIE_HTTPONLY
 app.config['SESSION_COOKIE_SAMESITE'] = Config.SESSION_COOKIE_SAMESITE
 
-app.jinja_env.filters['time_ago'] = time_ago
+app._started_at = time.time()
+
+# Jinja filters / globals
+from utils import (
+    time_ago,
+    somali_dt_filter,
+    somali_time_only_filter,
+    somali_date_only_filter,
+)
+
+app.jinja_env.filters['time_ago']       = time_ago
+app.jinja_env.filters['somali_dt']      = somali_dt_filter
+app.jinja_env.filters['somali_time']    = somali_time_only_filter
+app.jinja_env.filters['somali_date']    = somali_date_only_filter
 app.jinja_env.globals['normalize_tier'] = normalize_tier
 
-# PHASE 3: i18n — expose t() and current_language() to every template
 register_i18n(app)
 
 
@@ -359,6 +383,93 @@ def log_request_end(response):
 
 
 # ============================================
+# MAINTENANCE MODE
+# ============================================
+_MAINTENANCE_STATE_PATH = os.path.join(INSTANCE_DIR, 'maintenance.json')
+_MAINTENANCE_CACHE = {'loaded_at': 0.0, 'state': None}
+_MAINTENANCE_CACHE_TTL = 5
+
+
+def _load_maintenance_state():
+    now = time.time()
+    if (_MAINTENANCE_CACHE['state'] is not None
+            and now - _MAINTENANCE_CACHE['loaded_at'] < _MAINTENANCE_CACHE_TTL):
+        return _MAINTENANCE_CACHE['state']
+
+    state = {'enabled': False, 'title': '', 'message': '', 'eta': ''}
+    try:
+        if os.path.exists(_MAINTENANCE_STATE_PATH):
+            with open(_MAINTENANCE_STATE_PATH, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            state = {
+                'enabled': bool(data.get('enabled', False)),
+                'title': data.get('title') or "We'll be back soon",
+                'message': data.get('message')
+                    or "We're performing scheduled maintenance. Please check back shortly.",
+                'eta': data.get('eta') or '',
+            }
+    except Exception as e:
+        logger.warning(f"Could not read maintenance state: {e}")
+
+    _MAINTENANCE_CACHE['state'] = state
+    _MAINTENANCE_CACHE['loaded_at'] = now
+    return state
+
+
+@app.route('/maintenance', endpoint='maintenance_page')
+def maintenance_page():
+    state = _load_maintenance_state()
+    return render_template(
+        'maintenance.html',
+        title=state.get('title'),
+        message=state.get('message'),
+        eta=state.get('eta'),
+    ), 503
+
+
+@app.before_request
+def enforce_maintenance_mode():
+    path = request.path or '/'
+    if path.startswith('/static/'):
+        return None
+    if path in ('/login', '/logout', '/auth/check-phone'):
+        return None
+    if path == '/maintenance':
+        return None
+    if path in ('/favicon.ico', '/health'):
+        return None
+
+    state = _load_maintenance_state()
+    if not state.get('enabled'):
+        return None
+
+    user_id = session.get('user_id')
+    if user_id and session.get('is_admin'):
+        return None
+
+    try:
+        from services.admin.roles import is_super_admin
+        if is_super_admin():
+            return None
+    except Exception:
+        pass
+
+    wants_json = (
+        path.startswith('/api/')
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or request.accept_mimetypes.best == 'application/json'
+    )
+    if wants_json:
+        return jsonify({
+            'error': 'maintenance',
+            'message': state.get('message'),
+            'title': state.get('title'),
+        }), 503
+
+    return redirect(url_for('maintenance_page'))
+
+
+# ============================================
 # CSRF PROTECTION
 # ============================================
 @app.before_request
@@ -378,7 +489,6 @@ def refresh_user_state_if_needed():
 
     should_reload = False
 
-    # Check 1: flag file mtime
     try:
         if os.path.exists(USER_STATE_FLAG):
             flag_mtime = os.path.getmtime(USER_STATE_FLAG)
@@ -388,7 +498,6 @@ def refresh_user_state_if_needed():
     except Exception:
         pass
 
-    # Check 2: 1-hour fallback
     if not should_reload:
         loaded_at = session.get('user_state_loaded_at', 0)
         if time.time() - loaded_at > 3600:
@@ -411,30 +520,41 @@ def refresh_user_state_if_needed():
 
 
 # ============================================
-# REGISTER BLUEPRINTS
+# REGISTER BLUEPRINTS — Core user-facing
 # ============================================
 app.register_blueprint(auth_bp)
-
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(groups_bp)
 app.register_blueprint(pdfs_bp)
-app.register_blueprint(admin_bp)
-app.register_blueprint(admin_errors_bp)
 app.register_blueprint(quiz_bp)
 app.register_blueprint(live_quiz_bp)
 app.register_blueprint(notifications_bp)
 app.register_blueprint(saved_content_bp)
 app.register_blueprint(achievements_bp)
-app.register_blueprint(admin_activity_bp)
-app.register_blueprint(admin_backup_bp)
-app.register_blueprint(upgrade_bp)
-app.register_blueprint(admin_platform_bp)
 app.register_blueprint(focus_bp)
 
+# ============================================
+# REGISTER BLUEPRINTS — Settings, profile, interactions
+# ============================================
 app.register_blueprint(settings_bp)
 app.register_blueprint(profile_bp)
+app.register_blueprint(interactions_bp)
+app.register_blueprint(history_bp)
 
+# ============================================
+# REGISTER BLUEPRINTS — Modular admin system
+# ============================================
+# Registers ALL admin blueprints:
+#   access, policy, content, community, upgrade (revenue),
+#   ops, system, activity, backup, errors, platform
+# plus the legacy shim.
+#
+# Everything admin-related now lives in blueprints/admin/.
+register_admin_blueprints(app)
+
+# ============================================
 # PDF Admin (secret path)
+# ============================================
 PDF_ADMIN_SECRET = Config.PDF_ADMIN_SECRET_PATH
 if not PDF_ADMIN_SECRET:
     PDF_ADMIN_SECRET = '/pdf-admin-' + os.urandom(8).hex()
@@ -442,9 +562,6 @@ elif not PDF_ADMIN_SECRET.startswith('/'):
     PDF_ADMIN_SECRET = '/' + PDF_ADMIN_SECRET
 app.register_blueprint(pdf_admin_bp, url_prefix=PDF_ADMIN_SECRET)
 logger.info(f"PDF Admin panel mounted at {PDF_ADMIN_SECRET}")
-
-app.register_blueprint(interactions_bp)
-app.register_blueprint(history_bp)
 
 
 # ============================================
@@ -703,7 +820,6 @@ def utility_processor():
         except Exception:
             pending_upgrades_count = 0
 
-    # Focus access — used by sidebar to show/hide lock badge
     has_focus_access = False
     if 'user_id' in session:
         try:
@@ -715,9 +831,16 @@ def utility_processor():
         except Exception:
             has_focus_access = False
 
+    from services.admin.capabilities import admin_can as _admin_can
+    from services.admin.roles import is_any_admin as _is_any_admin
+    from services.admin.roles import is_super_admin as _is_super_admin
+
     return {
         'session': session,
         'is_admin': session.get('is_admin', False),
+        'is_any_admin': _is_any_admin,
+        'is_super_admin': _is_super_admin,
+        'admin_can': _admin_can,
         'somali_time': get_somali_time_display,
         'csrf_token': token,
         'settings': settings,

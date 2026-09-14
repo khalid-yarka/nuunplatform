@@ -27,7 +27,7 @@ class Config:
         _env_bool('DEBUG', 'false')
         or _env_bool('FLASK_DEBUG', 'false')
     )"""
-    DEBUG=True
+    DEBUG=False
 
     # ============================================
     # SECURITY

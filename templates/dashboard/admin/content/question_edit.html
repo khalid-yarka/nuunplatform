@@ -1,0 +1,166 @@
+{# ============================================================
+   templates/dashboard/admin/content/question_edit.html
+   Create or edit a single question.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% set is_new = (question is none) %}
+
+{% block admin_title_icon %}<i class="fas fa-pen header-icon"></i>{% endblock %}
+{% block admin_title %}{{ 'New Question' if is_new else 'Edit Question' }}{% endblock %}
+{% block admin_subtitle %}
+    {% if is_new %}Create a new question for the bank.
+    {% else %}Question #{{ question.id }} · created {{ (question.created_at or '')[:10] }}{% endif %}
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_content.questions') }}">Questions</a>
+    <span class="sep">/</span>
+    <span class="current">{{ 'New' if is_new else ('#' ~ question.id) }}</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_content.questions') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+<form method="POST" id="questionForm"
+      action="{{ url_for('admin_content.question_new') if is_new else url_for('admin_content.question_edit', question_id=question.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <div class="q-edit-layout">
+
+        {# ─────── MAIN COLUMN ─────── #}
+        <div class="q-edit-main">
+
+            <div class="q-edit-section">
+                <h3><i class="fas fa-book"></i> Subject</h3>
+                <select name="subject_code" class="admin-select" required>
+                    <option value="">— Select subject —</option>
+                    {% for s in subjects %}
+                        <option value="{{ s.code }}"
+                                {% if question and question.subject_code == s.code %}selected{% endif %}>
+                            {{ s.icon or '📚' }} {{ s.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="q-edit-section">
+                <h3><i class="fas fa-question"></i> Question Text</h3>
+                <textarea name="question_text" class="admin-textarea" rows="4" required
+                          placeholder="Type the question…">{{ question.question_text if question else '' }}</textarea>
+            </div>
+
+            <div class="q-edit-section">
+                <h3><i class="fas fa-list"></i> Options</h3>
+                <p class="admin-muted-sm" style="margin:0 0 10px 0;">
+                    A, B, C required. D–F optional. Click the radio to mark the correct answer.
+                </p>
+
+                {% set opts = question.options if question else {} %}
+                {% set correct = question.correct_answer if question else 'A' %}
+
+                {% for letter in ['A', 'B', 'C', 'D', 'E', 'F'] %}
+                    {% set required = letter in ['A', 'B', 'C'] %}
+                    <div class="q-opt-row {% if correct == letter %}selected{% endif %}"
+                         data-letter="{{ letter }}">
+                        <input type="radio" name="correct_answer" value="{{ letter }}"
+                               {% if correct == letter %}checked{% endif %}>
+                        <span class="opt-letter">{{ letter }}.</span>
+                        <input type="text"
+                               name="option_{{ letter|lower }}"
+                               value="{{ opts.get(letter, '') }}"
+                               placeholder="{% if required %}Option {{ letter }} (required){% else %}Option {{ letter }} (optional){% endif %}"
+                               {% if required %}required{% endif %}>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div class="q-edit-section">
+                <h3><i class="fas fa-info-circle"></i> Meta</h3>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                    <div>
+                        <label class="admin-muted-sm">Difficulty</label>
+                        <select name="difficulty" class="admin-select">
+                            {% for i in range(1, 6) %}
+                                <option value="{{ i }}"
+                                        {% if question and question.difficulty == i %}selected{% endif %}>
+                                    {{ '⭐' * i }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="admin-muted-sm">Chapter</label>
+                        <input type="text" name="chapter" class="admin-input"
+                               value="{{ question.chapter if question else '' }}"
+                               placeholder="e.g. Chapter 5">
+                    </div>
+                </div>
+                <div style="margin-top:14px;">
+                    <label class="admin-muted-sm">Tags (comma-separated)</label>
+                    <input type="text" name="tags" class="admin-input"
+                           value="{{ question.tags if question else '' }}"
+                           placeholder="e.g. algebra, equations, review">
+                </div>
+                <div style="margin-top:14px;">
+                    <label class="admin-muted-sm">Explanation (optional)</label>
+                    <textarea name="explanation" class="admin-textarea" rows="3"
+                              placeholder="Why this answer is correct…">{{ question.explanation if question else '' }}</textarea>
+                </div>
+            </div>
+
+        </div>
+
+        {# ─────── SIDE COLUMN ─────── #}
+        <div class="q-edit-side">
+
+            <div class="q-edit-section">
+                <h3><i class="fas fa-toggle-on"></i> State</h3>
+                <select name="status" class="admin-select">
+                    <option value="active"   {% if not question or question.status == 'active' %}selected{% endif %}>Active</option>
+                    <option value="archived" {% if question and question.status == 'archived' %}selected{% endif %}>Archived</option>
+                    <option value="draft"    {% if question and question.status == 'draft' %}selected{% endif %}>Draft</option>
+                </select>
+            </div>
+
+            <div class="q-edit-section">
+                <h3><i class="fas fa-file-pdf"></i> Source PDF</h3>
+
+                <label class="admin-muted-sm">PDF code</label>
+                <input type="text" id="pdfCodeInput" name="pdf_code" class="admin-input"
+                       value="{{ question.pdf_code if question else '' }}"
+                       placeholder="XXXX-XXXX" maxlength="9"
+                       autocomplete="off" spellcheck="false" style="font-family:monospace;letter-spacing:1px;">
+
+                <div class="q-pdf-preview" id="pdfLookupPreview" style="display:none;"></div>
+
+                <div style="margin-top:14px;">
+                    <label class="admin-muted-sm">Page (optional)</label>
+                    <input type="number" id="pdfPageInput" name="pdf_page" class="admin-input"
+                           value="{{ question.pdf_page if question and question.pdf_page else '' }}"
+                           min="1" placeholder="e.g. 42">
+                </div>
+            </div>
+
+            <div class="q-edit-actions">
+                <a href="{{ url_for('admin_content.questions') }}" class="admin-btn secondary">Cancel</a>
+                <button type="submit" class="admin-btn primary">
+                    <i class="fas fa-save"></i> {{ 'Create' if is_new else 'Save' }}
+                </button>
+            </div>
+
+        </div>
+    </div>
+</form>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/content.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,191 @@
+{# ============================================================
+   templates/dashboard/admin/revenue/discount_form.html
+   Create or edit a discount code.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% set is_new = (discount is none) %}
+
+{% block admin_title_icon %}<i class="fas fa-tag header-icon"></i>{% endblock %}
+{% block admin_title %}{{ 'New Discount Code' if is_new else 'Edit ' ~ discount.code }}{% endblock %}
+{% block admin_subtitle %}
+    {% if is_new %}
+        Create a promo code for upgrade checkouts.
+    {% else %}
+        Editing code #{{ discount.id }} · created {{ (discount.created_at or '')[:10] }}
+    {% endif %}
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('upgrade.admin_list') }}">Upgrades</a>
+    <span class="sep">/</span>
+    <a href="{{ url_for('upgrade.admin_discounts') }}">Discounts</a>
+    <span class="sep">/</span>
+    <span class="current">{{ 'New' if is_new else discount.code }}</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('upgrade.admin_discounts') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+<div style="max-width:560px;margin:0 auto;">
+
+    <form method="POST" id="discountForm"
+          action="{{ url_for('upgrade.admin_discount_create') if is_new else url_for('upgrade.admin_discount_edit', discount_id=discount.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <section class="admin-card">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-tag"></i> Code</h3>
+            </div>
+            <div class="admin-card-body">
+
+                <div class="admin-form-group" style="margin-bottom:0;">
+                    <label>Code <span style="color:var(--primary);">*</span></label>
+                    <input type="text" name="code" class="admin-input" required
+                           value="{{ discount.code if discount else '' }}"
+                           placeholder="e.g. LAUNCH20"
+                           maxlength="32"
+                           style="font-family:'Courier New',monospace;font-size:16px;letter-spacing:2px;text-transform:uppercase;">
+                    <div class="hint">Uppercase letters, digits, hyphens. Must be unique.</div>
+                </div>
+
+            </div>
+        </section>
+
+        <section class="admin-card" style="margin-top:16px;">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-percent"></i> Discount</h3>
+            </div>
+            <div class="admin-card-body">
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                    <div class="admin-form-group" style="margin-bottom:0;">
+                        <label>Type <span style="color:var(--primary);">*</span></label>
+                        <select name="discount_type" id="discountType" class="admin-select" required>
+                            <option value="percentage"
+                                    {% if not discount or discount.discount_type == 'percentage' %}selected{% endif %}>
+                                Percentage (%)
+                            </option>
+                            <option value="fixed"
+                                    {% if discount and discount.discount_type == 'fixed' %}selected{% endif %}>
+                                Fixed amount (cents)
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="admin-form-group" style="margin-bottom:0;">
+                        <label>Value <span style="color:var(--primary);">*</span></label>
+                        <input type="number" name="discount_value" class="admin-input" required
+                               min="1"
+                               value="{{ discount.discount_value if discount else '' }}"
+                               placeholder="20"
+                               id="discountValue">
+                        <div class="hint" id="valueHint">
+                            {% if discount and discount.discount_type == 'fixed' %}
+                                Amount in cents (100 = $1.00)
+                            {% else %}
+                                Percentage between 1 and 100
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="admin-form-group" style="margin-top:16px;margin-bottom:0;">
+                    <label>Applies to</label>
+                    <select name="applies_to" class="admin-select">
+                        <option value="all"     {% if not discount or discount.applies_to == 'all' %}selected{% endif %}>All tiers</option>
+                        <option value="premium" {% if discount and discount.applies_to == 'premium' %}selected{% endif %}>Premium only</option>
+                        <option value="pro"     {% if discount and discount.applies_to == 'pro' %}selected{% endif %}>Pro only</option>
+                    </select>
+                </div>
+
+            </div>
+        </section>
+
+        <section class="admin-card" style="margin-top:16px;">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-cog"></i> Limits</h3>
+            </div>
+            <div class="admin-card-body">
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                    <div class="admin-form-group" style="margin-bottom:0;">
+                        <label>Max uses</label>
+                        <input type="number" name="max_uses" class="admin-input" min="1"
+                               value="{{ discount.max_uses if discount and discount.max_uses else '' }}"
+                               placeholder="Unlimited">
+                        <div class="hint">Leave empty for unlimited</div>
+                    </div>
+
+                    <div class="admin-form-group" style="margin-bottom:0;">
+                        <label>Expires at</label>
+                        <input type="date" name="expires_at" class="admin-input"
+                               value="{{ discount.expires_at[:10] if discount and discount.expires_at else '' }}">
+                        <div class="hint">Leave empty for never</div>
+                    </div>
+                </div>
+
+                <div class="admin-form-group" style="margin-top:16px;margin-bottom:0;">
+                    <label class="sys-toggle-row">
+                        <input type="checkbox" name="is_active" value="1"
+                               {% if not discount or discount.is_active %}checked{% endif %}>
+                        <div class="toggle-body">
+                            <div class="toggle-title">Code is active</div>
+                            <div class="toggle-sub">Available for users to redeem at checkout</div>
+                        </div>
+                    </label>
+                </div>
+
+            </div>
+        </section>
+
+        <div style="display:flex;gap:10px;margin-top:20px;">
+            <a href="{{ url_for('upgrade.admin_discounts') }}"
+               class="admin-btn secondary lg" style="flex:1;justify-content:center;">
+                Cancel
+            </a>
+            <button type="submit" class="admin-btn primary lg" style="flex:1;justify-content:center;">
+                <i class="fas fa-save"></i> {{ 'Create' if is_new else 'Save' }}
+            </button>
+        </div>
+
+    </form>
+
+</div>
+
+{% endblock %}
+
+{% block admin_js %}
+<script>
+(function () {
+    var typeSelect = document.getElementById('discountType');
+    var valueInput = document.getElementById('discountValue');
+    var hint = document.getElementById('valueHint');
+
+    function update() {
+        if (typeSelect.value === 'percentage') {
+            hint.textContent = 'Percentage between 1 and 100';
+            valueInput.setAttribute('max', '100');
+        } else {
+            hint.textContent = 'Amount in cents (100 = $1.00)';
+            valueInput.removeAttribute('max');
+        }
+    }
+    typeSelect.addEventListener('change', update);
+    update();
+
+    var codeInput = document.querySelector('input[name="code"]');
+    if (codeInput) {
+        codeInput.addEventListener('input', function () {
+            this.value = this.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+        });
+    }
+})();
+</script>
+{% endblock %}

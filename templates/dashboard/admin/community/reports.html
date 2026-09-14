@@ -1,0 +1,145 @@
+{# ============================================================
+   templates/dashboard/admin/community/reports.html
+   Reported questions — resolve / dismiss with optional reply.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-flag header-icon"></i>{% endblock %}
+{% block admin_title %}Reports{% endblock %}
+{% block admin_subtitle %}
+    Questions flagged by users. Resolve or dismiss with a note.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Reports</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_community.reports') }}?status=pending" class="admin-btn secondary">
+        <i class="fas fa-clock"></i> Pending
+    </a>
+    <a href="{{ url_for('admin_community.reports') }}?status=resolved" class="admin-btn secondary">
+        <i class="fas fa-check"></i> Resolved
+    </a>
+    <a href="{{ url_for('admin_community.reports') }}?status=all" class="admin-btn secondary">
+        <i class="fas fa-list"></i> All
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── TABS ─────── #}
+<div class="admin-toolbar" style="margin-bottom:20px;">
+    <span style="font-size:13px;font-weight:600;color:var(--text);">
+        <i class="fas fa-flag" style="color:var(--primary);"></i>
+        {{ total }} report{{ '' if total == 1 else 's' }}
+        {% if status == 'pending' %}<span class="admin-chip amber" style="margin-left:8px;">Pending only</span>{% endif %}
+        {% if status == 'resolved' %}<span class="admin-chip green" style="margin-left:8px;">Resolved only</span>{% endif %}
+        {% if status == 'dismissed' %}<span class="admin-chip neutral" style="margin-left:8px;">Dismissed only</span>{% endif %}
+    </span>
+</div>
+
+{# ─────── LIST ─────── #}
+{% if reports %}
+<div style="display:flex;flex-direction:column;gap:14px;">
+    {% for r in reports %}
+    <div class="report-card">
+        <div class="rc-head">
+            <div class="rc-question">
+                <i class="fas fa-question-circle" style="color:var(--text-muted);margin-right:6px;"></i>
+                {{ r.question_text or 'Question deleted' }}
+            </div>
+
+            {% if r.report_status == 'pending' %}
+                <span class="admin-chip amber">⏳ Pending</span>
+            {% elif r.report_status == 'resolved' %}
+                <span class="admin-chip green">✅ Resolved</span>
+            {% else %}
+                <span class="admin-chip neutral">— Dismissed</span>
+            {% endif %}
+        </div>
+
+        <div class="rc-meta">
+            <span>👤 <strong>{{ r.first_name or 'Unknown' }} {{ r.last_name or '' }}</strong>{% if r.public_id %} (#{{ r.public_id }}){% endif %}</span>
+            <span>🏷️ <strong>{{ r.report_reason or 'unspecified' }}</strong></span>
+            <span>📅 {{ (r.created_at or '')[:16] }}</span>
+            {% if r.resolved_by %}
+                <span>✔️ by admin #{{ r.resolved_by }}</span>
+            {% endif %}
+        </div>
+
+        {% if r.report_comment %}
+            <div class="rc-comment">
+                <strong style="color:var(--text);">Reporter says:</strong>
+                {{ r.report_comment }}
+            </div>
+        {% endif %}
+
+        {% if r.admin_reply %}
+            <div class="rc-reply">
+                <strong>Reply sent:</strong> {{ r.admin_reply }}
+            </div>
+        {% endif %}
+
+        {% if r.report_status == 'pending' and (admin_can('reports.resolve') or admin_can('reports.dismiss')) %}
+        <div class="rc-actions">
+            {% if admin_can('reports.dismiss') %}
+                <button type="button" class="admin-btn secondary"
+                        data-dismiss-report="{{ r.id }}">
+                    <i class="fas fa-times"></i> Dismiss
+                </button>
+            {% endif %}
+            {% if admin_can('reports.resolve') %}
+                <button type="button" class="admin-btn success"
+                        data-resolve-report="{{ r.id }}">
+                    <i class="fas fa-check"></i> Resolve
+                </button>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+{# ─────── PAGINATION ─────── #}
+{% if total_pages > 1 %}
+<div class="admin-pagination">
+    {% set base_params = 'status=' ~ status %}
+    <a href="?page=1&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
+        <i class="fas fa-angle-double-left"></i>
+    </a>
+    <a href="?page={{ page - 1 }}&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
+        <i class="fas fa-angle-left"></i>
+    </a>
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+            <span class="active">{{ p }}</span>
+        {% elif p <= page + 2 and p >= page - 2 %}
+            <a href="?page={{ p }}&{{ base_params }}">{{ p }}</a>
+        {% endif %}
+    {% endfor %}
+    <a href="?page={{ page + 1 }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}">
+        <i class="fas fa-angle-right"></i>
+    </a>
+    <a href="?page={{ total_pages }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}">
+        <i class="fas fa-angle-double-right"></i>
+    </a>
+</div>
+{% endif %}
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">🎉</span>
+    <h3>No reports</h3>
+    <p>
+        {% if status == 'pending' %}Nothing to resolve. The queue is empty.{% else %}No reports match this filter.{% endif %}
+    </p>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/community.js') }}"></script>
+{% endblock %}

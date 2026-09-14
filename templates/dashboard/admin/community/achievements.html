@@ -1,0 +1,101 @@
+{# ============================================================
+   templates/dashboard/admin/community/achievements.html
+   Achievements catalog — grid of unlockable badges.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-trophy header-icon"></i>{% endblock %}
+{% block admin_title %}Achievements{% endblock %}
+{% block admin_subtitle %}
+    Every unlockable badge on the platform. Users earn them by learning.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Achievements</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_community.achievement_new') }}" class="admin-btn primary">
+        <i class="fas fa-plus"></i> New Achievement
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="admin-stats">
+    <div class="admin-stat tone-purple">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-trophy"></i></span></div>
+        <span class="stat-value">{{ achievements|length }}</span>
+        <span class="stat-label">Total achievements</span>
+    </div>
+    <div class="admin-stat tone-blue">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-unlock"></i></span></div>
+        <span class="stat-value">{{ total_unlocks or 0 }}</span>
+        <span class="stat-label">Total unlocks</span>
+        <span class="stat-sub">across all users</span>
+    </div>
+    <div class="admin-stat tone-amber">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-star"></i></span></div>
+        <span class="stat-value">
+            {{ achievements | selectattr('tier_required', 'equalto', 'premium') | list | length }}
+        </span>
+        <span class="stat-label">Premium tier</span>
+    </div>
+    <div class="admin-stat tone-green">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-crown"></i></span></div>
+        <span class="stat-value">
+            {{ achievements | selectattr('tier_required', 'equalto', 'pro') | list | length }}
+        </span>
+        <span class="stat-label">Pro tier</span>
+    </div>
+</div>
+
+{% if achievements %}
+<div class="ach-grid" style="margin-top:20px;">
+    {% for a in achievements %}
+    <div class="ach-card">
+        <div class="ach-icon">{{ a.icon or '🏆' }}</div>
+        <div class="ach-name">{{ a.name }}</div>
+        <div class="ach-desc">{{ a.description or 'No description.' }}</div>
+
+        <div class="ach-tier {{ a.tier_required or 'free' }}">
+            {{ (a.tier_required or 'free')|upper }}
+        </div>
+
+        <div class="ach-unlocks">
+            👥 <strong>{{ a.unlock_count or 0 }}</strong> user{{ '' if a.unlock_count == 1 else 's' }} unlocked
+        </div>
+
+        <div class="ach-actions">
+            <a href="{{ url_for('admin_community.achievement_edit', achievement_id=a.id) }}"
+               class="admin-btn secondary sm">
+                <i class="fas fa-pen"></i> Edit
+            </a>
+            <button type="button"
+                    class="admin-btn danger sm"
+                    data-delete-achievement="{{ a.id }}"
+                    data-achievement-name="{{ a.name }}">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">🏆</span>
+    <h3>No achievements yet</h3>
+    <p>Create the first achievement to give students something to unlock.</p>
+    <a href="{{ url_for('admin_community.achievement_new') }}" class="admin-btn primary">
+        <i class="fas fa-plus"></i> New Achievement
+    </a>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/community.js') }}"></script>
+{% endblock %}

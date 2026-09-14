@@ -1,0 +1,147 @@
+{# ============================================================
+   templates/dashboard/admin/ops/error_detail.html
+   Single error — full context, stack trace, resolve / dismiss.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-bug header-icon"></i>{% endblock %}
+{% block admin_title %}{{ error.error_type or 'Error' }}{% endblock %}
+{% block admin_subtitle %}
+    Request {{ error.request_id }} · {{ (error.timestamp or '')[:16] }}
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_errors.index') }}">Errors</a>
+    <span class="sep">/</span>
+    <span class="current">#{{ error.id }}</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_errors.index') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="error-detail-card">
+    <div class="header">
+        <div>
+            <div class="title">
+                <span class="severity-badge {{ error.severity|lower }}">{{ error.severity }}</span>
+                {{ error.error_type or 'Unknown' }}
+            </div>
+            <div class="sub">
+                {{ (error.timestamp or '')[:19] }}
+                {% if error.occurrence_count and error.occurrence_count > 1 %}
+                    · seen <strong>{{ error.occurrence_count }}</strong> times
+                {% endif %}
+            </div>
+        </div>
+        {% if error.resolved %}
+            <span class="status-badge resolved">Resolved</span>
+        {% elif error.dismissed %}
+            <span class="status-badge dismissed">Dismissed</span>
+        {% else %}
+            <span class="status-badge unresolved">Open</span>
+        {% endif %}
+    </div>
+
+    <div class="error-meta-grid">
+        <div class="error-meta-item">
+            <div class="lbl">Request ID</div>
+            <div class="val" style="font-family:monospace;font-size:12px;">{{ error.request_id }}</div>
+        </div>
+        <div class="error-meta-item">
+            <div class="lbl">Status code</div>
+            <div class="val">{{ error.status_code or '—' }}</div>
+        </div>
+        <div class="error-meta-item">
+            <div class="lbl">Method</div>
+            <div class="val">{{ error.method or '—' }}</div>
+        </div>
+        <div class="error-meta-item">
+            <div class="lbl">User ID</div>
+            <div class="val">{{ error.user_id or 'Not logged in' }}</div>
+        </div>
+        <div class="error-meta-item">
+            <div class="lbl">IP address</div>
+            <div class="val" style="font-family:monospace;font-size:12px;">{{ error.ip_address or '—' }}</div>
+        </div>
+        <div class="error-meta-item" style="grid-column:1/-1;">
+            <div class="lbl">URL</div>
+            <div class="val" style="font-size:12px;word-break:break-all;">{{ error.url or '—' }}</div>
+        </div>
+    </div>
+
+    <div style="margin-top:20px;">
+        <div class="lbl" style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">
+            Message
+        </div>
+        <div style="font-family:monospace;font-size:13px;background:var(--background);padding:12px 16px;
+                    border-radius:var(--radius-sm);border:1px solid var(--border);word-break:break-word;">
+            {{ error.error_message or 'No message' }}
+        </div>
+    </div>
+
+    {% if error.user_description %}
+    <div style="margin-top:16px;">
+        <div class="lbl" style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">
+            User description
+        </div>
+        <div style="font-size:13px;background:#FFFBEB;padding:12px 16px;
+                    border-radius:var(--radius-sm);border:1px solid #FDE68A;color:#92400E;">
+            {{ error.user_description }}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if error.stack_trace %}
+    <div style="margin-top:16px;">
+        <div class="lbl" style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">
+            Stack trace
+        </div>
+        <div class="error-trace">{{ error.stack_trace }}</div>
+    </div>
+    {% endif %}
+
+    {% if error.resolution_note %}
+    <div style="margin-top:16px;">
+        <div class="lbl" style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">
+            Resolution note
+        </div>
+        <div style="font-size:13px;background:#ECFDF5;padding:12px 16px;
+                    border-radius:var(--radius-sm);border:1px solid #A7F3D0;color:#065F46;">
+            {{ error.resolution_note }}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not error.resolved and not error.dismissed %}
+    <div class="error-detail-actions">
+        {% if admin_can('errors.resolve') %}
+        <form method="POST" action="{{ url_for('admin_errors.resolve', error_id=error.id) }}"
+              style="display:flex;gap:10px;align-items:center;flex:1;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="text" name="note" class="admin-input" placeholder="Resolution note (optional)" style="flex:1;">
+            <button type="submit" class="admin-btn success">
+                <i class="fas fa-check"></i> Resolve
+            </button>
+        </form>
+        {% endif %}
+
+        {% if admin_can('errors.dismiss') %}
+        <form method="POST" action="{{ url_for('admin_errors.dismiss', error_id=error.id) }}"
+              onsubmit="return confirm('Dismiss this error?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="admin-btn secondary">
+                <i class="fas fa-times"></i> Dismiss
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}

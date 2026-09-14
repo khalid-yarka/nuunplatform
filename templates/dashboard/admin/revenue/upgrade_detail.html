@@ -1,0 +1,255 @@
+{# ============================================================
+   templates/dashboard/admin/revenue/upgrade_detail.html
+   Single upgrade request — full view with approve/reject actions.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% set r = upgrade_request %}
+
+{% block admin_title_icon %}<i class="fas fa-rocket header-icon"></i>{% endblock %}
+{% block admin_title %}Request {{ r.request_id }}{% endblock %}
+{% block admin_subtitle %}
+    Submitted {{ (r.created_at or '')[:16] }}
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('upgrade.admin_list') }}">Upgrades</a>
+    <span class="sep">/</span>
+    <span class="current">{{ r.request_id }}</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('upgrade.admin_list') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+<div style="max-width:800px;margin:0 auto;">
+
+    {# ─────── STATUS BANNER ─────── #}
+    {% if r.status == 'pending' %}
+        <div class="rev-status-banner pending">
+            <span class="rsb-icon">⏳</span>
+            <div class="rsb-body">
+                <div class="rsb-title">Awaiting review</div>
+                <div class="rsb-sub">
+                    Approving will upgrade the user immediately.
+                    Rejecting sends them a notification.
+                </div>
+            </div>
+        </div>
+    {% elif r.status == 'approved' %}
+        <div class="rev-status-banner approved">
+            <span class="rsb-icon">✅</span>
+            <div class="rsb-body">
+                <div class="rsb-title">Approved</div>
+                <div class="rsb-sub">
+                    Approved on {{ (r.approved_at or '')[:16] }}
+                    {% if r.expiry_date %} · expires {{ r.expiry_date[:10] }}{% endif %}
+                </div>
+            </div>
+        </div>
+    {% elif r.status == 'rejected' %}
+        <div class="rev-status-banner rejected">
+            <span class="rsb-icon">❌</span>
+            <div class="rsb-body">
+                <div class="rsb-title">Rejected</div>
+                <div class="rsb-sub">
+                    Rejected on {{ (r.rejected_at or '')[:16] }}
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="rev-status-banner cancelled">
+            <span class="rsb-icon">—</span>
+            <div class="rsb-body">
+                <div class="rsb-title">Cancelled</div>
+            </div>
+        </div>
+    {% endif %}
+
+    {# ─────── REQUESTER ─────── #}
+    <section class="admin-card">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-user"></i> Requester</h3>
+        </div>
+        <div class="admin-card-body">
+            <div class="rev-requester">
+                <div class="rv-avatar">
+                    {{ (r.first_name or '?')[0] }}{{ (r.last_name or '')[0] if r.last_name else '' }}
+                </div>
+                <div class="rv-body">
+                    <div class="rv-name">
+                        {{ r.first_name or 'Unknown' }} {{ r.last_name or '' }}
+                    </div>
+                    <div class="rv-meta">
+                        <span>#{{ r.public_id or '----' }}</span>
+                        {% if r.phone_number %}<span>📞 {{ r.phone_number }}</span>{% endif %}
+                        {% if r.current_tier %}
+                            <span class="admin-pill {{ r.current_tier }}">Now: {{ r.current_tier }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <a href="{{ url_for('admin_users.user_detail', user_id=r.user_id) }}"
+                   class="admin-btn secondary sm">
+                    <i class="fas fa-external-link-alt"></i> Profile
+                </a>
+            </div>
+        </div>
+    </section>
+
+    {# ─────── ORDER ─────── #}
+    <section class="admin-card" style="margin-top:16px;">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-shopping-cart"></i> Order</h3>
+        </div>
+        <div class="admin-card-body">
+            <div class="rev-order-grid">
+
+                <div class="rev-order-item">
+                    <div class="roi-label">Requested tier</div>
+                    <div class="roi-value">
+                        <span class="admin-pill {{ r.requested_tier }}">{{ r.requested_tier }}</span>
+                    </div>
+                </div>
+
+                <div class="rev-order-item">
+                    <div class="roi-label">Duration</div>
+                    <div class="roi-value">{{ r.duration|capitalize }}</div>
+                </div>
+
+                <div class="rev-order-item">
+                    <div class="roi-label">Original price</div>
+                    <div class="roi-value">
+                        ${{ '%.2f'|format((r.original_price_cents or 0) / 100) }}
+                    </div>
+                </div>
+
+                <div class="rev-order-item">
+                    <div class="roi-label">Discount</div>
+                    <div class="roi-value discount">
+                        {% if r.discount_amount_cents and r.discount_amount_cents > 0 %}
+                            -${{ '%.2f'|format(r.discount_amount_cents / 100) }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="rev-order-total">
+                    <div class="roi-label">Final amount</div>
+                    <div class="roi-value">
+                        ${{ '%.2f'|format((r.final_price_cents or 0) / 100) }}
+                    </div>
+                </div>
+
+            </div>
+
+            {% if r.user_note %}
+                <div style="margin-top:18px;padding:12px 16px;background:var(--background);
+                            border-left:3px solid var(--primary);border-radius:var(--radius-sm);font-size:13px;">
+                    <strong style="color:var(--text);">User's note:</strong>
+                    <div style="color:var(--text-secondary);margin-top:4px;line-height:1.5;">
+                        {{ r.user_note }}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </section>
+
+    {# ─────── ADMIN DECISION (if not pending) ─────── #}
+    {% if r.status != 'pending' and r.admin_note %}
+    <section class="admin-card" style="margin-top:16px;">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-gavel"></i> Admin decision</h3>
+        </div>
+        <div class="admin-card-body">
+            <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;">
+                {{ r.admin_note }}
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    {# ─────── PENDING ACTIONS ─────── #}
+    {% if r.status == 'pending' and (admin_can('upgrades.approve') or admin_can('upgrades.reject')) %}
+    <section class="admin-card" style="margin-top:20px;">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-bolt"></i> Take action</h3>
+        </div>
+        <div class="admin-card-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+
+                {% if admin_can('upgrades.approve') %}
+                <form method="POST"
+                      action="{{ url_for('upgrade.admin_approve', request_id=r.request_id) }}"
+                      onsubmit="return confirm('Approve this request and upgrade the user?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <div class="admin-form-group">
+                        <label>Approval note (optional)</label>
+                        <textarea name="admin_note" class="admin-textarea" rows="2"
+                                  placeholder="e.g. Verified payment by WhatsApp"
+                                  maxlength="300"></textarea>
+                    </div>
+                    <button type="submit" class="admin-btn success"
+                            style="width:100%;justify-content:center;">
+                        <i class="fas fa-check"></i> Approve &amp; upgrade
+                    </button>
+                </form>
+                {% endif %}
+
+                {% if admin_can('upgrades.reject') %}
+                <form method="POST"
+                      action="{{ url_for('upgrade.admin_reject', request_id=r.request_id) }}"
+                      onsubmit="return confirm('Reject this request?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <div class="admin-form-group">
+                        <label>Reason (sent to user)</label>
+                        <textarea name="reason" class="admin-textarea" rows="2"
+                                  placeholder="e.g. Payment not received"
+                                  maxlength="300"></textarea>
+                    </div>
+                    <button type="submit" class="admin-btn danger"
+                            style="width:100%;justify-content:center;">
+                        <i class="fas fa-times"></i> Reject request
+                    </button>
+                </form>
+                {% endif %}
+
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    {# ─────── DANGER ZONE ─────── #}
+    {% if r.status != 'approved' %}
+    <section class="admin-card" style="margin-top:16px;border-color:#FCA5A5;">
+        <div class="admin-card-head" style="background:#FEF2F2;">
+            <h3 style="color:#991B1B;"><i class="fas fa-exclamation-triangle"></i> Danger zone</h3>
+        </div>
+        <div class="admin-card-body">
+            <p style="font-size:13px;color:#991B1B;margin:0 0 14px;line-height:1.5;">
+                Permanently delete this request. Approved requests cannot be deleted.
+            </p>
+            <form method="POST"
+                  action="{{ url_for('upgrade.admin_delete', request_id=r.request_id) }}"
+                  onsubmit="return confirm('Delete this request permanently?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="admin-btn danger">
+                    <i class="fas fa-trash"></i> Delete request
+                </button>
+            </form>
+        </div>
+    </section>
+    {% endif %}
+
+</div>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/core.js') }}"></script>
+{% endblock %}

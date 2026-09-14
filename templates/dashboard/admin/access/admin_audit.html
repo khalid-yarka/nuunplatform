@@ -1,0 +1,211 @@
+{# ============================================================
+   templates/dashboard/admin/access/admin_audit.html
+   Unified audit log across the whole platform.
+   Every write action by any admin is recorded here.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-history header-icon"></i>{% endblock %}
+{% block admin_title %}Audit Log{% endblock %}
+{% block admin_subtitle %}
+    Every write action by any admin. Filterable by actor, action, target, and severity.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_access.roster') }}">Admins</a>
+    <span class="sep">/</span>
+    <span class="current">Audit Log</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_access.roster') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back to roster
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── STATS ─────── #}
+<div class="admin-stats">
+    <div class="admin-stat tone-slate">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-stream"></i></span>
+        </div>
+        <span class="stat-value">{{ stats.total }}</span>
+        <span class="stat-label">Total events</span>
+        <span class="stat-sub">last 30 days</span>
+    </div>
+    <div class="admin-stat tone-red">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-exclamation-circle"></i></span>
+        </div>
+        <span class="stat-value">{{ stats.critical }}</span>
+        <span class="stat-label">Critical</span>
+        <span class="stat-sub">destructive actions</span>
+    </div>
+    <div class="admin-stat tone-amber">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-exclamation-triangle"></i></span>
+        </div>
+        <span class="stat-value">{{ stats.warning }}</span>
+        <span class="stat-label">Warning</span>
+        <span class="stat-sub">sensitive changes</span>
+    </div>
+    <div class="admin-stat tone-blue">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-users-cog"></i></span>
+        </div>
+        <span class="stat-value">{{ stats.unique_actors }}</span>
+        <span class="stat-label">Unique actors</span>
+        <span class="stat-sub">admins who wrote</span>
+    </div>
+</div>
+
+{# ─────── FILTER TOOLBAR ─────── #}
+<form method="GET" class="perm-toolbar">
+    <div class="search-wrap">
+        <i class="fas fa-search"></i>
+        <input type="text" name="search" value="{{ search }}"
+               placeholder="Search action, target, note…"
+               autocomplete="off" spellcheck="false">
+    </div>
+    <select name="severity" class="admin-select" style="min-width: 130px;">
+        <option value="">All severity</option>
+        <option value="info"     {% if severity_filter == 'info' %}selected{% endif %}>Info</option>
+        <option value="warning"  {% if severity_filter == 'warning' %}selected{% endif %}>Warning</option>
+        <option value="critical" {% if severity_filter == 'critical' %}selected{% endif %}>Critical</option>
+    </select>
+    <select name="actor" class="admin-select" style="min-width: 160px;">
+        <option value="">All actors</option>
+        {% for a in actor_options %}
+            <option value="{{ a.id }}" {% if actor_filter == a.id|string %}selected{% endif %}>
+                {{ a.first_name }} {{ a.last_name or '' }}
+            </option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="admin-btn primary">
+        <i class="fas fa-filter"></i> Apply
+    </button>
+    {% if search or severity_filter or actor_filter %}
+        <a href="{{ url_for('admin_access.audit') }}" class="admin-btn secondary">
+            <i class="fas fa-times"></i> Clear
+        </a>
+    {% endif %}
+</form>
+
+{# ─────── TABLE ─────── #}
+{% if entries %}
+<section class="admin-table-wrap">
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Actor</th>
+                    <th>Action</th>
+                    <th>Target</th>
+                    <th class="hide-mobile">Note</th>
+                    <th style="text-align: center;">Severity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in entries %}
+                <tr>
+                    <td style="white-space: nowrap; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums;">
+                        {{ e.created_at[:16] if e.created_at else '' }}
+                    </td>
+
+                    <td>
+                        {% if e.actor_id %}
+                            <a href="{{ url_for('admin_users.user_detail', user_id=e.actor_id) }}"
+                               style="color: var(--text); text-decoration: none; font-weight: 600; font-size: 13px;">
+                                {{ e.actor_first_name or 'System' }} {{ e.actor_last_name or '' }}
+                            </a>
+                            {% if e.actor_role == 'super' %}
+                                <span class="admin-pill super" style="font-size: 9px; padding: 1px 6px; margin-left: 4px;">SUPER</span>
+                            {% endif %}
+                            <div style="font-size: 11px; color: var(--text-muted); font-family: 'Courier New', monospace;">
+                                #{{ e.actor_public_id or '----' }}
+                            </div>
+                        {% else %}
+                            <span style="color: var(--text-muted); font-size: 13px;">System</span>
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        <code style="font-family: 'Courier New', monospace; font-size: 12px; color: var(--primary); background: var(--primary-light); padding: 2px 8px; border-radius: 6px;">
+                            {{ e.action }}
+                        </code>
+                    </td>
+
+                    <td>
+                        {% if e.target_type %}
+                            <span style="font-size: 13px; color: var(--text);">
+                                {{ e.target_type }}
+                            </span>
+                            {% if e.target_id %}
+                                <span style="font-size: 11px; color: var(--text-muted); font-family: 'Courier New', monospace;">
+                                    #{{ e.target_id }}
+                                </span>
+                            {% endif %}
+                        {% else %}
+                            <span style="color: var(--text-muted); font-size: 12px;">—</span>
+                        {% endif %}
+                    </td>
+
+                    <td class="hide-mobile" style="max-width: 240px; font-size: 12px; color: var(--text-secondary);">
+                        {% if e.note %}
+                            {{ e.note[:80] }}{% if e.note|length > 80 %}…{% endif %}
+                        {% else %}
+                            <span style="color: var(--text-muted);">—</span>
+                        {% endif %}
+                    </td>
+
+                    <td style="text-align: center;">
+                        <span class="severity-badge {{ e.severity }}">
+                            {{ e.severity }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{# ─────── PAGINATION ─────── #}
+{% if total_pages > 1 %}
+<div class="admin-pagination">
+    {% set base_params = 'search=' ~ search ~ '&severity=' ~ severity_filter ~ '&actor=' ~ actor_filter %}
+    <a href="?page=1&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
+        <i class="fas fa-angle-double-left"></i>
+    </a>
+    <a href="?page={{ page - 1 }}&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
+        <i class="fas fa-angle-left"></i>
+    </a>
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+            <span class="active">{{ p }}</span>
+        {% elif p <= page + 2 and p >= page - 2 %}
+            <a href="?page={{ p }}&{{ base_params }}">{{ p }}</a>
+        {% endif %}
+    {% endfor %}
+    <a href="?page={{ page + 1 }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}">
+        <i class="fas fa-angle-right"></i>
+    </a>
+    <a href="?page={{ total_pages }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}">
+        <i class="fas fa-angle-double-right"></i>
+    </a>
+</div>
+{% endif %}
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">📋</span>
+    <h3>No audit entries</h3>
+    <p>Admin actions will appear here as they happen. Nothing has been recorded yet.</p>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,31 @@
+{# ============================================================
+   templates/dashboard/admin/ops/config.html
+   Masked configuration viewer.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-cog header-icon"></i>{% endblock %}
+{% block admin_title %}Configuration{% endblock %}
+{% block admin_subtitle %}
+    Read-only view of the loaded Config. Secrets are masked.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Config</span>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="config-list">
+    {% for k, v in config_items %}
+    <div class="config-row">
+        <div class="key">{{ k }}</div>
+        <div class="val {% if v.masked %}masked{% elif v.type == 'boolean' %}{{ 'true' if v.value else 'false' }}{% endif %}">
+            {{ v.display }}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% endblock %}

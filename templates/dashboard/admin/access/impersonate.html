@@ -1,0 +1,89 @@
+{# ============================================================
+   templates/dashboard/admin/access/impersonate.html
+   Impersonation confirmation + session start page.
+   Only reachable by super admin (users.impersonate capability).
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-user-secret header-icon"></i>{% endblock %}
+{% block admin_title %}Impersonate{% endblock %}
+{% block admin_subtitle %}
+    View the platform as this user. All actions are logged.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_users.list_users') }}">Users</a>
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_users.user_detail', user_id=user.id) }}">{{ user.first_name }}</a>
+    <span class="sep">/</span>
+    <span class="current">Impersonate</span>
+{% endblock %}
+
+{% block admin_content %}
+
+<div style="max-width: 560px; margin: 0 auto;">
+
+    {# ─────── WARNING BOX ─────── #}
+    <div style="background: #FFFBEB; border: 1px solid #FDE68A; border-left: 4px solid #F59E0B;
+                border-radius: var(--radius); padding: 16px 20px; margin-bottom: 20px;">
+        <div style="display: flex; gap: 12px; align-items: flex-start;">
+            <span style="font-size: 24px;">⚠️</span>
+            <div>
+                <div style="font-size: 14px; font-weight: 700; color: #92400E;">
+                    Impersonation is a privileged action
+                </div>
+                <div style="font-size: 13px; color: #B45309; margin-top: 4px; line-height: 1.5;">
+                    You will see the platform as this user. A persistent banner will
+                    appear at the top of the screen so you always know you're impersonating.
+                    Every action you take will be audited with your admin ID.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ─────── TARGET USER ─────── #}
+    <div class="admin-profile-head" style="margin-bottom: 20px;">
+        <div class="avatar-lg">
+            {{ (user.first_name or '?')[0] }}{{ (user.last_name or '')[0] if user.last_name else '' }}
+        </div>
+        <div class="info">
+            <h2>{{ user.first_name }} {{ user.last_name or '' }}</h2>
+            <div class="meta">
+                <span class="pid">#{{ user.public_id or '----' }}</span>
+                <span>{{ user.phone_number or '—' }}</span>
+                {% if user.tier %}
+                    <span class="admin-pill {{ normalize_tier(user.tier) }}">{{ normalize_tier(user.tier) }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ─────── CONFIRM FORM ─────── #}
+    <form method="POST" id="impersonateForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <div class="admin-form-group">
+            <label>Reason (optional)</label>
+            <textarea name="reason" class="admin-textarea" rows="3"
+                      placeholder="e.g. Investigating reported bug #1234…"
+                      maxlength="300"></textarea>
+            <div class="hint">Recorded in the audit log for accountability.</div>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 20px;">
+            <button type="submit" class="admin-btn danger lg"
+                    style="flex: 1; justify-content: center;"
+                    onclick="return confirm('Start impersonating {{ user.first_name }}? Every action will be logged.');">
+                <i class="fas fa-user-secret"></i> Start impersonating
+            </button>
+            <a href="{{ url_for('admin_users.user_detail', user_id=user.id) }}"
+               class="admin-btn secondary lg" style="flex: 1; justify-content: center;">
+                Cancel
+            </a>
+        </div>
+    </form>
+
+</div>
+
+{% endblock %}

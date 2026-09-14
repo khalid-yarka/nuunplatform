@@ -1,0 +1,121 @@
+{# ============================================================
+   templates/dashboard/admin/access/user_tier.html
+   Change one user's tier (free / premium / pro).
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-layer-group header-icon"></i>{% endblock %}
+{% block admin_title %}Change Tier{% endblock %}
+{% block admin_subtitle %}Update the subscription tier for this user.{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_users.list_users') }}">Users</a>
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_users.user_detail', user_id=user.id) }}">{{ user.first_name }}</a>
+    <span class="sep">/</span>
+    <span class="current">Tier</span>
+{% endblock %}
+
+{% block admin_content %}
+
+<div style="max-width: 560px; margin: 0 auto;">
+
+    {# ─────── USER HEAD ─────── #}
+    <div class="admin-profile-head" style="margin-bottom: 16px;">
+        <div class="avatar-lg">
+            {{ (user.first_name or '?')[0] }}{{ (user.last_name or '')[0] if user.last_name else '' }}
+        </div>
+        <div class="info">
+            <h2>{{ user.first_name }} {{ user.last_name or '' }}</h2>
+            <div class="meta">
+                <span class="pid">#{{ user.public_id or '----' }}</span>
+                <span>{{ user.phone_number or '—' }}</span>
+            </div>
+        </div>
+    </div>
+
+    {# ─────── FORM ─────── #}
+    <form method="POST" id="tierForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+
+            {% set current = normalize_tier(current_tier) %}
+
+            <label class="admin-card tier-option {% if current == 'free' %}selected{% endif %}"
+                   style="cursor: pointer; padding: 18px 22px; transition: all 0.2s ease;">
+                <input type="radio" name="tier" value="free" {% if current == 'free' %}checked{% endif %} style="display: none;">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <span style="font-size: 32px;">🔓</span>
+                    <div style="flex: 1;">
+                        <div style="font-size: 16px; font-weight: 700; color: var(--text);">Free</div>
+                        <div style="font-size: 13px; color: var(--text-secondary);">Basic access with limited quotas.</div>
+                    </div>
+                    <span class="admin-pill free">Free</span>
+                </div>
+            </label>
+
+            <label class="admin-card tier-option {% if current == 'premium' %}selected{% endif %}"
+                   style="cursor: pointer; padding: 18px 22px; transition: all 0.2s ease;">
+                <input type="radio" name="tier" value="premium" {% if current == 'premium' %}checked{% endif %} style="display: none;">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <span style="font-size: 32px;">🔑</span>
+                    <div style="flex: 1;">
+                        <div style="font-size: 16px; font-weight: 700; color: var(--text);">Premium</div>
+                        <div style="font-size: 13px; color: var(--text-secondary);">Advanced features, higher quotas, live quiz hosting.</div>
+                    </div>
+                    <span class="admin-pill premium">Premium</span>
+                </div>
+            </label>
+
+            <label class="admin-card tier-option {% if current == 'pro' %}selected{% endif %}"
+                   style="cursor: pointer; padding: 18px 22px; transition: all 0.2s ease;">
+                <input type="radio" name="tier" value="pro" {% if current == 'pro' %}checked{% endif %} style="display: none;">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <span style="font-size: 32px;">⭐</span>
+                    <div style="flex: 1;">
+                        <div style="font-size: 16px; font-weight: 700; color: var(--text);">Pro</div>
+                        <div style="font-size: 13px; color: var(--text-secondary);">Complete access with unlimited features and premium resources.</div>
+                    </div>
+                    <span class="admin-pill pro">Pro</span>
+                </div>
+            </label>
+
+        </div>
+
+        <div style="display: flex; gap: 12px;">
+            <button type="submit" class="admin-btn primary lg" style="flex: 1; justify-content: center;">
+                <i class="fas fa-save"></i> Update tier
+            </button>
+            <a href="{{ url_for('admin_users.user_detail', user_id=user.id) }}"
+               class="admin-btn secondary lg" style="flex: 1; justify-content: center;">
+                <i class="fas fa-arrow-left"></i> Cancel
+            </a>
+        </div>
+    </form>
+
+</div>
+
+<style>
+    .tier-option { transition: all 0.2s ease; }
+    .tier-option:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+    .tier-option.selected { border-color: var(--primary); background: var(--primary-light); box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.10); }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.tier-option').forEach(function (card) {
+        card.addEventListener('click', function () {
+            document.querySelectorAll('.tier-option').forEach(function (c) {
+                c.classList.remove('selected');
+            });
+            this.classList.add('selected');
+            var radio = this.querySelector('input[type="radio"]');
+            if (radio) radio.checked = true;
+        });
+    });
+});
+</script>
+
+{% endblock %}

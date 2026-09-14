@@ -1,0 +1,124 @@
+{# ============================================================
+   templates/dashboard/admin/community/groups_audit.html
+   Chronological log of every admin action on groups.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-history header-icon"></i>{% endblock %}
+{% block admin_title %}Groups Audit{% endblock %}
+{% block admin_subtitle %}
+    Every create, edit, feature, activate, and delete on a group.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_community.groups') }}">Groups</a>
+    <span class="sep">/</span>
+    <span class="current">Audit</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_community.groups') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+<form method="GET" class="admin-toolbar" style="margin-bottom:16px;">
+    <div class="admin-search">
+        <i class="fas fa-search"></i>
+        <input type="text" name="search" value="{{ search or '' }}"
+               data-search-form
+               placeholder="Search by group name, action, or admin…"
+               autocomplete="off" spellcheck="false">
+    </div>
+    <select name="action" class="admin-select" data-autofilter>
+        <option value="">All actions</option>
+        <option value="create"     {% if action_filter == 'create' %}selected{% endif %}>Create</option>
+        <option value="edit"       {% if action_filter == 'edit' %}selected{% endif %}>Edit</option>
+        <option value="activate"   {% if action_filter == 'activate' %}selected{% endif %}>Activate</option>
+        <option value="deactivate" {% if action_filter == 'deactivate' %}selected{% endif %}>Deactivate</option>
+        <option value="feature"    {% if action_filter == 'feature' %}selected{% endif %}>Feature</option>
+        <option value="unfeature"  {% if action_filter == 'unfeature' %}selected{% endif %}>Unfeature</option>
+        <option value="delete"     {% if action_filter == 'delete' %}selected{% endif %}>Delete</option>
+    </select>
+    {% if search or action_filter %}
+        <a href="{{ url_for('admin_community.groups_audit') }}" class="admin-btn secondary">
+            <i class="fas fa-times"></i> Clear
+        </a>
+    {% endif %}
+</form>
+
+{% if logs %}
+<section class="admin-table-wrap">
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th style="white-space:nowrap;">When</th>
+                    <th>Admin</th>
+                    <th>Action</th>
+                    <th class="hide-mobile">Group</th>
+                    <th class="hide-mobile">Changes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in logs %}
+                <tr>
+                    <td style="white-space:nowrap;font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;">
+                        {{ (l.created_at or '')[:16] }}
+                    </td>
+                    <td>
+                        <span style="font-weight:600;font-size:13px;">
+                            {{ l.first_name or 'System' }} {{ l.last_name or '' }}
+                        </span>
+                        {% if l.public_id %}
+                            <div style="font-size:11px;color:var(--text-muted);font-family:monospace;">
+                                #{{ l.public_id }}
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% set tone = 'neutral' %}
+                        {% if l.action in ('feature', 'activate') %}{% set tone = 'green' %}{% endif %}
+                        {% if l.action in ('delete', 'deactivate') %}{% set tone = 'red' %}{% endif %}
+                        {% if l.action == 'edit' %}{% set tone = 'amber' %}{% endif %}
+                        <span class="admin-chip {{ tone }}">
+                            {{ l.action }}
+                        </span>
+                    </td>
+                    <td class="hide-mobile" style="font-size:13px;">
+                        {% if l.group_name %}
+                            {{ l.group_name }}
+                            <div style="font-size:11px;color:var(--text-muted);font-family:monospace;">
+                                #{{ l.group_id }}
+                            </div>
+                        {% else %}
+                            <span style="color:var(--text-muted);">Group #{{ l.group_id }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="hide-mobile" style="font-size:12px;color:var(--text-secondary);
+                            max-width:340px;word-break:break-word;">
+                        {% if l.changes %}
+                            {{ l.changes[:100] }}{% if l.changes|length > 100 %}…{% endif %}
+                        {% else %}
+                            <span style="color:var(--text-muted);">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">📋</span>
+    <h3>No audit entries yet</h3>
+    <p>Every group change made by an admin will appear here.</p>
+</div>
+{% endif %}
+
+{% endblock %}

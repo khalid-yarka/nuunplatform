@@ -1,0 +1,170 @@
+{# ============================================================
+   templates/dashboard/admin/ops/platform_metrics.html
+   Historical platform metrics — daily snapshots.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-chart-bar header-icon"></i>{% endblock %}
+{% block admin_title %}Platform Metrics{% endblock %}
+{% block admin_subtitle %}
+    Daily snapshots from the task runner. Every metric is a row per day.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_platform.index') }}">Platform</a>
+    <span class="sep">/</span>
+    <span class="current">Metrics</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_platform.index') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+<form method="GET" class="admin-toolbar" style="margin-bottom:16px;">
+    <select name="days" class="admin-select" data-autofilter>
+        <option value="7"  {% if days == 7 %}selected{% endif %}>Last 7 days</option>
+        <option value="14" {% if days == 14 %}selected{% endif %}>Last 14 days</option>
+        <option value="30" {% if days == 30 %}selected{% endif %}>Last 30 days</option>
+        <option value="90" {% if days == 90 %}selected{% endif %}>Last 90 days</option>
+    </select>
+</form>
+
+{# ─────── SERIES ─────── #}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+    <section class="admin-card">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-user-plus"></i> Signups</h3>
+        </div>
+        <div class="admin-card-body">
+            <div class="platform-chart-wrap">
+                <canvas id="chartSignups"></canvas>
+            </div>
+        </div>
+    </section>
+
+    <section class="admin-card">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-pencil-alt"></i> Quiz attempts</h3>
+        </div>
+        <div class="admin-card-body">
+            <div class="platform-chart-wrap">
+                <canvas id="chartQuizzes"></canvas>
+            </div>
+        </div>
+    </section>
+
+    <section class="admin-card" style="grid-column:1/-1;">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-bolt"></i> Live quizzes created</h3>
+        </div>
+        <div class="admin-card-body">
+            <div class="platform-chart-wrap">
+                <canvas id="chartLive"></canvas>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+{# ─────── TABLE ─────── #}
+<section class="admin-card" style="margin-top:16px;">
+    <div class="admin-card-head">
+        <h3><i class="fas fa-table"></i> Daily breakdown</h3>
+    </div>
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th style="text-align:right;">Signups</th>
+                    <th style="text-align:right;">Quizzes</th>
+                    <th style="text-align:right;">Live quizzes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set all_dates = {} %}
+                {% for r in signups %}{% set _ = all_dates.update({r.date: True}) %}{% endfor %}
+                {% for r in quizzes %}{% set _ = all_dates.update({r.date: True}) %}{% endfor %}
+                {% for r in live_quizzes %}{% set _ = all_dates.update({r.date: True}) %}{% endfor %}
+                {% for d in all_dates.keys() | sort(reverse=True) %}
+                <tr>
+                    <td style="font-family:monospace;font-size:12px;">{{ d }}</td>
+                    <td style="text-align:right;">
+                        {% for r in signups %}{% if r.date == d %}{{ r.value }}{% endif %}{% endfor %}
+                    </td>
+                    <td style="text-align:right;">
+                        {% for r in quizzes %}{% if r.date == d %}{{ r.value }}{% endif %}{% endfor %}
+                    </td>
+                    <td style="text-align:right;">
+                        {% for r in live_quizzes %}{% if r.date == d %}{{ r.value }}{% endif %}{% endfor %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    'use strict';
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var grid = isDark ? '#1E293B' : '#E2E8F0';
+    var text = isDark ? '#94A3B8' : '#64748B';
+
+    function makeChart(canvasId, labels, data, color) {
+        var el = document.getElementById(canvasId);
+        if (!el) return;
+        new Chart(el.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    borderColor: color,
+                    backgroundColor: color + '20',
+                    fill: true,
+                    tension: 0.35,
+                    borderWidth: 2,
+                    pointRadius: data.length > 20 ? 0 : 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { color: text, font: { size: 10 } }, grid: { color: grid } },
+                    x: { ticks: { color: text, font: { size: 10 }, maxTicksLimit: 10 }, grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    makeChart('chartSignups',
+        {{ signups | map(attribute='date') | list | tojson }},
+        {{ signups | map(attribute='value') | list | tojson }},
+        '#3B82F6');
+
+    makeChart('chartQuizzes',
+        {{ quizzes | map(attribute='date') | list | tojson }},
+        {{ quizzes | map(attribute='value') | list | tojson }},
+        '#10B981');
+
+    makeChart('chartLive',
+        {{ live_quizzes | map(attribute='date') | list | tojson }},
+        {{ live_quizzes | map(attribute='value') | list | tojson }},
+        '#8B5CF6');
+})();
+</script>
+{% endblock %}

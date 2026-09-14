@@ -1,0 +1,76 @@
+{# ============================================================
+   templates/dashboard/admin/ops/scheduled_tasks.html
+   Task runner view — history of daily task runs.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-clock header-icon"></i>{% endblock %}
+{% block admin_title %}Scheduled Tasks{% endblock %}
+{% block admin_subtitle %}
+    History of the daily task runner. The viewer cannot schedule — use cron.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Tasks</span>
+{% endblock %}
+
+{% block admin_content %}
+
+<section class="admin-card">
+    <div class="admin-card-head">
+        <h3><i class="fas fa-list"></i> Recent runs</h3>
+        <span class="hint">Last 50</span>
+    </div>
+    <div>
+        {% if runs %}
+            {% for r in runs %}
+            <div class="task-row">
+                <span class="status-dot {{ r.status }}"></span>
+                <div>
+                    <div class="task-name">{{ r.task_name }}</div>
+                    <div class="task-meta">
+                        <span class="task-cat">{{ r.category or 'general' }}</span>
+                        <span>{{ r.status }}</span>
+                        <span>· {{ r.items_affected or 0 }} items</span>
+                        <span>· {{ r.duration_ms or 0 }}ms</span>
+                        {% if r.error_message %}
+                            <span style="color:#DC2626;">· {{ r.error_message[:60] }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div style="font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;">
+                    {{ (r.started_at or '')[:16] }}
+                </div>
+                <div class="task-actions">
+                    {% if admin_can('tasks.trigger') %}
+                        <button type="button"
+                                class="admin-btn secondary sm"
+                                data-trigger-task="{{ r.task_name }}"
+                                title="Run now">
+                            <i class="fas fa-play"></i>
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px;">
+                No task runs recorded yet.
+            </div>
+        {% endif %}
+    </div>
+</section>
+
+<div style="margin-top:16px;padding:14px 18px;background:var(--background);
+            border-radius:var(--radius-sm);font-size:13px;color:var(--text-secondary);line-height:1.6;">
+    <i class="fas fa-info-circle" style="color:var(--primary);"></i>
+    Scheduling is handled by cron. This page views history and (if you have
+    <code>tasks.trigger</code>) runs a task on demand.
+</div>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/ops.js') }}"></script>
+{% endblock %}

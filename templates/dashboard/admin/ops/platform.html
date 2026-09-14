@@ -1,0 +1,181 @@
+{# ============================================================
+   templates/dashboard/admin/ops/platform.html
+   Live platform monitor — KPIs, series, top lists, feed.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-chart-line header-icon"></i>{% endblock %}
+{% block admin_title %}Platform Monitor{% endblock %}
+{% block admin_subtitle %}
+    Live state of the platform. Refreshes automatically.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Platform</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <span class="platform-live-badge"><span class="pulse"></span> Live</span>
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── KPI STRIP ─────── #}
+<div class="admin-stats" id="platformStats">
+    <div class="admin-stat tone-blue">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-users"></i></span></div>
+        <span class="stat-value" data-stat="users_total">{{ stats.users_total or 0 }}</span>
+        <span class="stat-label">Users</span>
+        <span class="stat-sub">{{ stats.users_today or 0 }} today</span>
+    </div>
+    <div class="admin-stat tone-green">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-pencil-alt"></i></span></div>
+        <span class="stat-value" data-stat="quizzes_today">{{ stats.quizzes_today or 0 }}</span>
+        <span class="stat-label">Quizzes today</span>
+        <span class="stat-sub">{{ stats.quizzes_week or 0 }} this week</span>
+    </div>
+    <div class="admin-stat tone-purple">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-bolt"></i></span></div>
+        <span class="stat-value" data-stat="live_quizzes_active">{{ stats.live_quizzes_active or 0 }}</span>
+        <span class="stat-label">Live quizzes active</span>
+        <span class="stat-sub">{{ stats.live_quizzes_finished_week or 0 }} finished this week</span>
+    </div>
+    <div class="admin-stat tone-amber">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-rocket"></i></span></div>
+        <span class="stat-value" data-stat="upgrades_pending">{{ stats.upgrades_pending or 0 }}</span>
+        <span class="stat-label">Pending upgrades</span>
+        <span class="stat-sub">{{ stats.upgrades_approved_month or 0 }} approved this month</span>
+    </div>
+    <div class="admin-stat tone-red">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-exclamation-triangle"></i></span></div>
+        <span class="stat-value" data-stat="errors_open">{{ stats.errors_open or 0 }}</span>
+        <span class="stat-label">Open errors</span>
+        <span class="stat-sub">{{ stats.errors_today or 0 }} today</span>
+    </div>
+    <div class="admin-stat tone-slate">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-file-pdf"></i></span></div>
+        <span class="stat-value" data-stat="pdfs_total">{{ stats.pdfs_total or 0 }}</span>
+        <span class="stat-label">PDFs</span>
+        <span class="stat-sub">{{ stats.groups_total or 0 }} active groups</span>
+    </div>
+</div>
+
+{# ─────── TOP LISTS ─────── #}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;">
+
+    <section class="admin-card">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-fire"></i> Top subjects (30d)</h3>
+        </div>
+        <div class="admin-card-body" style="padding:6px 0;">
+            {% if top_subjects %}
+                {% for s in top_subjects %}
+                <div style="display:flex;justify-content:space-between;padding:10px 20px;
+                            border-bottom:1px solid var(--border-light);">
+                    <span style="font-weight:600;font-size:13px;">
+                        {{ s.subject|capitalize }}
+                    </span>
+                    <span style="font-weight:700;color:var(--primary);font-variant-numeric:tabular-nums;">
+                        {{ s.attempts }} attempts
+                    </span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px;">
+                    No quiz activity yet.
+                </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="admin-card">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-trophy"></i> Top performers (30d)</h3>
+        </div>
+        <div class="admin-card-body" style="padding:6px 0;">
+            {% if top_performers %}
+                {% for p in top_performers %}
+                <div style="display:flex;justify-content:space-between;padding:10px 20px;
+                            border-bottom:1px solid var(--border-light);">
+                    <div>
+                        <div style="font-weight:600;font-size:13px;">{{ p.name }}</div>
+                        <div style="font-size:11px;color:var(--text-muted);font-family:monospace;">
+                            #{{ p.public_id }}
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-weight:700;color:var(--primary);">
+                            {{ p.attempts }} attempts
+                        </div>
+                        <div style="font-size:11px;color:var(--text-muted);">
+                            avg {{ p.avg_score }}%
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px;">
+                    No active users yet.
+                </div>
+            {% endif %}
+        </div>
+    </section>
+
+</div>
+
+{# ─────── ACTIVITY FEED ─────── #}
+<section class="admin-card" style="margin-top:20px;">
+    <div class="admin-card-head">
+        <h3><i class="fas fa-stream"></i> Recent activity</h3>
+        <a href="{{ url_for('admin_activity.index') }}"
+           style="font-size:12px;color:var(--primary);text-decoration:none;font-weight:600;">
+            View all <i class="fas fa-arrow-right"></i>
+        </a>
+    </div>
+    <div class="admin-card-body" style="padding:0;">
+        {% if feed %}
+            {% for f in feed[:20] %}
+            <div class="activity-item">
+                <span class="dot {{ f.color or 'info' }}"></span>
+                <div class="body">
+                    <div class="title">{{ f.title|safe }}</div>
+                    <div class="meta">
+                        <span>{{ f.subtitle }}</span>
+                        <span>{{ (f.timestamp or '')[:16] }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px;">
+                No recent activity.
+            </div>
+        {% endif %}
+    </div>
+</section>
+
+{% endblock %}
+
+{% block admin_js %}
+<script>
+(function () {
+    'use strict';
+    function refresh() {
+        fetch('{{ url_for("admin_platform.api_stats") }}', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+            if (!data) return;
+            Object.keys(data).forEach(function (key) {
+                var el = document.querySelector('[data-stat="' + key + '"]');
+                if (el) el.textContent = data[key];
+            });
+        })
+        .catch(function () {});
+    }
+    setInterval(refresh, 30000);
+})();
+</script>
+{% endblock %}

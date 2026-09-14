@@ -1,0 +1,280 @@
+/* ============================================================
+   static/css/admin/revenue.css
+   Styles for templates/dashboard/admin/revenue/*.html
+     - upgrades.html
+     - upgrade_detail.html
+     - discounts.html
+     - discount_form.html
+     - revenue.html
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   REVENUE BREAKDOWN BARS
+   ------------------------------------------------------------ */
+.rev-bar-row {
+    margin-bottom: 16px;
+}
+.rev-bar-row:last-child { margin-bottom: 0; }
+.rev-bar-row .rev-bar-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    margin-bottom: 5px;
+}
+.rev-bar-row .rev-bar-label {
+    font-weight: 600;
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.rev-bar-row .rev-bar-value {
+    font-weight: 700;
+    color: var(--primary);
+    font-variant-numeric: tabular-nums;
+}
+.rev-bar-row .rev-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--background);
+    border-radius: 10px;
+    overflow: hidden;
+}
+.rev-bar-row .rev-bar .fill {
+    height: 100%;
+    border-radius: 10px;
+    background: var(--primary);
+    transition: width 0.5s ease;
+}
+.rev-bar-row .rev-bar .fill.purple {
+    background: #8B5CF6;
+}
+.rev-bar-row .rev-bar-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* ------------------------------------------------------------
+   UPGRADE DETAIL STATUS BANNERS
+   ------------------------------------------------------------ */
+.rev-status-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 20px;
+    border-radius: var(--radius);
+    margin-bottom: 18px;
+    border: 1px solid transparent;
+    font-size: 13px;
+    line-height: 1.6;
+}
+.rev-status-banner .rsb-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+.rev-status-banner .rsb-body { flex: 1; min-width: 0; }
+.rev-status-banner .rsb-title {
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+.rev-status-banner .rsb-sub {
+    margin-top: 3px;
+}
+
+.rev-status-banner.pending {
+    background: #FFFBEB;
+    border-color: #FDE68A;
+    border-left: 4px solid #F59E0B;
+    color: #92400E;
+}
+.rev-status-banner.approved {
+    background: #ECFDF5;
+    border-color: #A7F3D0;
+    border-left: 4px solid #10B981;
+    color: #065F46;
+}
+.rev-status-banner.rejected {
+    background: #FEF2F2;
+    border-color: #FCA5A5;
+    border-left: 4px solid #EF4444;
+    color: #991B1B;
+}
+.rev-status-banner.cancelled {
+    background: var(--background);
+    border-color: var(--border);
+    border-left: 4px solid var(--text-muted);
+    color: var(--text-secondary);
+}
+
+/* ------------------------------------------------------------
+   UPGRADE DETAIL — REQUESTER CARD
+   ------------------------------------------------------------ */
+.rev-requester {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.rev-requester .rv-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+    flex-shrink: 0;
+    text-transform: uppercase;
+}
+.rev-requester .rv-body {
+    flex: 1;
+    min-width: 200px;
+}
+.rev-requester .rv-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.3;
+}
+.rev-requester .rv-meta {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 3px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+/* ------------------------------------------------------------
+   UPGRADE DETAIL — ORDER GRID
+   ------------------------------------------------------------ */
+.rev-order-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 24px;
+}
+.rev-order-item .roi-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.rev-order-item .roi-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    margin-top: 3px;
+    font-variant-numeric: tabular-nums;
+}
+.rev-order-item .roi-value.discount {
+    color: #10B981;
+}
+.rev-order-total {
+    grid-column: 1 / -1;
+    background: #F0FDF4;
+    border: 1px solid #A7F3D0;
+    border-radius: var(--radius-sm);
+    padding: 14px 18px;
+    margin-top: 6px;
+}
+.rev-order-total .roi-label {
+    color: #065F46;
+}
+.rev-order-total .roi-value {
+    font-size: 22px;
+    font-weight: 800;
+    color: #065F46;
+}
+
+/* ------------------------------------------------------------
+   DISCOUNT CODE CHIP
+   ------------------------------------------------------------ */
+.rev-code {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primary);
+    background: var(--primary-light);
+    padding: 2px 10px;
+    border-radius: 8px;
+    letter-spacing: 0.5px;
+    display: inline-block;
+}
+
+/* ------------------------------------------------------------
+   DISCOUNT STATUS CHIPS
+   ------------------------------------------------------------ */
+.rev-status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+.rev-status-chip.active    { background: #ECFDF5; color: #065F46; }
+.rev-status-chip.expired   { background: #FFFBEB; color: #92400E; }
+.rev-status-chip.exhausted { background: #FEF2F2; color: #991B1B; }
+.rev-status-chip.inactive  { background: var(--background); color: var(--text-muted); }
+
+/* ------------------------------------------------------------
+   USER CELL (upgrades table)
+   ------------------------------------------------------------ */
+.rev-user-cell .ru-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text);
+}
+.rev-user-cell .ru-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* ------------------------------------------------------------
+   RESPONSIVE
+   ------------------------------------------------------------ */
+@media (max-width: 640px) {
+    .rev-order-grid {
+        grid-template-columns: 1fr;
+    }
+    .rev-order-total {
+        grid-column: 1;
+    }
+    .rev-requester {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+/* ------------------------------------------------------------
+   DARK MODE
+   ------------------------------------------------------------ */
+[data-theme="dark"] .rev-status-banner.pending   { background: #3A2E1A; border-color: #92400E; color: #FCD34D; }
+[data-theme="dark"] .rev-status-banner.approved  { background: #1A3A2E; border-color: #10B981; color: #A7F3D0; }
+[data-theme="dark"] .rev-status-banner.rejected  { background: #3A1A1A; border-color: #EF4444; color: #FECACA; }
+[data-theme="dark"] .rev-status-banner.cancelled { background: var(--surface-alt); }
+
+[data-theme="dark"] .rev-order-total {
+    background: #1A3A2E;
+    border-color: #10B981;
+}
+[data-theme="dark"] .rev-order-total .roi-label,
+[data-theme="dark"] .rev-order-total .roi-value { color: #A7F3D0; }
+
+[data-theme="dark"] .rev-status-chip.active    { background: #1A3A2E; color: #34D399; }
+[data-theme="dark"] .rev-status-chip.expired   { background: #3A2E1A; color: #FBBF24; }
+[data-theme="dark"] .rev-status-chip.exhausted { background: #3A1A1A; color: #F87171; }
+[data-theme="dark"] .rev-status-chip.inactive  { background: var(--surface-alt); }

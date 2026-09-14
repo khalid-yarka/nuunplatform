@@ -1,0 +1,136 @@
+{# ============================================================
+   templates/dashboard/admin/community/achievement_edit.html
+   Create or edit a single achievement.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% set is_new = (achievement is none) %}
+
+{% block admin_title_icon %}<i class="fas fa-trophy header-icon"></i>{% endblock %}
+{% block admin_title %}{{ 'New Achievement' if is_new else 'Edit Achievement' }}{% endblock %}
+{% block admin_subtitle %}
+    {% if is_new %}Create a new unlockable badge.
+    {% else %}Achievement #{{ achievement.id }} · {{ achievement.name }}{% endif %}
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_community.achievements') }}">Achievements</a>
+    <span class="sep">/</span>
+    <span class="current">{{ 'New' if is_new else ('#' ~ achievement.id) }}</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_community.achievements') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+<div style="max-width:640px;margin:0 auto;">
+
+    <form method="POST" id="achievementForm"
+          action="{{ url_for('admin_community.achievement_new') if is_new else url_for('admin_community.achievement_edit', achievement_id=achievement.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <section class="admin-card">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-id-badge"></i> Identity</h3>
+            </div>
+            <div class="admin-card-body">
+
+                <div class="admin-form-group">
+                    <label>Name <span style="color:var(--primary);">*</span></label>
+                    <input type="text" name="name" class="admin-input" required
+                           value="{{ achievement.name if achievement else '' }}"
+                           placeholder="e.g. First Quiz"
+                           maxlength="100">
+                </div>
+
+                <div class="admin-form-group">
+                    <label>Description</label>
+                    <textarea name="description" class="admin-textarea" rows="3"
+                              placeholder="e.g. Complete your first quiz."
+                              maxlength="300">{{ achievement.description if achievement else '' }}</textarea>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                    <div class="admin-form-group">
+                        <label>Icon (emoji)</label>
+                        <input type="text" name="icon" class="admin-input"
+                               value="{{ achievement.icon if achievement else '🏆' }}"
+                               placeholder="🏆" maxlength="4"
+                               style="font-size:22px;text-align:center;">
+                    </div>
+                    <div class="admin-form-group">
+                        <label>Tier required</label>
+                        <select name="tier_required" class="admin-select">
+                            <option value="free"    {% if not achievement or achievement.tier_required == 'free' %}selected{% endif %}>Free</option>
+                            <option value="premium" {% if achievement and achievement.tier_required == 'premium' %}selected{% endif %}>Premium</option>
+                            <option value="pro"     {% if achievement and achievement.tier_required == 'pro' %}selected{% endif %}>Pro</option>
+                        </select>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <section class="admin-card" style="margin-top:16px;">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-key"></i> Unlock Condition</h3>
+                <span class="hint">How the user earns it</span>
+            </div>
+            <div class="admin-card-body">
+                <div class="admin-form-group">
+                    <label>Condition key</label>
+                    <input type="text" name="unlock_condition" class="admin-input"
+                           value="{{ achievement.unlock_condition if achievement else '' }}"
+                           placeholder="e.g. complete_quiz_count >= 1"
+                           maxlength="200">
+                    <div class="hint">
+                        Known conditions: <code>complete_quiz_count >= N</code>,
+                        <code>perfect_quiz</code>, <code>live_quiz_joined</code>,
+                        <code>achievement_count >= N</code>, <code>premium_resource_access</code>.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div style="display:flex;gap:10px;margin-top:20px;">
+            <a href="{{ url_for('admin_community.achievements') }}" class="admin-btn secondary lg" style="flex:1;justify-content:center;">
+                Cancel
+            </a>
+            <button type="submit" class="admin-btn primary lg" style="flex:1;justify-content:center;">
+                <i class="fas fa-save"></i> {{ 'Create' if is_new else 'Save' }}
+            </button>
+        </div>
+    </form>
+
+    {% if not is_new %}
+    <section class="admin-card" style="margin-top:20px;border-color:#FCA5A5;">
+        <div class="admin-card-head" style="background:#FEF2F2;">
+            <h3 style="color:#991B1B;"><i class="fas fa-exclamation-triangle"></i> Danger zone</h3>
+        </div>
+        <div class="admin-card-body">
+            <p style="font-size:13px;color:#991B1B;margin:0 0 14px;line-height:1.5;">
+                Deleting this achievement will also remove it from every user who unlocked it.
+                This cannot be undone.
+            </p>
+            <button type="button"
+                    class="admin-btn danger"
+                    data-delete-achievement="{{ achievement.id }}"
+                    data-achievement-name="{{ achievement.name }}">
+                <i class="fas fa-trash"></i> Delete achievement
+            </button>
+        </div>
+    </section>
+    {% endif %}
+
+</div>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/community.js') }}"></script>
+{% endblock %}

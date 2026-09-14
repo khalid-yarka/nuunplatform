@@ -1,0 +1,97 @@
+{# ============================================================
+   templates/dashboard/admin/content/pdf_pending.html
+   Telegram bot intake queue — files awaiting fulfilment.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-inbox header-icon"></i>{% endblock %}
+{% block admin_title %}Pending PDF Intake{% endblock %}
+{% block admin_subtitle %}
+    Files uploaded via the Telegram bot, waiting for review and metadata.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_content.pdfs') }}">PDF Library</a>
+    <span class="sep">/</span>
+    <span class="current">Pending</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_content.pdfs') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back to Library
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+{% if pending_list %}
+<section class="admin-table-wrap">
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th style="width:60px;">ID</th>
+                    <th>Filename</th>
+                    <th class="hide-mobile">Uploaded By</th>
+                    <th class="hide-mobile">Uploaded At</th>
+                    <th style="text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in pending_list %}
+                <tr>
+                    <td><code>#{{ p.id }}</code></td>
+                    <td>
+                        <div style="font-weight:600;color:var(--text);word-break:break-all;">
+                            {{ p.filename or 'unknown.pdf' }}
+                        </div>
+                    </td>
+                    <td class="hide-mobile" style="font-size:12px;color:var(--text-secondary);">
+                        {% if p.uploaded_by %}TG #{{ p.uploaded_by }}{% else %}—{% endif %}
+                    </td>
+                    <td class="hide-mobile" style="font-size:12px;color:var(--text-secondary);">
+                        {{ (p.uploaded_at or '')[:16] }}
+                    </td>
+                    <td style="text-align:right;">
+                        {% if admin_can('pdfs.intake') %}
+                            <a href="{{ url_for('pdf_admin.process_pending', pending_id=p.id) }}"
+                               class="admin-btn primary sm">
+                                <i class="fas fa-check"></i> Process
+                            </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% if total_pages > 1 %}
+<div class="admin-pagination">
+    <a href="{{ url_for('pdf_admin.pending_list', page=page-1) }}"
+       class="{% if page == 1 %}disabled{% endif %}">
+        <i class="fas fa-angle-left"></i>
+    </a>
+    <span class="active">{{ page }}</span>
+    <span style="color:var(--text-muted);">of {{ total_pages }}</span>
+    <a href="{{ url_for('pdf_admin.pending_list', page=page+1) }}"
+       class="{% if page == total_pages %}disabled{% endif %}">
+        <i class="fas fa-angle-right"></i>
+    </a>
+</div>
+{% endif %}
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">🎉</span>
+    <h3>Nothing pending</h3>
+    <p>The intake queue is empty. New Telegram uploads will appear here.</p>
+    <a href="{{ url_for('admin_content.pdfs') }}" class="admin-btn primary">
+        <i class="fas fa-arrow-left"></i> Back to Library
+    </a>
+</div>
+{% endif %}
+
+{% endblock %}

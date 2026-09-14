@@ -1,0 +1,144 @@
+{# ============================================================
+   templates/dashboard/admin/system/admin_broadcast.html
+   Broadcast a notification to every admin.
+   Form posts to admin_platform.broadcast.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-satellite-dish header-icon"></i>{% endblock %}
+{% block admin_title %}Broadcast to Admins{% endblock %}
+{% block admin_subtitle %}
+    Sends an in-app notification to every admin except yourself.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Broadcast</span>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="sys-page">
+
+    <div class="sys-banner info">
+        <i class="fas fa-info-circle"></i>
+        <div>
+            Broadcasts go to every admin on the platform. The sender (you) is skipped to
+            avoid duplicating your own message back to yourself.
+        </div>
+    </div>
+
+    <form method="POST" id="broadcastForm"
+          action="{{ url_for('admin_platform.broadcast') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <section class="admin-card">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-satellite-dish"></i> Compose broadcast</h3>
+            </div>
+            <div class="admin-card-body">
+
+                <div class="admin-form-group">
+                    <label>Title <span style="color:var(--primary);">*</span></label>
+                    <input type="text" name="title" class="admin-input"
+                           required maxlength="100"
+                           placeholder="e.g. Platform update: new admin tools">
+                    <div class="hint">Short headline visible on the notification card.</div>
+                </div>
+
+                <div class="admin-form-group">
+                    <label>Message <span style="color:var(--primary);">*</span></label>
+                    <textarea name="body" class="admin-textarea" rows="5"
+                              required maxlength="500"
+                              placeholder="Write the message for your fellow admins…"></textarea>
+                    <div class="hint">Up to 500 characters.</div>
+                </div>
+
+                <div class="admin-form-group">
+                    <label>Link (optional)</label>
+                    <input type="text" name="link" class="admin-input"
+                           maxlength="200"
+                           value="/admin/platform"
+                           placeholder="/admin/platform">
+                    <div class="hint">
+                        Where admins land when they tap the notification.
+                        Defaults to <code>/admin/platform</code>.
+                    </div>
+                </div>
+
+                <div class="admin-form-group" style="margin-bottom:0;">
+                    <label>Icon (emoji)</label>
+                    <input type="text" name="icon" class="admin-input sys-emoji-input"
+                           maxlength="4" value="📡">
+                </div>
+
+            </div>
+        </section>
+
+        <section class="admin-card" style="margin-top:16px;">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-eye"></i> Preview</h3>
+                <span class="hint">How admins will see it</span>
+            </div>
+            <div class="admin-card-body">
+                <div class="sys-preview">
+                    <span class="preview-icon" id="previewIcon">📡</span>
+                    <div class="preview-body">
+                        <div class="preview-title" id="previewTitle">Broadcast title</div>
+                        <div class="preview-text" id="previewBody">Your message preview appears here.</div>
+                        <div class="preview-link" id="previewLink">→ /admin/platform</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="sys-actions">
+            <a href="{{ url_for('admin_platform.index') }}" class="admin-btn secondary lg">
+                Cancel
+            </a>
+            <button type="submit" class="admin-btn primary lg primary-2x">
+                <i class="fas fa-satellite-dish"></i> Send broadcast
+            </button>
+        </div>
+
+    </form>
+
+</div>
+
+{% endblock %}
+
+{% block admin_js %}
+<script>
+(function () {
+    'use strict';
+
+    var titleInput = document.querySelector('input[name="title"]');
+    var bodyInput = document.querySelector('textarea[name="body"]');
+    var iconInput = document.querySelector('input[name="icon"]');
+    var linkInput = document.querySelector('input[name="link"]');
+
+    var previewIcon = document.getElementById('previewIcon');
+    var previewTitle = document.getElementById('previewTitle');
+    var previewBody = document.getElementById('previewBody');
+    var previewLink = document.getElementById('previewLink');
+
+    function update() {
+        previewIcon.textContent = iconInput.value || '📡';
+        previewTitle.textContent = titleInput.value || 'Broadcast title';
+        previewBody.textContent = bodyInput.value || 'Your message preview appears here.';
+        previewLink.textContent = '→ ' + (linkInput.value || '/admin/platform');
+    }
+
+    [titleInput, bodyInput, iconInput, linkInput].forEach(function (el) {
+        el.addEventListener('input', update);
+    });
+    update();
+
+    document.getElementById('broadcastForm').addEventListener('submit', function (e) {
+        if (!window.confirm('Send this broadcast to every admin?')) {
+            e.preventDefault();
+        }
+    });
+})();
+</script>
+{% endblock %}

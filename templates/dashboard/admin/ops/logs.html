@@ -1,0 +1,62 @@
+{# ============================================================
+   templates/dashboard/admin/ops/logs.html
+   Log file viewer — level filter, search, auto-refresh.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-file-alt header-icon"></i>{% endblock %}
+{% block admin_title %}Logs{% endblock %}
+{% block admin_subtitle %}
+    Tail of the application, worker, and error logs.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Logs</span>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="logs-layout">
+
+    <aside class="logs-sidebar" id="logSidebar">
+        {% for f in log_files %}
+            <button type="button"
+                    class="file-btn {% if loop.first %}active{% endif %}"
+                    data-file="{{ f.name }}">
+                <span>{{ f.name }}</span>
+                <span class="size">{{ f.size_kb }} KB</span>
+            </button>
+        {% endfor %}
+    </aside>
+
+    <div>
+        <div class="admin-toolbar" style="margin-bottom:10px;">
+            <select id="logLevelFilter" class="admin-select">
+                <option value="">All levels</option>
+                <option value="ERROR">ERROR</option>
+                <option value="WARNING">WARNING</option>
+                <option value="INFO">INFO</option>
+                <option value="DEBUG">DEBUG</option>
+            </select>
+
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+                <input type="checkbox" id="logAutoRefresh" style="accent-color:var(--primary);">
+                Auto-refresh (5s)
+            </label>
+
+            <span class="toolbar-meta" id="logMeta">Click a file to load.</span>
+        </div>
+
+        <div class="logs-viewer" id="logViewer">
+            <span class="line INFO">Select a log file from the sidebar.</span>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/ops.js') }}"></script>
+{% endblock %}

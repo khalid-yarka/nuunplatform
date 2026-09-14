@@ -158,7 +158,6 @@
                     <span class="nav-badge">⚡</span>
                 </a>
 
-
                 <a href="{{ url_for('focus.index') }}"
                    class="nav-item {% if request.endpoint.startswith('focus.') %}active{% endif %}"
                    data-title="{{ _('nav.focus') }}" title="{{ _('nav.focus') }}">
@@ -166,7 +165,7 @@
                     <span class="nav-text">{{ _('nav.focus') }}</span>
                     {% if not has_focus_access %}<span class="nav-badge">🔒</span>{% endif %}
                 </a>
-              
+
                 <a href="{{ url_for('pdfs.list_pdfs') }}"
                    class="nav-item {% if request.endpoint == 'pdfs.list_pdfs' or request.endpoint == 'pdfs.view_pdf' %}active{% endif %}"
                    data-title="{{ _('nav.pdfs') }}" title="{{ _('nav.pdfs') }}">
@@ -225,13 +224,14 @@
                 <div class="nav-section">
                     <div class="nav-label">{{ _('nav.section.admin') }}</div>
 
-                    <a href="{{ url_for('admin.dashboard') }}"
-                       class="nav-item {% if request.endpoint.startswith('admin.') and not request.endpoint.startswith('admin_errors.') %}active{% endif %}"
+                    <a href="{{ url_for('admin_system.dashboard') }}"
+                       class="nav-item {% if request.endpoint.startswith('admin_') and not request.endpoint.startswith('admin_errors.') %}active{% endif %}"
                        data-title="{{ _('nav.admin_panel') }}" title="{{ _('nav.admin_panel') }}">
                         <span class="nav-icon"><i class="fas fa-shield-alt"></i></span>
                         <span class="nav-text">{{ _('nav.admin_panel') }}</span>
                     </a>
 
+                    {% if admin_can('upgrades.view') %}
                     <a href="{{ url_for('upgrade.admin_list') }}"
                        class="nav-item {% if request.path.startswith('/upgrade/admin/upgrade-requests') %}active{% endif %}"
                        data-title="{{ _('nav.upgrade_requests') }}" title="{{ _('nav.upgrade_requests') }}">
@@ -241,14 +241,18 @@
                             <span class="nav-badge danger">{{ pending_upgrades_count }}</span>
                         {% endif %}
                     </a>
+                    {% endif %}
 
+                    {% if admin_can('discounts.view') %}
                     <a href="{{ url_for('upgrade.admin_discounts') }}"
                        class="nav-item {% if request.path.startswith('/upgrade/admin/discounts') %}active{% endif %}"
                        data-title="{{ _('nav.discount_codes') }}" title="{{ _('nav.discount_codes') }}">
                         <span class="nav-icon"><i class="fas fa-tags"></i></span>
                         <span class="nav-text">{{ _('nav.discount_codes') }}</span>
                     </a>
+                    {% endif %}
 
+                    {% if admin_can('errors.view') %}
                     <a href="{{ url_for('admin_errors.index') }}"
                        class="nav-item {% if request.endpoint.startswith('admin_errors.') %}active{% endif %}"
                        data-title="{{ _('nav.error_logs') }}" title="{{ _('nav.error_logs') }}">
@@ -256,6 +260,7 @@
                         <span class="nav-text">{{ _('nav.error_logs') }}</span>
                         <span class="nav-badge danger">!</span>
                     </a>
+                    {% endif %}
                 </div>
             {% endif %}
         </nav>

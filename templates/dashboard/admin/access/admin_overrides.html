@@ -1,0 +1,334 @@
+{# ============================================================
+   templates/dashboard/admin/access/admin_overrides.html
+   Per-admin tri-state override editor.
+   Each capability has three states per admin:
+     - Follow global (inherit)
+     - Force ON (grant, regardless of global)
+     - Force OFF (revoke, regardless of global)
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-user-cog header-icon"></i>{% endblock %}
+{% block admin_title %}
+    {% if admin %}{{ admin.first_name }} {{ admin.last_name or '' }}{% else %}Permissions{% endif %}
+{% endblock %}
+{% block admin_subtitle %}
+    Configure what this admin can do. Changes take effect on their next request.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_access.roster') }}">Admins</a>
+    <span class="sep">/</span>
+    <span class="current">{{ admin.first_name if admin else 'Permissions' }}</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_access.roster') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back to roster
+    </a>
+    <button type="button" id="clearOverridesBtn" class="admin-btn danger">
+        <i class="fas fa-eraser"></i> Clear all overrides
+    </button>
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── ADMIN PROFILE HEAD ─────── #}
+<div class="admin-profile-head">
+    <div class="avatar-lg">
+        {{ (admin.first_name or '?')[0] }}{{ (admin.last_name or '')[0] if admin.last_name else '' }}
+    </div>
+    <div class="info">
+        <h2>
+            {{ admin.first_name }} {{ admin.middle_name or '' }} {{ admin.last_name or '' }}
+        </h2>
+        <div class="meta">
+            <span class="pid">#{{ admin.public_id or '----' }}</span>
+            <span>📞 {{ admin.phone_number or '—' }}</span>
+            {% if admin.school %}<span>🏫 {{ admin.school }}</span>{% endif %}
+        </div>
+    </div>
+    <div style="text-align: right;">
+        <div style="font-size: 12px; color: var(--text-secondary); font-weight: 600;">
+            Override summary
+        </div>
+        <div style="font-size: 22px; font-weight: 800; color: var(--primary); margin-top: 2px;">
+            {{ summary.override_count }}
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+            {{ summary.effective_count }} effective
+            · {{ summary.default_count }} default
+        </div>
+    </div>
+</div>
+
+{# ─────── SUMMARY TILES ─────── #}
+<div class="admin-stats" style="margin-top: 16px;">
+    <div class="admin-stat tone-green">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-plus-circle"></i></span>
+        </div>
+        <span class="stat-value">{{ summary.grants_count }}</span>
+        <span class="stat-label">Force ON</span>
+        <span class="stat-sub">extended beyond default</span>
+    </div>
+    <div class="admin-stat tone-red">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-minus-circle"></i></span>
+        </div>
+        <span class="stat-value">{{ summary.revokes_count }}</span>
+        <span class="stat-label">Force OFF</span>
+        <span class="stat-sub">restricted below default</span>
+    </div>
+    <div class="admin-stat tone-blue">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-check-circle"></i></span>
+        </div>
+        <span class="stat-value">{{ summary.effective_count }}</span>
+        <span class="stat-label">Effective</span>
+        <span class="stat-sub">of {{ summary.total_writable }} writable</span>
+    </div>
+    <div class="admin-stat tone-slate">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-layer-group"></i></span>
+        </div>
+        <span class="stat-value">{{ summary.default_count }}</span>
+        <span class="stat-label">Global default</span>
+        <span class="stat-sub">current baseline</span>
+    </div>
+</div>
+
+{# ─────── TOOLBAR ─────── #}
+<div class="perm-toolbar">
+    <div class="search-wrap">
+        <i class="fas fa-search"></i>
+        <input type="text" id="permSearch"
+               placeholder="Search capabilities…"
+               autocomplete="off" spellcheck="false">
+    </div>
+    <div class="toolbar-meta">
+        Overrides are <strong>absolute</strong> — they win over the global default
+    </div>
+</div>
+
+{# ─────── FORM ─────── #}
+<form id="overrideForm" method="POST"
+      action="{{ url_for('admin_access.admin_overrides', admin_id=admin.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    {% for group in groups %}
+    <section class="perm-group" data-group-name="{{ group.name|lower }}">
+        <header class="perm-group-head">
+            <h3>{{ group.name }}</h3>
+            <span class="perm-group-count">
+                {{ group.capabilities|length }}
+                capabilit{{ 'y' if group.capabilities|length == 1 else 'ies' }}
+            </span>
+        </header>
+
+        <div class="perm-group-body">
+            {% for cap in group.capabilities %}
+                {% set override_class = '' %}
+                {% if cap.has_override %}
+                    {% if cap.override %}
+                        {% set override_class = 'has-override override-on' %}
+                    {% else %}
+                        {% set override_class = 'has-override override-off' %}
+                    {% endif %}
+                {% endif %}
+
+                <div class="perm-row tri {{ override_class }} {% if cap.reserved %}reserved{% endif %}"
+                     data-cap-key="{{ cap.key }}"
+                     data-searchable="{{ cap.label|lower }} {{ cap.description|lower }}">
+
+                    <div class="perm-row-text">
+                        <span class="perm-label">{{ cap.label }}</span>
+                        {% if cap.description %}
+                            <span class="perm-desc">{{ cap.description }}</span>
+                        {% endif %}
+                    </div>
+
+                    {% if cap.reserved %}
+                        <div class="perm-row-meta">
+                            <span class="perm-reserved">
+                                <i class="fas fa-lock"></i> Reserved
+                            </span>
+                        </div>
+                    {% else %}
+                        {% set state = 'inherit' if cap.override is none else ('on' if cap.override else 'off') %}
+                        <fieldset class="perm-state">
+                            <label class="perm-radio inherit {% if state == 'inherit' %}active{% endif %}">
+                                <input type="radio"
+                                       name="cap__{{ cap.key }}"
+                                       value="inherit"
+                                       data-cap="{{ cap.key }}"
+                                       {% if state == 'inherit' %}checked{% endif %}>
+                                <span class="dot"></span>
+                                <span class="txt">
+                                    Follow global
+                                    <span class="global-hint">
+                                        ({{ 'ON' if cap.global_enabled else 'OFF' }})
+                                    </span>
+                                </span>
+                            </label>
+
+                            <label class="perm-radio on {% if state == 'on' %}active{% endif %}">
+                                <input type="radio"
+                                       name="cap__{{ cap.key }}"
+                                       value="on"
+                                       data-cap="{{ cap.key }}"
+                                       {% if state == 'on' %}checked{% endif %}>
+                                <span class="dot"></span>
+                                <span class="txt">Force ON</span>
+                            </label>
+
+                            <label class="perm-radio off {% if state == 'off' %}active{% endif %}">
+                                <input type="radio"
+                                       name="cap__{{ cap.key }}"
+                                       value="off"
+                                       data-cap="{{ cap.key }}"
+                                       {% if state == 'off' %}checked{% endif %}>
+                                <span class="dot"></span>
+                                <span class="txt">Force OFF</span>
+                            </label>
+                        </fieldset>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+
+    {# ─────── FLOATING SAVE BAR ─────── #}
+    <div class="admin-dirty-bar" id="overrideDirtyBar">
+        <span class="dirty-text">
+            <span class="count">0</span> change<span class="plural">s</span> pending
+        </span>
+        <div class="dirty-actions">
+            <button type="button" class="admin-btn secondary" data-act="discard">Discard</button>
+            <button type="button" class="admin-btn primary" data-act="save">
+                <i class="fas fa-save"></i> Save overrides
+            </button>
+        </div>
+    </div>
+</form>
+
+{# ─────── RECENT CHANGES TIMELINE ─────── #}
+<section class="admin-card" style="margin-top: 20px;">
+    <div class="admin-card-head">
+        <h3><i class="fas fa-history"></i> Recent changes for this admin</h3>
+        <span class="hint">Last 10</span>
+    </div>
+    <div class="admin-card-body">
+        {% if recent %}
+            <div class="perm-timeline">
+                {% for item in recent %}
+                <div class="perm-timeline-item">
+                    <div class="when">
+                        {{ item.created_at[:16] if item.created_at else '' }}
+                    </div>
+                    <div class="what">
+                        <strong>{{ item.actor_first_name or 'System' }} {{ item.actor_last_name or '' }}</strong>
+                        — {{ item.action }}
+                        {% if item.after_value %}
+                            {% set parsed = item.after_value %}
+                            <em style="color: var(--text-secondary); font-size: 12px;">
+                                ({{ parsed }})
+                            </em>
+                        {% endif %}
+                        {% if item.note %}
+                            <em style="color: var(--text-secondary); font-size: 12px;">
+                                — "{{ item.note }}"
+                            </em>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="perm-timeline-empty">
+                No changes recorded yet.
+            </div>
+        {% endif %}
+    </div>
+</section>
+
+{# ─────── CLEAR OVERRIDES CONFIRMATION MODAL ─────── #}
+<div class="admin-modal-backdrop" id="clearOverridesModal">
+    <div class="admin-modal">
+        <div class="admin-modal-head">
+            <h3>⚠️ Clear all overrides for {{ admin.first_name }}?</h3>
+            <div class="sub">
+                This removes every per-admin override for this account. They will
+                return to the global defaults.
+            </div>
+        </div>
+        <div class="admin-modal-body">
+            <p style="margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                This action is irreversible from the UI. The audit trail will record
+                the change. Continue?
+            </p>
+        </div>
+        <div class="admin-modal-actions">
+            <button type="button" class="admin-btn secondary"
+                    onclick="document.getElementById('clearOverridesModal').classList.remove('is-open')">
+                Cancel
+            </button>
+            <form method="POST"
+                  action="{{ url_for('admin_access.admin_overrides_clear', admin_id=admin.id) }}"
+                  style="display: inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="admin-btn danger">
+                    <i class="fas fa-eraser"></i> Clear overrides
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/access.js') }}"></script>
+<script>
+(function () {
+    'use strict';
+
+    // Init dirty form tracking
+    var form = document.getElementById('overrideForm');
+    if (form) {
+        AdminCore.initDirtyForm(form, {
+            barId: 'overrideDirtyBar',
+        });
+    }
+
+    // Clear overrides confirmation modal
+    var clearBtn = document.getElementById('clearOverridesBtn');
+    var clearModal = document.getElementById('clearOverridesModal');
+    if (clearBtn && clearModal) {
+        clearBtn.addEventListener('click', function () {
+            clearModal.classList.add('is-open');
+        });
+        clearModal.addEventListener('click', function (e) {
+            if (e.target === clearModal) clearModal.classList.remove('is-open');
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') clearModal.classList.remove('is-open');
+        });
+    }
+
+    // Plural fix for the dirty count
+    if (form) {
+        form.addEventListener('input', function () {
+            var count = document.querySelector('#overrideDirtyBar .count');
+            var pluralEl = document.querySelector('#overrideDirtyBar .plural');
+            if (count && pluralEl) {
+                var n = parseInt(count.textContent, 10) || 0;
+                pluralEl.textContent = (n === 1) ? '' : 's';
+            }
+        }, true);
+    }
+})();
+</script>
+{% endblock %}

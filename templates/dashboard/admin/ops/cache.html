@@ -1,0 +1,91 @@
+{# ============================================================
+   templates/dashboard/admin/ops/cache.html
+   Local cache viewer.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-bolt header-icon"></i>{% endblock %}
+{% block admin_title %}Cache{% endblock %}
+{% block admin_subtitle %}
+    Process-local LRU cache. Single-worker deployment, so this is authoritative.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Cache</span>
+{% endblock %}
+
+{% block admin_actions %}
+    {% if admin_can('cache.clear') %}
+        <button type="button" class="admin-btn danger" id="clearCacheBtn">
+            <i class="fas fa-broom"></i> Clear cache
+        </button>
+    {% endif %}
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="cache-metric-grid">
+    <div class="cache-metric">
+        <div class="num primary">{{ cache.size or 0 }}</div>
+        <div class="lbl">Entries</div>
+    </div>
+    <div class="cache-metric">
+        <div class="num green">{{ cache.hit_ratio_pct or 0 }}%</div>
+        <div class="lbl">Hit ratio</div>
+    </div>
+    <div class="cache-metric">
+        <div class="num">{{ cache.hits or 0 }}</div>
+        <div class="lbl">Hits</div>
+    </div>
+    <div class="cache-metric">
+        <div class="num">{{ cache.misses or 0 }}</div>
+        <div class="lbl">Misses</div>
+    </div>
+    <div class="cache-metric">
+        <div class="num">{{ cache.max_size or 0 }}</div>
+        <div class="lbl">Max size</div>
+    </div>
+    <div class="cache-metric">
+        <div class="num">{{ cache.used_pct or 0 }}%</div>
+        <div class="lbl">Capacity used</div>
+    </div>
+</div>
+
+<section class="admin-card">
+    <div class="admin-card-head">
+        <h3><i class="fas fa-folder-tree"></i> Top namespaces</h3>
+    </div>
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Namespace</th>
+                    <th style="text-align:right;">Entries</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if namespaces %}
+                    {% for n in namespaces %}
+                    <tr>
+                        <td style="font-family:monospace;font-size:12px;">{{ n.name }}</td>
+                        <td style="text-align:right;font-weight:600;">{{ n.count }}</td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="2" style="text-align:center;color:var(--text-muted);padding:24px;">
+                            Cache is empty.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/ops.js') }}"></script>
+{% endblock %}

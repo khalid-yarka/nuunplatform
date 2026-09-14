@@ -1,0 +1,202 @@
+{# ============================================================
+   templates/dashboard/admin/access/admins.html
+   Roster of all admins with permission summaries.
+   Super admin sees this page; regular admins get 404.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-user-shield header-icon"></i>{% endblock %}
+{% block admin_title %}Admins{% endblock %}
+{% block admin_subtitle %}
+    Every account with admin access. Super admin is defined by environment and cannot be edited here.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Admins</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_access.global_permissions') }}" class="admin-btn primary">
+        <i class="fas fa-sliders-h"></i> Global Defaults
+    </a>
+    <a href="{{ url_for('admin_access.audit') }}" class="admin-btn secondary">
+        <i class="fas fa-history"></i> Audit
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── SUMMARY TILES ─────── #}
+<div class="admin-stats">
+    <div class="admin-stat tone-blue">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-users-cog"></i></span>
+        </div>
+        <span class="stat-value">{{ stats.total_admins }}</span>
+        <span class="stat-label">Total admins</span>
+        <span class="stat-sub">is_admin = 1</span>
+    </div>
+    <div class="admin-stat tone-green">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-check-double"></i></span>
+        </div>
+        <span class="stat-value">{{ stats.total_overrides }}</span>
+        <span class="stat-label">Active overrides</span>
+        <span class="stat-sub">across all admins</span>
+    </div>
+    <div class="admin-stat tone-amber">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-user-tag"></i></span>
+        </div>
+        <span class="stat-value">{{ stats.admins_with_overrides }}</span>
+        <span class="stat-label">Customised</span>
+        <span class="stat-sub">differ from default</span>
+    </div>
+    <div class="admin-stat tone-purple">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-shield-alt"></i></span>
+        </div>
+        <span class="stat-value">{{ stats.global_default_count }}</span>
+        <span class="stat-label">Global default caps</span>
+        <span class="stat-sub">of {{ stats.total_capabilities }} total</span>
+    </div>
+</div>
+
+{# ─────── INFO BAR ─────── #}
+<div class="roster-info-bar">
+    <i class="fas fa-info-circle"></i>
+    <div>
+        Regular admins have the <strong>Global Defaults</strong> unless overridden individually.
+        Overrides silently change one admin's effective capabilities without affecting anyone else.
+        Nobody but a super admin can see the difference.
+    </div>
+</div>
+
+{# ─────── ROSTER TABLE ─────── #}
+{% if admins %}
+<section class="admin-table-wrap">
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Admin</th>
+                    <th class="hide-mobile">Phone</th>
+                    <th style="text-align: center;">Effective caps</th>
+                    <th class="hide-mobile">Overrides</th>
+                    <th style="text-align: right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in admins %}
+                <tr class="{% if a.is_super %}roster-super-row{% endif %}">
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 38px; height: 38px; border-radius: 50%;
+                                        background: {% if a.is_super %}linear-gradient(135deg, var(--primary), #B91C1C){% else %}var(--primary){% endif %};
+                                        color: #fff; display: flex; align-items: center;
+                                        justify-content: center; font-weight: 700; font-size: 14px;
+                                        flex-shrink: 0; text-transform: uppercase;">
+                                {{ (a.first_name or '?')[0] }}{{ (a.last_name or '')[0] if a.last_name else '' }}
+                            </div>
+                            <div style="min-width: 0;">
+                                <div style="font-size: 14px; font-weight: 600; color: var(--text);
+                                            display: flex; align-items: center; flex-wrap: wrap;">
+                                    {{ a.first_name }} {{ a.last_name or '' }}
+                                    {% if a.is_super %}
+                                        <span class="roster-super-mark">SUPER</span>
+                                    {% endif %}
+                                </div>
+                                <div style="font-size: 11px; color: var(--text-muted);
+                                            font-family: 'Courier New', monospace; margin-top: 1px;">
+                                    #{{ a.public_id or '----' }}
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+
+                    <td class="hide-mobile">
+                        <span style="font-size: 13px; font-variant-numeric: tabular-nums;">
+                            {{ a.phone_number or '—' }}
+                        </span>
+                    </td>
+
+                    <td style="text-align: center;">
+                        {% if a.is_super %}
+                            <div class="roster-effective">
+                                <span class="eff" style="color: #F59E0B;">{{ stats.total_capabilities }}</span>
+                            </div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+                                all capabilities
+                            </div>
+                        {% else %}
+                            <div class="roster-effective">
+                                <span class="eff">{{ a.effective_count }}</span>
+                                <span class="sep">/</span>
+                                <span class="tot">{{ stats.global_default_count }}</span>
+                            </div>
+                            {% if a.effective_count > stats.global_default_count %}
+                                <div style="font-size: 11px; color: #10B981; margin-top: 2px; font-weight: 600;">
+                                    +{{ a.effective_count - stats.global_default_count }} above default
+                                </div>
+                            {% elif a.effective_count < stats.global_default_count %}
+                                <div style="font-size: 11px; color: #EF4444; margin-top: 2px; font-weight: 600;">
+                                    −{{ stats.global_default_count - a.effective_count }} below default
+                                </div>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+
+                    <td class="hide-mobile">
+                        {% if a.is_super %}
+                            <span class="roster-override-pill none">Environment-defined</span>
+                        {% elif a.override_count == 0 %}
+                            <span class="roster-override-pill none">On defaults</span>
+                        {% else %}
+                            <div class="roster-override-summary">
+                                {% if a.override_grants > 0 %}
+                                    <span class="roster-override-pill grant">
+                                        <i class="fas fa-plus"></i> {{ a.override_grants }}
+                                    </span>
+                                {% endif %}
+                                {% if a.override_revokes > 0 %}
+                                    <span class="roster-override-pill revoke">
+                                        <i class="fas fa-minus"></i> {{ a.override_revokes }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </td>
+
+                    <td style="text-align: right;">
+                        {% if a.is_super %}
+                            <span class="admin-btn secondary sm is-disabled"
+                                  title="Super admin is defined by environment, not by permissions.">
+                                <i class="fas fa-lock"></i> Environment
+                            </span>
+                        {% else %}
+                            <a href="{{ url_for('admin_access.admin_overrides', admin_id=a.id) }}"
+                               class="admin-btn secondary sm">
+                                <i class="fas fa-sliders-h"></i> Permissions
+                            </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">👥</span>
+    <h3>No admins yet</h3>
+    <p>Promote a user to admin from their user detail page. Their permission summary will appear here.</p>
+    <a href="{{ url_for('admin_users.list_users') }}" class="admin-btn primary">
+        <i class="fas fa-users"></i> Go to Users
+    </a>
+</div>
+{% endif %}
+
+{% endblock %}

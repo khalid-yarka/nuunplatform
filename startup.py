@@ -3,6 +3,7 @@
 # ============================================
 # Verifies all critical components before starting Flask
 # Also bootstraps the entitlement system on first install.
+# Also bootstraps the admin capability system on first install.
 # ============================================
 
 import os
@@ -192,6 +193,118 @@ def bootstrap_entitlements() -> Tuple[bool, str]:
 
 
 # ============================================
+# ADMIN CAPABILITY BOOTSTRAP (Phase A)
+# ============================================
+
+def _count_admin_capability_grants(conn: sqlite3.Connection) -> int:
+    try:
+        cursor = conn.execute("SELECT COUNT(*) FROM admin_capability_grants")
+        return int(cursor.fetchone()[0])
+    except Exception:
+        return -1
+
+
+def bootstrap_admin_capabilities() -> Tuple[bool, str]:
+    """
+    First-run seed of the admin capability grants table.
+
+    - Reads DEFAULT_ENABLED_KEYS from the registry.
+    - Inserts one row per enabled capability.
+    - Never overwrites an existing row.
+    - Logs stale keys (in DB but not in registry) but does not delete.
+
+    Returns (ok, message).
+    """
+    db_path = Config.DATABASE_PATH
+    if not os.path.exists(db_path):
+        return False, f"Database not found: {db_path}"
+
+    try:
+        from services.admin.registry import (
+            DEFAULT_ENABLED_KEYS,
+            REGISTRY_KEYS,
+        )
+    except Exception as e:
+        return False, f"Could not import capability registry: {e}"
+
+    conn = sqlite3.connect(db_path, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+
+    try:
+        # Defensive: table must exist
+        try:
+            conn.execute("SELECT 1 FROM admin_capability_grants LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.close()
+            return False, (
+                "admin_capability_grants table not found. "
+                "Run schema migration first."
+            )
+
+        inserted = 0
+        existing_keys = set()
+
+        # Read current state
+        cursor = conn.execute(
+            "SELECT capability_key FROM admin_capability_grants"
+        )
+        for row in cursor.fetchall():
+            existing_keys.add(row['capability_key'])
+
+        # Detect stale keys (in DB but not in the registry)
+        stale_keys = existing_keys - REGISTRY_KEYS
+        if stale_keys:
+            logger.warning(
+                f"Stale capability grants found in DB (not in registry): "
+                f"{sorted(stale_keys)}"
+            )
+
+        # Insert missing defaults
+        for key in DEFAULT_ENABLED_KEYS:
+            if key in existing_keys:
+                continue
+            conn.execute("""
+                INSERT INTO admin_capability_grants
+                    (capability_key, is_enabled, updated_at)
+                VALUES (?, 1, datetime('now', 'localtime'))
+            """, (key,))
+            inserted += 1
+
+        # Ensure version row exists
+        conn.execute("""
+            INSERT OR IGNORE INTO admin_capability_version (id, version)
+            VALUES (1, 1)
+        """)
+
+        conn.commit()
+
+        total = _count_admin_capability_grants(conn)
+        conn.close()
+
+        msg = (
+            f"Admin capabilities seeded: "
+            f"{inserted} new grant(s), {total} total, "
+            f"{len(DEFAULT_ENABLED_KEYS)} default-enabled"
+        )
+        logger.info(msg)
+        return True, msg
+
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+        logger.error(f"Admin capability bootstrap failed: {e}", exc_info=True)
+        return False, f"Bootstrap error: {e}"
+
+
+# ============================================
 # STARTUP VERIFICATION
 # ============================================
 
@@ -243,6 +356,19 @@ def verify_startup() -> bool:
     except Exception as e:
         logger.critical(f"Entitlement bootstrap exception: {e}")
         errors.append(f"Entitlements: {e}")
+
+    # 4b. Bootstrap admin capabilities (first install only)
+    logger.info("Bootstrapping admin capabilities...")
+    try:
+        ok, msg = bootstrap_admin_capabilities()
+        if ok:
+            logger.info(f"Admin capabilities OK: {msg}")
+        else:
+            logger.critical(f"Admin capability bootstrap failed: {msg}")
+            errors.append(f"Admin capabilities: {msg}")
+    except Exception as e:
+        logger.critical(f"Admin capability bootstrap exception: {e}")
+        errors.append(f"Admin capabilities: {e}")
 
     # 5. Verify backup directory
     logger.info("Verifying backup directory...")
@@ -306,6 +432,7 @@ def get_startup_health() -> dict:
         'database': {},
         'error_table': False,
         'entitlements': {'ok': False, 'message': ''},
+        'admin_capabilities': {'ok': False, 'message': ''},
         'backup_dir': False,
         'log_dir': False,
         'errors': []
@@ -348,6 +475,28 @@ def get_startup_health() -> dict:
     except Exception as e:
         health['entitlements'] = {'ok': False, 'message': str(e)}
         health['errors'].append(f"Entitlements: {e}")
+
+    # Check admin capabilities (read-only)
+    try:
+        db_path = Config.DATABASE_PATH
+        conn = sqlite3.connect(db_path, timeout=5)
+        cursor = conn.execute("SELECT COUNT(*) FROM admin_capability_grants")
+        grant_count = cursor.fetchone()[0]
+        cursor = conn.execute(
+            "SELECT version FROM admin_capability_version WHERE id = 1"
+        )
+        row = cursor.fetchone()
+        version = row[0] if row else 0
+        conn.close()
+        health['admin_capabilities'] = {
+            'ok': grant_count > 0,
+            'message': f"version={version}, grants={grant_count}",
+            'version': version,
+            'grant_count': grant_count,
+        }
+    except Exception as e:
+        health['admin_capabilities'] = {'ok': False, 'message': str(e)}
+        health['errors'].append(f"Admin capabilities: {e}")
 
     health['backup_dir'] = os.path.exists(Config.BACKUP_DIR)
     health['log_dir'] = os.path.exists(Config.LOG_DIR)

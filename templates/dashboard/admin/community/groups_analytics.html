@@ -1,0 +1,116 @@
+{# ============================================================
+   templates/dashboard/admin/community/groups_analytics.html
+   Groups analytics — top clicked, platform split.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-chart-bar header-icon"></i>{% endblock %}
+{% block admin_title %}Groups Analytics{% endblock %}
+{% block admin_subtitle %}
+    What students click, which platform wins, and which groups deserve more spotlight.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_community.groups') }}">Groups</a>
+    <span class="sep">/</span>
+    <span class="current">Analytics</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_community.groups') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── KPI CARDS ─────── #}
+<div class="ga-grid">
+    <div class="ga-card">
+        <div class="num primary">{{ stats.total_groups or 0 }}</div>
+        <div class="lbl">Total groups</div>
+        <div class="sub">{{ stats.active_groups or 0 }} active</div>
+    </div>
+    <div class="ga-card">
+        <div class="num green">{{ stats.total_clicks or 0 }}</div>
+        <div class="lbl">Total clicks</div>
+        <div class="sub">across all groups</div>
+    </div>
+    <div class="ga-card">
+        <div class="num gold">{{ (stats.avg_clicks or 0)|round(1) }}</div>
+        <div class="lbl">Average clicks</div>
+        <div class="sub">per group</div>
+    </div>
+    <div class="ga-card">
+        <div class="num blue">{{ stats.featured_groups or 0 }}</div>
+        <div class="lbl">Featured groups</div>
+        <div class="sub">highlighted to students</div>
+    </div>
+</div>
+
+{# ─────── TOP GROUPS ─────── #}
+<section class="ga-section">
+    <div class="head">
+        <h3><i class="fas fa-trophy"></i> Top 10 most-clicked groups</h3>
+    </div>
+
+    {% if top_groups %}
+        {% for g in top_groups %}
+        <div class="ga-top-item">
+            <div class="rank {% if loop.index == 1 %}gold{% elif loop.index == 2 %}silver{% elif loop.index == 3 %}bronze{% endif %}">
+                {% if loop.index <= 3 %}🏅{% else %}#{{ loop.index }}{% endif %}
+            </div>
+            <div class="ic">{{ g.icon or '📚' }}</div>
+            <div class="info">
+                <div class="n">{{ g.name }}</div>
+                <div class="m">
+                    {{ g.platform|capitalize }}
+                    {% if g.category %} · {{ g.category }}{% endif %}
+                    {% if g.is_featured %} · ⭐ Featured{% endif %}
+                </div>
+            </div>
+            <div class="clicks">{{ g.click_count or 0 }}</div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px;">
+            No click data yet.
+        </div>
+    {% endif %}
+</section>
+
+{# ─────── PLATFORM SPLIT ─────── #}
+<section class="ga-section">
+    <div class="head">
+        <h3><i class="fas fa-tachometer-alt"></i> Platform split</h3>
+    </div>
+
+    {% if platforms %}
+        {% set total_p = (platforms|sum(attribute='count')) or 1 %}
+        {% for p in platforms %}
+        <div class="ga-platform-row">
+            {% if p.platform == 'whatsapp' %}
+                <span class="pico whatsapp"><i class="fab fa-whatsapp"></i></span>
+            {% elif p.platform == 'telegram' %}
+                <span class="pico telegram"><i class="fab fa-telegram-plane"></i></span>
+            {% else %}
+                <span class="pico">📱</span>
+            {% endif %}
+            <div class="pinfo">
+                <div class="n">{{ p.platform|capitalize }}</div>
+                <div class="c">{{ p.count }} group{{ '' if p.count == 1 else 's' }} · {{ ((p.count / total_p) * 100)|round(0) }}%</div>
+            </div>
+            <div class="pbar">
+                <div class="fill {{ p.platform }}" style="width: {{ ((p.count / total_p) * 100)|round(0) }}%;"></div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px;">
+            No groups yet.
+        </div>
+    {% endif %}
+</section>
+
+{% endblock %}

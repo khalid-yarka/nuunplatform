@@ -1,0 +1,108 @@
+{# ============================================================
+   templates/dashboard/admin/access/user_history.html
+   Full activity timeline for one user.
+   Aggregates history_entries + quiz attempts + notifications.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-history header-icon"></i>{% endblock %}
+{% block admin_title %}History: {{ user.first_name }} {{ user.last_name or '' }}{% endblock %}
+{% block admin_subtitle %}
+    Complete activity timeline for this user.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_users.list_users') }}">Users</a>
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_users.user_detail', user_id=user.id) }}">{{ user.first_name }}</a>
+    <span class="sep">/</span>
+    <span class="current">History</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_users.user_detail', user_id=user.id) }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back to profile
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="admin-stats">
+    <div class="admin-stat tone-blue">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-stream"></i></span></div>
+        <span class="stat-value">{{ stats.total }}</span>
+        <span class="stat-label">Total entries</span>
+    </div>
+    <div class="admin-stat tone-green">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-pencil-alt"></i></span></div>
+        <span class="stat-value">{{ stats.quizzes }}</span>
+        <span class="stat-label">Quizzes</span>
+    </div>
+    <div class="admin-stat tone-purple">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-bolt"></i></span></div>
+        <span class="stat-value">{{ stats.live_quizzes }}</span>
+        <span class="stat-label">Live quizzes</span>
+    </div>
+    <div class="admin-stat tone-amber">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-trophy"></i></span></div>
+        <span class="stat-value">{{ stats.achievements }}</span>
+        <span class="stat-label">Achievements</span>
+    </div>
+</div>
+
+<section class="admin-card">
+    <div class="admin-card-head">
+        <h3><i class="fas fa-list"></i> Activity timeline</h3>
+        <span class="hint">{{ entries|length }} entries</span>
+    </div>
+    <div class="admin-card-body" style="padding: 0;">
+        {% if entries %}
+            {% for e in entries %}
+            <div class="activity-item">
+                <span class="dot info"></span>
+                <div class="body">
+                    <div class="title">
+                        {% if e.entry_type == 'quiz_attempt' %}
+                            📝 Completed a quiz
+                        {% elif e.entry_type == 'live_quiz' %}
+                            ⚡ Joined a live quiz
+                        {% elif e.entry_type == 'achievement' %}
+                            🏆 Unlocked an achievement
+                        {% elif e.entry_type == 'save' %}
+                            🔖 Saved a question
+                        {% elif e.entry_type == 'pdf_view' %}
+                            📄 Viewed a PDF
+                        {% elif e.entry_type == 'pdf_download' %}
+                            ⬇️ Downloaded a PDF
+                        {% elif e.entry_type == 'like' %}
+                            ❤️ Liked a question
+                        {% elif e.entry_type == 'report' %}
+                            ⚠️ Reported a question
+                        {% else %}
+                            {{ e.entry_type }}
+                        {% endif %}
+                        <span style="color: var(--text-muted); font-weight: 400; font-size: 12px; margin-left: 8px;">
+                            {{ e.action }}
+                        </span>
+                    </div>
+                    <div class="meta">
+                        <span>{{ (e.created_at or '')[:16] }}</span>
+                        {% if e.metadata %}
+                            <span style="font-family: 'Courier New', monospace; font-size: 11px;">
+                                {{ e.metadata[:80] }}{% if e.metadata|length > 80 %}…{% endif %}
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div style="text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px;">
+                No activity recorded for this user.
+            </div>
+        {% endif %}
+    </div>
+</section>
+
+{% endblock %}

@@ -1,0 +1,319 @@
+{# ============================================================
+   templates/dashboard/admin/search.html
+   Global admin search — users, questions, PDFs, groups.
+   Uses a single query box, groups results by domain.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-search header-icon"></i>{% endblock %}
+{% block admin_title %}Search{% endblock %}
+{% block admin_subtitle %}
+    Search across users, questions, PDFs, and groups in one place.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Search</span>
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── SEARCH BOX ─────── #}
+<form method="GET" action="{{ url_for('admin_system.search') }}" id="searchForm"
+      style="margin-bottom:24px;">
+    <div style="position:relative;display:flex;gap:10px;">
+        <div style="flex:1;position:relative;">
+            <i class="fas fa-search"
+               style="position:absolute;left:16px;top:50%;transform:translateY(-50%);
+                      color:var(--text-muted);font-size:16px;pointer-events:none;"></i>
+            <input type="text" name="q" id="searchQuery"
+                   value="{{ query or '' }}"
+                   placeholder="Search by name, phone, public ID, question text, PDF title, group…"
+                   autocomplete="off" spellcheck="false" autofocus
+                   style="width:100%;padding:14px 16px 14px 46px;
+                          border:2px solid var(--border);border-radius:var(--radius);
+                          font-size:15px;background:var(--surface);color:var(--text);
+                          transition:border-color 0.2s,box-shadow 0.2s;">
+        </div>
+        <button type="submit" class="admin-btn primary lg">
+            <i class="fas fa-search"></i> Search
+        </button>
+        {% if query %}
+            <a href="{{ url_for('admin_system.search') }}" class="admin-btn secondary lg">
+                <i class="fas fa-times"></i> Clear
+            </a>
+        {% endif %}
+    </div>
+</form>
+
+{# ─────── EMPTY STATE (no query yet) ─────── #}
+{% if not query %}
+<div style="text-align:center;padding:60px 20px;">
+    <div style="font-size:64px;opacity:0.3;margin-bottom:12px;">🔍</div>
+    <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px;">
+        What are you looking for?
+    </div>
+    <div style="font-size:14px;color:var(--text-secondary);max-width:480px;margin:0 auto;line-height:1.6;">
+        Type a name, phone number, public ID, question text, PDF title, or group name
+        to search across the whole platform at once.
+    </div>
+
+    <div style="margin-top:28px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">
+        <button type="button" class="admin-chip blue" data-suggest="new">users named "new"</button>
+        <button type="button" class="admin-chip green" data-suggest="quiz">quizzes</button>
+        <button type="button" class="admin-chip amber" data-suggest="Chapter">chapter tags</button>
+        <button type="button" class="admin-chip purple" data-suggest="PDF">PDFs</button>
+    </div>
+</div>
+{% endif %}
+
+{# ─────── RESULTS ─────── #}
+{% if query %}
+
+    {% set total_results = (users|length) + (questions|length) + (pdfs|length) + (groups|length) %}
+
+    <div class="admin-toolbar" style="margin-bottom:20px;">
+        <span style="font-size:13px;color:var(--text);">
+            <strong>{{ total_results }}</strong> result{{ '' if total_results == 1 else 's' }}
+            for "<strong>{{ query }}</strong>"
+        </span>
+    </div>
+
+    {% if total_results == 0 %}
+        <div class="admin-empty">
+            <span class="empty-icon">🚫</span>
+            <h3>No results</h3>
+            <p>Try a shorter search term, or check for typos.</p>
+        </div>
+    {% endif %}
+
+    {# ─────── USERS ─────── #}
+    {% if users %}
+    <section class="admin-card" style="margin-bottom:16px;">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-user"></i> Users</h3>
+            <span class="hint">{{ users|length }} match{{ '' if users|length == 1 else 'es' }}</span>
+        </div>
+        <div class="admin-card-body" style="padding:0;">
+            {% for u in users %}
+            {% set tier = normalize_tier(u.tier or 'free') %}
+            <a href="{{ url_for('admin_users.user_detail', user_id=u.id) }}"
+               style="display:flex;align-items:center;gap:14px;padding:12px 20px;
+                      border-bottom:1px solid var(--border-light);text-decoration:none;
+                      color:inherit;transition:background 0.15s;"
+               onmouseover="this.style.background='var(--primary-light)'"
+               onmouseout="this.style.background='transparent'">
+                <div style="width:38px;height:38px;border-radius:50%;
+                            background:var(--primary);color:#fff;
+                            display:flex;align-items:center;justify-content:center;
+                            font-weight:700;font-size:14px;flex-shrink:0;text-transform:uppercase;">
+                    {{ (u.first_name or '?')[0] }}{{ (u.last_name or '')[0] if u.last_name else '' }}
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:14px;font-weight:600;color:var(--text);
+                                display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        {{ u.first_name or 'Unknown' }} {{ u.last_name or '' }}
+                        {% if u.is_admin %}<span style="color:#F59E0B;font-size:12px;">⭐</span>{% endif %}
+                    </div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:2px;
+                                display:flex;flex-wrap:wrap;gap:10px;">
+                        <span>#{{ u.public_id or '----' }}</span>
+                        {% if u.phone_number %}<span>📞 {{ u.phone_number }}</span>{% endif %}
+                        {% if u.school %}<span>🏫 {{ u.school[:40] }}</span>{% endif %}
+                    </div>
+                </div>
+                <span class="admin-pill {{ tier }}">{{ tier }}</span>
+                <i class="fas fa-arrow-right" style="color:var(--text-muted);"></i>
+            </a>
+            {% endfor %}
+        </div>
+        {% if users|length == 10 %}
+        <div style="padding:10px 20px;text-align:center;font-size:12px;
+                    color:var(--text-muted);background:var(--background);
+                    border-top:1px solid var(--border-light);">
+            Showing first 10 user results. Refine your search to narrow down.
+        </div>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    {# ─────── QUESTIONS ─────── #}
+    {% if questions %}
+    <section class="admin-card" style="margin-bottom:16px;">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-question-circle"></i> Questions</h3>
+            <span class="hint">{{ questions|length }} match{{ '' if questions|length == 1 else 'es' }}</span>
+        </div>
+        <div class="admin-card-body" style="padding:0;">
+            {% for q in questions %}
+            <a href="{{ url_for('admin_content.question_edit', question_id=q.id) }}"
+               style="display:flex;align-items:flex-start;gap:12px;padding:12px 20px;
+                      border-bottom:1px solid var(--border-light);text-decoration:none;
+                      color:inherit;transition:background 0.15s;"
+               onmouseover="this.style.background='var(--primary-light)'"
+               onmouseout="this.style.background='transparent'">
+                <div style="width:36px;height:36px;border-radius:9px;
+                            background:var(--background);display:flex;align-items:center;
+                            justify-content:center;font-size:16px;flex-shrink:0;">
+                    📝
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:14px;font-weight:600;color:var(--text);
+                                line-height:1.4;word-break:break-word;">
+                        {{ q.question_text[:120] }}{% if q.question_text|length > 120 %}…{% endif %}
+                    </div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;
+                                display:flex;flex-wrap:wrap;gap:10px;">
+                        <span>{{ q.subject_name or q.subject_code }}</span>
+                        {% if q.chapter %}<span>📖 {{ q.chapter }}</span>{% endif %}
+                        {% if q.pdf_code %}<span>📄 {{ q.pdf_code }}</span>{% endif %}
+                        <span>#{{ q.id }}</span>
+                    </div>
+                </div>
+                <i class="fas fa-arrow-right" style="color:var(--text-muted);margin-top:8px;"></i>
+            </a>
+            {% endfor %}
+        </div>
+        {% if questions|length == 10 %}
+        <div style="padding:10px 20px;text-align:center;font-size:12px;
+                    color:var(--text-muted);background:var(--background);
+                    border-top:1px solid var(--border-light);">
+            Showing first 10 question results.
+        </div>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    {# ─────── PDFs ─────── #}
+    {% if pdfs %}
+    <section class="admin-card" style="margin-bottom:16px;">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-file-pdf"></i> PDFs</h3>
+            <span class="hint">{{ pdfs|length }} match{{ '' if pdfs|length == 1 else 'es' }}</span>
+        </div>
+        <div class="admin-card-body" style="padding:0;">
+            {% for p in pdfs %}
+            <a href="{{ url_for('admin_content.pdf_edit', pdf_id=p.id) }}"
+               style="display:flex;align-items:flex-start;gap:12px;padding:12px 20px;
+                      border-bottom:1px solid var(--border-light);text-decoration:none;
+                      color:inherit;transition:background 0.15s;"
+               onmouseover="this.style.background='var(--primary-light)'"
+               onmouseout="this.style.background='transparent'">
+                <div style="width:36px;height:36px;border-radius:9px;background:#FEF2F2;
+                            display:flex;align-items:center;justify-content:center;
+                            font-size:16px;flex-shrink:0;color:#E74C3C;">
+                    <i class="fas fa-file-pdf"></i>
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:14px;font-weight:600;color:var(--text);
+                                line-height:1.4;word-break:break-word;">
+                        {{ p.title }}
+                    </div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;
+                                display:flex;flex-wrap:wrap;gap:10px;">
+                        <span style="font-family:monospace;color:var(--primary);font-weight:600;">
+                            {{ p.code }}
+                        </span>
+                        {% if p.subject %}<span>{{ p.subject }}</span>{% endif %}
+                        {% if p.curriculum %}<span>{{ p.curriculum }}</span>{% endif %}
+                        {% if p.class %}<span>{{ p.class }}</span>{% endif %}
+                        {% if p.is_premium %}<span>💎</span>{% endif %}
+                    </div>
+                </div>
+                <i class="fas fa-arrow-right" style="color:var(--text-muted);margin-top:8px;"></i>
+            </a>
+            {% endfor %}
+        </div>
+        {% if pdfs|length == 10 %}
+        <div style="padding:10px 20px;text-align:center;font-size:12px;
+                    color:var(--text-muted);background:var(--background);
+                    border-top:1px solid var(--border-light);">
+            Showing first 10 PDF results.
+        </div>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    {# ─────── GROUPS ─────── #}
+    {% if groups %}
+    <section class="admin-card">
+        <div class="admin-card-head">
+            <h3><i class="fas fa-users"></i> Groups</h3>
+            <span class="hint">{{ groups|length }} match{{ '' if groups|length == 1 else 'es' }}</span>
+        </div>
+        <div class="admin-card-body" style="padding:0;">
+            {% for g in groups %}
+            <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 20px;
+                        border-bottom:1px solid var(--border-light);">
+                <div style="width:36px;height:36px;border-radius:9px;
+                            background:var(--background);display:flex;align-items:center;
+                            justify-content:center;font-size:18px;flex-shrink:0;">
+                    {{ g.icon or '📚' }}
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:14px;font-weight:600;color:var(--text);
+                                display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        {{ g.name }}
+                        {% if g.is_featured %}
+                            <span class="admin-chip amber" style="font-size:9px;">Featured</span>
+                        {% endif %}
+                        {% if not g.is_active %}
+                            <span class="admin-chip neutral" style="font-size:9px;">Inactive</span>
+                        {% endif %}
+                    </div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;
+                                display:flex;flex-wrap:wrap;gap:10px;">
+                        {% if g.platform == 'whatsapp' %}
+                            <span style="color:#25D366;"><i class="fab fa-whatsapp"></i> WhatsApp</span>
+                        {% elif g.platform == 'telegram' %}
+                            <span style="color:#0088CC;"><i class="fab fa-telegram-plane"></i> Telegram</span>
+                        {% endif %}
+                        {% if g.category %}<span>📂 {{ g.category }}</span>{% endif %}
+                        <span>#{{ g.id }}</span>
+                    </div>
+                </div>
+                <a href="{{ url_for('admin_community.groups') }}?search={{ g.name|urlencode }}"
+                   class="admin-btn secondary sm" title="View in Groups">
+                    <i class="fas fa-external-link-alt"></i>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+{% endif %}
+
+{% endblock %}
+
+{% block admin_js %}
+<script>
+(function () {
+    'use strict';
+
+    // Auto-focus the input and apply nice border on focus
+    var input = document.getElementById('searchQuery');
+    if (input) {
+        input.addEventListener('focus', function () {
+            this.style.borderColor = 'var(--primary)';
+            this.style.boxShadow = '0 0 0 4px rgba(255, 49, 56, 0.10)';
+        });
+        input.addEventListener('blur', function () {
+            this.style.borderColor = 'var(--border)';
+            this.style.boxShadow = 'none';
+        });
+    }
+
+    // Click on a suggestion chip fills the input and submits
+    document.querySelectorAll('[data-suggest]').forEach(function (btn) {
+        btn.style.cursor = 'pointer';
+        btn.addEventListener('click', function () {
+            if (input) {
+                input.value = this.getAttribute('data-suggest');
+                document.getElementById('searchForm').submit();
+            }
+        });
+    });
+})();
+</script>
+{% endblock %}

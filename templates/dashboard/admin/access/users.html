@@ -1,0 +1,299 @@
+{# ============================================================
+   templates/dashboard/admin/access/users.html
+   User directory with filters, sorting, and bulk actions.
+   Both regular admins (view only) and super admins (full) use this page.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-users header-icon"></i>{% endblock %}
+{% block admin_title %}Users{% endblock %}
+{% block admin_subtitle %}
+    Browse, filter, and manage every registered user on the platform.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Users</span>
+{% endblock %}
+
+{% block admin_actions %}
+    {% if admin_can('users.export') %}
+        <a href="{{ url_for('admin_users.users_export', search=search, tier=tier_filter, location=location_filter, curriculum=curriculum_filter, sort=sort) }}"
+           class="admin-btn secondary">
+            <i class="fas fa-download"></i> Export CSV
+        </a>
+    {% endif %}
+    {% if admin_can('users.restore') %}
+        <a href="{{ url_for('admin_users.deleted_users') }}" class="admin-btn secondary">
+            <i class="fas fa-trash-restore"></i> Deleted Users
+        </a>
+    {% endif %}
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── STATS ─────── #}
+<div class="admin-stats">
+    <div class="admin-stat tone-blue">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-users"></i></span>
+        </div>
+        <span class="stat-value">{{ stats.total }}</span>
+        <span class="stat-label">Total users</span>
+    </div>
+    <div class="admin-stat tone-amber">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-user-shield"></i></span>
+        </div>
+        <span class="stat-value">{{ stats.admins }}</span>
+        <span class="stat-label">Admins</span>
+    </div>
+    <div class="admin-stat tone-green">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-calendar-plus"></i></span>
+        </div>
+        <span class="stat-value">{{ stats.this_week }}</span>
+        <span class="stat-label">New this week</span>
+    </div>
+    <div class="admin-stat tone-slate">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-layer-group"></i></span>
+        </div>
+        <span class="stat-value">{{ stats.free }} · {{ stats.premium }} · {{ stats.pro }}</span>
+        <span class="stat-label">Free / Premium / Pro</span>
+    </div>
+</div>
+
+{# ─────── FILTER TOOLBAR ─────── #}
+<form method="GET" class="admin-toolbar">
+    <div class="admin-search">
+        <i class="fas fa-search"></i>
+        <input type="text" name="search"
+               value="{{ search }}"
+               data-search-form
+               placeholder="Search by name, phone, public ID, school…"
+               autocomplete="off" spellcheck="false">
+    </div>
+
+    <select name="tier" class="admin-select" data-autofilter style="min-width: 110px;">
+        <option value="">All tiers</option>
+        <option value="free"    {% if tier_filter == 'free' %}selected{% endif %}>Free</option>
+        <option value="premium" {% if tier_filter == 'premium' %}selected{% endif %}>Premium</option>
+        <option value="pro"     {% if tier_filter == 'pro' %}selected{% endif %}>Pro</option>
+    </select>
+
+    <select name="location" class="admin-select" data-autofilter style="min-width: 130px;">
+        <option value="">All locations</option>
+        <option value="SO" {% if location_filter == 'SO' %}selected{% endif %}>🇸🇴 Somalia</option>
+        <option value="PL" {% if location_filter == 'PL' %}selected{% endif %}>🇸🇴 Puntland</option>
+        <option value="SL" {% if location_filter == 'SL' %}selected{% endif %}>🇸🇴 Somaliland</option>
+    </select>
+
+    <select name="sort" class="admin-select" data-autofilter style="min-width: 150px;">
+        <option value="newest"      {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
+        <option value="oldest"      {% if sort == 'oldest' %}selected{% endif %}>Oldest first</option>
+        <option value="name_az"     {% if sort == 'name_az' %}selected{% endif %}>Name A → Z</option>
+        <option value="name_za"     {% if sort == 'name_za' %}selected{% endif %}>Name Z → A</option>
+        <option value="points_high" {% if sort == 'points_high' %}selected{% endif %}>Points high → low</option>
+        <option value="points_low"  {% if sort == 'points_low' %}selected{% endif %}>Points low → high</option>
+        <option value="tier_high"   {% if sort == 'tier_high' %}selected{% endif %}>Tier high → low</option>
+    </select>
+
+    {% if search or tier_filter or location_filter or curriculum_filter %}
+        <a href="{{ url_for('admin_users.list_users') }}" class="admin-btn secondary">
+            <i class="fas fa-times"></i> Clear
+        </a>
+    {% endif %}
+
+    <span class="toolbar-meta">
+        <strong>{{ total }}</strong> result{{ '' if total == 1 else 's' }}
+    </span>
+</form>
+
+{# ─────── BULK FORM ─────── #}
+{% if users and admin_can('users.bulk') %}
+<form method="POST" action="{{ url_for('admin_users.users_bulk') }}" id="bulkForm" data-bulk-form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="" data-bulk-action-input>
+
+    <div class="admin-toolbar" style="margin-bottom: 0;">
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; font-weight: 600; color: var(--text-secondary);">
+            <input type="checkbox" data-check-all style="accent-color: var(--primary); cursor: pointer;">
+            Select all
+        </label>
+        <span class="toolbar-meta">
+            <strong data-bulk-count>0</strong> selected
+        </span>
+        <div class="toolbar-spacer"></div>
+        <button type="button" class="admin-btn success sm"
+                data-bulk-action="promote_admin" data-bulk-verb="Make admin" disabled>
+            <i class="fas fa-user-shield"></i> Make Admin
+        </button>
+        <button type="button" class="admin-btn secondary sm"
+                data-bulk-action="demote_admin" data-bulk-verb="Remove admin" disabled>
+            <i class="fas fa-user-minus"></i> Remove Admin
+        </button>
+        <button type="button" class="admin-btn danger sm"
+                data-bulk-action="delete" data-bulk-verb="Delete" disabled>
+            <i class="fas fa-trash"></i> Delete
+        </button>
+    </div>
+{% endif %}
+
+{# ─────── USER TABLE ─────── #}
+{% if users %}
+<section class="admin-table-wrap" style="border-radius: {% if admin_can('users.bulk') %}0 0 var(--radius) var(--radius){% else %}var(--radius){% endif %};">
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    {% if admin_can('users.bulk') %}
+                        <th class="cell-check"></th>
+                    {% endif %}
+                    <th>User</th>
+                    <th class="hide-mobile">Public ID</th>
+                    <th class="hide-mobile">Phone</th>
+                    <th>Tier</th>
+                    <th style="text-align: right;">Points</th>
+                    <th class="hide-mobile">Joined</th>
+                    <th style="text-align: right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                    {% set tier = normalize_tier(u.tier or 'free') %}
+                    <tr>
+                        {% if admin_can('users.bulk') %}
+                            <td class="cell-check">
+                                <input type="checkbox" name="user_ids" value="{{ u.id }}" data-check-row>
+                            </td>
+                        {% endif %}
+
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div style="width: 38px; height: 38px; border-radius: 50%;
+                                            background: var(--primary-light);
+                                            color: var(--primary);
+                                            display: flex; align-items: center;
+                                            justify-content: center; font-weight: 700;
+                                            font-size: 14px; flex-shrink: 0; text-transform: uppercase;">
+                                    {{ (u.first_name or '?')[0] }}{{ (u.last_name or '')[0] if u.last_name else '' }}
+                                </div>
+                                <div style="min-width: 0;">
+                                    <div style="font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px;">
+                                        {{ u.first_name }} {{ u.last_name or '' }}
+                                        {% if u.is_admin %}
+                                            <span style="color: #F59E0B; font-size: 12px;" title="Admin">⭐</span>
+                                        {% endif %}
+                                    </div>
+                                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 1px;">
+                                        {{ u.school or 'No school' }}
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+
+                        <td class="hide-mobile">
+                            {% if u.public_id and u.public_id != '----' %}
+                                <span class="admin-chip primary" style="font-family: 'Courier New', monospace; font-weight: 700;">
+                                    #{{ u.public_id }}
+                                </span>
+                            {% else %}
+                                <span class="admin-chip amber">⏳ Pending</span>
+                            {% endif %}
+                        </td>
+
+                        <td class="hide-mobile" style="font-size: 13px;">
+                            {% if u.phone_number %}
+                                <a href="https://wa.me/{{ u.phone_number|replace('+','')|replace(' ','') }}"
+                                   target="_blank" rel="noopener"
+                                   style="color: var(--text); text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                                    <i class="fab fa-whatsapp" style="color: #25D366; font-size: 14px;"></i>
+                                    {{ u.phone_number }}
+                                </a>
+                            {% else %}
+                                <span style="color: var(--text-muted);">—</span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            <span class="admin-pill {{ tier }}">
+                                {{ tier }}
+                            </span>
+                        </td>
+
+                        <td class="cell-num">
+                            {{ u.total_points or 0 }}
+                        </td>
+
+                        <td class="hide-mobile" style="font-size: 12px; color: var(--text-secondary);">
+                            {{ (u.created_at or '')[:10] }}
+                        </td>
+
+                        <td class="cell-actions">
+                            <a href="{{ url_for('admin_users.user_detail', user_id=u.id) }}"
+                               class="admin-btn primary sm" title="View">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            {% if admin_can('users.notify') %}
+                                <a href="{{ url_for('admin_users.user_detail', user_id=u.id) }}#notify"
+                                   class="admin-btn secondary sm" title="Notify">
+                                    <i class="fas fa-paper-plane"></i>
+                                </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% if admin_can('users.bulk') %}
+</form>
+{% endif %}
+
+{# ─────── PAGINATION ─────── #}
+{% if total_pages > 1 %}
+<div class="admin-pagination">
+    {% set base_params = 'search=' ~ search ~ '&tier=' ~ tier_filter ~ '&location=' ~ location_filter ~ '&curriculum=' ~ curriculum_filter ~ '&sort=' ~ sort %}
+    <a href="?page=1&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
+        <i class="fas fa-angle-double-left"></i>
+    </a>
+    <a href="?page={{ page - 1 }}&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
+        <i class="fas fa-angle-left"></i>
+    </a>
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+            <span class="active">{{ p }}</span>
+        {% elif p <= page + 2 and p >= page - 2 %}
+            <a href="?page={{ p }}&{{ base_params }}">{{ p }}</a>
+        {% endif %}
+    {% endfor %}
+    <a href="?page={{ page + 1 }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}">
+        <i class="fas fa-angle-right"></i>
+    </a>
+    <a href="?page={{ total_pages }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}">
+        <i class="fas fa-angle-double-right"></i>
+    </a>
+</div>
+{% endif %}
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">🔍</span>
+    <h3>No matching users</h3>
+    <p>Try adjusting your search terms or clearing the filters.</p>
+    {% if search or tier_filter or location_filter or curriculum_filter %}
+        <a href="{{ url_for('admin_users.list_users') }}" class="admin-btn primary">
+            <i class="fas fa-times"></i> Clear filters
+        </a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/access.js') }}"></script>
+{% endblock %}

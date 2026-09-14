@@ -1,0 +1,137 @@
+{# ============================================================
+   templates/dashboard/admin/ops/activity.html
+   Platform activity feed — from activity_logs table.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-stream header-icon"></i>{% endblock %}
+{% block admin_title %}Activity{% endblock %}
+{% block admin_subtitle %}
+    Every write action recorded by the platform activity logger.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Activity</span>
+{% endblock %}
+
+{% block admin_content %}
+
+<form class="admin-toolbar" style="margin-bottom:16px;" id="activityFilters">
+    <div class="admin-search">
+        <i class="fas fa-search"></i>
+        <input type="text" id="activitySearch" placeholder="Search message…"
+               autocomplete="off" spellcheck="false">
+    </div>
+
+    <select id="activityType" class="admin-select">
+        <option value="">All types</option>
+    </select>
+
+    <select id="activitySeverity" class="admin-select">
+        <option value="">All severities</option>
+        <option value="info">Info</option>
+        <option value="warning">Warning</option>
+        <option value="critical">Critical</option>
+    </select>
+
+    <button type="button" class="admin-btn secondary" id="activityReload">
+        <i class="fas fa-sync"></i> Reload
+    </button>
+</form>
+
+<div class="activity-feed" id="activityFeed">
+    <div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px;">
+        <i class="fas fa-spinner fa-spin"></i> Loading…
+    </div>
+</div>
+
+{% endblock %}
+
+{% block admin_js %}
+<script>
+(function () {
+    'use strict';
+
+    var feed = document.getElementById('activityFeed');
+    var typeSel = document.getElementById('activityType');
+    var sevSel = document.getElementById('activitySeverity');
+    var searchInput = document.getElementById('activitySearch');
+    var reloadBtn = document.getElementById('activityReload');
+
+    function esc(s) {
+        var d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    function load() {
+        var params = new URLSearchParams();
+        if (typeSel.value) params.set('type', typeSel.value);
+        if (sevSel.value) params.set('severity', sevSel.value);
+        if (searchInput.value.trim()) params.set('search', searchInput.value.trim());
+        params.set('limit', '100');
+
+        feed.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px;">' +
+                         '<i class="fas fa-spinner fa-spin"></i> Loading…</div>';
+
+        fetch('{{ url_for("admin_activity.feed") }}?' + params.toString())
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                // Populate type dropdown on first load
+                if (typeSel.options.length === 1 && data.types) {
+                    data.types.forEach(function (t) {
+                        var opt = document.createElement('option');
+                        opt.value = t;
+                        opt.textContent = t;
+                        typeSel.appendChild(opt);
+                    });
+                }
+                render(data.logs || []);
+            })
+            .catch(function () {
+                feed.innerHTML = '<div style="text-align:center;padding:40px;color:#DC2626;font-size:13px;">' +
+                                 'Failed to load activity.</div>';
+            });
+    }
+
+    function render(logs) {
+        if (!logs.length) {
+            feed.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px;">' +
+                             'No activity recorded.</div>';
+            return;
+        }
+        var html = '';
+        logs.forEach(function (l) {
+            var sev = (l.severity || 'info').toLowerCase();
+            var dotClass = sev === 'critical' ? 'critical' : sev === 'warning' ? 'warning' : 'info';
+            html += '<div class="activity-item">' +
+                    '<span class="dot ' + dotClass + '"></span>' +
+                    '<div class="body">' +
+                    '<div class="title">' + esc(l.message || '') + '</div>' +
+                    '<div class="meta">' +
+                    '<span>' + esc(l.activity_type || '') + '</span>' +
+                    '<span>👤 ' + esc(l.user_id || 'system') + '</span>' +
+                    '<span>' + esc((l.created_at || '').slice(0, 16)) + '</span>' +
+                    (l.ip_address ? '<span>' + esc(l.ip_address) + '</span>' : '') +
+                    '</div>' +
+                    '</div>' +
+                    '</div>';
+        });
+        feed.innerHTML = html;
+    }
+
+    typeSel.addEventListener('change', load);
+    sevSel.addEventListener('change', load);
+    reloadBtn.addEventListener('click', load);
+
+    var debounce;
+    searchInput.addEventListener('input', function () {
+        clearTimeout(debounce);
+        debounce = setTimeout(load, 400);
+    });
+
+    load();
+})();
+</script>
+{% endblock %}

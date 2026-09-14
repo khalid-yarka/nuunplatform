@@ -1,0 +1,91 @@
+{# ============================================================
+   templates/dashboard/admin/access/users_deleted.html
+   Deleted users — restore from the trash.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-trash-restore header-icon"></i>{% endblock %}
+{% block admin_title %}Deleted Users{% endblock %}
+{% block admin_subtitle %}
+    Soft-deleted accounts. Restore them to bring them back to the platform.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_users.list_users') }}">Users</a>
+    <span class="sep">/</span>
+    <span class="current">Deleted</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_users.list_users') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back to Users
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+{% if deleted %}
+<section class="admin-table-wrap">
+    <div class="admin-table-head" style="padding: 12px 20px; background: var(--background); border-bottom: 1px solid var(--border);">
+        <span style="font-size: 13px; color: var(--text-secondary);">
+            <strong style="color: var(--text);">{{ deleted|length }}</strong> deleted account{{ '' if deleted|length == 1 else 's' }}
+        </span>
+    </div>
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Public ID</th>
+                    <th>Name</th>
+                    <th class="hide-mobile">Phone</th>
+                    <th class="hide-mobile">Deleted by</th>
+                    <th>Deleted at</th>
+                    <th style="text-align: right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in deleted %}
+                <tr>
+                    <td class="cell-mono">#{{ d.public_id or '----' }}</td>
+                    <td style="font-weight: 600; color: var(--text);">
+                        {{ d.first_name }} {{ d.last_name or '' }}
+                    </td>
+                    <td class="hide-mobile">{{ d.phone_number or '—' }}</td>
+                    <td class="hide-mobile" style="font-size: 12px; color: var(--text-secondary);">
+                        {% if d.deleted_by_data %}
+                            #{{ d.deleted_by_data.public_id }} {{ d.deleted_by_data.first_name }}
+                        {% else %}
+                            System
+                        {% endif %}
+                    </td>
+                    <td style="font-size: 12px; color: var(--text-secondary);">
+                        {{ (d.deleted_at or '')[:16] }}
+                    </td>
+                    <td class="cell-actions">
+                        <form method="POST"
+                              action="{{ url_for('admin_users.restore_deleted_user', deleted_id=d.id) }}"
+                              style="display: inline;"
+                              onsubmit="return confirm('Restore this user?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="admin-btn success sm">
+                                <i class="fas fa-undo"></i> Restore
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">🗑️</span>
+    <h3>No deleted users</h3>
+    <p>When users are deleted, they appear here for restoration.</p>
+</div>
+{% endif %}
+
+{% endblock %}

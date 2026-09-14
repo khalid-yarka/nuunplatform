@@ -1,0 +1,114 @@
+{# ============================================================
+   templates/dashboard/admin/policy/entitlement_audit.html
+   Audit log for all entitlement changes.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-history header-icon"></i>{% endblock %}
+{% block admin_title %}Entitlement Audit{% endblock %}
+{% block admin_subtitle %}
+    Every change to a feature policy. Filterable by actor and action.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_policy.entitlements') }}">Entitlements</a>
+    <span class="sep">/</span>
+    <span class="current">Audit</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_policy.entitlements') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── FILTER TOOLBAR ─────── #}
+<form method="GET" class="perm-toolbar">
+    <div class="search-wrap">
+        <i class="fas fa-search"></i>
+        <input type="text" name="search" value="{{ search }}"
+               data-search-form
+               placeholder="Search by feature key or note…"
+               autocomplete="off" spellcheck="false">
+    </div>
+    <button type="submit" class="admin-btn primary">
+        <i class="fas fa-filter"></i> Apply
+    </button>
+    {% if search %}
+        <a href="{{ url_for('admin_policy.entitlements_audit') }}" class="admin-btn secondary">
+            <i class="fas fa-times"></i> Clear
+        </a>
+    {% endif %}
+</form>
+
+{# ─────── TABLE ─────── #}
+{% if entries %}
+<section class="admin-table-wrap">
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Actor</th>
+                    <th>Action</th>
+                    <th>Feature</th>
+                    <th class="hide-mobile">Change</th>
+                    <th class="hide-mobile">Note</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in entries %}
+                <tr>
+                    <td style="white-space:nowrap;font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;">
+                        {{ e.created_at[:16] if e.created_at else '' }}
+                    </td>
+                    <td>
+                        <span style="font-weight:600;color:var(--text);font-size:13px;">
+                            {{ e.actor_first_name or 'System' }} {{ e.actor_last_name or '' }}
+                        </span>
+                    </td>
+                    <td>
+                        <code style="font-family:'Courier New',monospace;font-size:12px;
+                                     color:var(--primary);background:var(--primary-light);
+                                     padding:2px 8px;border-radius:6px;">
+                            {{ e.action }}
+                        </code>
+                    </td>
+                    <td style="font-family:'Courier New',monospace;font-size:12px;color:var(--text);">
+                        {{ e.feature_key or e.target_type or '—' }}
+                    </td>
+                    <td class="hide-mobile" style="font-size:12px;color:var(--text-secondary);max-width:260px;word-break:break-word;">
+                        {% if e.before_value and e.after_value %}
+                            <span style="color:#EF4444;">{{ e.before_value[:40] }}</span>
+                            →
+                            <span style="color:#10B981;">{{ e.after_value[:40] }}</span>
+                        {% else %}
+                            <span style="color:var(--text-muted);">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="hide-mobile" style="font-size:12px;color:var(--text-muted);">
+                        {{ e.note[:60] if e.note else '—' }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">📋</span>
+    <h3>No entitlement changes yet</h3>
+    <p>When you modify a feature policy, the change will appear here.</p>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/core.js') }}"></script>
+{% endblock %}
