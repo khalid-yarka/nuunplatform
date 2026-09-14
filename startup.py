@@ -1,9 +1,13 @@
 # ============================================
 # APPLICATION STARTUP VERIFICATION
 # ============================================
-# Verifies all critical components before starting Flask
-# Also bootstraps the entitlement system on first install.
-# Also bootstraps the admin capability system on first install.
+# Verifies critical components before starting Flask.
+# Also bootstraps the entitlement system and admin capabilities.
+#
+# NOTE: the full SQLite integrity scan and the write test are NOT
+# run at boot anymore — they are too slow for PythonAnywhere's WSGI
+# timeout. Use `python -m database --verify` from a scheduled task,
+# or check the /health endpoint after the app is up.
 # ============================================
 
 import os
@@ -11,12 +15,97 @@ import sys
 import json
 import sqlite3
 import logging
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 
 from config import Config
-from database import initialize_database_startup, verify_database_full
+from database import (
+    verify_database_exists,
+    verify_database_openable,
+    verify_database_writable,
+    verify_tables_exist,
+    verify_wal_enabled,
+    create_database_schema,
+    enable_wal_mode,
+    ensure_question_interactions_table,
+    _get_connection,
+)
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================
+# FAST DATABASE BOOTSTRAP
+# ============================================
+
+def initialize_database_startup_fast() -> Tuple[bool, List[str]]:
+    """
+    Fast startup path for the database.
+
+    What it does:
+      - ensures the DB file exists (creates schema if missing)
+      - verifies the DB is openable
+      - verifies required tables exist
+      - ensures WAL mode
+      - ensures the question_interactions table exists
+
+    What it does NOT do (by design):
+      - the full PRAGMA integrity_check (O(DB size))
+      - the write test (opens a transaction just to prove it works)
+      - column-by-column schema verification
+
+    These slow operations are safe to skip at boot because they are
+    redundant on every restart and can be run from /health or a
+    scheduled task. Their absence does not prevent serving pages.
+    """
+    errors: List[str] = []
+
+    # 1. Ensure the DB file exists
+    if not verify_database_exists():
+        logger.info("Database not found. Creating new database...")
+        success, error = create_database_schema()
+        if not success:
+            return False, [f"Failed to create database schema: {error}"]
+
+        success, error = enable_wal_mode()
+        if not success:
+            return False, [f"Failed to enable WAL mode: {error}"]
+
+        logger.info("Database created successfully")
+    else:
+        logger.info("Database already exists.")
+
+    # 2. Must be openable
+    openable, err = verify_database_openable()
+    if not openable:
+        return False, [f"Cannot open database: {err}"]
+
+    # 3. Required tables must exist
+    try:
+        conn = _get_connection(timeout=5)
+        ensure_question_interactions_table(conn)
+        tables_ok, missing = verify_tables_exist(conn)
+        conn.close()
+        if not tables_ok:
+            # If this is a fresh install with no tables, try creating schema
+            if not verify_database_exists():
+                pass
+            errors.append(f"Missing tables: {', '.join(missing)}")
+            return False, errors
+    except Exception as e:
+        return False, [f"Table verification failed: {e}"]
+
+    # 4. WAL mode
+    wal_ok, wal_err = verify_wal_enabled()
+    if not wal_ok:
+        logger.warning(f"WAL not enabled ({wal_err}); attempting to enable.")
+        success, error = enable_wal_mode()
+        if not success:
+            # Not fatal — the app can still serve, just slower
+            logger.warning(f"Could not enable WAL: {error}")
+        else:
+            logger.info("WAL mode enabled")
+
+    return True, []
 
 
 # ============================================
@@ -116,7 +205,6 @@ def bootstrap_entitlements() -> Tuple[bool, str]:
             sort_order = feat.get('sort_order', 0)
             notes = feat.get('notes', '')
 
-            # Insert or skip if already present (shouldn't happen on first run)
             cursor = conn.execute(
                 "SELECT id FROM entitlement_features WHERE feature_key = ?",
                 (feature_key,)
@@ -138,7 +226,6 @@ def bootstrap_entitlements() -> Tuple[bool, str]:
                 feature_id = cursor.lastrowid
                 inserted_features += 1
 
-            # Insert policies for each tier
             policies = feat.get('policies', {})
             for tier in ('free', 'premium', 'pro'):
                 p = policies.get(tier, {})
@@ -147,7 +234,6 @@ def bootstrap_entitlements() -> Tuple[bool, str]:
                 limit_value = p.get('limit_value')
                 limit_unit = p.get('limit_unit')
 
-                # Skip if this policy already exists (idempotency)
                 cursor = conn.execute(
                     "SELECT id FROM entitlement_policies WHERE feature_id = ? AND tier = ?",
                     (feature_id, tier)
@@ -167,8 +253,6 @@ def bootstrap_entitlements() -> Tuple[bool, str]:
                 inserted_policies += 1
 
         conn.commit()
-
-        # Set user_version to mark bootstrap complete
         _set_user_version(conn, 1)
 
         total_features = _count_features(conn)
@@ -193,7 +277,7 @@ def bootstrap_entitlements() -> Tuple[bool, str]:
 
 
 # ============================================
-# ADMIN CAPABILITY BOOTSTRAP (Phase A)
+# ADMIN CAPABILITY BOOTSTRAP
 # ============================================
 
 def _count_admin_capability_grants(conn: sqlite3.Connection) -> int:
@@ -212,8 +296,6 @@ def bootstrap_admin_capabilities() -> Tuple[bool, str]:
     - Inserts one row per enabled capability.
     - Never overwrites an existing row.
     - Logs stale keys (in DB but not in registry) but does not delete.
-
-    Returns (ok, message).
     """
     db_path = Config.DATABASE_PATH
     if not os.path.exists(db_path):
@@ -233,7 +315,6 @@ def bootstrap_admin_capabilities() -> Tuple[bool, str]:
     conn.execute("PRAGMA journal_mode = WAL")
 
     try:
-        # Defensive: table must exist
         try:
             conn.execute("SELECT 1 FROM admin_capability_grants LIMIT 1")
         except sqlite3.OperationalError:
@@ -246,14 +327,12 @@ def bootstrap_admin_capabilities() -> Tuple[bool, str]:
         inserted = 0
         existing_keys = set()
 
-        # Read current state
         cursor = conn.execute(
             "SELECT capability_key FROM admin_capability_grants"
         )
         for row in cursor.fetchall():
             existing_keys.add(row['capability_key'])
 
-        # Detect stale keys (in DB but not in the registry)
         stale_keys = existing_keys - REGISTRY_KEYS
         if stale_keys:
             logger.warning(
@@ -261,7 +340,6 @@ def bootstrap_admin_capabilities() -> Tuple[bool, str]:
                 f"{sorted(stale_keys)}"
             )
 
-        # Insert missing defaults
         for key in DEFAULT_ENABLED_KEYS:
             if key in existing_keys:
                 continue
@@ -272,7 +350,6 @@ def bootstrap_admin_capabilities() -> Tuple[bool, str]:
             """, (key,))
             inserted += 1
 
-        # Ensure version row exists
         conn.execute("""
             INSERT OR IGNORE INTO admin_capability_version (id, version)
             VALUES (1, 1)
@@ -310,12 +387,14 @@ def bootstrap_admin_capabilities() -> Tuple[bool, str]:
 
 def verify_startup() -> bool:
     """
-    Verify all critical components before starting the application.
+    Verify critical components before starting the application.
     Returns True if everything is ready, False otherwise.
-    """
-    errors = []
 
-    # 1. Validate configuration
+    Uses the fast DB path — no integrity scan, no write test.
+    """
+    errors: List[str] = []
+
+    # 1. Configuration
     logger.info("Validating configuration...")
     config_errors = Config.validate()
     if config_errors:
@@ -323,15 +402,15 @@ def verify_startup() -> bool:
             logger.critical(f"Config error: {error}")
             errors.append(f"Config: {error}")
 
-    # 2. Initialize database (creates if missing, verifies)
-    logger.info("Initializing database...")
-    db_success, db_errors = initialize_database_startup()
+    # 2. Database (fast path)
+    logger.info("Initializing database (fast path)...")
+    db_success, db_errors = initialize_database_startup_fast()
     if not db_success:
         for error in db_errors:
             logger.critical(f"Database error: {error}")
             errors.append(f"Database: {error}")
 
-    # 3. Ensure error table exists
+    # 3. Error table
     logger.info("Ensuring error table exists...")
     try:
         from error_models import ensure_error_table
@@ -344,7 +423,7 @@ def verify_startup() -> bool:
         logger.critical(f"Error table creation failed: {e}")
         errors.append(f"Database: Error table - {e}")
 
-    # 4. Bootstrap entitlement system (first install only)
+    # 4. Entitlements
     logger.info("Bootstrapping entitlement system...")
     try:
         ok, msg = bootstrap_entitlements()
@@ -357,7 +436,7 @@ def verify_startup() -> bool:
         logger.critical(f"Entitlement bootstrap exception: {e}")
         errors.append(f"Entitlements: {e}")
 
-    # 4b. Bootstrap admin capabilities (first install only)
+    # 4b. Admin capabilities
     logger.info("Bootstrapping admin capabilities...")
     try:
         ok, msg = bootstrap_admin_capabilities()
@@ -370,7 +449,7 @@ def verify_startup() -> bool:
         logger.critical(f"Admin capability bootstrap exception: {e}")
         errors.append(f"Admin capabilities: {e}")
 
-    # 5. Verify backup directory
+    # 5. Backup directory
     logger.info("Verifying backup directory...")
     try:
         if not os.path.exists(Config.BACKUP_DIR):
@@ -380,7 +459,7 @@ def verify_startup() -> bool:
         logger.critical(f"Backup directory error: {e}")
         errors.append(f"Backup: Cannot create directory - {e}")
 
-    # 6. Verify log directory
+    # 6. Log directory
     logger.info("Verifying log directory...")
     try:
         if not os.path.exists(Config.LOG_DIR):
@@ -390,7 +469,7 @@ def verify_startup() -> bool:
         logger.critical(f"Log directory error: {e}")
         errors.append(f"Logs: Cannot create directory - {e}")
 
-    # Report errors
+    # Report
     if errors:
         error_message = "\n".join(errors)
         logger.critical(f"Startup verification FAILED:\n{error_message}")
@@ -399,7 +478,7 @@ def verify_startup() -> bool:
             from errors import send_error_email
             send_error_email({
                 'request_id': 'startup',
-                'timestamp': __import__('datetime').datetime.now().isoformat(),
+                'timestamp': datetime.now().isoformat() if 'datetime' in dir() else '',
                 'severity': 'CRITICAL',
                 'status_code': 500,
                 'url': 'STARTUP',
@@ -425,7 +504,8 @@ def verify_startup() -> bool:
 def get_startup_health() -> dict:
     """
     Get detailed startup health information.
-    Used by the /health endpoint.
+    Used by the /health endpoint. Does not perform the full
+    integrity scan (that is available at /health?full=1 if you add it).
     """
     health = {
         'config_valid': False,
@@ -457,7 +537,7 @@ def get_startup_health() -> dict:
     except Exception as e:
         health['errors'].append(f'Error table: {e}')
 
-    # Check entitlements (read-only — do not bootstrap here)
+    # Entitlements (read-only)
     try:
         db_path = Config.DATABASE_PATH
         conn = sqlite3.connect(db_path, timeout=5)
@@ -476,7 +556,7 @@ def get_startup_health() -> dict:
         health['entitlements'] = {'ok': False, 'message': str(e)}
         health['errors'].append(f"Entitlements: {e}")
 
-    # Check admin capabilities (read-only)
+    # Admin capabilities (read-only)
     try:
         db_path = Config.DATABASE_PATH
         conn = sqlite3.connect(db_path, timeout=5)

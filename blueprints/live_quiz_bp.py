@@ -1,5 +1,10 @@
 # blueprints/live_quiz_bp.py
 # Complete file with default privacy fix
+#
+# REMOVED: the duplicate start_cleanup_thread() at the bottom.
+# The same cleanup already runs inside live_quiz_state.py's
+# get_live_quiz_state_manager(). Two cleanup threads was a bug —
+# it doubled SQLite writes and burned CPU quota.
 
 import json
 import random
@@ -312,7 +317,6 @@ def create():
         flash('Upgrade to Premium or Pro to create live quizzes.', 'error')
         return redirect(url_for('live_quiz.lobby'))
 
-    # Load defaults from settings
     settings = session.get('settings', {})
     default_time = settings.get('live_quiz.default_time_per_question', 30)
     default_max_participants = settings.get('live_quiz.default_max_participants', 50)
@@ -375,7 +379,6 @@ def create():
                                    default_max_participants=default_max_participants,
                                    default_privacy=default_privacy)
 
-        # Use form value, fallback to default
         time_per_question = request.form.get('time_per_question')
         if time_per_question is None:
             time_per_question = default_time
@@ -394,7 +397,6 @@ def create():
             except ValueError:
                 max_participants = default_max_participants
 
-        # Use form value, fallback to default
         privacy = request.form.get('is_public')
         if privacy is None:
             privacy = default_privacy
@@ -1421,16 +1423,28 @@ def cache_stats():
         return jsonify({'error': str(e)}), 500
 
 
-# Background cleanup thread
-def start_cleanup_thread():
-    def cleanup_loop():
-        while True:
-            time.sleep(60)
-            try:
-                manager = get_state_manager()
-                manager.cleanup_finished_quizzes()
-            except Exception as e:
-                logger.error(f"Cleanup error: {e}")
-    threading.Thread(target=cleanup_loop, daemon=True).start()
-
-start_cleanup_thread()
+# ============================================
+# BACKGROUND CLEANUP — REMOVED
+# ============================================
+# The following block was removed because it duplicated the cleanup
+# already running inside live_quiz_state.get_live_quiz_state_manager().
+#
+# Two cleanup threads meant:
+#   - doubled SQLite writes (both scanning for finished quizzes)
+#   - doubled CPU usage on PythonAnywhere
+#   - a race where both threads could try to clean the same quiz
+#
+# The single cleanup loop in live_quiz_state.py is now authoritative.
+#
+#     def start_cleanup_thread():
+#         def cleanup_loop():
+#             while True:
+#                 time.sleep(60)
+#                 try:
+#                     manager = get_state_manager()
+#                     manager.cleanup_finished_quizzes()
+#                 except Exception as e:
+#                     logger.error(f"Cleanup error: {e}")
+#         threading.Thread(target=cleanup_loop, daemon=True).start()
+#
+#     start_cleanup_thread()

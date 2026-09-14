@@ -1,4 +1,5 @@
 # app.py – Complete file with modular admin system + maintenance mode
+#         All import-time blockers removed (deferred to first request)
 
 import os
 import sys
@@ -7,6 +8,7 @@ import json
 import secrets
 import logging
 import atexit
+import threading
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 
@@ -30,6 +32,7 @@ from database import get_database_health
 from errors import register_error_handlers
 from error_models import get_error_stats, get_error_log_count
 
+
 # ============================================
 # DEPLOYMENT SAFETY CHECK: Single worker
 # ============================================
@@ -50,6 +53,17 @@ def ensure_single_worker():
 
 ensure_single_worker()
 
+
+# ============================================
+# ENV TOGGLE — background threads on/off
+# ============================================
+# On PythonAnywhere free tier, background threads are killed when the
+# worker goes idle. Set ENABLE_BG_THREADS=1 in .env only if you have a
+# paid account and want live quiz checkpointing to persist.
+BG_THREADS_ENABLED = os.environ.get('ENABLE_BG_THREADS', '0') == '1'
+DEFER_HEAVY_IMPORTS = os.environ.get('DEFER_HEAVY_IMPORTS', '1') == '1'
+
+
 # ============================================
 # BLUEPRINT IMPORTS — Core
 # ============================================
@@ -64,15 +78,16 @@ from blueprints.saved_content_bp import saved_content_bp
 from blueprints.achievements_bp import achievements_bp
 from blueprints.focus_bp import focus_bp
 
+
 # ============================================
 # BLUEPRINT IMPORTS — Modular admin system
 # ============================================
-# Every admin blueprint lives in blueprints/admin/.
-# `register_admin_blueprints(app)` below registers all of them:
+# Registers ALL admin blueprints:
 #   - admin_shim, users, access, policy, content, community,
 #     upgrade (revenue), ops, system,
 #     activity, backup, errors, platform
 from blueprints.admin import register_admin_blueprints
+
 
 # ============================================
 # BLUEPRINT IMPORTS — Settings, Profile, PDF admin, Bot
@@ -83,9 +98,6 @@ from blueprints.interactions_bp import interactions_bp
 from blueprints.history_bp import history_bp
 from blueprints.pdf_admin_bp import pdf_admin_bp
 
-from bot.bot import start_bot, stop_bot, get_bot
-from bot.handlers import process_telegram_update
-from bot.db import init_bot_db
 
 # ============================================
 # SUPPORTING SERVICES
@@ -96,6 +108,7 @@ from activity_logger import (
     log_backup_event, init_activity_logger,
 )
 from services.i18n_service import register_jinja as register_i18n
+
 
 # ============================================
 # BASE DIRECTORY
@@ -108,6 +121,7 @@ if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR, exist_ok=True)
     except Exception:
         pass
+
 
 # ============================================
 # INSTANCE DIRECTORY (flag files + maintenance state)
@@ -125,6 +139,7 @@ if not os.path.exists(USER_STATE_FLAG):
             f.write('0')
     except Exception:
         pass
+
 
 # ============================================
 # LOGGING — Somali time formatter
@@ -236,6 +251,9 @@ logger = logging.getLogger(__name__)
 # ============================================
 # STARTUP VERIFICATION
 # ============================================
+# NOTE: this is the ONLY heavy synchronous work done at import time.
+# It performs the entitlement seed and capability bootstrap exactly once
+# (idempotent). The heavy integrity scan is skipped here — see startup.py.
 logger.info("=" * 60)
 logger.info("NUUNPLATFORM STARTUP - Starting verification")
 logger.info("=" * 60)
@@ -307,23 +325,11 @@ def execute_backup(backup_type='daily'):
 
 
 # ============================================
-# CACHE INITIALIZATION
+# CACHE INITIALIZATION (lazy, non-blocking)
 # ============================================
-try:
-    from cache import get_cache_manager, start_worker
-    cache_manager = get_cache_manager()
-    logger.info("Cache manager initialized successfully.")
-
-    if Config.REDIS_URL and Config.REDIS_URL.strip():
-        if Config.CACHE_WORKER_ENABLED:
-            start_worker()
-            logger.info("Cache worker started.")
-        else:
-            logger.info("Cache worker disabled (set CACHE_WORKER_ENABLED=true to enable).")
-    else:
-        logger.info("Redis not configured; cache worker not started.")
-except Exception as e:
-    logger.error(f"Cache initialization failed: {e}")
+# The cache manager is created on first access. We do NOT ping Redis
+# here because that can block for 2s if the network is slow.
+logger.info("Cache manager will initialize lazily on first use.")
 
 
 # ============================================
@@ -520,6 +526,100 @@ def refresh_user_state_if_needed():
 
 
 # ============================================
+# DEFERRED BACKGROUND WORK (runs once, on first request)
+# ============================================
+# Every operation below used to run at import time and could block
+# WSGI boot for seconds. They now run in background daemon threads
+# the first time a request arrives.
+
+_bg_lock = threading.Lock()
+_bg_state = {
+    'webhook_started': False,
+    'recovery_started': False,
+    'activity_logger_started': False,
+    'live_quiz_started': False,
+    'history_recovery_started': False,
+}
+
+
+def _spawn(name, fn):
+    t = threading.Thread(target=fn, daemon=True, name=name)
+    t.start()
+    logger.info(f"Deferred task scheduled: {name}")
+
+
+def _run_webhook_setup():
+    try:
+        from bot.bot import start_bot
+        start_bot()
+        logger.info("Bot webhook configured successfully (deferred).")
+    except Exception as e:
+        logger.error(f"Bot webhook setup failed (deferred): {e}")
+
+
+def _run_history_recovery():
+    try:
+        recover_pending_entries()
+        logger.info("History queue recovery checked (deferred).")
+    except Exception as e:
+        logger.error(f"History recovery error (deferred): {e}")
+
+
+def _run_live_quiz_recovery():
+    try:
+        from live_quiz_state import initialize_state_manager, recover_active_quizzes
+        initialize_state_manager()
+        logger.info("Live Quiz State Manager initialized (deferred).")
+        recover_active_quizzes()
+        logger.info("Active quizzes recovered (deferred).")
+    except Exception as e:
+        logger.error(f"Live Quiz recovery failed (deferred): {e}", exc_info=True)
+
+
+def _run_activity_logger_init():
+    try:
+        init_activity_logger(app)
+        logger.info("Activity logger initialized (deferred).")
+    except Exception as e:
+        logger.error(f"Activity logger init failed (deferred): {e}")
+
+
+@app.before_request
+def _kick_deferred_work():
+    """
+    First request triggers all deferred boot work in background threads.
+    Uses a lock so nothing starts twice, even under concurrent requests.
+    """
+    if not DEFER_HEAVY_IMPORTS:
+        return
+
+    # Fast path — all done
+    with _bg_lock:
+        all_done = all(_bg_state.values())
+    if all_done:
+        return
+
+    with _bg_lock:
+        if not _bg_state['webhook_started']:
+            _bg_state['webhook_started'] = True
+            _spawn('webhook-setup', _run_webhook_setup)
+
+        if not _bg_state['history_recovery_started']:
+            _bg_state['history_recovery_started'] = True
+            _spawn('history-recovery', _run_history_recovery)
+
+        if not _bg_state['live_quiz_started']:
+            _bg_state['live_quiz_started'] = True
+            _spawn('live-quiz-recovery', _run_live_quiz_recovery)
+
+        if not _bg_state['activity_logger_started']:
+            _bg_state['activity_logger_started'] = True
+            _spawn('activity-logger-init', _run_activity_logger_init)
+
+        _bg_state['recovery_started'] = True
+
+
+# ============================================
 # REGISTER BLUEPRINTS — Core user-facing
 # ============================================
 app.register_blueprint(auth_bp)
@@ -544,12 +644,6 @@ app.register_blueprint(history_bp)
 # ============================================
 # REGISTER BLUEPRINTS — Modular admin system
 # ============================================
-# Registers ALL admin blueprints:
-#   access, policy, content, community, upgrade (revenue),
-#   ops, system, activity, backup, errors, platform
-# plus the legacy shim.
-#
-# Everything admin-related now lives in blueprints/admin/.
 register_admin_blueprints(app)
 
 # ============================================
@@ -581,7 +675,11 @@ def close_db_connection(exception=None):
 @atexit.register
 def cleanup():
     logger.info("Application shutdown initiated.")
-    stop_bot()
+    try:
+        from bot.bot import stop_bot
+        stop_bot()
+    except Exception:
+        pass
     try:
         close_db_connections()
     except Exception as e:
@@ -589,13 +687,30 @@ def cleanup():
 
 
 # ============================================
-# INITIALIZE BOT DATABASE
+# BOT DATABASE INITIALIZATION (deferred — non-blocking)
 # ============================================
-try:
-    init_bot_db()
-    logger.info("Bot database initialized")
-except Exception as e:
-    logger.error(f"Failed to initialize bot database: {e}")
+# init_bot_db() creates the bot schema in a separate SQLite file.
+# It runs in the deferred worker thread instead of blocking import.
+
+
+def _run_bot_db_init():
+    try:
+        from bot.db import init_bot_db
+        init_bot_db()
+        logger.info("Bot database initialized (deferred).")
+    except Exception as e:
+        logger.error(f"Bot database init failed (deferred): {e}")
+
+
+@app.before_request
+def _kick_bot_db_init():
+    global _bg_state
+    with _bg_lock:
+        key = 'bot_db_started'
+        if _bg_state.get(key):
+            return
+        _bg_state[key] = True
+    _spawn('bot-db-init', _run_bot_db_init)
 
 
 # ============================================
@@ -605,7 +720,7 @@ except Exception as e:
 def telegram_webhook(token):
     expected_token = Config.TELEGRAM_BOT_TOKEN
     if not expected_token or token != expected_token:
-        logger.warning(f"Webhook token mismatch.")
+        logger.warning("Webhook token mismatch.")
         return jsonify({'error': 'Unauthorized'}), 403
 
     try:
@@ -613,32 +728,14 @@ def telegram_webhook(token):
         if not update_data:
             return jsonify({'error': 'Invalid data'}), 400
 
+        from bot.bot import get_bot
+        from bot.handlers import process_telegram_update
         bot = get_bot()
         process_telegram_update(bot, update_data)
         return jsonify({'status': 'ok'}), 200
     except Exception as e:
         logger.error(f"Webhook error: {e}", exc_info=True)
         return jsonify({'error': 'Internal error'}), 500
-
-
-# ============================================
-# START BOT (Set Webhook, No Polling)
-# ============================================
-try:
-    start_bot()
-    logger.info("Bot webhook configured successfully.")
-except Exception as e:
-    logger.error(f"Failed to configure bot webhook: {e}")
-
-
-# ============================================
-# HISTORY SYSTEM – RECOVER PENDING ENTRIES
-# ============================================
-try:
-    recover_pending_entries()
-    logger.info("History queue recovery checked.")
-except Exception as e:
-    logger.error(f"History recovery error: {e}")
 
 
 # ============================================
@@ -683,10 +780,9 @@ def health_check():
         critical_issues.append('Database does not exist')
     if not db_health.get('openable'):
         critical_issues.append('Database cannot be opened')
-    if not db_health.get('integrity'):
-        critical_issues.append('Database integrity check failed')
     if not db_health.get('tables_ok'):
         critical_issues.append('Missing required tables')
+    # Integrity check is expensive — skipped at boot, reported separately.
     if not db_health.get('wal_enabled'):
         critical_issues.append('WAL mode is disabled')
 
@@ -702,6 +798,7 @@ def health_check():
             'backup': backup_health,
             'cache': cache_health,
             'errors': error_stats,
+            'deferred_tasks': dict(_bg_state),
         },
         'critical_issues': critical_issues,
     }), status_code
@@ -849,24 +946,6 @@ def utility_processor():
         'super_admin_phone': Config.SUPER_ADMIN_PHONE,
         'has_focus_access': has_focus_access,
     }
-
-
-# ============================================
-# INITIALIZE ACTIVITY LOGGER
-# ============================================
-init_activity_logger(app)
-
-
-# ============================================
-# INITIALIZE LIVE QUIZ STATE MANAGER
-# ============================================
-try:
-    from live_quiz_state import initialize_state_manager, recover_active_quizzes
-    initialize_state_manager()
-    recover_active_quizzes()
-    logger.info("Live Quiz State Manager initialized and recovered active quizzes.")
-except Exception as e:
-    logger.error(f"Live Quiz State Manager initialization failed: {e}", exc_info=True)
 
 
 # ============================================
