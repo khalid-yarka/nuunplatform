@@ -1,10 +1,8 @@
 {# ============================================================
    templates/dashboard/admin/overview.html
    Dual-mode admin home.
-     - Super admin (platform.view) → command centre
-     - Regular admin              → workbench
-
-   Revenue tools are SUPER-ADMIN-ONLY on this page.
+     - Super admin → command centre (pulse + alerts + revenue)
+     - Regular admin → workbench (pending items, own activity)
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -15,7 +13,7 @@
 {% block admin_title_icon %}<i class="fas fa-th-large header-icon"></i>{% endblock %}
 {% block admin_title %}Overview{% endblock %}
 {% block admin_subtitle %}
-    {% if admin_can('platform.view') %}
+    {% if is_super_admin_view %}
         Command centre — every lever of the platform, one screen.
     {% else %}
         Your workbench — what's waiting for you today.
@@ -45,7 +43,7 @@
 {# ════════════════════════════════════════════════════════════
    SUPER ADMIN — COMMAND CENTRE
    ════════════════════════════════════════════════════════════ #}
-{% if admin_can('platform.view') %}
+{% if is_super_admin_view %}
 
     {# ─────── 1. ALERTS ─────── #}
     {% if alerts %}
@@ -91,6 +89,7 @@
             <span class="stat-sub">{{ pulse.quizzes_week }} this week</span>
         </div>
 
+        {# ─────── REVENUE — SUPER ADMIN ONLY ─────── #}
         <div class="admin-stat tone-purple">
             <div class="stat-head">
                 <span class="stat-icon"><i class="fas fa-rocket"></i></span>
@@ -510,7 +509,7 @@
                         <div class="cc-act-text">
                             <strong>{{ a.actor_name }}</strong> {{ a.description|safe }}
                         </div>
-                        <div class="cc-act-time">{{ a.time }}</div>
+                        <div class="cc-act-time">{{ a.time|somali_dt }}</div>
                     </div>
                 </div>
                 {% endfor %}
@@ -525,7 +524,7 @@
     {% endif %}
 
 {# ════════════════════════════════════════════════════════════
-   REGULAR ADMIN — WORKBENCH
+   REGULAR ADMIN — WORKBENCH (no revenue anywhere)
    ════════════════════════════════════════════════════════════ #}
 {% else %}
 
@@ -617,7 +616,7 @@
                 <span class="cc-act-icon">{{ a.icon }}</span>
                 <div class="cc-act-body">
                     <div class="cc-act-text">{{ a.description|safe }}</div>
-                    <div class="cc-act-time">{{ a.time }}</div>
+                    <div class="cc-act-time">{{ a.time|somali_dt }}</div>
                 </div>
             </div>
             {% endfor %}

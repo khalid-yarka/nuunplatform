@@ -1,12 +1,11 @@
 # admin_users_db.py
 # Advanced user management helpers for the admin panel.
 # Auto-adds missing columns/tables on first use — no manual migration.
-#
-# PHASE 2: Tier vocabulary normalized to canonical free/premium/pro.
 
 import csv
 import io
 import logging
+import re
 import sqlite3
 from datetime import datetime
 from typing import Optional, List, Tuple, Dict, Any
@@ -21,15 +20,10 @@ from tier_config import normalize_tier
 logger = logging.getLogger(__name__)
 
 
-# ============================================
-# SCHEMA BOOTSTRAP (idempotent)
-# ============================================
-
 _SCHEMA_READY = False
 
 
 def ensure_admin_user_schema() -> bool:
-    """Add columns and tables needed for advanced user admin. Runs once per process."""
     global _SCHEMA_READY
     if _SCHEMA_READY:
         return True
@@ -102,7 +96,6 @@ def log_admin_user_action(
     new_value: Optional[str] = None,
     note: Optional[str] = None,
 ) -> bool:
-    """Record an admin action on a user."""
     ensure_admin_user_schema()
     try:
         execute_with_retry("""
@@ -110,23 +103,16 @@ def log_admin_user_action(
                 (admin_id, target_user_id, action, old_value, new_value, note, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
-            admin_id,
-            target_user_id,
-            action,
+            admin_id, target_user_id, action,
             str(old_value) if old_value is not None else None,
             str(new_value) if new_value is not None else None,
-            note,
-            now(),
+            note, now(),
         ), commit=True)
         return True
     except Exception as e:
         logger.error(f"log_admin_user_action failed: {e}")
         return False
 
-
-# ============================================
-# LIST QUERY (search / filter / sort / paginate)
-# ============================================
 
 SORT_MAP = {
     'newest': 'created_at DESC',
@@ -135,7 +121,6 @@ SORT_MAP = {
     'name_za': 'first_name DESC, last_name DESC',
     'points_high': 'total_points DESC',
     'points_low': 'total_points ASC',
-    # PHASE 2: canonical vocabulary
     'tier_high': "CASE tier WHEN 'pro' THEN 3 WHEN 'premium' THEN 2 ELSE 1 END DESC, total_points DESC",
 }
 
@@ -148,7 +133,6 @@ def _build_user_filter_sql(
     only_admins: bool = False,
     only_inactive: bool = False,
 ) -> Tuple[str, List[Any]]:
-    """Shared WHERE clause builder for list + export."""
     where = ["1=1"]
     params: List[Any] = []
 
@@ -160,7 +144,6 @@ def _build_user_filter_sql(
         )
         params.extend([like] * 7)
 
-    # PHASE 2: accept canonical or legacy input; compare against canonical.
     if tier_filter:
         canonical = normalize_tier(tier_filter)
         if canonical in ('free', 'premium', 'pro'):
@@ -201,7 +184,6 @@ def get_users_admin(
     page: int = 1,
     per_page: int = 25,
 ) -> Tuple[List[Dict], int]:
-    """Return (list_of_users, total_count) for the admin list page."""
     ensure_admin_user_schema()
 
     where_sql, params = _build_user_filter_sql(
@@ -243,7 +225,6 @@ def get_users_admin_export(
     only_inactive: bool = False,
     sort: str = 'newest',
 ) -> List[Dict]:
-    """Return all matching users (no pagination) for CSV export."""
     ensure_admin_user_schema()
     where_sql, params = _build_user_filter_sql(
         search, tier_filter, location_filter, curriculum_filter,
@@ -266,7 +247,6 @@ def get_users_admin_export(
 
 
 def users_to_csv(users: List[Dict]) -> str:
-    """Convert a list of user dicts to a CSV string."""
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow([
@@ -295,12 +275,7 @@ def users_to_csv(users: List[Dict]) -> str:
     return buf.getvalue()
 
 
-# ============================================
-# STATS
-# ============================================
-
 def get_users_admin_stats() -> Dict[str, int]:
-    """Top-of-page stats for the admin user list (canonical tier keys)."""
     ensure_admin_user_schema()
     try:
         cursor = execute_with_retry("""
@@ -326,12 +301,7 @@ def get_users_admin_stats() -> Dict[str, int]:
     }
 
 
-# ============================================
-# DETAIL PAGE DATA
-# ============================================
-
 def get_user_admin_history(user_id: int, limit: int = 50) -> List[Dict]:
-    """Recent admin actions targeting this user."""
     ensure_admin_user_schema()
     try:
         cursor = execute_with_retry("""
@@ -355,7 +325,6 @@ def get_user_admin_history(user_id: int, limit: int = 50) -> List[Dict]:
 
 
 def get_user_recent_quizzes_admin(user_id: int, limit: int = 20) -> List[Dict]:
-    """Recent quiz attempts enriched with subject info."""
     try:
         cursor = execute_with_retry("""
             SELECT id, subject_code, score, total_questions, completed_at
@@ -380,7 +349,6 @@ def get_user_recent_quizzes_admin(user_id: int, limit: int = 20) -> List[Dict]:
 
 
 def get_user_recent_live_quizzes(user_id: int, limit: int = 10) -> List[Dict]:
-    """Recent live quiz participations."""
     try:
         cursor = execute_with_retry("""
             SELECT lqp.id, lqp.quiz_id, lqp.score, lqp.ranking,
@@ -406,11 +374,174 @@ def get_user_recent_live_quizzes(user_id: int, limit: int = 10) -> List[Dict]:
 
 
 # ============================================
-# WRITE OPERATIONS (single user)
+# PROFILE EDIT (NEW)
+# ============================================
+
+# Validation rules shared with auth_bp — kept here so admin edits and
+# registration stay in sync.
+_VALID_GRADES = ('G7', 'G8', 'F3', 'F4')
+_VALID_LOCATIONS = ('SO', 'PL', 'SL')
+_VALID_CURRICULA = ('general', 'science', 'arts')
+
+
+def _valid_name(name: str) -> bool:
+    name = (name or '').strip()
+    return len(name) >= 4 and name.isalpha()
+
+
+def _valid_city(city: str) -> bool:
+    city = (city or '').strip()
+    return len(city) >= 5 and all(c.isalpha() or c.isspace() for c in city)
+
+
+def _valid_school(school: str) -> bool:
+    words = (school or '').strip().split()
+    return len(words) >= 2 and all(
+        len(w) >= 4 and w.isalpha() for w in words
+    )
+
+
+def _normalize_phone(raw: str) -> str:
+    digits = re.sub(r'\D', '', raw or '')
+    if digits.startswith('252'):
+        digits = digits[3:]
+    return '+252' + digits
+
+
+def update_user_profile(user_id: int, data: Dict[str, Any], admin_id: int) -> Tuple[bool, str, Dict[str, Any]]:
+    """
+    Update a user's profile fields as a super admin.
+
+    Accepts the following keys in `data` (all optional):
+        first_name, middle_name, last_name,
+        phone_number, school, grade, city, location, curriculum
+
+    Returns (ok, message, changed_fields).
+
+    Validation:
+      - names:   >= 4 letters, alphabetic only
+      - school:  >= 2 words, each >= 4 letters
+      - city:    >= 5 letters
+      - grade:   one of G7, G8, F3, F4
+      - location: one of SO, PL, SL
+      - curriculum: only for PL; must be one of general/science/arts
+      - phone:   normalized to +252XXXXXXXXX; must be unique
+    """
+    ensure_admin_user_schema()
+
+    user = get_student_by_id(user_id)
+    if not user:
+        return False, 'User not found.', {}
+
+    old = dict(user)
+
+    # -------- normalize inputs --------
+    new_first = (data.get('first_name') or old.get('first_name') or '').strip()
+    new_middle = (data.get('middle_name') or '').strip() if 'middle_name' in data else (old.get('middle_name') or '')
+    new_last = (data.get('last_name') or old.get('last_name') or '').strip()
+    new_school = (data.get('school') or old.get('school') or '').strip()
+    new_grade = (data.get('grade') or old.get('grade') or '').strip()
+    new_city = (data.get('city') or old.get('city') or '').strip()
+    new_location = (data.get('location') or old.get('location') or '').strip()
+
+    # curriculum: only meaningful for PL
+    if 'curriculum' in data:
+        new_curriculum = (data.get('curriculum') or '').strip() or None
+    else:
+        new_curriculum = old.get('curriculum')
+
+    # phone — optional in the form
+    new_phone_raw = (data.get('phone_number') or '').strip()
+    new_phone = None
+    if new_phone_raw:
+        digits = re.sub(r'\D', '', new_phone_raw)
+        if len(digits) != 9:
+            return False, 'Phone number must be exactly 9 digits.', {}
+        new_phone = _normalize_phone(digits)
+
+    # -------- validate --------
+    if not _valid_name(new_first):
+        return False, 'First name must be at least 4 letters (A–Z).', {}
+    if new_middle and not re.fullmatch(r'[A-Za-z]+', new_middle):
+        return False, 'Middle name must contain only letters.', {}
+    if not _valid_name(new_last):
+        return False, 'Last name must be at least 4 letters (A–Z).', {}
+    if not _valid_school(new_school):
+        return False, 'School must have at least 2 words, each 4+ letters.', {}
+    if new_grade not in _VALID_GRADES:
+        return False, f'Grade must be one of: {", ".join(_VALID_GRADES)}.', {}
+    if not _valid_city(new_city):
+        return False, 'City must be at least 5 letters.', {}
+    if new_location not in _VALID_LOCATIONS:
+        return False, f'Location must be one of: {", ".join(_VALID_LOCATIONS)}.', {}
+
+    if new_location == 'PL':
+        if new_curriculum not in _VALID_CURRICULA:
+            return False, 'Curriculum is required for Puntland.', {}
+    else:
+        new_curriculum = None
+
+    if new_phone:
+        cursor = execute_with_retry(
+            "SELECT id FROM students WHERE phone_number = ? AND id != ?",
+            (new_phone, user_id),
+        )
+        if cursor.fetchone():
+            return False, 'This phone number is already used by another account.', {}
+
+    # -------- build diff --------
+    candidate = {
+        'first_name': new_first,
+        'middle_name': new_middle,
+        'last_name': new_last,
+        'school': new_school,
+        'grade': new_grade,
+        'city': new_city,
+        'location': new_location,
+        'curriculum': new_curriculum,
+    }
+    if new_phone:
+        candidate['phone_number'] = new_phone
+
+    changed_fields: Dict[str, Any] = {}
+    for key, new_val in candidate.items():
+        old_val = old.get(key)
+        if str(old_val or '') != str(new_val or ''):
+            changed_fields[key] = {'before': old_val, 'after': new_val}
+
+    if not changed_fields:
+        return True, 'No changes.', {}
+
+    # -------- persist --------
+    try:
+        set_clauses = []
+        params = []
+        for key in candidate.keys():
+            set_clauses.append(f"{key} = ?")
+            params.append(candidate[key])
+        params.append(user_id)
+
+        execute_with_retry(
+            f"UPDATE students SET {', '.join(set_clauses)} WHERE id = ?",
+            params, commit=True,
+        )
+
+        log_admin_user_action(
+            admin_id, user_id, 'edit_profile',
+            None, ', '.join(changed_fields.keys()),
+        )
+
+        return True, f"Updated {len(changed_fields)} field(s).", changed_fields
+    except Exception as e:
+        logger.error(f"update_user_profile failed: {e}", exc_info=True)
+        return False, 'Database error while saving.', {}
+
+
+# ============================================
+# SINGLE-USER WRITES
 # ============================================
 
 def set_user_admin_note(user_id: int, note: str, admin_id: int) -> bool:
-    """Set the free-text admin note on a user and log the change."""
     ensure_admin_user_schema()
     try:
         user = get_student_by_id(user_id)
@@ -429,7 +560,6 @@ def set_user_admin_note(user_id: int, note: str, admin_id: int) -> bool:
 
 
 def set_user_tier_admin(user_id: int, new_tier: str, admin_id: int) -> bool:
-    """Set a user's tier. Accepts canonical or legacy input; stores canonical."""
     ensure_admin_user_schema()
 
     new_tier = normalize_tier(new_tier)
@@ -464,7 +594,6 @@ def set_user_tier_admin(user_id: int, new_tier: str, admin_id: int) -> bool:
 
 
 def toggle_user_admin_admin(user_id: int, admin_id: int) -> Optional[bool]:
-    """Returns the new admin state (True/False) or None on error."""
     ensure_admin_user_schema()
     if user_id == admin_id:
         return None
@@ -497,18 +626,6 @@ def reset_user_password(
     force_logout: bool = True,
     notify_user: bool = True,
 ) -> Tuple[bool, str]:
-    """
-    Set a user's password to a specific value.
-
-    Args:
-        user_id:       target user id
-        new_password:  plaintext password (>= 8 chars)
-        admin_id:      actor (recorded in admin_user_actions)
-        force_logout:  bump session_version so live sessions die
-        notify_user:   send an in-app "password changed" notice
-
-    Returns (ok, message). Message is user-facing.
-    """
     ensure_admin_user_schema()
 
     if not isinstance(new_password, str):
@@ -530,8 +647,7 @@ def reset_user_password(
 
         execute_with_retry(
             "UPDATE students SET password = ? WHERE id = ?",
-            (password_hash, user_id),
-            commit=True,
+            (password_hash, user_id), commit=True,
         )
 
         if force_logout:
@@ -540,31 +656,20 @@ def reset_user_password(
                     "UPDATE students "
                     "SET session_version = COALESCE(session_version, 0) + 1 "
                     "WHERE id = ?",
-                    (user_id,),
-                    commit=True,
+                    (user_id,), commit=True,
                 )
             except Exception as e:
                 logger.warning(f"session_version bump failed for {user_id}: {e}")
 
-        log_admin_user_action(
-            admin_id,
-            user_id,
-            'reset_password',
-            None,
-            'custom',
-        )
+        log_admin_user_action(admin_id, user_id, 'reset_password', None, 'custom')
 
         if notify_user:
             try:
-                from db import create_notification
                 create_notification(
-                    user_id=user_id,
-                    type='account',
+                    user_id=user_id, type='account',
                     title='🔐 Password Changed',
-                    body='An administrator changed your password. '
-                         'Please log in again.',
-                    link='/login',
-                    icon='🔐',
+                    body='An administrator changed your password. Please log in again.',
+                    link='/login', icon='🔐',
                 )
             except Exception as e:
                 logger.warning(f"reset-password notification failed: {e}")
@@ -582,18 +687,13 @@ def reset_user_password_to_default(
     force_logout: bool = True,
     notify_user: bool = True,
 ) -> Tuple[bool, str]:
-    """Reset a user's password to a specific default. Thin wrapper."""
     return reset_user_password(
-        user_id,
-        default_password,
-        admin_id,
-        force_logout=force_logout,
-        notify_user=notify_user,
+        user_id, default_password, admin_id,
+        force_logout=force_logout, notify_user=notify_user,
     )
 
 
 def force_user_logout(user_id: int, admin_id: int) -> bool:
-    """Bump session_version so all existing sessions become invalid."""
     ensure_admin_user_schema()
     try:
         execute_with_retry("""
@@ -609,9 +709,7 @@ def force_user_logout(user_id: int, admin_id: int) -> bool:
 
 
 def set_user_public_id(user_id: int, new_id: str, admin_id: int) -> Tuple[bool, str]:
-    """Set a user's public ID. Returns (ok, message)."""
     ensure_admin_user_schema()
-    import re
     new_id = (new_id or '').strip().upper()
     if not re.fullmatch(r'[A-Z0-9]{4}', new_id):
         return False, 'ID must be exactly 4 uppercase letters/digits.'
@@ -645,7 +743,6 @@ def bulk_user_action(
     admin_id: int,
     extra: Optional[Dict[str, Any]] = None,
 ) -> Tuple[int, int]:
-    """Returns (succeeded, failed). Never raises."""
     ensure_admin_user_schema()
     if not user_ids:
         return 0, 0

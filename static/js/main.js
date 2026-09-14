@@ -1,4 +1,6 @@
-// static/js/main.js – Global utilities with logout modal handling
+// static/js/main.js – Global utilities
+// NOTE: the sidebar logout button is handled EXCLUSIVELY by dashboard.js.
+// Do NOT attach another listener here — that caused a double modal.
 
 document.addEventListener('DOMContentLoaded', function() {
     // ============================================
@@ -119,26 +121,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // ============================================
-    // SIDEBAR LOGOUT – Fallback handler
-    // ============================================
-    const sidebarLogoutBtn = document.getElementById('sidebarLogoutBtn');
-    if (sidebarLogoutBtn) {
-        // The modal is already handled in dashboard_base.html
-        // This is just a safety fallback
-        sidebarLogoutBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            // Check if the modal function exists
-            if (typeof openSidebarLogoutModal === 'function') {
-                openSidebarLogoutModal();
-            } else {
-                // Fallback: redirect to logout directly
-                if (confirm('Are you sure you want to log out? Any unsaved changes will be lost.')) {
-                    window.location.href = '/logout';
-                }
-            }
-        });
-    }
+    // NOTE:
+    // The sidebar logout button (#sidebarLogoutBtn) is intentionally NOT
+    // wired up in this file. dashboard.js owns it. Attaching a listener
+    // here as well caused the logout warning modal to open twice.
 
     console.log('✅ NuunPlatform main.js loaded');
 });
@@ -160,21 +146,21 @@ document.addEventListener('click', function(e) {
 });
 
 // ============================================
-// GLOBAL LOGOUT MODAL FUNCTIONS (fallback)
+// GLOBAL LOGOUT MODAL FALLBACK
 // ============================================
-// These are defined in dashboard_base.html and settings/index.html,
-// but we provide a fallback just in case.
+// A minimal fallback is provided ONLY if dashboard.js did not define
+// the modal helpers. dashboard.js loads first, so in normal operation
+// these definitions are no-ops.
 
-if (typeof openSidebarLogoutModal === 'undefined') {
+if (typeof window.openSidebarLogoutModal === 'undefined') {
     window.openSidebarLogoutModal = function() {
-        // Fallback to simple confirm
         if (confirm('Are you sure you want to log out?\n\nYou will lose any unsaved changes, including:\n• Unsaved settings\n• In-progress quizzes\n• Live quiz sessions\n• Unsaved form data\n\nThis action cannot be undone.')) {
             window.location.href = '/logout';
         }
     };
 }
 
-if (typeof closeSidebarLogoutModal === 'undefined') {
+if (typeof window.closeSidebarLogoutModal === 'undefined') {
     window.closeSidebarLogoutModal = function() {
         // Nothing to close in fallback mode
     };

@@ -12,12 +12,10 @@
 #   POST /admin/announcement                       → send announcement
 #   GET  /admin/broadcast                          → broadcast compose
 #
-# NOTE: The POST handler for /admin/broadcast lives in admin_platform_bp.
-# This file only serves the compose page (GET).
-#
-# Maintenance state is stored as JSON in  <project>/instance/maintenance.json
-# (user_settings has a FK on students.id, so user_id=0 is not usable as
-#  a "platform" sentinel row.)
+# NOTE: Revenue figures (today / month) are SUPER-ADMIN ONLY. They are
+# included in the pulse ONLY when is_super_admin() is true. Regular
+# admins receive pulse without revenue keys and the template hides
+# those tiles anyway.
 # ============================================================
 
 import os
@@ -146,7 +144,7 @@ def _backup_health():
 def dashboard():
     """
     Dual-mode admin landing page.
-    - Super admin (platform.view): control centre with pulse + alerts.
+    - Super admin (is_super_admin): command centre with pulse + alerts.
     - Regular admin: workbench with pending items and own recent activity.
     """
     if 'user_id' not in session:
@@ -156,10 +154,10 @@ def dashboard():
     if not is_any_admin():
         abort(404)
 
-    is_super = admin_can('platform.view')
+    is_super = is_super_admin()
 
     if is_super:
-        pulse = _build_pulse()
+        pulse = _build_pulse(include_revenue=True)
         alerts = _build_alerts(pulse)
         system = _build_system_block()
         recent_actions = _build_recent_actions()
@@ -172,23 +170,33 @@ def dashboard():
             recent_actions=recent_actions,
             pending={'total': 0, 'items': []},
             recent_own_actions=[],
+            is_super_admin_view=True,
         )
     else:
+        # Regular admin — no revenue anywhere in the payload.
+        pulse = _build_pulse(include_revenue=False)
         pending = _build_pending_work()
         recent_own = _build_recent_own_actions()
 
         return render_template(
             'dashboard/admin/overview.html',
-            pulse={},
+            pulse=pulse,
             alerts=[],
             system={},
             recent_actions=[],
             pending=pending,
             recent_own_actions=recent_own,
+            is_super_admin_view=False,
         )
 
 
-def _build_pulse():
+def _build_pulse(include_revenue: bool = False):
+    """
+    Build the pulse dict.
+
+    Revenue keys (revenue_today, revenue_month) are ONLY added when
+    `include_revenue=True`. Callers must pass True only for super admin.
+    """
     stats = {}
     try:
         from platform_activity import get_platform_stats
@@ -196,33 +204,7 @@ def _build_pulse():
     except Exception:
         pass
 
-    revenue_today_cents = 0
-    revenue_month_cents = 0
-    try:
-        cursor = execute_with_retry("""
-            SELECT COALESCE(SUM(final_price_cents), 0) AS c
-            FROM upgrade_requests
-            WHERE status = 'approved'
-              AND approved_at >= datetime('now', '-1 day')
-        """)
-        row = cursor.fetchone()
-        revenue_today_cents = int(row['c'] or 0) if row else 0
-
-        cursor = execute_with_retry("""
-            SELECT COALESCE(SUM(final_price_cents), 0) AS c
-            FROM upgrade_requests
-            WHERE status = 'approved'
-              AND approved_at >= datetime('now', '-30 days')
-        """)
-        row = cursor.fetchone()
-        revenue_month_cents = int(row['c'] or 0) if row else 0
-    except Exception:
-        pass
-
-    backup = _backup_health()
-    disk = _disk_stats()
-
-    return {
+    pulse = {
         'users_total':      stats.get('users_total', 0),
         'users_delta':      0,
         'users_new_today':  stats.get('users_today', 0),
@@ -230,16 +212,49 @@ def _build_pulse():
         'quizzes_delta':    0,
         'quizzes_week':     stats.get('quizzes_week', 0),
         'upgrades_pending': stats.get('upgrades_pending', 0),
-        'revenue_today':    round(revenue_today_cents / 100, 2),
-        'revenue_month':    round(revenue_month_cents / 100, 2),
         'errors_open':      stats.get('errors_open', 0),
         'errors_today':     stats.get('errors_today', 0),
+    }
+
+    if include_revenue:
+        revenue_today_cents = 0
+        revenue_month_cents = 0
+        try:
+            cursor = execute_with_retry("""
+                SELECT COALESCE(SUM(final_price_cents), 0) AS c
+                FROM upgrade_requests
+                WHERE status = 'approved'
+                  AND approved_at >= datetime('now', '-1 day')
+            """)
+            row = cursor.fetchone()
+            revenue_today_cents = int(row['c'] or 0) if row else 0
+
+            cursor = execute_with_retry("""
+                SELECT COALESCE(SUM(final_price_cents), 0) AS c
+                FROM upgrade_requests
+                WHERE status = 'approved'
+                  AND approved_at >= datetime('now', '-30 days')
+            """)
+            row = cursor.fetchone()
+            revenue_month_cents = int(row['c'] or 0) if row else 0
+        except Exception:
+            pass
+
+        pulse['revenue_today'] = round(revenue_today_cents / 100, 2)
+        pulse['revenue_month'] = round(revenue_month_cents / 100, 2)
+
+    backup = _backup_health()
+    disk = _disk_stats()
+
+    pulse.update({
         'backup_age_days':  backup['age_days'],
         'backup_count':     backup['count'],
         'disk_free_mb':     disk['free_mb'],
         'disk_free_gb':     disk['free_gb'],
         'disk_used_pct':    disk['used_pct'],
-    }
+    })
+
+    return pulse
 
 
 def _build_alerts(pulse):
@@ -323,6 +338,7 @@ def _build_system_block():
 
 
 def _build_recent_actions():
+    """Recent admin actions across the platform. Super admin only."""
     try:
         rows = _rows("""
             SELECT a.action, a.target_type, a.created_at, a.severity,
@@ -348,6 +364,7 @@ def _build_recent_actions():
 
 
 def _build_pending_work():
+    """Regular-admin workbench: pending items only, no revenue."""
     items = []
 
     try:
@@ -496,10 +513,8 @@ def search():
 
 
 # ============================================================
-# MAINTENANCE MODE — super admin only
+# MAINTENANCE MODE
 # ============================================================
-# State is a plain JSON file in <project>/instance/maintenance.json
-# (see module docstring for why we don't use user_settings).
 
 _DEFAULT_MAINTENANCE = {
     'enabled': False,
@@ -616,7 +631,7 @@ def maintenance_save():
 
 
 # ============================================================
-# ANNOUNCEMENTS — send to all users
+# ANNOUNCEMENTS
 # ============================================================
 
 @admin_system_bp.route('/announcement', methods=['GET'],
@@ -671,10 +686,8 @@ def announcement_send():
 
 
 # ============================================================
-# BROADCAST — compose page only
+# BROADCAST
 # ============================================================
-# The actual POST handler lives in `admin_platform_bp.broadcast`.
-# This GET just renders the compose form which posts to that endpoint.
 
 @admin_system_bp.route('/broadcast', methods=['GET'],
                        endpoint='broadcast_compose')

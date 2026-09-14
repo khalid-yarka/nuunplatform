@@ -32,6 +32,7 @@ from admin_users_db import (
     force_user_logout,
     set_user_public_id, get_user_admin_history, get_user_recent_quizzes_admin,
     get_user_recent_live_quizzes, bulk_user_action, log_admin_user_action,
+    update_user_profile,     # ← NEW
 )
 from utils import validate_csrf
 from services.admin.guards import admin_can
@@ -140,7 +141,6 @@ def user_detail(user_id):
     if quizzes:
         avg = round(sum(q['percentage'] for q in quizzes) / len(quizzes), 1)
 
-    # Active session info (best-effort)
     session_info = None
     try:
         row = execute_with_retry(
@@ -154,7 +154,6 @@ def user_detail(user_id):
     except Exception:
         session_info = None
 
-    # Generate a fresh random password for the "suggest" button
     alphabet = string.ascii_letters + string.digits
     suggested_password = ''.join(secrets.choice(alphabet) for _ in range(12))
 
@@ -170,6 +169,58 @@ def user_detail(user_id):
         suggested_password=suggested_password,
         default_password_preset=DEFAULT_PASSWORD_PRESET,
     )
+
+
+# ============================================================
+# PROFILE EDIT (NEW — fixes "super admin can't edit user details")
+# ============================================================
+
+@admin_users_bp.route('/users/<int:user_id>/profile', methods=['POST'],
+                      endpoint='edit_profile')
+@admin_can('users.view')
+def edit_profile(user_id):
+    """
+    Update a user's profile as super admin. Every changed field is
+    audited. Guarded by users.view for now — change to a dedicated
+    users.edit_profile capability if you want to restrict further.
+    """
+    validate_csrf()
+
+    user = get_student_by_id(user_id)
+    if not user:
+        flash('User not found.', 'error')
+        return redirect(url_for('admin_users.list_users'))
+
+    payload = {
+        'first_name': (request.form.get('first_name') or '').strip(),
+        'middle_name': (request.form.get('middle_name') or '').strip(),
+        'last_name': (request.form.get('last_name') or '').strip(),
+        'school': (request.form.get('school') or '').strip(),
+        'grade': (request.form.get('grade') or '').strip(),
+        'city': (request.form.get('city') or '').strip(),
+        'location': (request.form.get('location') or '').strip(),
+        'curriculum': (request.form.get('curriculum') or '').strip(),
+        'phone_number': (request.form.get('phone_number') or '').strip(),
+    }
+
+    ok, msg, changed = update_user_profile(user_id, payload, session['user_id'])
+
+    if ok and changed:
+        write_audit(
+            action='user.edit_profile',
+            target_type='user',
+            target_id=user_id,
+            before=None,
+            after={'changed_fields': list(changed.keys())},
+            severity='warning',
+        )
+        flash(msg, 'success')
+    elif ok:
+        flash(msg or 'No changes.', 'info')
+    else:
+        flash(msg or 'Failed to update profile.', 'error')
+
+    return redirect(url_for('admin_users.user_detail', user_id=user_id))
 
 
 # ============================================================
@@ -263,7 +314,7 @@ def notify(user_id):
 
 
 # ============================================================
-# PASSWORD — custom value
+# PASSWORD — custom
 # ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/set-password', methods=['POST'],
@@ -311,7 +362,7 @@ def set_password(user_id):
 
 
 # ============================================================
-# PASSWORD — reset to 12345678 (one click)
+# PASSWORD — preset 12345678
 # ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/reset-password-default',
@@ -460,10 +511,7 @@ def users_bulk():
     elif action == 'notify':
         extra['title'] = (request.form.get('bulk_title') or '').strip()
         extra['body'] = (request.form.get('bulk_body') or '').strip()
-    elif action == 'reset_password_default':
-        extra['password'] = DEFAULT_PASSWORD_PRESET
 
-    # Bulk password reset — special handling since it needs werkzeug
     if action == 'reset_password_default':
         from werkzeug.security import generate_password_hash
         succeeded = 0
@@ -497,8 +545,7 @@ def users_bulk():
         )
 
         if succeeded:
-            flash(f'Bulk reset: {succeeded} user(s) set to '
-                  f'{DEFAULT_PASSWORD_PRESET}.', 'success')
+            flash(f'Bulk reset: {succeeded} user(s) set to {DEFAULT_PASSWORD_PRESET}.', 'success')
         if failed:
             flash(f'Bulk reset: {failed} failed.', 'error')
         return redirect(request.referrer or url_for('admin_users.list_users'))

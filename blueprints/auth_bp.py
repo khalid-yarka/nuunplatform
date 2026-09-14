@@ -4,6 +4,9 @@
 # Password hashing: werkzeug.security (generate/check).
 # No email. No verification step. No password reset.
 # New users register with is_verified=0. Admin verifies manually.
+#
+# NOTE: login stores session['session_version'] from the DB so that
+# app.py::refresh_user_state_if_needed can detect a force-logout.
 
 import time
 import secrets
@@ -79,7 +82,6 @@ def _normalize_phone(phone: str) -> str:
     return '+252' + phone
 
 
-# Valid grades
 VALID_GRADES = ('G7', 'G8', 'F3', 'F4')
 
 
@@ -89,10 +91,6 @@ VALID_GRADES = ('G7', 'G8', 'F3', 'F4')
 
 @auth_bp.route('/auth/check-phone', methods=['POST'])
 def check_phone():
-    """
-    Called from the registration form after phone validation.
-    Returns {'valid': bool, 'taken': bool}.
-    """
     if not _rate_limit(f'checkphone:{_client_ip()}', max_calls=30, window_seconds=600):
         return jsonify({'valid': False, 'taken': False, 'error': 'rate_limited'}), 429
 
@@ -134,7 +132,6 @@ def register():
         flash('Invalid request. Please refresh and try again.', 'error')
         return render_template('auth/register.html')
 
-    # ---- Read form ----
     phone_raw = (request.form.get('phone') or '').strip()
     password = request.form.get('password') or ''
     confirm = request.form.get('confirm_password') or ''
@@ -287,6 +284,14 @@ def login():
         flash('Invalid phone number or password.', 'error')
         return render_template('auth/login.html')
 
+    # ------------------------------------------------------------------
+    # SESSION BOOTSTRAP
+    # ------------------------------------------------------------------
+    # IMPORTANT: session['session_version'] is stored here so that
+    # app.py::refresh_user_state_if_needed can detect a force-logout.
+    # If the DB value ever diverges from the session value, the session
+    # is killed on the user's next request.
+    # ------------------------------------------------------------------
     session.clear()
     session['user_id'] = student['id']
     session['public_id'] = student.get('public_id', '----')
@@ -298,6 +303,7 @@ def login():
     session['tier'] = student.get('tier', 'free')
     session['tier_expires_at'] = student.get('tier_expires_at')
     session['tier_loaded_at'] = time.time()
+    session['session_version'] = int(student.get('session_version', 0) or 0)
     session['user_state_loaded_at'] = time.time()
     session['csrf_token'] = secrets.token_hex(32)
     session.permanent = True

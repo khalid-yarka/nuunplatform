@@ -25,6 +25,8 @@ from db import (
 from utils import (
     get_somali_time_display, validate_csrf, ensure_csrf_token, time_ago,
     get_accent_colours, ACCENT_MAP, get_somali_time_db, SOMALI_TIMEZONE,
+    somali_dt_filter, somali_time_only_filter, somali_date_only_filter,
+    format_somali_time,
 )
 from tier_config import normalize_tier
 from startup import verify_startup, get_startup_health
@@ -33,9 +35,6 @@ from errors import register_error_handlers
 from error_models import get_error_stats, get_error_log_count
 
 
-# ============================================
-# DEPLOYMENT SAFETY CHECK: Single worker
-# ============================================
 def ensure_single_worker():
     if os.environ.get('FORCE_MULTI_WORKER') == '1':
         return
@@ -54,18 +53,12 @@ def ensure_single_worker():
 ensure_single_worker()
 
 
-# ============================================
-# ENV TOGGLE — background threads on/off
-# ============================================
-# On PythonAnywhere free tier, background threads are killed when the
-# worker goes idle. Set ENABLE_BG_THREADS=1 in .env only if you have a
-# paid account and want live quiz checkpointing to persist.
 BG_THREADS_ENABLED = os.environ.get('ENABLE_BG_THREADS', '0') == '1'
 DEFER_HEAVY_IMPORTS = os.environ.get('DEFER_HEAVY_IMPORTS', '1') == '1'
 
 
 # ============================================
-# BLUEPRINT IMPORTS — Core
+# BLUEPRINT IMPORTS
 # ============================================
 from blueprints.auth_bp import auth_bp
 from blueprints.dashboard_bp import dashboard_bp
@@ -78,30 +71,14 @@ from blueprints.saved_content_bp import saved_content_bp
 from blueprints.achievements_bp import achievements_bp
 from blueprints.focus_bp import focus_bp
 
-
-# ============================================
-# BLUEPRINT IMPORTS — Modular admin system
-# ============================================
-# Registers ALL admin blueprints:
-#   - admin_shim, users, access, policy, content, community,
-#     upgrade (revenue), ops, system,
-#     activity, backup, errors, platform
 from blueprints.admin import register_admin_blueprints
 
-
-# ============================================
-# BLUEPRINT IMPORTS — Settings, Profile, PDF admin, Bot
-# ============================================
 from blueprints.settings_bp import settings_bp
 from blueprints.profile_bp import profile_bp
 from blueprints.interactions_bp import interactions_bp
 from blueprints.history_bp import history_bp
 from blueprints.pdf_admin_bp import pdf_admin_bp
 
-
-# ============================================
-# SUPPORTING SERVICES
-# ============================================
 from history_logger import recover_pending_entries
 from activity_logger import (
     log_activity, log_admin_action, log_quiz_complete,
@@ -110,9 +87,6 @@ from activity_logger import (
 from services.i18n_service import register_jinja as register_i18n
 
 
-# ============================================
-# BASE DIRECTORY
-# ============================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = Config.LOG_DIR
 
@@ -123,9 +97,6 @@ if not os.path.exists(LOG_DIR):
         pass
 
 
-# ============================================
-# INSTANCE DIRECTORY (flag files + maintenance state)
-# ============================================
 INSTANCE_DIR = os.path.join(BASE_DIR, 'instance')
 try:
     os.makedirs(INSTANCE_DIR, exist_ok=True)
@@ -142,12 +113,9 @@ if not os.path.exists(USER_STATE_FLAG):
 
 
 # ============================================
-# LOGGING — Somali time formatter
+# LOGGING
 # ============================================
 def _format_somali_log_time(ts: float) -> str:
-    """Format a Unix timestamp as Somali time for log files.
-    Example: 2027/9/12 11:09:42 pm Mon
-    """
     dt = datetime.fromtimestamp(ts, tz=timezone.utc).astimezone(SOMALI_TIMEZONE)
     hour12 = dt.hour % 12
     if hour12 == 0:
@@ -183,9 +151,6 @@ class RequestIDFilter(logging.Filter):
         return True
 
 
-# ============================================
-# LOGGING SETUP — four destinations
-# ============================================
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] - %(message)s'
 log_formatter = SomaliFormatter(LOG_FORMAT)
 request_id_filter = RequestIDFilter()
@@ -195,15 +160,9 @@ _console_level = logging.DEBUG if Config.DEBUG else logging.ERROR
 _file_size = (5 * 1024 * 1024) if Config.DEBUG else Config.LOG_MAX_BYTES
 _file_backups = 5 if Config.DEBUG else Config.LOG_BACKUP_COUNT
 
-WEB_PREFIXES = (
-    'blueprints.', 'services.', 'nuun.', 'app', 'utils', '__main__',
-    'templates.',
-)
-WORKER_PREFIXES = (
-    'db', 'cache', 'live_quiz_state', 'history_logger',
-    'activity_logger', 'platform_activity', 'redis_state', 'bot.',
-    'startup', 'migrate',
-)
+WEB_PREFIXES = ('blueprints.', 'services.', 'nuun.', 'app', 'utils', '__main__', 'templates.',)
+WORKER_PREFIXES = ('db', 'cache', 'live_quiz_state', 'history_logger', 'activity_logger',
+                   'platform_activity', 'redis_state', 'bot.', 'startup', 'migrate',)
 
 
 def _make_rotating_handler(path, level, allow_prefixes=None):
@@ -219,15 +178,9 @@ def _make_rotating_handler(path, level, allow_prefixes=None):
     return h
 
 
-app_handler = _make_rotating_handler(
-    os.path.join(LOG_DIR, 'app.log'), _root_level, WEB_PREFIXES
-)
-workers_handler = _make_rotating_handler(
-    os.path.join(LOG_DIR, 'workers.log'), _root_level, WORKER_PREFIXES
-)
-error_file_handler = _make_rotating_handler(
-    os.path.join(LOG_DIR, 'error.log'), logging.ERROR, None
-)
+app_handler = _make_rotating_handler(os.path.join(LOG_DIR, 'app.log'), _root_level, WEB_PREFIXES)
+workers_handler = _make_rotating_handler(os.path.join(LOG_DIR, 'workers.log'), _root_level, WORKER_PREFIXES)
+error_file_handler = _make_rotating_handler(os.path.join(LOG_DIR, 'error.log'), logging.ERROR, None)
 
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setLevel(_console_level)
@@ -239,21 +192,12 @@ root_logger.setLevel(_root_level)
 for _h in (app_handler, workers_handler, error_file_handler, console_handler):
     root_logger.addHandler(_h)
 
-for _lib in (
-    'urllib3', 'requests', 'PIL', 'werkzeug',
-    'matplotlib', 'telebot', 'asyncio',
-):
+for _lib in ('urllib3', 'requests', 'PIL', 'werkzeug', 'matplotlib', 'telebot', 'asyncio'):
     logging.getLogger(_lib).setLevel(logging.CRITICAL)
 
 logger = logging.getLogger(__name__)
 
 
-# ============================================
-# STARTUP VERIFICATION
-# ============================================
-# NOTE: this is the ONLY heavy synchronous work done at import time.
-# It performs the entitlement seed and capability bootstrap exactly once
-# (idempotent). The heavy integrity scan is skipped here — see startup.py.
 logger.info("=" * 60)
 logger.info("NUUNPLATFORM STARTUP - Starting verification")
 logger.info("=" * 60)
@@ -261,7 +205,6 @@ logger.info("=" * 60)
 if not verify_startup():
     logger.critical("=" * 60)
     logger.critical("STARTUP VERIFICATION FAILED")
-    logger.critical("Application cannot start. Please check the logs.")
     logger.critical("=" * 60)
 
 logger.info("Startup verification PASSED")
@@ -324,11 +267,6 @@ def execute_backup(backup_type='daily'):
         return {'success': False, 'message': str(e)}
 
 
-# ============================================
-# CACHE INITIALIZATION (lazy, non-blocking)
-# ============================================
-# The cache manager is created on first access. We do NOT ping Redis
-# here because that can block for 2s if the network is slow.
 logger.info("Cache manager will initialize lazily on first use.")
 
 
@@ -348,19 +286,22 @@ app.config['SESSION_COOKIE_SAMESITE'] = Config.SESSION_COOKIE_SAMESITE
 
 app._started_at = time.time()
 
-# Jinja filters / globals
-from utils import (
-    time_ago,
-    somali_dt_filter,
-    somali_time_only_filter,
-    somali_date_only_filter,
-)
 
+# ============================================
+# JINJA FILTERS / GLOBALS
+# ============================================
 app.jinja_env.filters['time_ago']       = time_ago
 app.jinja_env.filters['somali_dt']      = somali_dt_filter
 app.jinja_env.filters['somali_time']    = somali_time_only_filter
 app.jinja_env.filters['somali_date']    = somali_date_only_filter
+
+# Short aliases — the timestamp format fix uses `| dt`, `| dt_time`, `| dt_date`.
+app.jinja_env.filters['dt']        = somali_dt_filter
+app.jinja_env.filters['dt_time']   = somali_time_only_filter
+app.jinja_env.filters['dt_date']   = somali_date_only_filter
+
 app.jinja_env.globals['normalize_tier'] = normalize_tier
+app.jinja_env.globals['fmt_dt']         = format_somali_time
 
 register_i18n(app)
 
@@ -484,8 +425,15 @@ def generate_csrf_if_needed():
 
 
 # ============================================
-# USER STATE REFRESH (verification, tier)
+# SESSION VERSION CHECK
 # ============================================
+# Every request compares the session's stored session_version against
+# the DB value. If they differ, the session is killed and the user
+# is forced to log in again. This is what makes "Force logout" work.
+#
+# The check is bundled into refresh_user_state_if_needed below so we
+# only hit the DB once per request.
+
 @app.before_request
 def refresh_user_state_if_needed():
     if 'user_id' not in session:
@@ -510,8 +458,32 @@ def refresh_user_state_if_needed():
             should_reload = True
 
     if not should_reload:
+        # Still need to validate session_version on EVERY request.
+        # This is a single indexed SELECT — cheap. It's the mechanism
+        # that makes "Force logout" actually work.
+        try:
+            row = execute_with_retry(
+                "SELECT session_version FROM students WHERE id = ?",
+                (session['user_id'],),
+            ).fetchone()
+            if row is not None:
+                db_sv = int(row['session_version'] or 0)
+                session_sv = int(session.get('session_version', 0) or 0)
+                if db_sv != session_sv:
+                    # Session was revoked. Kill it.
+                    logger.info(
+                        f"Session version mismatch for user {session['user_id']}: "
+                        f"session={session_sv}, db={db_sv} — forcing re-login."
+                    )
+                    session.clear()
+                    if request.path.startswith('/api/'):
+                        return jsonify({'error': 'Session expired'}), 401
+                    return redirect(url_for('auth.login', next=request.path))
+        except Exception as e:
+            logger.warning(f"session_version check failed: {e}")
         return
 
+    # Full reload path
     try:
         student = get_student_by_id(session['user_id'])
         if student:
@@ -519,6 +491,7 @@ def refresh_user_state_if_needed():
             session['tier_expires_at'] = student.get('tier_expires_at')
             session['is_verified'] = int(student.get('is_verified', 0))
             session['is_admin'] = bool(student.get('is_admin', 0))
+            session['session_version'] = int(student.get('session_version', 0) or 0)
             session['user_state_loaded_at'] = time.time()
             session.modified = True
     except Exception as e:
@@ -526,12 +499,8 @@ def refresh_user_state_if_needed():
 
 
 # ============================================
-# DEFERRED BACKGROUND WORK (runs once, on first request)
+# DEFERRED BACKGROUND WORK
 # ============================================
-# Every operation below used to run at import time and could block
-# WSGI boot for seconds. They now run in background daemon threads
-# the first time a request arrives.
-
 _bg_lock = threading.Lock()
 _bg_state = {
     'webhook_started': False,
@@ -539,6 +508,7 @@ _bg_state = {
     'activity_logger_started': False,
     'live_quiz_started': False,
     'history_recovery_started': False,
+    'bot_db_started': False,
 }
 
 
@@ -584,16 +554,20 @@ def _run_activity_logger_init():
         logger.error(f"Activity logger init failed (deferred): {e}")
 
 
+def _run_bot_db_init():
+    try:
+        from bot.db import init_bot_db
+        init_bot_db()
+        logger.info("Bot database initialized (deferred).")
+    except Exception as e:
+        logger.error(f"Bot database init failed (deferred): {e}")
+
+
 @app.before_request
 def _kick_deferred_work():
-    """
-    First request triggers all deferred boot work in background threads.
-    Uses a lock so nothing starts twice, even under concurrent requests.
-    """
     if not DEFER_HEAVY_IMPORTS:
         return
 
-    # Fast path — all done
     with _bg_lock:
         all_done = all(_bg_state.values())
     if all_done:
@@ -603,24 +577,23 @@ def _kick_deferred_work():
         if not _bg_state['webhook_started']:
             _bg_state['webhook_started'] = True
             _spawn('webhook-setup', _run_webhook_setup)
-
         if not _bg_state['history_recovery_started']:
             _bg_state['history_recovery_started'] = True
             _spawn('history-recovery', _run_history_recovery)
-
         if not _bg_state['live_quiz_started']:
             _bg_state['live_quiz_started'] = True
             _spawn('live-quiz-recovery', _run_live_quiz_recovery)
-
         if not _bg_state['activity_logger_started']:
             _bg_state['activity_logger_started'] = True
             _spawn('activity-logger-init', _run_activity_logger_init)
-
+        if not _bg_state['bot_db_started']:
+            _bg_state['bot_db_started'] = True
+            _spawn('bot-db-init', _run_bot_db_init)
         _bg_state['recovery_started'] = True
 
 
 # ============================================
-# REGISTER BLUEPRINTS — Core user-facing
+# REGISTER BLUEPRINTS
 # ============================================
 app.register_blueprint(auth_bp)
 app.register_blueprint(dashboard_bp)
@@ -633,22 +606,13 @@ app.register_blueprint(saved_content_bp)
 app.register_blueprint(achievements_bp)
 app.register_blueprint(focus_bp)
 
-# ============================================
-# REGISTER BLUEPRINTS — Settings, profile, interactions
-# ============================================
 app.register_blueprint(settings_bp)
 app.register_blueprint(profile_bp)
 app.register_blueprint(interactions_bp)
 app.register_blueprint(history_bp)
 
-# ============================================
-# REGISTER BLUEPRINTS — Modular admin system
-# ============================================
 register_admin_blueprints(app)
 
-# ============================================
-# PDF Admin (secret path)
-# ============================================
 PDF_ADMIN_SECRET = Config.PDF_ADMIN_SECRET_PATH
 if not PDF_ADMIN_SECRET:
     PDF_ADMIN_SECRET = '/pdf-admin-' + os.urandom(8).hex()
@@ -658,9 +622,6 @@ app.register_blueprint(pdf_admin_bp, url_prefix=PDF_ADMIN_SECRET)
 logger.info(f"PDF Admin panel mounted at {PDF_ADMIN_SECRET}")
 
 
-# ============================================
-# REGISTER ERROR HANDLERS
-# ============================================
 register_error_handlers(app)
 
 
@@ -684,33 +645,6 @@ def cleanup():
         close_db_connections()
     except Exception as e:
         logger.warning(f"Cleanup error: {e}")
-
-
-# ============================================
-# BOT DATABASE INITIALIZATION (deferred — non-blocking)
-# ============================================
-# init_bot_db() creates the bot schema in a separate SQLite file.
-# It runs in the deferred worker thread instead of blocking import.
-
-
-def _run_bot_db_init():
-    try:
-        from bot.db import init_bot_db
-        init_bot_db()
-        logger.info("Bot database initialized (deferred).")
-    except Exception as e:
-        logger.error(f"Bot database init failed (deferred): {e}")
-
-
-@app.before_request
-def _kick_bot_db_init():
-    global _bg_state
-    with _bg_lock:
-        key = 'bot_db_started'
-        if _bg_state.get(key):
-            return
-        _bg_state[key] = True
-    _spawn('bot-db-init', _run_bot_db_init)
 
 
 # ============================================
@@ -782,7 +716,6 @@ def health_check():
         critical_issues.append('Database cannot be opened')
     if not db_health.get('tables_ok'):
         critical_issues.append('Missing required tables')
-    # Integrity check is expensive — skipped at boot, reported separately.
     if not db_health.get('wal_enabled'):
         critical_issues.append('WAL mode is disabled')
 
@@ -906,16 +839,18 @@ def utility_processor():
         from utils import get_accent_colours as get_accent
         accent_colours = get_accent(accent, is_dark)
 
+    # Pending upgrade requests — SUPER ADMIN ONLY.
     pending_upgrades_count = 0
-    if session.get('is_admin'):
-        try:
+    try:
+        from services.admin.roles import is_super_admin as _sa_check
+        if _sa_check():
             cursor = execute_with_retry(
                 "SELECT COUNT(*) AS cnt FROM upgrade_requests WHERE status = 'pending'"
             )
             row = cursor.fetchone()
             pending_upgrades_count = row['cnt'] if row else 0
-        except Exception:
-            pending_upgrades_count = 0
+    except Exception:
+        pending_upgrades_count = 0
 
     has_focus_access = False
     if 'user_id' in session:
@@ -955,9 +890,5 @@ if __name__ == '__main__':
     port = Config.PORT
     logger.info(f"Server starting at: {get_somali_time_display()}")
     logger.info(f"Database path: {Config.DATABASE_PATH}")
-    logger.info(f"Bot database path: {Config.BOT_DATABASE_PATH}")
-    logger.info(f"Log directory: {Config.LOG_DIR}")
-    logger.info(f"Backup directory: {Config.BACKUP_DIR}")
-    logger.info(f"Redis URL: {Config.REDIS_URL or 'Not configured'}")
     logger.info(f"Debug mode: {Config.DEBUG}")
     app.run(debug=Config.DEBUG, host='0.0.0.0', port=port)

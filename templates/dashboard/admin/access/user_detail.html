@@ -1,7 +1,7 @@
 {# ============================================================
    templates/dashboard/admin/access/user_detail.html
    Advanced single-user profile with integrated password
-   management panel (super admin only).
+   management and editable identity form.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -10,10 +10,10 @@
     {{ user.first_name }} {{ user.middle_name or '' }} {{ user.last_name or '' }}
 {% endblock %}
 {% block admin_subtitle %}
-    Joined {{ (user.created_at or '')[:10] }} ·
+    Joined {{ user.created_at|somali_dt }} ·
     {% if user.is_admin %}Admin account{% else %}Student account{% endif %}
     {% if session_info and session_info.last_login_at %}
-        · Last login {{ session_info.last_login_at[:16] }}
+        · Last login {{ session_info.last_login_at|somali_dt }}
     {% endif %}
 {% endblock %}
 
@@ -87,9 +87,7 @@
     .um-grid-2 {
         display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
     }
-    @media (max-width: 900px) {
-        .um-grid-2 { grid-template-columns: 1fr; }
-    }
+    @media (max-width: 900px) { .um-grid-2 { grid-template-columns: 1fr; } }
 
     .um-kv {
         display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -104,14 +102,21 @@
     .um-kv .k { color: var(--text-secondary); }
     .um-kv .v { color: var(--text); font-weight: 600; text-align: right; word-break: break-word; }
 
+    /* ---- Profile edit form ---- */
+    .um-form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+    }
+    .um-form-grid .admin-form-group { margin-bottom: 0; }
+
     /* ---- Password panel ---- */
     .pw-panel {
         background: #FEF9E7;
         border: 1px solid #FDE68A;
         border-left: 4px solid #F59E0B;
         border-radius: var(--radius-sm);
-        padding: 16px 18px;
-        margin-bottom: 16px;
+        padding: 16px 18px; margin-bottom: 16px;
     }
     .pw-panel .pw-panel-title {
         font-size: 13px; font-weight: 700;
@@ -128,9 +133,7 @@
         border-radius: var(--radius-sm); padding: 12px 16px;
         margin-bottom: 16px;
     }
-    .pw-preset .preset-icon {
-        font-size: 22px; flex-shrink: 0;
-    }
+    .pw-preset .preset-icon { font-size: 22px; flex-shrink: 0; }
     .pw-preset .preset-body { flex: 1; min-width: 0; }
     .pw-preset .preset-title {
         font-size: 13px; font-weight: 700; color: var(--text);
@@ -141,8 +144,7 @@
         color: var(--primary);
         background: var(--primary-light);
         padding: 2px 10px; border-radius: 8px;
-        display: inline-block;
-        margin-top: 4px;
+        display: inline-block; margin-top: 4px;
     }
     .pw-preset .preset-desc {
         font-size: 12px; color: var(--text-secondary);
@@ -188,15 +190,13 @@
         display: flex; gap: 8px; align-items: center;
         margin-top: 8px; flex-wrap: wrap;
     }
-    .pw-row .admin-btn { flex: 0 0 auto; }
 
     .pw-options {
         display: flex; flex-direction: column; gap: 10px;
         background: var(--background);
         border: 1px solid var(--border-light);
         border-radius: var(--radius-sm);
-        padding: 12px 14px;
-        margin-top: 14px;
+        padding: 12px 14px; margin-top: 14px;
     }
     .pw-option {
         display: flex; align-items: flex-start; gap: 10px;
@@ -215,8 +215,7 @@
 
     .pw-strength {
         height: 4px; background: var(--border);
-        border-radius: 4px; margin-top: 8px;
-        overflow: hidden;
+        border-radius: 4px; margin-top: 8px; overflow: hidden;
     }
     .pw-strength .fill {
         height: 100%; border-radius: 4px;
@@ -313,6 +312,128 @@
 </div>
 
 
+{# ═══════════ EDIT PROFILE (super admin) ═══════════ #}
+{% if admin_can('users.view') %}
+<section class="um-section" id="edit-profile">
+    <div class="um-section-head">
+        <h3><i class="fas fa-user-edit"></i> Edit Profile</h3>
+        <span class="hint">Changes are audited. Fields not edited are left untouched.</span>
+    </div>
+    <form method="POST"
+          action="{{ url_for('admin_users.edit_profile', user_id=user.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="um-section-body">
+
+            <div class="um-form-grid">
+                <div class="admin-form-group">
+                    <label>First name <span style="color:var(--primary);">*</span></label>
+                    <input type="text" name="first_name" class="admin-input"
+                           value="{{ user.first_name or '' }}"
+                           required minlength="4" maxlength="60"
+                           pattern="[A-Za-z]{4,60}"
+                           title="At least 4 letters">
+                    <div class="hint">At least 4 letters, A–Z only.</div>
+                </div>
+
+                <div class="admin-form-group">
+                    <label>Middle name</label>
+                    <input type="text" name="middle_name" class="admin-input"
+                           value="{{ user.middle_name or '' }}"
+                           maxlength="60" pattern="[A-Za-z]*"
+                           title="Letters only">
+                </div>
+
+                <div class="admin-form-group">
+                    <label>Last name <span style="color:var(--primary);">*</span></label>
+                    <input type="text" name="last_name" class="admin-input"
+                           value="{{ user.last_name or '' }}"
+                           required minlength="4" maxlength="60"
+                           pattern="[A-Za-z]{4,60}"
+                           title="At least 4 letters">
+                </div>
+
+                <div class="admin-form-group">
+                    <label>Phone number</label>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="font-weight:600;color:var(--text-secondary);">+252</span>
+                        <input type="tel" name="phone_number" class="admin-input"
+                               value="{{ (user.phone_number or '')|replace('+252','')|replace(' ','') }}"
+                               placeholder="9 digits"
+                               inputmode="numeric"
+                               pattern="[0-9]{0,9}"
+                               maxlength="9"
+                               style="flex:1;">
+                    </div>
+                    <div class="hint">Leave unchanged to keep the current number. 9 digits.</div>
+                </div>
+
+                <div class="admin-form-group">
+                    <label>School <span style="color:var(--primary);">*</span></label>
+                    <input type="text" name="school" class="admin-input"
+                           value="{{ user.school or '' }}"
+                           required maxlength="120"
+                           placeholder="e.g. Mogadishu Secondary School">
+                    <div class="hint">Minimum 2 words, each 4+ letters.</div>
+                </div>
+
+                <div class="admin-form-group">
+                    <label>Grade <span style="color:var(--primary);">*</span></label>
+                    <select name="grade" class="admin-select" required>
+                        <option value="">— Select —</option>
+                        {% for g in ['G7','G8','F3','F4'] %}
+                            <option value="{{ g }}" {% if user.grade == g %}selected{% endif %}>
+                                {% if g == 'G7' %}Grade 7
+                                {% elif g == 'G8' %}Grade 8
+                                {% elif g == 'F3' %}Form 3
+                                {% else %}Form 4{% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="admin-form-group">
+                    <label>City <span style="color:var(--primary);">*</span></label>
+                    <input type="text" name="city" class="admin-input"
+                           value="{{ user.city or '' }}"
+                           required minlength="5" maxlength="80">
+                    <div class="hint">At least 5 letters.</div>
+                </div>
+
+                <div class="admin-form-group">
+                    <label>Location <span style="color:var(--primary);">*</span></label>
+                    <select name="location" class="admin-select" required
+                            onchange="window.__umToggleCurriculum();">
+                        <option value="">— Select —</option>
+                        <option value="SO" {% if user.location == 'SO' %}selected{% endif %}>🇸🇴 Somalia (SO)</option>
+                        <option value="PL" {% if user.location == 'PL' %}selected{% endif %}>🇸🇴 Puntland (PL)</option>
+                        <option value="SL" {% if user.location == 'SL' %}selected{% endif %}>🇸🇴 Somaliland (SL)</option>
+                    </select>
+                </div>
+
+                <div class="admin-form-group" id="curriculumField"
+                     style="{% if user.location != 'PL' %}display:none;{% endif %}">
+                    <label>Curriculum</label>
+                    <select name="curriculum" class="admin-select">
+                        <option value="">— None —</option>
+                        <option value="general" {% if user.curriculum == 'general' %}selected{% endif %}>General</option>
+                        <option value="science" {% if user.curriculum == 'science' %}selected{% endif %}>Science</option>
+                        <option value="arts"    {% if user.curriculum == 'arts' %}selected{% endif %}>Arts</option>
+                    </select>
+                    <div class="hint">Required for Puntland. Clear for other regions.</div>
+                </div>
+            </div>
+
+        </div>
+        <div class="admin-modal-actions" style="border-top:none;padding-top:0;">
+            <button type="submit" class="admin-btn primary">
+                <i class="fas fa-save"></i> Save changes
+            </button>
+        </div>
+    </form>
+</section>
+{% endif %}
+
+
 {# ═══════════ PASSWORD MANAGEMENT ═══════════ #}
 {% if user.id != session.user_id and admin_can('users.reset_password') %}
 <section class="um-section" id="password-panel">
@@ -322,7 +443,6 @@
     </div>
     <div class="um-section-body">
 
-        {# ─── WARNING ─── #}
         <div class="pw-panel">
             <div class="pw-panel-title">
                 <i class="fas fa-shield-alt"></i> Privileged action
@@ -330,11 +450,9 @@
             <div class="pw-panel-sub">
                 Setting a password will <strong>immediately log the user out</strong>
                 (unless you uncheck "Force logout") and notify them in-app.
-                Choose carefully — this cannot be undone.
             </div>
         </div>
 
-        {# ─── PRESET: Reset to 12345678 ─── #}
         <div class="pw-preset">
             <span class="preset-icon">⚡</span>
             <div class="preset-body">
@@ -357,7 +475,6 @@
             </form>
         </div>
 
-        {# ─── CUSTOM PASSWORD ─── #}
         <form method="POST"
               action="{{ url_for('admin_users.set_password', user_id=user.id) }}"
               id="setPasswordForm"
@@ -461,22 +578,21 @@
 {% endif %}
 
 
-{# ═══════════ IDENTITY ═══════════ #}
+{# ═══════════ IDENTITY / EDUCATION (READ ONLY) ═══════════ #}
 <div class="um-grid-2" style="margin-top:16px;">
 
     <section class="um-section" style="margin-top:0;">
         <div class="um-section-head">
-            <h3><i class="fas fa-id-card"></i> Identity</h3>
+            <h3><i class="fas fa-id-card"></i> Account</h3>
         </div>
         <div class="um-section-body">
             <div class="um-kv">
-                <div class="row"><span class="k">First name</span><span class="v">{{ user.first_name or '—' }}</span></div>
-                <div class="row"><span class="k">Middle name</span><span class="v">{{ user.middle_name or '—' }}</span></div>
-                <div class="row"><span class="k">Last name</span><span class="v">{{ user.last_name or '—' }}</span></div>
                 <div class="row"><span class="k">Public ID</span><span class="v">{{ user.public_id or '—' }}</span></div>
-                <div class="row"><span class="k">Phone</span><span class="v">{{ user.phone_number or '—' }}</span></div>
-                <div class="row"><span class="k">Joined</span><span class="v">{{ (user.created_at or '')[:16] }}</span></div>
-                <div class="row"><span class="k">Last login</span><span class="v">{{ (user.last_login_at or 'Never')[:16] }}</span></div>
+                <div class="row"><span class="k">Tier</span><span class="v">{{ tier|upper }}</span></div>
+                <div class="row"><span class="k">Admin</span><span class="v">{{ 'Yes' if user.is_admin else 'No' }}</span></div>
+                <div class="row"><span class="k">Verified</span><span class="v">{{ 'Yes' if user.is_verified else 'No' }}</span></div>
+                <div class="row"><span class="k">Joined</span><span class="v">{{ user.created_at|somali_dt }}</span></div>
+                <div class="row"><span class="k">Last login</span><span class="v">{{ (user.last_login_at|somali_dt) if user.last_login_at else 'Never' }}</span></div>
                 {% if session_info %}
                     <div class="row">
                         <span class="k">Session version</span>
@@ -489,7 +605,7 @@
 
     <section class="um-section" style="margin-top:0;">
         <div class="um-section-head">
-            <h3><i class="fas fa-graduation-cap"></i> Education</h3>
+            <h3><i class="fas fa-graduation-cap"></i> Education snapshot</h3>
         </div>
         <div class="um-section-body">
             <div class="um-kv">
@@ -498,8 +614,7 @@
                 <div class="row"><span class="k">Curriculum</span><span class="v">{{ user.curriculum or '—' }}</span></div>
                 <div class="row"><span class="k">Location</span><span class="v">{{ user.location or '—' }}</span></div>
                 <div class="row"><span class="k">City</span><span class="v">{{ user.city or '—' }}</span></div>
-                <div class="row"><span class="k">Tier</span><span class="v">{{ tier|upper }}</span></div>
-                <div class="row"><span class="k">Admin</span><span class="v">{{ 'Yes' if user.is_admin else 'No' }}</span></div>
+                <div class="row"><span class="k">Phone</span><span class="v">{{ user.phone_number or '—' }}</span></div>
             </div>
         </div>
     </section>
@@ -591,7 +706,7 @@
                             <span class="admin-chip {{ cls }}">{{ q.percentage }}%</span>
                         </td>
                         <td style="font-size:12px;color:var(--text-secondary);">
-                            {{ (q.completed_at or '')[:16] }}
+                            {{ q.completed_at|somali_dt }}
                         </td>
                     </tr>
                     {% endfor %}
@@ -605,6 +720,33 @@
         {% endif %}
     </div>
 </section>
+
+
+{# ═══════════ ADMIN HISTORY ═══════════ #}
+{% if history %}
+<section class="um-section">
+    <div class="um-section-head">
+        <h3><i class="fas fa-history"></i> Admin History</h3>
+        <span class="hint">Last {{ history|length }}</span>
+    </div>
+    <div class="um-section-body" style="padding:0;">
+        {% for h in history %}
+        <div class="cc-activity-row">
+            <span class="cc-act-icon">📌</span>
+            <div class="cc-act-body">
+                <div class="cc-act-text">
+                    <strong>{{ h.admin_name }}</strong> — {{ h.action }}
+                    {% if h.new_value %}
+                        <em style="color:var(--text-secondary);font-size:12px;">({{ h.new_value }})</em>
+                    {% endif %}
+                </div>
+                <div class="cc-act-time">{{ h.created_at|somali_dt }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
 
 
 {# ═══════════ ADMIN NOTE ═══════════ #}
@@ -701,6 +843,14 @@
 (function () {
     'use strict';
 
+    window.__umToggleCurriculum = function () {
+        var sel = document.querySelector('select[name="location"]');
+        var field = document.getElementById('curriculumField');
+        if (!sel || !field) return;
+        field.style.display = (sel.value === 'PL') ? '' : 'none';
+    };
+    window.__umToggleCurriculum();
+
     window.__umToggle = function (fieldId, btn) {
         var input = document.getElementById(fieldId);
         if (!input) return;
@@ -725,6 +875,7 @@
 
         if (!val) {
             hint.textContent = 'Type a password to see its strength.';
+            hint.style.color = '';
             return;
         }
 
@@ -812,7 +963,6 @@
         return true;
     };
 
-    // Initialize strength on load (in case the field is pre-filled)
     window.__umUpdateStrength();
 })();
 </script>

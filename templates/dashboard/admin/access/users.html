@@ -1,7 +1,6 @@
 {# ============================================================
    templates/dashboard/admin/access/users.html
    User directory with filters, sorting, and bulk actions.
-   Both regular admins (view only) and super admins (full) use this page.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -227,7 +226,7 @@
                         </td>
 
                         <td class="hide-mobile" style="font-size: 12px; color: var(--text-secondary);">
-                            {{ (u.created_at or '')[:10] }}
+                            {{ u.created_at|somali_date }}
                         </td>
 
                         <td class="cell-actions">
