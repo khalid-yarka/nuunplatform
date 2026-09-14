@@ -1,25 +1,6 @@
 # ============================================================
 # blueprints/admin/users_bp.py
-# User management — list, detail, tier, admin toggle, notify,
-# password reset, force logout, public ID, delete, restore.
-#
-# Routes:
-#   GET  /admin/users
-#   GET  /admin/users/export
-#   GET  /admin/users/<int:user_id>
-#   POST /admin/users/<int:user_id>/note
-#   POST /admin/users/<int:user_id>/tier
-#   POST /admin/users/<int:user_id>/toggle-admin
-#   POST /admin/users/<int:user_id>/notify
-#   POST /admin/users/<int:user_id>/reset-password
-#   POST /admin/users/<int:user_id>/force-logout
-#   POST /admin/users/<int:user_id>/public-id
-#   POST /admin/users/<int:user_id>/delete
-#   POST /admin/users/bulk
-#   GET  /admin/users/tier/<int:user_id>
-#   POST /admin/users/tier/<int:user_id>
-#   GET  /admin/deleted-users
-#   POST /admin/deleted-users/restore/<int:deleted_id>
+# Advanced user management for super admin.
 # ============================================================
 
 from flask import (
@@ -27,7 +8,10 @@ from flask import (
     redirect, url_for, abort, jsonify, Response,
 )
 import logging
+import secrets
+import string
 
+from config import Config
 from db import (
     get_student_by_id,
     delete_user as db_delete_user,
@@ -35,6 +19,7 @@ from db import (
     restore_deleted_user as db_restore_user,
     get_user_subject_list,
     is_admin,
+    execute_with_retry,
 )
 from services.tier_service import (
     get_user_tier, set_user_tier, get_current_user_tier,
@@ -43,7 +28,8 @@ from admin_users_db import (
     ensure_admin_user_schema,
     get_users_admin, get_users_admin_export, get_users_admin_stats,
     users_to_csv, set_user_admin_note, set_user_tier_admin,
-    toggle_user_admin_admin, reset_user_password, force_user_logout,
+    toggle_user_admin_admin, reset_user_password, reset_user_password_to_default,
+    force_user_logout,
     set_user_public_id, get_user_admin_history, get_user_recent_quizzes_admin,
     get_user_recent_live_quizzes, bulk_user_action, log_admin_user_action,
 )
@@ -56,9 +42,11 @@ logger = logging.getLogger(__name__)
 
 admin_users_bp = Blueprint('admin_users', __name__, url_prefix='/admin')
 
+DEFAULT_PASSWORD_PRESET = '12345678'
+
 
 # ============================================================
-# LIST — /admin/users
+# LIST
 # ============================================================
 
 @admin_users_bp.route('/users', methods=['GET'], endpoint='list_users')
@@ -77,15 +65,10 @@ def list_users():
     per_page = 25
 
     users, total = get_users_admin(
-        search=search,
-        tier_filter=tier_filter,
-        location_filter=location_filter,
-        curriculum_filter=curriculum_filter,
-        only_admins=only_admins,
-        only_inactive=only_inactive,
-        sort=sort,
-        page=page,
-        per_page=per_page,
+        search=search, tier_filter=tier_filter,
+        location_filter=location_filter, curriculum_filter=curriculum_filter,
+        only_admins=only_admins, only_inactive=only_inactive,
+        sort=sort, page=page, per_page=per_page,
     )
     total_pages = (total + per_page - 1) // per_page if total > 0 else 1
     stats = get_users_admin_stats()
@@ -95,24 +78,16 @@ def list_users():
 
     return render_template(
         'dashboard/admin/access/users.html',
-        users=users,
-        total=total,
-        page=page,
-        per_page=per_page,
-        total_pages=total_pages,
-        stats=stats,
-        search=search,
-        tier_filter=tier_filter,
-        location_filter=location_filter,
-        curriculum_filter=curriculum_filter,
-        only_admins=only_admins,
-        only_inactive=only_inactive,
-        sort=sort,
+        users=users, total=total, page=page, per_page=per_page,
+        total_pages=total_pages, stats=stats, search=search,
+        tier_filter=tier_filter, location_filter=location_filter,
+        curriculum_filter=curriculum_filter, only_admins=only_admins,
+        only_inactive=only_inactive, sort=sort,
     )
 
 
 # ============================================================
-# EXPORT — /admin/users/export
+# EXPORT
 # ============================================================
 
 @admin_users_bp.route('/users/export', methods=['GET'], endpoint='users_export')
@@ -130,11 +105,8 @@ def users_export():
     )
 
     write_audit(
-        action='users.export',
-        target_type='user',
-        before=None,
-        after={'count': len(rows)},
-        severity='info',
+        action='users.export', target_type='user',
+        before=None, after={'count': len(rows)}, severity='info',
     )
 
     return Response(
@@ -145,7 +117,7 @@ def users_export():
 
 
 # ============================================================
-# DETAIL — /admin/users/<id>
+# DETAIL
 # ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>', methods=['GET'],
@@ -168,6 +140,24 @@ def user_detail(user_id):
     if quizzes:
         avg = round(sum(q['percentage'] for q in quizzes) / len(quizzes), 1)
 
+    # Active session info (best-effort)
+    session_info = None
+    try:
+        row = execute_with_retry(
+            "SELECT last_login_at, last_login_ip, "
+            "COALESCE(session_version, 0) AS sv "
+            "FROM students WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        if row:
+            session_info = dict(row)
+    except Exception:
+        session_info = None
+
+    # Generate a fresh random password for the "suggest" button
+    alphabet = string.ascii_letters + string.digits
+    suggested_password = ''.join(secrets.choice(alphabet) for _ in range(12))
+
     return render_template(
         'dashboard/admin/access/user_detail.html',
         user=user,
@@ -176,11 +166,14 @@ def user_detail(user_id):
         history=history,
         total_quizzes=len(quizzes),
         avg_score=avg,
+        session_info=session_info,
+        suggested_password=suggested_password,
+        default_password_preset=DEFAULT_PASSWORD_PRESET,
     )
 
 
 # ============================================================
-# NOTE — /admin/users/<id>/note
+# NOTE
 # ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/note', methods=['POST'],
@@ -196,7 +189,7 @@ def set_note(user_id):
 
 
 # ============================================================
-# TIER — /admin/users/<id>/tier
+# TIER
 # ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/tier', methods=['POST'],
@@ -207,12 +200,8 @@ def set_tier(user_id):
     new_tier = (request.form.get('tier') or '').strip().lower()
     if set_user_tier_admin(user_id, new_tier, session['user_id']):
         write_audit(
-            action='user.set_tier',
-            target_type='user',
-            target_id=user_id,
-            before=None,
-            after={'tier': new_tier},
-            severity='warning',
+            action='user.set_tier', target_type='user', target_id=user_id,
+            before=None, after={'tier': new_tier}, severity='warning',
         )
         flash(f'Tier updated to {new_tier.upper()}.', 'success')
     else:
@@ -221,7 +210,7 @@ def set_tier(user_id):
 
 
 # ============================================================
-# TOGGLE ADMIN — /admin/users/<id>/toggle-admin
+# TOGGLE ADMIN
 # ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/toggle-admin', methods=['POST'],
@@ -238,12 +227,8 @@ def toggle_admin(user_id):
         flash('Failed to change admin status.', 'error')
     else:
         write_audit(
-            action='user.toggle_admin',
-            target_type='user',
-            target_id=user_id,
-            before=None,
-            after={'is_admin': new_state},
-            severity='critical',
+            action='user.toggle_admin', target_type='user', target_id=user_id,
+            before=None, after={'is_admin': new_state}, severity='critical',
         )
         flash('Admin privileges granted.' if new_state
               else 'Admin privileges revoked.', 'success')
@@ -251,7 +236,7 @@ def toggle_admin(user_id):
 
 
 # ============================================================
-# NOTIFY — /admin/users/<id>/notify
+# NOTIFY
 # ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/notify', methods=['POST'],
@@ -270,46 +255,101 @@ def notify(user_id):
     log_admin_user_action(session['user_id'], user_id, 'notify', None, title[:200])
 
     write_audit(
-        action='user.notify',
-        target_type='user',
-        target_id=user_id,
-        before=None,
-        after={'title': title},
-        severity='info',
+        action='user.notify', target_type='user', target_id=user_id,
+        before=None, after={'title': title}, severity='info',
     )
     flash('Notification sent.', 'success')
     return redirect(url_for('admin_users.user_detail', user_id=user_id))
 
 
 # ============================================================
-# RESET PASSWORD — /admin/users/<id>/reset-password
+# PASSWORD — custom value
 # ============================================================
 
-@admin_users_bp.route('/users/<int:user_id>/reset-password', methods=['POST'],
-                      endpoint='reset_password')
+@admin_users_bp.route('/users/<int:user_id>/set-password', methods=['POST'],
+                      endpoint='set_password')
 @admin_can('users.reset_password')
-def reset_password(user_id):
+def set_password(user_id):
     validate_csrf()
+
+    if user_id == session['user_id']:
+        flash('Use Settings → Security to change your own password.', 'error')
+        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
     new_pw = (request.form.get('new_password') or '').strip()
-    if len(new_pw) < 8:
-        flash('Password must be at least 8 characters.', 'error')
-    elif reset_user_password(user_id, new_pw, session['user_id']):
+    confirm = (request.form.get('confirm_password') or '').strip()
+    force_logout = request.form.get('force_logout') == '1'
+    notify_user = request.form.get('notify_user') == '1'
+
+    if not new_pw:
+        flash('Password is required.', 'error')
+        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
+    if new_pw != confirm:
+        flash('Passwords do not match.', 'error')
+        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
+    ok, msg = reset_user_password(
+        user_id, new_pw, session['user_id'],
+        force_logout=force_logout, notify_user=notify_user,
+    )
+
+    if ok:
         write_audit(
-            action='user.reset_password',
-            target_type='user',
-            target_id=user_id,
+            action='user.reset_password', target_type='user', target_id=user_id,
             before=None,
-            after=None,
+            after={'mode': 'custom',
+                   'force_logout': force_logout,
+                   'notify_user': notify_user},
             severity='critical',
         )
-        flash('Password reset successfully.', 'success')
+        flash(msg, 'success')
     else:
-        flash('Failed to reset password.', 'error')
+        flash(msg or 'Failed to update password.', 'error')
+
     return redirect(url_for('admin_users.user_detail', user_id=user_id))
 
 
 # ============================================================
-# FORCE LOGOUT — /admin/users/<id>/force-logout
+# PASSWORD — reset to 12345678 (one click)
+# ============================================================
+
+@admin_users_bp.route('/users/<int:user_id>/reset-password-default',
+                      methods=['POST'],
+                      endpoint='reset_password_to_default')
+@admin_can('users.reset_password')
+def reset_password_to_default(user_id):
+    validate_csrf()
+
+    if user_id == session['user_id']:
+        flash('Use Settings → Security to change your own password.', 'error')
+        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
+    ok, msg = reset_user_password_to_default(
+        user_id,
+        session['user_id'],
+        default_password=DEFAULT_PASSWORD_PRESET,
+        force_logout=True,
+        notify_user=True,
+    )
+
+    if ok:
+        write_audit(
+            action='user.reset_password', target_type='user', target_id=user_id,
+            before=None,
+            after={'mode': 'preset_12345678'},
+            severity='critical',
+        )
+        flash(f'Password reset to {DEFAULT_PASSWORD_PRESET}. '
+              f'User must log in again.', 'success')
+    else:
+        flash(msg or 'Failed to reset password.', 'error')
+
+    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
+
+# ============================================================
+# FORCE LOGOUT
 # ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/force-logout', methods=['POST'],
@@ -320,12 +360,8 @@ def force_logout(user_id):
     ok = force_user_logout(user_id, session['user_id'])
     if ok:
         write_audit(
-            action='user.force_logout',
-            target_type='user',
-            target_id=user_id,
-            before=None,
-            after=None,
-            severity='warning',
+            action='user.force_logout', target_type='user', target_id=user_id,
+            before=None, after=None, severity='warning',
         )
     flash('User will be logged out on next request.' if ok
           else 'Failed to force logout.',
@@ -334,7 +370,7 @@ def force_logout(user_id):
 
 
 # ============================================================
-# PUBLIC ID — /admin/users/<id>/public-id
+# PUBLIC ID
 # ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/public-id', methods=['POST'],
@@ -353,19 +389,15 @@ def set_public_id(user_id):
     ok, msg = set_user_public_id(user_id, new_id, session['user_id'])
     if ok:
         write_audit(
-            action='user.set_public_id',
-            target_type='user',
-            target_id=user_id,
-            before=None,
-            after={'public_id': new_id},
-            severity='info',
+            action='user.set_public_id', target_type='user', target_id=user_id,
+            before=None, after={'public_id': new_id}, severity='info',
         )
     flash(msg, 'success' if ok else 'error')
     return redirect(url_for('admin_users.user_detail', user_id=user_id))
 
 
 # ============================================================
-# DELETE — /admin/users/<id>/delete
+# DELETE
 # ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/delete', methods=['POST'],
@@ -388,12 +420,8 @@ def delete_user(user_id):
         except Exception:
             pass
         write_audit(
-            action='user.delete',
-            target_type='user',
-            target_id=user_id,
-            before=None,
-            after=None,
-            severity='critical',
+            action='user.delete', target_type='user', target_id=user_id,
+            before=None, after=None, severity='critical',
         )
         flash('User deleted successfully.', 'success')
         return redirect(url_for('admin_users.list_users'))
@@ -403,7 +431,7 @@ def delete_user(user_id):
 
 
 # ============================================================
-# BULK — /admin/users/bulk
+# BULK
 # ============================================================
 
 @admin_users_bp.route('/users/bulk', methods=['POST'], endpoint='users_bulk')
@@ -432,15 +460,55 @@ def users_bulk():
     elif action == 'notify':
         extra['title'] = (request.form.get('bulk_title') or '').strip()
         extra['body'] = (request.form.get('bulk_body') or '').strip()
+    elif action == 'reset_password_default':
+        extra['password'] = DEFAULT_PASSWORD_PRESET
+
+    # Bulk password reset — special handling since it needs werkzeug
+    if action == 'reset_password_default':
+        from werkzeug.security import generate_password_hash
+        succeeded = 0
+        failed = 0
+        pw_hash = generate_password_hash(DEFAULT_PASSWORD_PRESET)
+        for uid in user_ids:
+            try:
+                execute_with_retry(
+                    "UPDATE students SET password = ? WHERE id = ?",
+                    (pw_hash, uid), commit=True,
+                )
+                try:
+                    execute_with_retry(
+                        "UPDATE students SET session_version = "
+                        "COALESCE(session_version, 0) + 1 WHERE id = ?",
+                        (uid,), commit=True,
+                    )
+                except Exception:
+                    pass
+                log_admin_user_action(session['user_id'], uid,
+                                      'reset_password', None, 'preset_12345678')
+                succeeded += 1
+            except Exception:
+                failed += 1
+
+        write_audit(
+            action='users.bulk_reset_password_default',
+            target_type='user', before=None,
+            after={'succeeded': succeeded, 'failed': failed},
+            severity='critical',
+        )
+
+        if succeeded:
+            flash(f'Bulk reset: {succeeded} user(s) set to '
+                  f'{DEFAULT_PASSWORD_PRESET}.', 'success')
+        if failed:
+            flash(f'Bulk reset: {failed} failed.', 'error')
+        return redirect(request.referrer or url_for('admin_users.list_users'))
 
     succeeded, failed = bulk_user_action(action, user_ids,
                                          session['user_id'], extra)
 
     write_audit(
-        action=f'users.bulk_{action}',
-        target_type='user',
-        before=None,
-        after={'succeeded': succeeded, 'failed': failed},
+        action=f'users.bulk_{action}', target_type='user',
+        before=None, after={'succeeded': succeeded, 'failed': failed},
         severity='warning',
     )
 
@@ -453,7 +521,7 @@ def users_bulk():
 
 
 # ============================================================
-# TIER MANAGEMENT PAGE — /admin/users/tier/<id>
+# TIER MANAGEMENT PAGE
 # ============================================================
 
 @admin_users_bp.route('/users/tier/<int:user_id>', methods=['GET', 'POST'],
@@ -482,15 +550,11 @@ def manage_user_tier(user_id):
             log_admin_action(
                 'tier.change',
                 f"Admin {session['user_id']} changed tier of {user_id} "
-                f"from {current_tier} to {new_tier}",
-                'warning',
+                f"from {current_tier} to {new_tier}", 'warning',
             )
             write_audit(
-                action='user.set_tier',
-                target_type='user',
-                target_id=user_id,
-                before={'tier': current_tier},
-                after={'tier': new_tier},
+                action='user.set_tier', target_type='user', target_id=user_id,
+                before={'tier': current_tier}, after={'tier': new_tier},
                 severity='warning',
             )
             flash(f"User tier updated to {new_tier.capitalize()}.", 'success')
@@ -501,14 +565,12 @@ def manage_user_tier(user_id):
 
     return render_template(
         'dashboard/admin/access/user_tier.html',
-        user=user,
-        current_tier=current_tier,
-        admin_tier=admin_tier,
+        user=user, current_tier=current_tier, admin_tier=admin_tier,
     )
 
 
 # ============================================================
-# DELETED USERS — /admin/deleted-users
+# DELETED USERS
 # ============================================================
 
 @admin_users_bp.route('/deleted-users', methods=['GET'],
@@ -532,14 +594,11 @@ def restore_deleted_user(deleted_id):
     if success:
         log_admin_action(
             'user.restore',
-            f"Restored user from deleted_id {deleted_id}",
-            'info',
+            f"Restored user from deleted_id {deleted_id}", 'info',
         )
         write_audit(
-            action='user.restore',
-            target_type='user',
-            before=None,
-            after={'deleted_id': deleted_id},
+            action='user.restore', target_type='user',
+            before=None, after={'deleted_id': deleted_id},
             severity='warning',
         )
         flash('User restored successfully!', 'success')

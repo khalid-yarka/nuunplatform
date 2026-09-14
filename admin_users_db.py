@@ -486,23 +486,110 @@ def toggle_user_admin_admin(user_id: int, admin_id: int) -> Optional[bool]:
         return None
 
 
-def reset_user_password(user_id: int, new_password: str, admin_id: int) -> bool:
-    """Set a user's password to a new value (hashed)."""
+# ============================================
+# PASSWORD MANAGEMENT
+# ============================================
+
+def reset_user_password(
+    user_id: int,
+    new_password: str,
+    admin_id: int,
+    force_logout: bool = True,
+    notify_user: bool = True,
+) -> Tuple[bool, str]:
+    """
+    Set a user's password to a specific value.
+
+    Args:
+        user_id:       target user id
+        new_password:  plaintext password (>= 8 chars)
+        admin_id:      actor (recorded in admin_user_actions)
+        force_logout:  bump session_version so live sessions die
+        notify_user:   send an in-app "password changed" notice
+
+    Returns (ok, message). Message is user-facing.
+    """
     ensure_admin_user_schema()
+
+    if not isinstance(new_password, str):
+        return False, 'Password must be a string.'
+
+    new_password = new_password.strip()
+    if len(new_password) < 8:
+        return False, 'Password must be at least 8 characters.'
+    if len(new_password) > 128:
+        return False, 'Password is too long (max 128 characters).'
+
     try:
-        if len(new_password) < 8:
-            return False
+        user = get_student_by_id(user_id)
+        if not user:
+            return False, 'User not found.'
+
         from werkzeug.security import generate_password_hash
         password_hash = generate_password_hash(new_password)
+
         execute_with_retry(
             "UPDATE students SET password = ? WHERE id = ?",
-            (password_hash, user_id), commit=True
+            (password_hash, user_id),
+            commit=True,
         )
-        log_admin_user_action(admin_id, user_id, 'reset_password')
-        return True
+
+        if force_logout:
+            try:
+                execute_with_retry(
+                    "UPDATE students "
+                    "SET session_version = COALESCE(session_version, 0) + 1 "
+                    "WHERE id = ?",
+                    (user_id,),
+                    commit=True,
+                )
+            except Exception as e:
+                logger.warning(f"session_version bump failed for {user_id}: {e}")
+
+        log_admin_user_action(
+            admin_id,
+            user_id,
+            'reset_password',
+            None,
+            'custom',
+        )
+
+        if notify_user:
+            try:
+                from db import create_notification
+                create_notification(
+                    user_id=user_id,
+                    type='account',
+                    title='🔐 Password Changed',
+                    body='An administrator changed your password. '
+                         'Please log in again.',
+                    link='/login',
+                    icon='🔐',
+                )
+            except Exception as e:
+                logger.warning(f"reset-password notification failed: {e}")
+
+        return True, 'Password updated. User sessions invalidated.'
     except Exception as e:
-        logger.error(f"reset_user_password failed: {e}")
-        return False
+        logger.error(f"reset_user_password failed: {e}", exc_info=True)
+        return False, 'Failed to update password.'
+
+
+def reset_user_password_to_default(
+    user_id: int,
+    admin_id: int,
+    default_password: str = '12345678',
+    force_logout: bool = True,
+    notify_user: bool = True,
+) -> Tuple[bool, str]:
+    """Reset a user's password to a specific default. Thin wrapper."""
+    return reset_user_password(
+        user_id,
+        default_password,
+        admin_id,
+        force_logout=force_logout,
+        notify_user=notify_user,
+    )
 
 
 def force_user_logout(user_id: int, admin_id: int) -> bool:
