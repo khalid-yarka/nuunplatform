@@ -1,10 +1,11 @@
 # blueprints/live_quiz_bp.py
-# Complete file with default privacy fix
+# Complete file with:
+#   • Active-quiz guard on create (GET + POST paths)
+#   • New /abandon/<quiz_id> endpoint (soft-close or leave)
+#   • Preserved behaviour for every existing route
 #
-# REMOVED: the duplicate start_cleanup_thread() at the bottom.
-# The same cleanup already runs inside live_quiz_state.py's
-# get_live_quiz_state_manager(). Two cleanup threads was a bug —
-# it doubled SQLite writes and burned CPU quota.
+# The duplicate cleanup thread at the bottom of the original file
+# remains removed — cleanup lives inside live_quiz_state.py only.
 
 import json
 import random
@@ -12,7 +13,10 @@ import threading
 import logging
 import time
 from datetime import datetime, timezone, timedelta
-from flask import Blueprint, render_template, request, session, flash, redirect, url_for, jsonify, Response
+from flask import (
+    Blueprint, render_template, request, session, flash, redirect,
+    url_for, jsonify, Response,
+)
 from functools import wraps
 from io import StringIO
 import csv
@@ -55,7 +59,13 @@ from db import (
 )
 
 from config import Config
-from utils import get_somali_time_db, get_somali_time_display, format_somali_time, validate_csrf, ensure_csrf_token
+from utils import (
+    get_somali_time_db,
+    get_somali_time_display,
+    format_somali_time,
+    validate_csrf,
+    ensure_csrf_token,
+)
 from subjects_config import get_subject, get_all_subjects
 from services.tier_service import (
     can_create_live_quiz,
@@ -82,15 +92,28 @@ CACHE_TTL = getattr(Config, 'CACHE_TTL', {}).get('quiz', {})
 QUIZ_STATE_TTL = CACHE_TTL.get('state', 60)
 
 
+# ============================================
+# SINGLE-WORKER SAFETY
+# ============================================
+
 def check_single_worker():
     try:
         if 'GUNICORN_WORKER' in os.environ:
-            logger.warning("Multiple Gunicorn workers detected. Live Quiz state is per-process and will be inconsistent across workers. Please set --workers=1.")
+            logger.warning(
+                "Multiple Gunicorn workers detected. Live Quiz state "
+                "is per-process and will be inconsistent across workers. "
+                "Please set --workers=1."
+            )
     except Exception:
         pass
 
+
 check_single_worker()
 
+
+# ============================================
+# SHARED HELPERS
+# ============================================
 
 def get_state_manager():
     return get_live_quiz_state_manager()
@@ -110,6 +133,31 @@ def get_questions_for_subject(subject_code, limit):
     return questions, len(questions)
 
 
+def _enrich_active_quiz(active_quiz: dict, user_id: int) -> dict:
+    """Attach subject display + role to an active quiz dict."""
+    if not active_quiz:
+        return active_quiz
+    active_quiz['is_creator'] = (active_quiz.get('creator_id') == user_id)
+    subj = get_subject(active_quiz.get('subject_code'))
+    active_quiz['subject_name'] = subj['name'] if subj else active_quiz.get('subject_code')
+    active_quiz['subject_icon'] = subj.get('icon', '📚') if subj else '📚'
+    return active_quiz
+
+
+def _get_active_quiz_for_user(user_id: int):
+    """
+    Return the user's current unfinished quiz (dict) or None.
+    'Unfinished' = status in ('waiting', 'scheduled', 'active').
+    """
+    active_id = get_user_active_quiz(user_id)
+    if not active_id:
+        return None
+    quiz = get_live_quiz_by_id(active_id)
+    if not quiz:
+        return None
+    return _enrich_active_quiz(quiz, user_id)
+
+
 def finalize_live_quiz(quiz_id: int) -> dict:
     manager = get_state_manager()
     quiz_state = manager.get_quiz(quiz_id)
@@ -123,7 +171,7 @@ def finalize_live_quiz(quiz_id: int) -> dict:
     try:
         update_live_quiz(quiz_id, {
             'status': 'finished',
-            'ended_at': final_data['ended_at']
+            'ended_at': final_data['ended_at'],
         })
 
         for pdata in final_data['participants']:
@@ -137,7 +185,7 @@ def finalize_live_quiz(quiz_id: int) -> dict:
                     'answers': pdata['answers'],
                     'ratings': pdata['ratings'],
                     'ranking': pdata['rank'],
-                    'status': pdata['status']
+                    'status': pdata['status'],
                 })
 
             add_history_entry(
@@ -148,14 +196,14 @@ def finalize_live_quiz(quiz_id: int) -> dict:
                     'subject': quiz_state.metadata.get('subject_code', 'Unknown'),
                     'score': pdata['score'],
                     'rank': pdata.get('rank'),
-                    'total_questions': len(quiz_state.question_ids)
-                }
+                    'total_questions': len(quiz_state.question_ids),
+                },
             )
 
         manager.enqueue_event({
             'quiz_id': quiz_id,
             'event_type': 'COMPLETE',
-            'payload': json.dumps(final_data)
+            'payload': json.dumps(final_data),
         })
 
         quiz_state.mark_finalized()
@@ -166,9 +214,13 @@ def finalize_live_quiz(quiz_id: int) -> dict:
                 user_id=p['student_id'],
                 notification_type='live_quiz_result',
                 title='🏆 Quiz Complete!',
-                body=f'"{quiz_state.metadata.get("title", "Quiz")}" finished. Your rank: #{p.get("rank", "N/A")}, Score: {p.get("score", 0)}',
+                body=(
+                    f'"{quiz_state.metadata.get("title", "Quiz")}" finished. '
+                    f'Your rank: #{p.get("rank", "N/A")}, '
+                    f'Score: {p.get("score", 0)}'
+                ),
                 link=f'/live-quiz/results/{quiz_id}',
-                icon='🏅'
+                icon='🏅',
             )
 
         invalidate_quiz_cache(quiz_id)
@@ -222,7 +274,7 @@ def lobby():
         subject_filter=subject_code,
         search=search if search else None,
         page=page,
-        per_page=per_page
+        per_page=per_page,
     )
 
     stats_key = make_key('quiz', 'stats', 'global')
@@ -236,12 +288,21 @@ def lobby():
     user_tier = get_current_user_tier()
     can_create = can_create_live_quiz()
 
-    return render_template('dashboard/live_quiz/lobby.html',
-                         quizzes=quizzes, stats=stats, subjects=subjects,
-                         status_filter=status_filter, subject_filter=subject_filter,
-                         search=search, page=page, per_page=per_page,
-                         total=total, total_pages=total_pages,
-                         user_tier=user_tier, can_create=can_create)
+    return render_template(
+        'dashboard/live_quiz/lobby.html',
+        quizzes=quizzes,
+        stats=stats,
+        subjects=subjects,
+        status_filter=status_filter,
+        subject_filter=subject_filter,
+        search=search,
+        page=page,
+        per_page=per_page,
+        total=total,
+        total_pages=total_pages,
+        user_tier=user_tier,
+        can_create=can_create,
+    )
 
 
 @live_quiz_bp.route('/lobby/join/<quiz_id>', methods=['POST'])
@@ -279,7 +340,7 @@ def lobby_join(quiz_id):
             'quiz_id': quiz_id,
             'user_id': user_id,
             'event_type': 'JOIN',
-            'payload': json.dumps({'name': name})
+            'payload': json.dumps({'name': name}),
         })
     else:
         return jsonify({'error': 'Quiz state not available'}), 500
@@ -294,11 +355,18 @@ def lobby_join(quiz_id):
             title='👋 New Participant!',
             body=f'{user_name} joined your quiz "{quiz.get("title", "Live Quiz")}"',
             link=f'/live-quiz/waiting-room/{quiz_id}',
-            icon='👤'
+            icon='👤',
         )
 
-    return jsonify({'success': True, 'redirect': url_for('live_quiz.waiting_room', quiz_id=quiz_id)})
+    return jsonify({
+        'success': True,
+        'redirect': url_for('live_quiz.waiting_room', quiz_id=quiz_id),
+    })
 
+
+# ============================================
+# CREATE — WITH ACTIVE-QUIZ GUARD
+# ============================================
 
 @live_quiz_bp.route('/create', methods=['GET', 'POST'])
 def create():
@@ -310,7 +378,11 @@ def create():
     user_subjects = get_user_subject_list(user_id)
 
     if not user_subjects:
-        flash('You need to set your location and curriculum in your profile before creating a quiz.', 'error')
+        flash(
+            'You need to set your location and curriculum in your profile '
+            'before creating a quiz.',
+            'error',
+        )
         return redirect(url_for('dashboard.profile'))
 
     if not can_create_live_quiz():
@@ -322,194 +394,261 @@ def create():
     default_max_participants = settings.get('live_quiz.default_max_participants', 50)
     default_privacy = settings.get('live_quiz.default_privacy', 1)
 
+    # ---- Active-quiz guard (runs for both GET and POST) ----
+    active_quiz = _get_active_quiz_for_user(user_id)
+
+    # ------------- GET -------------
     if request.method == 'GET':
         ensure_csrf_token()
-        return render_template('dashboard/live_quiz/create.html',
-                               subjects=user_subjects,
-                               default_time=default_time,
-                               default_max_participants=default_max_participants,
-                               default_privacy=default_privacy)
+        return render_template(
+            'dashboard/live_quiz/create.html',
+            subjects=user_subjects,
+            default_time=default_time,
+            default_max_participants=default_max_participants,
+            default_privacy=default_privacy,
+            active_quiz=active_quiz,
+        )
 
-    if request.method == 'POST':
-        if not validate_csrf():
-            flash('Invalid CSRF token. Please try again.', 'error')
-            return render_template('dashboard/live_quiz/create.html', subjects=user_subjects,
-                                   default_time=default_time, default_max_participants=default_max_participants,
-                                   default_privacy=default_privacy)
+    # ------------- POST -------------
+    if not validate_csrf():
+        flash('Invalid CSRF token. Please try again.', 'error')
+        return redirect(url_for('live_quiz.create'))
 
-        subject_code = request.form.get('subject_code', '').strip()
-        allowed_codes = [s['code'] for s in user_subjects]
-        if subject_code not in allowed_codes:
-            flash('Subject not available for your location/curriculum.', 'error')
-            return render_template('dashboard/live_quiz/create.html', subjects=user_subjects,
-                                   default_time=default_time, default_max_participants=default_max_participants,
-                                   default_privacy=default_privacy)
+    # Hard guard: refuse to create while already in another quiz
+    if active_quiz:
+        role = 'creator' if active_quiz.get('is_creator') else 'participant'
+        flash(
+            f'You are already in an unfinished quiz as a {role}. '
+            f'Please finish, leave, or abandon it before creating a new one.',
+            'error',
+        )
+        return redirect(url_for('live_quiz.create'))
 
+    subject_code = request.form.get('subject_code', '').strip()
+    allowed_codes = [s['code'] for s in user_subjects]
+    if subject_code not in allowed_codes:
+        flash('Subject not available for your location/curriculum.', 'error')
+        return render_template(
+            'dashboard/live_quiz/create.html',
+            subjects=user_subjects,
+            default_time=default_time,
+            default_max_participants=default_max_participants,
+            default_privacy=default_privacy,
+            active_quiz=None,
+        )
+
+    try:
+        question_count = int(request.form.get('question_count', 10))
+    except ValueError:
+        question_count = 10
+    if question_count < 5 or question_count > 30:
+        flash('Number of questions must be between 5 and 30.', 'error')
+        return render_template(
+            'dashboard/live_quiz/create.html',
+            subjects=user_subjects,
+            subject_code=subject_code,
+            title=request.form.get('title', '').strip(),
+            is_public=request.form.get('is_public', default_privacy),
+            default_time=default_time,
+            default_max_participants=default_max_participants,
+            default_privacy=default_privacy,
+            active_quiz=None,
+        )
+
+    title = request.form.get('title', '').strip()
+    if not title:
+        flash('Please give your quiz a title before creating it.', 'error')
+        return render_template(
+            'dashboard/live_quiz/create.html',
+            subjects=user_subjects,
+            subject_code=subject_code,
+            title='',
+            is_public=request.form.get('is_public', default_privacy),
+            default_time=default_time,
+            default_max_participants=default_max_participants,
+            default_privacy=default_privacy,
+            active_quiz=None,
+        )
+    if len(title) > 100:
+        flash('Title is too long (max 100 characters).', 'error')
+        return render_template(
+            'dashboard/live_quiz/create.html',
+            subjects=user_subjects,
+            subject_code=subject_code,
+            title=title,
+            is_public=request.form.get('is_public', default_privacy),
+            default_time=default_time,
+            default_max_participants=default_max_participants,
+            default_privacy=default_privacy,
+            active_quiz=None,
+        )
+
+    time_per_question = request.form.get('time_per_question')
+    if time_per_question is None:
+        time_per_question = default_time
+    else:
         try:
-            question_count = int(request.form.get('question_count', 10))
+            time_per_question = int(time_per_question)
         except ValueError:
-            question_count = 10
-        if question_count < 5 or question_count > 30:
-            flash('Number of questions must be between 5 and 30.', 'error')
-            return render_template('dashboard/live_quiz/create.html', subjects=user_subjects,
-                                   subject_code=subject_code, title=request.form.get('title', '').strip(),
-                                   is_public=request.form.get('is_public', default_privacy),
-                                   default_time=default_time, default_max_participants=default_max_participants,
-                                   default_privacy=default_privacy)
-
-        title = request.form.get('title', '').strip()
-        if not title:
-            flash('Please give your quiz a title before creating it.', 'error')
-            return render_template('dashboard/live_quiz/create.html',
-                                   subjects=user_subjects,
-                                   subject_code=subject_code,
-                                   title='',
-                                   is_public=request.form.get('is_public', default_privacy),
-                                   default_time=default_time,
-                                   default_max_participants=default_max_participants,
-                                   default_privacy=default_privacy)
-        if len(title) > 100:
-            flash('Title is too long (max 100 characters).', 'error')
-            return render_template('dashboard/live_quiz/create.html',
-                                   subjects=user_subjects,
-                                   subject_code=subject_code,
-                                   title=title,
-                                   is_public=request.form.get('is_public', default_privacy),
-                                   default_time=default_time,
-                                   default_max_participants=default_max_participants,
-                                   default_privacy=default_privacy)
-
-        time_per_question = request.form.get('time_per_question')
-        if time_per_question is None:
             time_per_question = default_time
-        else:
-            try:
-                time_per_question = int(time_per_question)
-            except ValueError:
-                time_per_question = default_time
 
-        max_participants = request.form.get('max_participants')
-        if max_participants is None:
-            max_participants = default_max_participants
-        else:
-            try:
-                max_participants = int(max_participants)
-            except ValueError:
-                max_participants = default_max_participants
-
-        privacy = request.form.get('is_public')
-        if privacy is None:
-            privacy = default_privacy
-        else:
-            try:
-                privacy = int(privacy)
-            except ValueError:
-                privacy = default_privacy
-        if privacy not in (0, 1):
-            privacy = 1
-
-        if privacy == 0 and not can_create_private_live_quiz():
-            flash('Upgrade to Premium or Pro to create private live quizzes.', 'error')
-            return render_template('dashboard/live_quiz/create.html', subjects=user_subjects,
-                                   subject_code=subject_code, title=title, is_public=1,
-                                   default_time=default_time, default_max_participants=default_max_participants,
-                                   default_privacy=default_privacy)
-
+    max_participants = request.form.get('max_participants')
+    if max_participants is None:
+        max_participants = default_max_participants
+    else:
         try:
-            schedule_minutes = int(request.form.get('schedule_minutes', 0))
+            max_participants = int(max_participants)
         except ValueError:
-            schedule_minutes = 0
-        if schedule_minutes < 0:
-            schedule_minutes = 0
+            max_participants = default_max_participants
 
-        if schedule_minutes > 0 and not can_schedule_live_quiz():
-            flash('Upgrade to Premium or Pro to schedule live quizzes.', 'error')
-            return render_template('dashboard/live_quiz/create.html', subjects=user_subjects,
-                                   subject_code=subject_code, title=title, is_public=privacy,
-                                   default_time=default_time, default_max_participants=default_max_participants,
-                                   default_privacy=default_privacy)
-
+    privacy = request.form.get('is_public')
+    if privacy is None:
+        privacy = default_privacy
+    else:
         try:
-            questions, available = get_questions_for_subject(subject_code, question_count)
-        except Exception as e:
-            logger.error(f"Error fetching questions for subject {subject_code}: {e}", exc_info=True)
-            flash('Error fetching questions. Please try again.', 'error')
-            return render_template('dashboard/live_quiz/create.html', subjects=user_subjects,
-                                   subject_code=subject_code, title=title, is_public=privacy,
-                                   default_time=default_time, default_max_participants=default_max_participants,
-                                   default_privacy=default_privacy)
+            privacy = int(privacy)
+        except ValueError:
+            privacy = default_privacy
+    if privacy not in (0, 1):
+        privacy = 1
 
-        if available == 0:
-            flash('No questions available for this subject. Please select another subject.', 'error')
-            return render_template('dashboard/live_quiz/create.html', subjects=user_subjects)
+    if privacy == 0 and not can_create_private_live_quiz():
+        flash('Upgrade to Premium or Pro to create private live quizzes.', 'error')
+        return render_template(
+            'dashboard/live_quiz/create.html',
+            subjects=user_subjects,
+            subject_code=subject_code,
+            title=title,
+            is_public=1,
+            default_time=default_time,
+            default_max_participants=default_max_participants,
+            default_privacy=default_privacy,
+            active_quiz=None,
+        )
 
-        if available < question_count:
-            return render_template('dashboard/live_quiz/create.html',
-                                   subjects=user_subjects, not_enough=True,
-                                   available=available, requested=question_count,
-                                   subject_code=subject_code, title=title, is_public=privacy,
-                                   default_time=default_time, default_max_participants=default_max_participants,
-                                   default_privacy=default_privacy)
+    try:
+        schedule_minutes = int(request.form.get('schedule_minutes', 0))
+    except ValueError:
+        schedule_minutes = 0
+    if schedule_minutes < 0:
+        schedule_minutes = 0
 
-        question_ids = [q['id'] for q in questions]
-        questions_cache = {q['id']: q for q in questions}
+    if schedule_minutes > 0 and not can_schedule_live_quiz():
+        flash('Upgrade to Premium or Pro to schedule live quizzes.', 'error')
+        return render_template(
+            'dashboard/live_quiz/create.html',
+            subjects=user_subjects,
+            subject_code=subject_code,
+            title=title,
+            is_public=privacy,
+            default_time=default_time,
+            default_max_participants=default_max_participants,
+            default_privacy=default_privacy,
+            active_quiz=None,
+        )
 
-        quiz_data = {
-            'creator_id': user_id,
-            'title': title,
-            'subject_code': subject_code,
-            'question_count': question_count,
-            'max_participants': max_participants,
-            'time_per_question': time_per_question,
-            'current_question_index': 0,
-            'question_ids': question_ids,
-            'is_public': privacy,
-        }
+    try:
+        questions, available = get_questions_for_subject(subject_code, question_count)
+    except Exception as e:
+        logger.error(f"Error fetching questions for subject {subject_code}: {e}", exc_info=True)
+        flash('Error fetching questions. Please try again.', 'error')
+        return render_template(
+            'dashboard/live_quiz/create.html',
+            subjects=user_subjects,
+            subject_code=subject_code,
+            title=title,
+            is_public=privacy,
+            default_time=default_time,
+            default_max_participants=default_max_participants,
+            default_privacy=default_privacy,
+            active_quiz=None,
+        )
 
-        if schedule_minutes > 0:
-            quiz_data['status'] = 'scheduled'
-            scheduled_time = datetime.now(timezone.utc) + timedelta(minutes=schedule_minutes)
-            quiz_data['scheduled_start'] = scheduled_time.isoformat()
-        else:
-            quiz_data['status'] = 'waiting'
-            quiz_data['scheduled_start'] = None
+    if available == 0:
+        flash('No questions available for this subject. Please select another subject.', 'error')
+        return render_template(
+            'dashboard/live_quiz/create.html',
+            subjects=user_subjects,
+            active_quiz=None,
+        )
 
-        quiz, error = create_live_quiz_with_participant(quiz_data, user_id)
+    if available < question_count:
+        return render_template(
+            'dashboard/live_quiz/create.html',
+            subjects=user_subjects,
+            not_enough=True,
+            available=available,
+            requested=question_count,
+            subject_code=subject_code,
+            title=title,
+            is_public=privacy,
+            default_time=default_time,
+            default_max_participants=default_max_participants,
+            default_privacy=default_privacy,
+            active_quiz=None,
+        )
 
-        if error or not quiz:
-            flash(f'Failed to create quiz: {error or "Unknown error"}', 'error')
-            return render_template('dashboard/live_quiz/create.html', subjects=user_subjects,
-                                   subject_code=subject_code, title=title, is_public=privacy,
-                                   default_time=default_time, default_max_participants=default_max_participants,
-                                   default_privacy=default_privacy)
+    question_ids = [q['id'] for q in questions]
+    questions_cache = {q['id']: q for q in questions}
 
-        if not quiz.get('id'):
-            logger.error(f"Quiz created but missing 'id': {quiz}")
-            flash('Quiz created but missing ID. Please contact support.', 'error')
-            return redirect(url_for('live_quiz.lobby'))
+    quiz_data = {
+        'creator_id': user_id,
+        'title': title,
+        'subject_code': subject_code,
+        'question_count': question_count,
+        'max_participants': max_participants,
+        'time_per_question': time_per_question,
+        'current_question_index': 0,
+        'question_ids': question_ids,
+        'is_public': privacy,
+    }
 
-        manager = get_state_manager()
-        quiz_state = manager.create_quiz(quiz['id'], quiz, question_ids, questions_cache)
+    if schedule_minutes > 0:
+        quiz_data['status'] = 'scheduled'
+        scheduled_time = datetime.now(timezone.utc) + timedelta(minutes=schedule_minutes)
+        quiz_data['scheduled_start'] = scheduled_time.isoformat()
+    else:
+        quiz_data['status'] = 'waiting'
+        quiz_data['scheduled_start'] = None
 
-        user = get_student_by_id(user_id)
-        name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
-        quiz_state.add_participant(user_id, name, user.get('public_id', '----'))
-        quiz_state.set_participant_ready(user_id, True)
+    quiz, error = create_live_quiz_with_participant(quiz_data, user_id)
 
-        manager.enqueue_event({
-            'quiz_id': quiz['id'],
-            'user_id': user_id,
-            'event_type': 'JOIN',
-            'payload': json.dumps({'name': name})
-        })
+    if error or not quiz:
+        flash(f'Failed to create quiz: {error or "Unknown error"}', 'error')
+        return render_template(
+            'dashboard/live_quiz/create.html',
+            subjects=user_subjects,
+            subject_code=subject_code,
+            title=title,
+            is_public=privacy,
+            default_time=default_time,
+            default_max_participants=default_max_participants,
+            default_privacy=default_privacy,
+            active_quiz=None,
+        )
 
-        flash('Quiz created successfully! Share the join code.', 'success')
-        return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
+    if not quiz.get('id'):
+        logger.error(f"Quiz created but missing 'id': {quiz}")
+        flash('Quiz created but missing ID. Please contact support.', 'error')
+        return redirect(url_for('live_quiz.lobby'))
 
-    return render_template('dashboard/live_quiz/create.html', subjects=user_subjects,
-                           default_time=default_time,
-                           default_max_participants=default_max_participants,
-                           default_privacy=default_privacy)
+    manager = get_state_manager()
+    quiz_state = manager.create_quiz(quiz['id'], quiz, question_ids, questions_cache)
+
+    user = get_student_by_id(user_id)
+    name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
+    quiz_state.add_participant(user_id, name, user.get('public_id', '----'))
+    quiz_state.set_participant_ready(user_id, True)
+
+    manager.enqueue_event({
+        'quiz_id': quiz['id'],
+        'user_id': user_id,
+        'event_type': 'JOIN',
+        'payload': json.dumps({'name': name}),
+    })
+
+    flash('Quiz created successfully! Share the join code.', 'success')
+    return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
 
 
 @live_quiz_bp.route('/create-with-available', methods=['POST'])
@@ -527,6 +666,18 @@ def create_with_available():
         return redirect(url_for('live_quiz.lobby'))
 
     user_id = session['user_id']
+
+    # Same guard as create()
+    active_quiz = _get_active_quiz_for_user(user_id)
+    if active_quiz:
+        role = 'creator' if active_quiz.get('is_creator') else 'participant'
+        flash(
+            f'You are already in an unfinished quiz as a {role}. '
+            f'Please finish, leave, or abandon it before creating a new one.',
+            'error',
+        )
+        return redirect(url_for('live_quiz.create'))
+
     subject_code = request.form.get('subject_code', '').strip()
     try:
         question_count = int(request.form.get('question_count', 10))
@@ -580,7 +731,7 @@ def create_with_available():
         'question_ids': question_ids,
         'is_public': is_public,
         'status': 'waiting',
-        'scheduled_start': None
+        'scheduled_start': None,
     }
 
     quiz, error = create_live_quiz_with_participant(quiz_data, user_id)
@@ -599,12 +750,113 @@ def create_with_available():
         'quiz_id': quiz['id'],
         'user_id': user_id,
         'event_type': 'JOIN',
-        'payload': json.dumps({'name': name})
+        'payload': json.dumps({'name': name}),
     })
 
     flash(f'Quiz created with {available} questions!', 'success')
     return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
 
+
+# ============================================
+# ABANDON — Soft-close or leave the user's unfinished quiz
+# ============================================
+
+@live_quiz_bp.route('/abandon/<quiz_id>', methods=['POST'])
+def abandon_quiz(quiz_id):
+    """
+    Skip the user's unfinished quiz so they can create a new one.
+
+    Behaviour:
+        • If the user is the creator and the quiz is waiting/scheduled:
+          soft-close the whole quiz (status -> 'finished'), mark every
+          active participant as left.
+        • If the user is a participant (not creator):
+          mark only their participation as 'left'.
+        • If the quiz is 'active' (a game is in progress):
+          refuse — the user must wait for the game to end.
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    if not validate_csrf():
+        return jsonify({'error': 'CSRF token missing or invalid'}), 403
+
+    user_id = session['user_id']
+    quiz = get_live_quiz_by_id(quiz_id)
+    if not quiz:
+        return jsonify({'error': 'Quiz not found'}), 404
+
+    if quiz['status'] == 'active':
+        return jsonify({
+            'error': 'This quiz is currently active. You cannot abandon it until it finishes.',
+        }), 400
+
+    if quiz['status'] not in ('waiting', 'scheduled'):
+        return jsonify({'error': 'Quiz is not in an abandonable state.'}), 400
+
+    manager = get_state_manager()
+
+    # ---------- Creator: soft-close the whole quiz ----------
+    if quiz['creator_id'] == user_id:
+        try:
+            update_live_quiz(quiz_id, {
+                'status': 'finished',
+                'ended_at': get_somali_time_db(),
+                'scheduled_start': None,
+            })
+            # Mark all active participants as left
+            execute_with_retry(
+                "UPDATE live_quiz_participants SET status = 'left' "
+                "WHERE quiz_id = ? AND status != 'left'",
+                (quiz_id,), commit=True,
+            )
+            # Remove from memory
+            try:
+                manager.delete_quiz(quiz_id)
+            except Exception:
+                pass
+            invalidate_quiz_cache(quiz_id)
+
+            logger.info(f"User {user_id} abandoned own quiz {quiz_id} (soft-closed)")
+            return jsonify({
+                'success': True,
+                'action': 'closed',
+                'redirect': url_for('live_quiz.create'),
+            })
+        except Exception as e:
+            logger.error(f"abandon_quiz (creator) failed for {quiz_id}: {e}", exc_info=True)
+            return jsonify({'error': 'Could not abandon the quiz.'}), 500
+
+    # ---------- Participant: just leave ----------
+    success = db_leave_live_quiz(quiz_id, user_id)
+    if not success:
+        return jsonify({'error': 'Failed to leave the quiz.'}), 500
+
+    try:
+        manager.ensure_quiz_in_memory(quiz_id)
+        quiz_state = manager.get_quiz(quiz_id)
+        if quiz_state:
+            quiz_state.remove_participant(user_id)
+            manager.enqueue_event({
+                'quiz_id': quiz_id,
+                'user_id': user_id,
+                'event_type': 'LEAVE',
+                'payload': json.dumps({}),
+            })
+    except Exception as e:
+        logger.warning(f"abandon_quiz (participant) memory cleanup failed: {e}")
+
+    invalidate_quiz_cache(quiz_id)
+    logger.info(f"User {user_id} abandoned participation in quiz {quiz_id}")
+    return jsonify({
+        'success': True,
+        'action': 'left',
+        'redirect': url_for('live_quiz.create'),
+    })
+
+
+# ============================================
+# JOIN
+# ============================================
 
 @live_quiz_bp.route('/join', methods=['GET', 'POST'])
 def join():
@@ -679,7 +931,7 @@ def join():
                 'quiz_id': quiz['id'],
                 'user_id': user_id,
                 'event_type': 'JOIN',
-                'payload': json.dumps({'name': name})
+                'payload': json.dumps({'name': name}),
             })
 
         flash('You have joined the quiz!', 'success')
@@ -687,6 +939,10 @@ def join():
 
     return render_template('dashboard/live_quiz/join.html')
 
+
+# ============================================
+# WAITING ROOM
+# ============================================
 
 @live_quiz_bp.route('/waiting-room/<quiz_id>')
 def waiting_room(quiz_id):
@@ -733,14 +989,17 @@ def waiting_room(quiz_id):
         except Exception:
             pass
 
-    return render_template('dashboard/live_quiz/waiting_room.html',
-                         quiz=quiz, is_creator=is_creator,
-                         participants=participants,
-                         participant_count=participant_count,
-                         active_participant_count=active_count,
-                         user_participant_status=user_participant_status,
-                         starts_in_seconds=starts_in_seconds,
-                         scheduled_start_display=scheduled_start_display)
+    return render_template(
+        'dashboard/live_quiz/waiting_room.html',
+        quiz=quiz,
+        is_creator=is_creator,
+        participants=participants,
+        participant_count=participant_count,
+        active_participant_count=active_count,
+        user_participant_status=user_participant_status,
+        starts_in_seconds=starts_in_seconds,
+        scheduled_start_display=scheduled_start_display,
+    )
 
 
 @live_quiz_bp.route('/waiting-room/participants/<quiz_id>')
@@ -763,7 +1022,7 @@ def waiting_room_participants(quiz_id):
             'name': f"{p.get('first_name', '')} {p.get('last_name', '')}".strip() or 'Unknown',
             'public_id': p.get('public_id', '----'),
             'status': p.get('status', 'active'),
-            'is_ready': p.get('is_ready', False)
+            'is_ready': p.get('is_ready', False),
         })
     return jsonify({'participants': formatted, 'count': len(formatted)})
 
@@ -823,12 +1082,16 @@ def start_quiz(quiz_id):
     if not success:
         return jsonify({'error': 'Failed to start quiz'}), 500
 
-    update_live_quiz(quiz_id, {'status': 'active', 'started_at': get_somali_time_db(), 'scheduled_start': None})
+    update_live_quiz(quiz_id, {
+        'status': 'active',
+        'started_at': get_somali_time_db(),
+        'scheduled_start': None,
+    })
 
     manager.enqueue_event({
         'quiz_id': quiz_id,
         'event_type': 'START',
-        'payload': {}
+        'payload': json.dumps({}),
     })
 
     participants = quiz_state.get_all_participants()
@@ -839,14 +1102,18 @@ def start_quiz(quiz_id):
             title='🚀 Quiz Started!',
             body=f'"{quiz.get("title", "Live Quiz")}" has started! Join now!',
             link=f'/live-quiz/play/{quiz_id}',
-            icon='⚡'
+            icon='⚡',
         )
 
-    return jsonify({'success': True, 'quiz_id': quiz_id, 'redirect_url': url_for('live_quiz.play', quiz_id=quiz_id)})
+    return jsonify({
+        'success': True,
+        'quiz_id': quiz_id,
+        'redirect_url': url_for('live_quiz.play', quiz_id=quiz_id),
+    })
 
 
 @live_quiz_bp.route('/quiz-state/<quiz_id>')
-def quiz_state(quiz_id):
+def quiz_state_endpoint(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
 
@@ -861,7 +1128,10 @@ def quiz_state(quiz_id):
 
     if not quiz_state:
         if quiz['status'] == 'finished':
-            return jsonify({'status': 'finished', 'redirect_url': url_for('live_quiz.results', quiz_id=quiz_id)})
+            return jsonify({
+                'status': 'finished',
+                'redirect_url': url_for('live_quiz.results', quiz_id=quiz_id),
+            })
         return jsonify({'status': 'waiting', 'error': 'Quiz not active'})
 
     p = quiz_state.get_participant(user_id)
@@ -874,24 +1144,36 @@ def quiz_state(quiz_id):
     answers = p.answers if p else {}
 
     if quiz_state.is_finished():
-        return jsonify({'status': 'finished', 'redirect_url': url_for('live_quiz.results', quiz_id=quiz_id)})
+        return jsonify({
+            'status': 'finished',
+            'redirect_url': url_for('live_quiz.results', quiz_id=quiz_id),
+        })
 
     all_completed = quiz_state.is_completed()
     if all_completed and quiz_state.status == 'active':
         finalize_live_quiz(quiz_id)
-        return jsonify({'status': 'finished', 'redirect_url': url_for('live_quiz.results', quiz_id=quiz_id)})
+        return jsonify({
+            'status': 'finished',
+            'redirect_url': url_for('live_quiz.results', quiz_id=quiz_id),
+        })
 
     remaining_time = None
     if quiz_state.status == 'active' and quiz_state.started_at:
         try:
-            total_duration = quiz_state.metadata.get('question_count', 10) * (quiz_state.metadata.get('time_per_question', 30) + RATING_TIME)
+            total_duration = (
+                quiz_state.metadata.get('question_count', 10)
+                * (quiz_state.metadata.get('time_per_question', 30) + RATING_TIME)
+            )
             started = datetime.fromisoformat(quiz_state.started_at.replace('Z', '+00:00'))
             elapsed = (datetime.now(timezone.utc) - started).total_seconds()
             remaining = max(0, total_duration - elapsed)
             remaining_time = int(remaining)
             if remaining_time == 0:
                 finalize_live_quiz(quiz_id)
-                return jsonify({'status': 'finished', 'redirect_url': url_for('live_quiz.results', quiz_id=quiz_id)})
+                return jsonify({
+                    'status': 'finished',
+                    'redirect_url': url_for('live_quiz.results', quiz_id=quiz_id),
+                })
         except Exception as e:
             logger.error(f"Error calculating remaining time: {e}")
             remaining_time = 0
@@ -903,9 +1185,15 @@ def quiz_state(quiz_id):
         'score': score,
         'is_completed': current_index >= total_questions,
         'all_completed': all_completed,
-        'completed_count': sum(1 for pp in quiz_state.participants.values() if pp.current_question_index >= total_questions),
-        'total_participants': len([pp for pp in quiz_state.participants.values() if pp.status != 'left']),
-        'remaining_time': remaining_time
+        'completed_count': sum(
+            1 for pp in quiz_state.participants.values()
+            if pp.current_question_index >= total_questions
+        ),
+        'total_participants': len([
+            pp for pp in quiz_state.participants.values()
+            if pp.status != 'left'
+        ]),
+        'remaining_time': remaining_time,
     }
 
     if current_index < total_questions:
@@ -924,7 +1212,7 @@ def quiz_state(quiz_id):
                 'current_question_index': pp.current_question_index,
                 'total_questions': total_questions,
                 'status': pp.status,
-                'score': pp.score
+                'score': pp.score,
             })
     response['participant_progress'] = progress
 
@@ -970,7 +1258,7 @@ def get_question(quiz_id):
             'answer': answer_data.get('answer'),
             'correct': answer_data.get('correct', False),
             'correct_answer': q_data['correct_answer'],
-            'explanation': q_data.get('explanation', '')
+            'explanation': q_data.get('explanation', ''),
         })
 
     if str(qid) in p.ratings:
@@ -980,7 +1268,7 @@ def get_question(quiz_id):
         'question': q_data,
         'index': current_index,
         'total': total,
-        'already_answered': False
+        'already_answered': False,
     })
 
 
@@ -1017,14 +1305,14 @@ def submit_answer():
         'user_id': user_id,
         'question_id': question_id,
         'event_type': 'ANSWER',
-        'payload': json.dumps({'answer': answer})
+        'payload': json.dumps({'answer': answer}),
     })
 
     return jsonify({
         'correct': result['correct'],
         'correct_answer': result['correct_answer'],
         'explanation': result['explanation'],
-        'new_score': result['new_score']
+        'new_score': result['new_score'],
     })
 
 
@@ -1060,7 +1348,7 @@ def skip_question():
         'user_id': user_id,
         'question_id': question_id,
         'event_type': 'SKIP',
-        'payload': json.dumps({})
+        'payload': json.dumps({}),
     })
 
     return jsonify({'success': True})
@@ -1101,7 +1389,7 @@ def submit_rating():
         'user_id': user_id,
         'question_id': question_id,
         'event_type': 'RATING',
-        'payload': json.dumps({'rating': rating})
+        'payload': json.dumps({'rating': rating}),
     })
 
     p = quiz_state.get_participant(user_id)
@@ -1190,10 +1478,14 @@ def leave_quiz(quiz_id):
                 'quiz_id': quiz_id,
                 'user_id': user_id,
                 'event_type': 'LEAVE',
-                'payload': json.dumps({})
+                'payload': json.dumps({}),
             })
         invalidate_quiz_cache(quiz_id)
-        return jsonify({'success': True, 'message': 'You have left the quiz', 'redirect': url_for('live_quiz.lobby')})
+        return jsonify({
+            'success': True,
+            'message': 'You have left the quiz',
+            'redirect': url_for('live_quiz.lobby'),
+        })
 
     return jsonify({'error': 'Failed to leave quiz'}), 500
 
@@ -1231,10 +1523,14 @@ def rejoin_quiz(quiz_id):
                 'quiz_id': quiz_id,
                 'user_id': user_id,
                 'event_type': 'JOIN',
-                'payload': json.dumps({'name': name})
+                'payload': json.dumps({'name': name}),
             })
         invalidate_quiz_cache(quiz_id)
-        return jsonify({'success': True, 'message': 'You have rejoined the quiz', 'redirect': url_for('live_quiz.waiting_room', quiz_id=quiz_id)})
+        return jsonify({
+            'success': True,
+            'message': 'You have rejoined the quiz',
+            'redirect': url_for('live_quiz.waiting_room', quiz_id=quiz_id),
+        })
 
     return jsonify({'error': 'Failed to rejoin quiz'}), 500
 
@@ -1284,7 +1580,9 @@ def results(quiz_id):
     is_creator = quiz['creator_id'] == user_id
     all_participants = get_live_quiz_participants_with_names(quiz_id)
 
-    sorted_participants = sorted(all_participants, key=lambda x: x.get('score', 0), reverse=True)
+    sorted_participants = sorted(
+        all_participants, key=lambda x: x.get('score', 0), reverse=True,
+    )
     for i, p in enumerate(sorted_participants, 1):
         if p.get('ranking') != i:
             update_live_quiz_participant(p['id'], {'ranking': i})
@@ -1296,10 +1594,13 @@ def results(quiz_id):
             user_participant = p
             break
 
-    return render_template('dashboard/live_quiz/results.html',
-                         quiz=quiz, is_creator=is_creator,
-                         participants=sorted_participants,
-                         user_participant=user_participant)
+    return render_template(
+        'dashboard/live_quiz/results.html',
+        quiz=quiz,
+        is_creator=is_creator,
+        participants=sorted_participants,
+        user_participant=user_participant,
+    )
 
 
 @live_quiz_bp.route('/analysis/<quiz_id>')
@@ -1340,7 +1641,7 @@ def analysis(quiz_id):
             'text': q_text,
             'correct_rate': correct_rate,
             'wrong_rate': wrong_rate,
-            'total_answers': total_count
+            'total_answers': total_count,
         })
 
     most_correct = sorted(analysis_data, key=lambda x: x['correct_rate'], reverse=True)[:3]
@@ -1369,9 +1670,14 @@ def export_results(quiz_id):
 
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(['Rank', 'Name', 'Public ID', 'Score', 'Correct', 'Wrong', 'Skipped', 'Status'])
+    writer.writerow([
+        'Rank', 'Name', 'Public ID', 'Score',
+        'Correct', 'Wrong', 'Skipped', 'Status',
+    ])
 
-    sorted_participants = sorted(participants, key=lambda x: x.get('score', 0), reverse=True)
+    sorted_participants = sorted(
+        participants, key=lambda x: x.get('score', 0), reverse=True,
+    )
     for i, p in enumerate(sorted_participants, 1):
         student = p.get('student', {})
         name = f"{student.get('first_name', '')} {student.get('last_name', '')}".strip() or 'Unknown'
@@ -1383,16 +1689,22 @@ def export_results(quiz_id):
             p.get('correct_count', 0),
             p.get('wrong_count', 0),
             p.get('skipped_count', 0),
-            p.get('status', 'active')
+            p.get('status', 'active'),
         ])
 
     output.seek(0)
     return Response(
         output.getvalue(),
         mimetype='text/csv',
-        headers={'Content-Disposition': f'attachment; filename=quiz_{quiz_id}_results.csv'}
+        headers={
+            'Content-Disposition': f'attachment; filename=quiz_{quiz_id}_results.csv',
+        },
     )
 
+
+# ============================================
+# ADMIN UTILITY ENDPOINTS
+# ============================================
 
 @live_quiz_bp.route('/flush-cache', methods=['POST'])
 def flush_cache_endpoint():
@@ -1417,34 +1729,17 @@ def cache_stats():
         manager = get_state_manager()
         return jsonify({
             'active_quizzes': len(manager._quizzes),
-            'participants': sum(len(q.participants) for q in manager._quizzes.values())
+            'participants': sum(
+                len(q.participants) for q in manager._quizzes.values()
+            ),
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
 # ============================================
-# BACKGROUND CLEANUP — REMOVED
+# BACKGROUND CLEANUP — intentionally removed
 # ============================================
-# The following block was removed because it duplicated the cleanup
-# already running inside live_quiz_state.get_live_quiz_state_manager().
-#
-# Two cleanup threads meant:
-#   - doubled SQLite writes (both scanning for finished quizzes)
-#   - doubled CPU usage on PythonAnywhere
-#   - a race where both threads could try to clean the same quiz
-#
-# The single cleanup loop in live_quiz_state.py is now authoritative.
-#
-#     def start_cleanup_thread():
-#         def cleanup_loop():
-#             while True:
-#                 time.sleep(60)
-#                 try:
-#                     manager = get_state_manager()
-#                     manager.cleanup_finished_quizzes()
-#                 except Exception as e:
-#                     logger.error(f"Cleanup error: {e}")
-#         threading.Thread(target=cleanup_loop, daemon=True).start()
-#
-#     start_cleanup_thread()
+# The duplicate cleanup thread that used to live here was removed.
+# The single cleanup loop in live_quiz_state.get_live_quiz_state_manager()
+# is authoritative; running two was a bug.

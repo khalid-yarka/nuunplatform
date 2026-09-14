@@ -69,7 +69,6 @@
     }
     .dh-hero-text .xp-line strong { color: #FCD34D; }
 
-    /* Level card */
     .dh-level-card {
         background: rgba(0, 0, 0, 0.18);
         backdrop-filter: blur(10px);
@@ -117,7 +116,7 @@
     }
 
     /* ============================================
-       TIER STRIP (next tier CTA)
+       TIER STRIP
        ============================================ */
     .dh-tier-strip {
         display: flex;
@@ -140,17 +139,13 @@
         flex: 1;
         min-width: 220px;
     }
-    .dh-tier-strip .ts-icon {
-        font-size: 22px;
-    }
+    .dh-tier-strip .ts-icon { font-size: 22px; }
     .dh-tier-strip .ts-text {
         font-size: 13px;
         color: var(--text);
         line-height: 1.5;
     }
-    .dh-tier-strip .ts-text strong {
-        color: var(--primary);
-    }
+    .dh-tier-strip .ts-text strong { color: var(--primary); }
     .dh-tier-strip .ts-btn {
         background: var(--primary);
         color: white;
@@ -236,7 +231,7 @@
     }
 
     /* ============================================
-       STATS TILES
+       STATS
        ============================================ */
     .dh-stats {
         display: grid;
@@ -286,10 +281,7 @@
         line-height: 1.1;
         letter-spacing: -0.5px;
     }
-    .dh-stat .ico {
-        font-size: 18px;
-        opacity: 0.65;
-    }
+    .dh-stat .ico { font-size: 18px; opacity: 0.65; }
     .dh-stat .lbl {
         font-size: 11px;
         color: var(--text-secondary);
@@ -298,14 +290,8 @@
         letter-spacing: 0.4px;
         margin-top: 2px;
     }
-    .dh-stat .sub {
-        font-size: 11px;
-        color: var(--text-muted);
-    }
+    .dh-stat .sub { font-size: 11px; color: var(--text-muted); }
 
-    /* ============================================
-       CORE GRID
-       ============================================ */
     .dh-grid-2 {
         display: grid;
         grid-template-columns: 1fr;
@@ -317,9 +303,6 @@
         .dh-grid-2 { grid-template-columns: 1fr 1fr; }
     }
 
-    /* ============================================
-       CARD
-       ============================================ */
     .dh-card {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -350,11 +333,8 @@
         color: var(--text-muted);
         font-weight: 500;
     }
-    .dh-card-body {
-        padding: 16px 20px;
-    }
+    .dh-card-body { padding: 16px 20px; }
 
-    /* Locked card state */
     .dh-card.locked .dh-card-body {
         position: relative;
     }
@@ -401,7 +381,6 @@
         transform: translateY(-1px);
     }
 
-    /* Mastery bars */
     .dh-mastery-list {
         display: flex;
         flex-direction: column;
@@ -437,15 +416,11 @@
         margin-top: 4px;
     }
 
-    /* Chart */
     .dh-chart-wrap {
         position: relative;
         height: 200px;
     }
 
-    /* ============================================
-       INSIGHTS
-       ============================================ */
     .dh-insights {
         display: flex;
         flex-direction: column;
@@ -471,9 +446,6 @@
     }
     .dh-insight .it strong { color: var(--primary); }
 
-    /* ============================================
-       ACTIVITY
-       ============================================ */
     .dh-activity {
         display: flex;
         flex-direction: column;
@@ -523,9 +495,6 @@
         padding-top: 2px;
     }
 
-    /* ============================================
-       QUICK LINKS
-       ============================================ */
     .dh-quick {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
@@ -554,18 +523,13 @@
         text-decoration: none;
         box-shadow: var(--shadow-sm);
     }
-    .dh-quick a .qi {
-        font-size: 20px;
-    }
+    .dh-quick a .qi { font-size: 20px; }
     .dh-quick a .qt {
         font-size: 12px;
         font-weight: 600;
         color: var(--text);
     }
 
-    /* ============================================
-       QUOTA MINI CARDS
-       ============================================ */
     .dh-quotas {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
@@ -600,11 +564,8 @@
         color: var(--text-muted);
         margin-left: 4px;
     }
-    .dh-quota .qv.unlimited {
-        color: #10B981;
-    }
+    .dh-quota .qv.unlimited { color: #10B981; }
 
-    /* Empty state */
     .dh-empty {
         text-align: center;
         padding: 30px 20px;
@@ -645,9 +606,6 @@
         color: white;
     }
 
-    /* ============================================
-       RESPONSIVE
-       ============================================ */
     @media (max-width: 480px) {
         .dh-hero { padding: 20px; }
         .dh-hero-text h1 { font-size: 20px; }
@@ -659,7 +617,6 @@
         .dh-card-head { padding: 12px 14px; }
     }
 
-    /* Dark mode */
     [data-theme="dark"] .dh-live {
         background: linear-gradient(135deg, #0F172A, #020617);
         border-color: #1E293B;
@@ -668,15 +625,9 @@
         background: var(--surface);
         color: white;
     }
-    [data-theme="dark"] .dh-tier-strip {
-        background: var(--surface);
-    }
-    [data-theme="dark"] .dh-insight {
-        background: var(--surface-alt);
-    }
-    [data-theme="dark"] .dh-quota {
-        background: var(--surface-alt);
-    }
+    [data-theme="dark"] .dh-tier-strip { background: var(--surface); }
+    [data-theme="dark"] .dh-insight { background: var(--surface-alt); }
+    [data-theme="dark"] .dh-quota { background: var(--surface-alt); }
 </style>
 {% endblock %}
 
@@ -708,9 +659,7 @@
     {% endif %}
 {% endif %}
 
-<!-- ============================================
-     HERO
-     ============================================ -->
+<!-- HERO -->
 <div class="dh-hero">
     <div class="dh-hero-inner">
         <div class="dh-hero-text">
@@ -754,15 +703,15 @@
     </div>
 </div>
 
-<!-- ============================================
-     TIER STRIP
-     ============================================ -->
+<!-- TIER STRIP -->
 {% if next_tier %}
 <div class="dh-tier-strip">
     <div class="ts-left">
         <span class="ts-icon">⬆️</span>
         <div class="ts-text">
-            {% if tier == 'free' %}
+            {% if upgrade_hint %}
+                {{ upgrade_hint }}
+            {% elif tier == 'free' %}
                 {{ _('home.tier.line_free') }}
             {% else %}
                 {{ _('home.tier.line_premium') }}
@@ -776,9 +725,7 @@
 </div>
 {% endif %}
 
-<!-- ============================================
-     LIVE QUIZ BANNER
-     ============================================ -->
+<!-- LIVE QUIZ BANNER -->
 {% if active_quiz and active_quiz.status in ['waiting', 'scheduled', 'active'] %}
 <div class="dh-live">
     <div class="l-left">
@@ -803,9 +750,7 @@
 </div>
 {% endif %}
 
-<!-- ============================================
-     STATS
-     ============================================ -->
+<!-- STATS -->
 <div class="dh-stats">
     <div class="dh-stat green">
         <div class="top">
@@ -844,9 +789,7 @@
     </div>
 </div>
 
-<!-- ============================================
-     QUICK ACTIONS
-     ============================================ -->
+<!-- QUICK ACTIONS -->
 <div class="dh-quick" style="margin-bottom: 22px;">
     <a href="{{ url_for('quiz.index') }}">
         <span class="qi">📝</span>
@@ -866,11 +809,8 @@
     </a>
 </div>
 
-<!-- ============================================
-     MASTERY + CHART
-     ============================================ -->
+<!-- MASTERY + CHART -->
 <div class="dh-grid-2">
-    <!-- Subject Mastery -->
     <div class="dh-card">
         <div class="dh-card-head">
             <h3><i class="fas fa-bullseye"></i> {{ _('home.mastery.title') }}</h3>
@@ -915,7 +855,6 @@
         </div>
     </div>
 
-    <!-- Performance Chart -->
     <div class="dh-card">
         <div class="dh-card-head">
             <h3><i class="fas fa-chart-line"></i> {{ _('home.chart.title') }}</h3>
@@ -924,9 +863,6 @@
                     {{ _('home.chart.last_one', n=1) }}
                 {% else %}
                     {{ _('home.chart.last_many', n=chart_data|length) }}
-                {% endif %}
-                {% if analytics_level < 3 %}
-                    · <a href="#" onclick="openSafkaPreview({ requiredTier: 'premium' }); return false;" style="color: var(--primary); text-decoration: none;">{{ _('home.chart.more') }}</a>
                 {% endif %}
             </span>
         </div>
@@ -947,17 +883,24 @@
     </div>
 </div>
 
-<!-- ============================================
-     INSIGHTS (Pro) OR LOCKED
-     ============================================ -->
-{% if analytics_level >= 3 %}
-    {% if insights %}
-        <div class="dh-card" style="margin-bottom: 22px;">
-            <div class="dh-card-head">
-                <h3><i class="fas fa-lightbulb"></i> {{ _('home.insights.title') }}</h3>
-                <span class="hint">{{ _('home.insights.subtitle') }}</span>
-            </div>
-            <div class="dh-card-body">
+{# ============================================
+   PERSONAL INSIGHTS
+   Gate on `insights_level` (personal_learning_insights feature):
+       0 → locked (free)
+       1 → premium sees insights
+       2 → pro sees more insights
+   ============================================ #}
+{% if insights_level >= 1 %}
+    <div class="dh-card" style="margin-bottom: 22px;">
+        <div class="dh-card-head">
+            <h3><i class="fas fa-lightbulb"></i> {{ _('home.insights.title') }}</h3>
+            <span class="hint">
+                {% if insights_level >= 2 %}Pro · personalised
+                {% else %}Premium · personalised{% endif %}
+            </span>
+        </div>
+        <div class="dh-card-body">
+            {% if insights and insights|length > 0 %}
                 <div class="dh-insights">
                     {% for ins in insights %}
                         <div class="dh-insight">
@@ -966,14 +909,21 @@
                         </div>
                     {% endfor %}
                 </div>
-            </div>
+            {% else %}
+                <div class="dh-empty" style="padding: 20px;">
+                    <span class="ico">✨</span>
+                    <h4>Insights unlock as you learn</h4>
+                    <p>Take a few quizzes and personalised insights will appear here.</p>
+                    <a href="{{ url_for('quiz.index') }}">Take a quiz</a>
+                </div>
+            {% endif %}
         </div>
-    {% endif %}
+    </div>
 {% else %}
     <div class="dh-card locked" style="margin-bottom: 22px;">
         <div class="dh-card-head">
             <h3><i class="fas fa-lightbulb"></i> {{ _('home.insights.title') }}</h3>
-            <span class="hint">{{ _('tier.pro') }}</span>
+            <span class="hint">{{ _('tier.premium') }}+</span>
         </div>
         <div class="dh-card-body">
             <div class="dh-locked-overlay">
@@ -983,19 +933,16 @@
                     {{ _('home.insights.locked_desc') }}
                 </div>
                 <button type="button" class="lock-btn"
-                        onclick="openSafkaPreview({ requiredTier: 'pro' })">
-                    {{ _('home.insights.upgrade') }}
+                        onclick="openSafkaPreview({ requiredTier: 'premium' })">
+                    ⬆ Upgrade to Premium
                 </button>
             </div>
         </div>
     </div>
 {% endif %}
 
-<!-- ============================================
-     QUOTAS + ACTIVITY
-     ============================================ -->
+<!-- QUOTAS + ACTIVITY -->
 <div class="dh-grid-2">
-    <!-- Quotas -->
     <div class="dh-card">
         <div class="dh-card-head">
             <h3><i class="fas fa-sliders-h"></i> {{ _('home.limits.title') }}</h3>
@@ -1033,7 +980,6 @@
         </div>
     </div>
 
-    <!-- Recent Activity -->
     <div class="dh-card">
         <div class="dh-card-head">
             <h3><i class="fas fa-clock"></i> {{ _('home.activity.title') }}</h3>

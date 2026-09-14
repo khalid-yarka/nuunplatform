@@ -133,7 +133,10 @@
                 </div>
             </div>
             <div class="form-row">
-                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {{ _('settings.appearance.save') }}</button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> {{ _('settings.appearance.save') }}
+                    <span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span>
+                </button>
             </div>
         </form>
     </div>
@@ -211,7 +214,10 @@
                 </div>
             </div>
             <div class="form-row">
-                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Preferences</button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Preferences
+                    <span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span>
+                </button>
             </div>
         </form>
     </div>
@@ -331,7 +337,10 @@
                 </div>
             </div>
             <div class="form-row">
-                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Notification Settings</button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Notification Settings
+                    <span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span>
+                </button>
             </div>
         </form>
     </div>
@@ -367,7 +376,10 @@
                 </div>
             </div>
             <div class="form-row">
-                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Privacy Settings</button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Privacy Settings
+                    <span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span>
+                </button>
             </div>
         </form>
     </div>
@@ -409,7 +421,10 @@
                 </div>
             </div>
             <div class="form-row">
-                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Live Quiz Defaults</button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Live Quiz Defaults
+                    <span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span>
+                </button>
             </div>
         </form>
     </div>
@@ -549,7 +564,10 @@
                 </div>
             </div>
             <div class="form-row">
-                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Accessibility Settings</button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Accessibility Settings
+                    <span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span>
+                </button>
             </div>
         </form>
     </div>
@@ -658,39 +676,174 @@
         margin-bottom: 16px;
         line-height: 1.6;
     }
+
+    /* Small inline "Saved ✓" note that appears next to the Save button */
+    .settings-saved-note {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 10px;
+        background: #ECFDF5;
+        color: #065F46;
+        font-weight: 700;
+        font-size: 11px;
+        transition: opacity 0.3s ease;
+    }
+    [data-theme="dark"] .settings-saved-note {
+        background: #1A3A2E;
+        color: #34D399;
+    }
 </style>
 
 <script>
-    function openLogoutModal() {
-        document.getElementById('logoutModal').classList.add('active');
-        document.body.style.overflow = 'hidden';
-    }
+(function () {
+    'use strict';
 
-    function closeLogoutModal() {
-        document.getElementById('logoutModal').classList.remove('active');
-        document.body.style.overflow = '';
-    }
+    // ================================================================
+    // FIELD ↔ SETTING MAPPING
+    // ================================================================
+    // Maps each form control ID to the settings key it persists to.
+    // The server returns a flat { dotKey: value } dict from /settings/api.
+    // We use this map to re-render the form after a successful save.
+    // ================================================================
+    var FIELD_TO_SETTING = {
+        // Appearance
+        'font_size':                   'appearance.font_size',
+        'language':                    'appearance.language',
+        'compact_mode':                'appearance.compact_mode',
+        'reduced_motion':              'appearance.reduced_motion',
 
-    document.getElementById('openLogoutModalBtn').addEventListener('click', openLogoutModal);
+        // Quiz
+        'default_question_count':      'quiz.default_question_count',
+        'default_difficulty':          'quiz.default_difficulty',
+        'default_subject':             'quiz.default_subject',
+        'show_correct_immediately':    'quiz.show_correct_immediately',
+        'auto_skip_enabled':           'quiz.auto_skip_enabled',
 
-    document.getElementById('logoutModal').addEventListener('click', function(e) {
-        if (e.target === this) closeLogoutModal();
-    });
+        // Notifications
+        'notify_quiz_complete':        'notifications.quiz_complete',
+        'notify_new_pdf':              'notifications.new_pdf',
+        'notify_live_quiz_start':      'notifications.live_quiz_start',
+        'notify_live_quiz_result':     'notifications.live_quiz_result',
+        'notify_participant_joined':   'notifications.participant_joined',
+        'notify_admin_announcement':   'notifications.admin_announcement',
+        'notify_daily_digest':         'notifications.daily_digest',
+        'notify_achievement_unlock':   'notifications.achievement_unlock',
+        'notify_live_quiz_reminder':   'notifications.live_quiz_reminder',
+        'notify_weekly_summary':       'notifications.weekly_summary',
 
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && document.getElementById('logoutModal').classList.contains('active')) {
-            closeLogoutModal();
+        // Privacy
+        'show_on_leaderboard':         'privacy.show_on_leaderboard',
+        'show_public_id':              'privacy.show_public_id',
+
+        // Live quiz
+        'default_time_per_question':   'live_quiz.default_time_per_question',
+        'default_max_participants':    'live_quiz.default_max_participants'
+        // default_privacy handled separately (radio group)
+    };
+
+    function isTruthy(v) {
+        if (v === true || v === 1) return true;
+        if (typeof v === 'string') {
+            var s = v.trim().toLowerCase();
+            if (s === '1' || s === 'true' || s === 'yes' || s === 'on') return true;
         }
-    });
+        return false;
+    }
 
-    let unsavedChanges = false;
-    const indicator = document.getElementById('unsavedIndicator');
-    const saveNowBtn = document.getElementById('unsavedSaveNow');
-    const discardBtn = document.getElementById('unsavedDiscard');
+    function isFalsy(v) {
+        if (v === false || v === 0 || v === null || v === undefined) return true;
+        if (typeof v === 'string') {
+            var s = v.trim().toLowerCase();
+            if (s === '' || s === '0' || s === 'false' || s === 'no' || s === 'off') return true;
+        }
+        return false;
+    }
 
-    function showUnsavedIndicator() {
+    // ================================================================
+    // APPLY SETTINGS TO FORM
+    // ================================================================
+    window.applySettingsToForm = function (settings) {
+        if (!settings || typeof settings !== 'object') return;
+
+        // ---- Simple field mapping ----
+        Object.keys(FIELD_TO_SETTING).forEach(function (fieldId) {
+            var key = FIELD_TO_SETTING[fieldId];
+            if (!(key in settings)) return;
+
+            var el = document.getElementById(fieldId);
+            if (!el) return;
+
+            var val = settings[key];
+
+            if (el.type === 'checkbox') {
+                el.checked = isTruthy(val);
+            } else if (el.tagName === 'SELECT') {
+                el.value = (val == null) ? '' : String(val);
+            } else {
+                el.value = (val == null) ? '' : String(val);
+            }
+        });
+
+        // ---- Radio group: default_privacy (live_quiz.default_privacy) ----
+        if ('live_quiz.default_privacy' in settings) {
+            var want = String(settings['live_quiz.default_privacy']);
+            document.querySelectorAll('input[name="default_privacy"]').forEach(function (r) {
+                r.checked = (r.value === want);
+            });
+        }
+
+        // ---- Theme visual selector (not a form control, uses data-theme) ----
+        if ('appearance.theme' in settings) {
+            var theme = settings['appearance.theme'];
+            document.querySelectorAll('.theme-option').forEach(function (o) {
+                o.classList.toggle('active', o.dataset.theme === theme);
+            });
+        }
+
+        // ---- Accent visual selector (uses data-accent) ----
+        if ('appearance.accent' in settings) {
+            var accent = settings['appearance.accent'];
+            document.querySelectorAll('.accent-option').forEach(function (o) {
+                o.classList.toggle('active', o.dataset.accent === accent);
+            });
+        }
+    };
+
+    // ================================================================
+    // SHOW INLINE "SAVED" NOTE
+    // ================================================================
+    function showSavedNote(form) {
+        if (!form) return;
+        var note = form.querySelector('[data-saved-note]');
+        if (!note) return;
+
+        var now = new Date();
+        var hh = String(now.getHours()).padStart(2, '0');
+        var mm = String(now.getMinutes()).padStart(2, '0');
+        note.textContent = '✓ Saved ' + hh + ':' + mm;
+        note.style.display = 'inline-block';
+        note.style.opacity = '1';
+
+        clearTimeout(note._hideTimer);
+        note._hideTimer = setTimeout(function () {
+            note.style.opacity = '0';
+            setTimeout(function () { note.style.display = 'none'; }, 350);
+        }, 3200);
+    }
+
+    // ================================================================
+    // UNSAVED CHANGES TRACKING
+    // ================================================================
+    var unsavedChanges = false;
+    var indicator = document.getElementById('unsavedIndicator');
+    var saveNowBtn = document.getElementById('unsavedSaveNow');
+    var discardBtn = document.getElementById('unsavedDiscard');
+    var lastActiveForm = null;
+
+    function showUnsavedIndicator(form) {
         if (indicator) indicator.classList.add('show');
         unsavedChanges = true;
+        if (form) lastActiveForm = form;
     }
 
     function hideUnsavedIndicator() {
@@ -698,421 +851,476 @@
         unsavedChanges = false;
     }
 
-    document.querySelectorAll('.settings-form').forEach(form => {
-        const inputs = form.querySelectorAll('input, select, textarea');
-        inputs.forEach(input => {
-            input.addEventListener('change', function() {
-                showUnsavedIndicator();
-            });
-        });
-        form.addEventListener('submit', function() {
-            hideUnsavedIndicator();
-        });
-    });
+    function attachTracking(form) {
+        if (!form) return;
+        form.addEventListener('input', function () { showUnsavedIndicator(form); });
+        form.addEventListener('change', function () { showUnsavedIndicator(form); });
+        form.addEventListener('submit', function () { /* cleared on success */ });
+    }
 
     if (saveNowBtn) {
-        saveNowBtn.addEventListener('click', function() {
-            const form = document.querySelector('.settings-form:not([style*="display: none"])');
-            if (form) form.dispatchEvent(new Event('submit'));
+        saveNowBtn.addEventListener('click', function () {
+            var form = lastActiveForm;
+            if (form) {
+                var submit = form.querySelector('button[type="submit"]');
+                if (submit) submit.click();
+            }
         });
     }
 
     if (discardBtn) {
-        discardBtn.addEventListener('click', function() {
+        discardBtn.addEventListener('click', function () {
             if (confirm('Discard all unsaved changes?')) {
                 location.reload();
             }
         });
     }
 
-    window.addEventListener('beforeunload', function(e) {
+    window.addEventListener('beforeunload', function (e) {
         if (unsavedChanges) {
             e.preventDefault();
-            e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
-            return e.returnValue;
+            e.returnValue = '';
+            return '';
         }
     });
 
+    // ================================================================
+    // SETTINGS PATCH HELPER
+    // ================================================================
     function getCsrfToken() {
-        const meta = document.querySelector('meta[name="csrf-token"]');
+        var meta = document.querySelector('meta[name="csrf-token"]');
         if (meta) return meta.content;
-        const input = document.querySelector('input[name="csrf_token"]');
+        var input = document.querySelector('input[name="csrf_token"]');
         if (input) return input.value;
-        console.warn('⚠️ CSRF token not found!');
         return '';
     }
 
-    function showToast(message, type) {
-        if (typeof window.showToast === 'function') {
-            window.showToast(message, type);
-        } else {
-            alert(message);
-        }
-    }
-
-    function submitForm(url, data, successMsg) {
-        const csrfToken = getCsrfToken();
-        if (!csrfToken) {
-            showToast('❌ CSRF token missing. Please refresh the page.', 'error');
-            return Promise.reject('No CSRF token');
-        }
-
-        return fetch(url, {
+    function submitForm(form, url, data, successMsg) {
+        fetch(url, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken
+                'X-CSRF-Token': getCsrfToken()
             },
             body: JSON.stringify(data)
         })
-        .then(response => {
+        .then(function (response) {
             if (!response.ok) {
-                return response.text().then(text => {
-                    let errorMsg = `Server error (${response.status})`;
+                return response.text().then(function (text) {
+                    var err = 'Server error (' + response.status + ')';
                     try {
-                        const json = JSON.parse(text);
-                        if (json.error) errorMsg = json.error;
-                    } catch (e) {
-                        if (text.length < 200) errorMsg = text;
-                    }
-                    throw new Error(errorMsg);
+                        var json = JSON.parse(text);
+                        if (json && json.error) err = json.error;
+                    } catch (e) {}
+                    throw new Error(err);
                 });
             }
             return response.json();
         })
-        .then(result => {
-            if (result.success) {
-                showToast(result.message || successMsg || '✅ Saved!', 'success');
+        .then(function (result) {
+            if (result && result.success) {
+                // ---- Apply returned settings back to the form (fixes the "no refresh" bug) ----
                 if (result.settings) {
+                    // Global theme/accent/font live-apply
                     if (typeof NuunSettings !== 'undefined') {
                         NuunSettings.settings = result.settings;
                         NuunSettings.applyAll();
                     }
+                    // Re-sync all form fields and visual selectors
+                    window.applySettingsToForm(result.settings);
                 }
-                return result;
+
+                // Clear the unsaved indicator for this form
+                hideUnsavedIndicator();
+
+                // Show the inline "Saved" note on the submitted form
+                showSavedNote(form);
+
+                // Toast for good measure
+                if (typeof window.showToast === 'function') {
+                    window.showToast(result.message || successMsg || '✅ Saved!', 'success');
+                }
             } else {
-                throw new Error(result.error || 'Unknown error');
+                var msg = (result && result.error) || 'Unknown error';
+                if (result && result.errors) {
+                    msg = Object.values(result.errors).join(' ');
+                }
+                if (typeof window.showToast === 'function') {
+                    window.showToast('❌ ' + msg, 'error');
+                }
             }
         })
-        .catch(err => {
-            showToast('❌ ' + err.message, 'error');
-            throw err;
+        .catch(function (err) {
+            if (typeof window.showToast === 'function') {
+                window.showToast('❌ ' + (err && err.message ? err.message : 'Network error.'), 'error');
+            }
         });
     }
 
-    document.addEventListener('DOMContentLoaded', function() {
-        const landing = document.getElementById('landing');
-        const sections = document.querySelectorAll('.settings-section');
-        const navItems = document.querySelectorAll('.settings-nav-item');
-        const sidebar = document.getElementById('settingsSidebar');
-        const breadcrumb = document.getElementById('settingsBreadcrumb');
+    // ================================================================
+    // FORM HANDLERS
+    // ================================================================
+    var appearanceForm = document.getElementById('appearance-form');
+    if (appearanceForm) {
+        attachTracking(appearanceForm);
+        appearanceForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var activeTheme = document.querySelector('.theme-option.active');
+            var theme = activeTheme ? activeTheme.dataset.theme : 'system';
+            var activeAccent = document.querySelector('.accent-option.active');
+            var accent = activeAccent ? activeAccent.dataset.accent : 'red';
+            var fontSize = document.getElementById('font_size')?.value || 'medium';
+            var compactMode = document.getElementById('compact_mode')?.checked || false;
+            var language = document.getElementById('language')?.value || 'en';
 
-        function showLanding() {
-            landing.style.display = 'block';
-            sections.forEach(sec => sec.classList.remove('active'));
-            sidebar.style.display = 'none';
-            if (breadcrumb) {
-                breadcrumb.innerHTML = `<a href="#" class="breadcrumb-link" id="breadcrumbHome">Settings</a>`;
-            }
-            const title = document.querySelector('.settings-page-title');
-            if (title) title.textContent = 'Settings';
-            navItems.forEach(item => item.classList.remove('active'));
-            history.pushState(null, '', '#');
-        }
+            var payload = {
+                'appearance.theme': theme,
+                'appearance.accent': accent,
+                'appearance.font_size': fontSize,
+                'appearance.compact_mode': compactMode,
+                'appearance.language': language
+            };
 
-        function showSection(id) {
-            landing.style.display = 'none';
-            sections.forEach(sec => sec.classList.remove('active'));
-            const target = document.getElementById(id);
-            if (target) target.classList.add('active');
-            sidebar.style.display = 'block';
-            const label = document.querySelector(`.settings-nav-item[data-section="${id}"]`)?.textContent.trim() || id;
-            if (breadcrumb) {
-                breadcrumb.innerHTML = `
-                    <a href="#" class="breadcrumb-link" id="breadcrumbHome">Settings</a>
-                    <span class="separator">/</span>
-                    <span class="current">${label}</span>
-                `;
-            }
-            const title = document.querySelector('.settings-page-title');
-            if (title) {
-                const nav = document.querySelector(`.settings-nav-item[data-section="${id}"]`);
-                title.textContent = nav ? nav.textContent.trim() : 'Settings';
-            }
-            navItems.forEach(item => item.classList.remove('active'));
-            const nav = document.querySelector(`.settings-nav-item[data-section="${id}"]`);
-            if (nav) nav.classList.add('active');
-            history.pushState(null, '', '#' + id);
-        }
+            submitForm(appearanceForm, '/settings/api', payload, 'Appearance updated!');
+        });
+    }
 
-        if (breadcrumb) {
-            breadcrumb.addEventListener('click', function(e) {
-                if (e.target.id === 'breadcrumbHome' || e.target.closest('#breadcrumbHome')) {
-                    e.preventDefault();
-                    showLanding();
-                }
+    var quizForm = document.getElementById('quiz-prefs-form');
+    if (quizForm) {
+        attachTracking(quizForm);
+        quizForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var payload = {
+                'quiz.default_question_count': parseInt(document.getElementById('default_question_count').value),
+                'quiz.default_difficulty': parseInt(document.getElementById('default_difficulty').value),
+                'quiz.default_subject': document.getElementById('default_subject').value,
+                'quiz.show_correct_immediately': document.getElementById('show_correct_immediately').checked,
+                'quiz.auto_skip_enabled': document.getElementById('auto_skip_enabled').checked
+            };
+            submitForm(quizForm, '/settings/api', payload, 'Quiz preferences saved!');
+        });
+    }
+
+    var notifForm = document.getElementById('notif-form');
+    if (notifForm) {
+        attachTracking(notifForm);
+        notifForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var toggles = notifForm.querySelectorAll('.toggle-switch input');
+            var payload = {};
+            toggles.forEach(function (t) {
+                payload[t.id.replace('notify_', 'notifications.')] = t.checked;
             });
-        }
+            submitForm(notifForm, '/settings/api', payload, 'Notification preferences saved!');
+        });
+    }
 
-        document.querySelectorAll('.settings-category-card').forEach(card => {
-            card.addEventListener('click', function(e) {
-                e.preventDefault();
-                const section = this.dataset.section;
-                if (section) showSection(section);
+    var privacyForm = document.getElementById('privacy-form');
+    if (privacyForm) {
+        attachTracking(privacyForm);
+        privacyForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var payload = {
+                'privacy.show_on_leaderboard': document.getElementById('show_on_leaderboard').checked,
+                'privacy.show_public_id': document.getElementById('show_public_id').checked
+            };
+            submitForm(privacyForm, '/settings/api', payload, 'Privacy settings saved!');
+        });
+    }
+
+    var liveQuizForm = document.getElementById('livequiz-form');
+    if (liveQuizForm) {
+        attachTracking(liveQuizForm);
+        liveQuizForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var payload = {
+                'live_quiz.default_time_per_question': parseInt(document.getElementById('default_time_per_question').value),
+                'live_quiz.default_max_participants': parseInt(document.getElementById('default_max_participants').value),
+                'live_quiz.default_privacy': parseInt(document.querySelector('input[name="default_privacy"]:checked').value)
+            };
+            submitForm(liveQuizForm, '/settings/api', payload, 'Live quiz defaults saved!');
+        });
+    }
+
+    var accessibilityForm = document.getElementById('accessibility-form');
+    if (accessibilityForm) {
+        attachTracking(accessibilityForm);
+        accessibilityForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var payload = {
+                'appearance.reduced_motion': document.getElementById('reduced_motion').checked
+            };
+            submitForm(accessibilityForm, '/settings/api', payload, 'Accessibility settings saved!');
+        });
+    }
+
+    // ---- Password form (separate endpoint, no form re-sync needed) ----
+    var passwordForm = document.getElementById('password-form');
+    if (passwordForm) {
+        passwordForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var current = document.getElementById('current_password').value;
+            var newPw = document.getElementById('new_password').value;
+            var confirm = document.getElementById('confirm_password').value;
+            if (newPw !== confirm) {
+                if (typeof window.showToast === 'function') window.showToast('Passwords do not match.', 'error');
+                return;
+            }
+            if (newPw.length < 8) {
+                if (typeof window.showToast === 'function') window.showToast('New password must be at least 8 characters.', 'error');
+                return;
+            }
+            if (!confirm('Change your password? You will be logged out.')) return;
+
+            fetch('/settings/api/password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': getCsrfToken()
+                },
+                body: JSON.stringify({ current_password: current, new_password: newPw, confirm_password: confirm })
+            })
+            .then(function (response) { return response.json(); })
+            .then(function (result) {
+                if (result.success) {
+                    if (typeof window.showToast === 'function') window.showToast('Password changed. Please log in again.', 'success');
+                    setTimeout(function () { window.location.href = '/logout'; }, 2000);
+                } else {
+                    if (typeof window.showToast === 'function') window.showToast(result.error || 'Error changing password.', 'error');
+                }
+            })
+            .catch(function () {
+                if (typeof window.showToast === 'function') window.showToast('Network error.', 'error');
             });
         });
+    }
 
-        navItems.forEach(item => {
-            item.addEventListener('click', function(e) {
-                const section = this.dataset.section;
-                e.preventDefault();
-                if (section === 'landing') {
-                    showLanding();
-                } else if (section) {
-                    showSection(section);
-                }
-            });
+    // ================================================================
+    // VISUAL SELECTORS (theme / accent / compact / reduced motion)
+    // ================================================================
+    document.querySelectorAll('.theme-option').forEach(function (opt) {
+        opt.addEventListener('click', function () {
+            document.querySelectorAll('.theme-option').forEach(function (o) { o.classList.remove('active'); });
+            this.classList.add('active');
+            var theme = this.dataset.theme;
+            if (typeof NuunSettings !== 'undefined') NuunSettings.applyTheme(theme);
         });
-
-        let initialHash = window.location.hash.replace('#', '');
-        if (initialHash && document.getElementById(initialHash)) {
-            showSection(initialHash);
-        } else {
-            showLanding();
-        }
     });
 
-    document.addEventListener('DOMContentLoaded', function() {
-        const appearanceForm = document.getElementById('appearance-form');
-        if (appearanceForm) {
-            appearanceForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const activeTheme = document.querySelector('.theme-option.active');
-                const theme = activeTheme ? activeTheme.dataset.theme : 'system';
-                const activeAccent = document.querySelector('.accent-option.active');
-                const accent = activeAccent ? activeAccent.dataset.accent : 'red';
-                const fontSize = document.getElementById('font_size')?.value || 'medium';
-                const compactMode = document.getElementById('compact_mode')?.checked || false;
-                const language = document.getElementById('language')?.value || 'en';
-
-                // Include language in the payload only if the user can change it.
-                // If the select is disabled (no entitlement), the browser returns
-                // the currently-selected value — which is always 'en' in that case —
-                // and the server will reject any attempt to flip it to 'so'.
-                const payload = {
-                    'appearance.theme': theme,
-                    'appearance.accent': accent,
-                    'appearance.font_size': fontSize,
-                    'appearance.compact_mode': compactMode,
-                    'appearance.language': language
-                };
-
-                submitForm('/settings/api', payload, 'Appearance updated!');
-            });
-        }
-
-        const quizForm = document.getElementById('quiz-prefs-form');
-        if (quizForm) {
-            quizForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                submitForm('/settings/api', {
-                    'quiz.default_question_count': parseInt(document.getElementById('default_question_count').value),
-                    'quiz.default_difficulty': parseInt(document.getElementById('default_difficulty').value),
-                    'quiz.default_subject': document.getElementById('default_subject').value,
-                    'quiz.show_correct_immediately': document.getElementById('show_correct_immediately').checked,
-                    'quiz.auto_skip_enabled': document.getElementById('auto_skip_enabled').checked
-                }, 'Quiz preferences saved!');
-            });
-        }
-
-        const notifForm = document.getElementById('notif-form');
-        if (notifForm) {
-            notifForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const toggles = notifForm.querySelectorAll('.toggle-switch input');
-                const data = {};
-                toggles.forEach(t => {
-                    data[t.id.replace('notify_', 'notifications.')] = t.checked;
-                });
-                submitForm('/settings/api', data, 'Notification preferences saved!');
-            });
-        }
-
-        const privacyForm = document.getElementById('privacy-form');
-        if (privacyForm) {
-            privacyForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                submitForm('/settings/api', {
-                    'privacy.show_on_leaderboard': document.getElementById('show_on_leaderboard').checked,
-                    'privacy.show_public_id': document.getElementById('show_public_id').checked
-                }, 'Privacy settings saved!');
-            });
-        }
-
-        const liveQuizForm = document.getElementById('livequiz-form');
-        if (liveQuizForm) {
-            liveQuizForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                submitForm('/settings/api', {
-                    'live_quiz.default_time_per_question': parseInt(document.getElementById('default_time_per_question').value),
-                    'live_quiz.default_max_participants': parseInt(document.getElementById('default_max_participants').value),
-                    'live_quiz.default_privacy': parseInt(document.querySelector('input[name="default_privacy"]:checked').value)
-                }, 'Live quiz defaults saved!');
-            });
-        }
-
-        const accessibilityForm = document.getElementById('accessibility-form');
-        if (accessibilityForm) {
-            accessibilityForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                submitForm('/settings/api', {
-                    'appearance.reduced_motion': document.getElementById('reduced_motion').checked
-                }, 'Accessibility settings saved!');
-            });
-        }
-
-        const passwordForm = document.getElementById('password-form');
-        if (passwordForm) {
-            passwordForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const current = document.getElementById('current_password').value;
-                const newPw = document.getElementById('new_password').value;
-                const confirm = document.getElementById('confirm_password').value;
-                if (newPw !== confirm) {
-                    showToast('Passwords do not match.', 'error');
-                    return;
-                }
-                if (newPw.length < 8) {
-                    showToast('New password must be at least 8 characters.', 'error');
-                    return;
-                }
-                if (!confirm('Change your password? You will be logged out.')) return;
-                fetch('/settings/api/password', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-Token': getCsrfToken()
-                    },
-                    body: JSON.stringify({ current_password: current, new_password: newPw, confirm_password: confirm })
-                })
-                .then(response => response.json())
-                .then(result => {
-                    if (result.success) {
-                        showToast('Password changed. Please log in again.', 'success');
-                        setTimeout(() => window.location.href = '/logout', 2000);
-                    } else {
-                        showToast(result.error || 'Error changing password.', 'error');
-                    }
-                })
-                .catch(() => showToast('Network error.', 'error'));
-            });
-        }
-
-        document.querySelectorAll('.theme-option').forEach(opt => {
-            opt.addEventListener('click', function() {
-                document.querySelectorAll('.theme-option').forEach(o => o.classList.remove('active'));
-                this.classList.add('active');
-                const theme = this.dataset.theme;
-                if (typeof NuunSettings !== 'undefined') {
-                    NuunSettings.applyTheme(theme);
-                }
-            });
+    document.querySelectorAll('.accent-option:not(.locked)').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.accent-option').forEach(function (b) { b.classList.remove('active'); });
+            this.classList.add('active');
+            var accent = this.dataset.accent;
+            if (typeof NuunSettings !== 'undefined') NuunSettings.applyAccent(accent);
         });
+    });
 
-        document.querySelectorAll('.accent-option:not(.locked)').forEach(btn => {
-            btn.addEventListener('click', function() {
-                document.querySelectorAll('.accent-option').forEach(b => b.classList.remove('active'));
-                this.classList.add('active');
-                const accent = this.dataset.accent;
-                if (typeof NuunSettings !== 'undefined') {
-                    NuunSettings.applyAccent(accent);
-                }
-            });
+    var compactToggle = document.getElementById('compact_mode');
+    if (compactToggle) {
+        compactToggle.addEventListener('change', function () {
+            if (typeof NuunSettings !== 'undefined') NuunSettings.applyCompactMode(this.checked);
         });
+    }
 
-        document.getElementById('compact_mode')?.addEventListener('change', function() {
-            if (typeof NuunSettings !== 'undefined') {
-                NuunSettings.applyCompactMode(this.checked);
-            }
+    var motionToggle = document.getElementById('reduced_motion');
+    if (motionToggle) {
+        motionToggle.addEventListener('change', function () {
+            if (typeof NuunSettings !== 'undefined') NuunSettings.applyReducedMotion(this.checked);
         });
+    }
 
-        document.getElementById('reduced_motion')?.addEventListener('change', function() {
-            if (typeof NuunSettings !== 'undefined') {
-                NuunSettings.applyReducedMotion(this.checked);
-            }
-        });
+    // ---- Password strength + match ----
+    var newPwInput = document.getElementById('new_password');
+    var confirmPwInput = document.getElementById('confirm_password');
 
-        document.getElementById('new_password').addEventListener('input', function() {
-            const val = this.value;
-            let strength = 'weak';
+    if (newPwInput) {
+        newPwInput.addEventListener('input', function () {
+            var val = this.value;
+            var strength = 'weak';
             if (val.length >= 8 && /[A-Z]/.test(val) && /[a-z]/.test(val) && /\d/.test(val) && /[^A-Za-z0-9]/.test(val)) {
                 strength = 'strong';
             } else if (val.length >= 8) {
                 strength = 'medium';
             }
-            const bar = document.getElementById('password-strength');
-            if (bar) {
-                bar.innerHTML = `<div class="fill ${strength}"></div>`;
-            }
+            var bar = document.getElementById('password-strength');
+            if (bar) bar.innerHTML = '<div class="fill ' + strength + '"></div>';
             checkPasswordMatch();
         });
+    }
+    if (confirmPwInput) {
+        confirmPwInput.addEventListener('input', checkPasswordMatch);
+    }
 
-        document.getElementById('confirm_password').addEventListener('input', checkPasswordMatch);
-        function checkPasswordMatch() {
-            const newPw = document.getElementById('new_password').value;
-            const confirmPw = document.getElementById('confirm_password').value;
-            const match = document.getElementById('password-match');
-            if (!match) return;
-            if (!confirmPw) {
-                match.textContent = '';
-                match.className = 'password-match';
-                return;
-            }
-            if (newPw === confirmPw) {
-                match.textContent = '✅ Passwords match';
-                match.className = 'password-match match';
-            } else {
-                match.textContent = '❌ Passwords do not match';
-                match.className = 'password-match no-match';
-            }
+    function checkPasswordMatch() {
+        var a = document.getElementById('new_password');
+        var b = document.getElementById('confirm_password');
+        var match = document.getElementById('password-match');
+        if (!a || !b || !match) return;
+        if (!b.value) { match.textContent = ''; match.className = 'password-match'; return; }
+        if (a.value === b.value) {
+            match.textContent = '✅ Passwords match';
+            match.className = 'password-match match';
+        } else {
+            match.textContent = '❌ Passwords do not match';
+            match.className = 'password-match no-match';
         }
+    }
 
-        document.querySelectorAll('.upgrade-btn').forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                const feature = this.dataset.feature;
-                const requiredTier = this.dataset.requiredTier || 'premium';
-                if (typeof window.openUpgradeSheet === 'function') {
-                    window.openUpgradeSheet({ feature: feature, requiredTier: requiredTier });
-                }
-            });
-        });
-
-        document.querySelectorAll('.toggle-item.locked input[type="checkbox"]').forEach(cb => {
-            cb.disabled = true;
-            cb.closest('.toggle-item').addEventListener('click', function(e) {
-                if (e.target.tagName !== 'INPUT') {
-                    const upgradeBtn = this.querySelector('.upgrade-btn');
-                    if (upgradeBtn) upgradeBtn.click();
-                }
-            });
-        });
-
-        document.getElementById('exportDataBtn')?.addEventListener('click', function() {
-            showToast('Data export will be available soon.', 'info');
-        });
-        document.getElementById('deleteAccountBtn')?.addEventListener('click', function() {
-            if (confirm('Are you sure you want to delete your account? This action is permanent.')) {
-                showToast('Account deletion is not implemented yet.', 'error');
+    // ---- Upgrade buttons ----
+    document.querySelectorAll('.upgrade-btn').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var feature = this.dataset.feature;
+            var requiredTier = this.dataset.requiredTier || 'premium';
+            if (typeof window.openUpgradeSheet === 'function') {
+                window.openUpgradeSheet({ feature: feature, requiredTier: requiredTier });
             }
         });
     });
 
-    function toggleFeatureInfo(card) {
-        document.querySelectorAll('.feature-card').forEach(c => {
+    // ---- Locked toggles ----
+    document.querySelectorAll('.toggle-item.locked input[type="checkbox"]').forEach(function (cb) {
+        cb.disabled = true;
+        cb.closest('.toggle-item').addEventListener('click', function (e) {
+            if (e.target.tagName !== 'INPUT') {
+                var upgradeBtn = this.querySelector('.upgrade-btn');
+                if (upgradeBtn) upgradeBtn.click();
+            }
+        });
+    });
+
+    // ---- Data buttons ----
+    var exportBtn = document.getElementById('exportDataBtn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', function () {
+            if (typeof window.showToast === 'function') window.showToast('Data export will be available soon.', 'info');
+        });
+    }
+    var deleteAccountBtn = document.getElementById('deleteAccountBtn');
+    if (deleteAccountBtn) {
+        deleteAccountBtn.addEventListener('click', function () {
+            if (confirm('Are you sure you want to delete your account? This action is permanent.')) {
+                if (typeof window.showToast === 'function') window.showToast('Account deletion is not implemented yet.', 'error');
+            }
+        });
+    }
+
+    // ================================================================
+    // LOGOUT MODAL
+    // ================================================================
+    var openLogoutBtn = document.getElementById('openLogoutModalBtn');
+    if (openLogoutBtn) {
+        openLogoutBtn.addEventListener('click', function () {
+            document.getElementById('logoutModal').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        });
+    }
+
+    window.closeLogoutModal = function () {
+        document.getElementById('logoutModal').classList.remove('active');
+        document.body.style.overflow = '';
+    };
+
+    var logoutModal = document.getElementById('logoutModal');
+    if (logoutModal) {
+        logoutModal.addEventListener('click', function (e) {
+            if (e.target === this) window.closeLogoutModal();
+        });
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && logoutModal && logoutModal.classList.contains('active')) {
+            window.closeLogoutModal();
+        }
+    });
+
+    // ================================================================
+    // NAVIGATION (landing ↔ sections)
+    // ================================================================
+    var landing = document.getElementById('landing');
+    var sections = document.querySelectorAll('.settings-section');
+    var navItems = document.querySelectorAll('.settings-nav-item');
+    var sidebar = document.getElementById('settingsSidebar');
+    var breadcrumb = document.getElementById('settingsBreadcrumb');
+
+    function showLanding() {
+        if (landing) landing.style.display = 'block';
+        sections.forEach(function (sec) { sec.classList.remove('active'); });
+        if (sidebar) sidebar.style.display = 'none';
+        if (breadcrumb) {
+            breadcrumb.innerHTML = '<a href="#" class="breadcrumb-link" id="breadcrumbHome">Settings</a>';
+        }
+        var title = document.querySelector('.settings-page-title');
+        if (title) title.textContent = 'Settings';
+        navItems.forEach(function (item) { item.classList.remove('active'); });
+        history.pushState(null, '', '#');
+    }
+
+    function showSection(id) {
+        if (landing) landing.style.display = 'none';
+        sections.forEach(function (sec) { sec.classList.remove('active'); });
+        var target = document.getElementById(id);
+        if (target) target.classList.add('active');
+        if (sidebar) sidebar.style.display = 'block';
+        var label = id;
+        var nav = document.querySelector('.settings-nav-item[data-section="' + id + '"]');
+        if (nav) label = nav.textContent.trim();
+        if (breadcrumb) {
+            breadcrumb.innerHTML =
+                '<a href="#" class="breadcrumb-link" id="breadcrumbHome">Settings</a>' +
+                '<span class="separator">/</span>' +
+                '<span class="current">' + label + '</span>';
+        }
+        var title = document.querySelector('.settings-page-title');
+        if (title) title.textContent = label;
+        navItems.forEach(function (item) { item.classList.remove('active'); });
+        if (nav) nav.classList.add('active');
+        history.pushState(null, '', '#' + id);
+    }
+
+    if (breadcrumb) {
+        breadcrumb.addEventListener('click', function (e) {
+            if (e.target.id === 'breadcrumbHome' || e.target.closest('#breadcrumbHome')) {
+                e.preventDefault();
+                showLanding();
+            }
+        });
+    }
+
+    document.querySelectorAll('.settings-category-card').forEach(function (card) {
+        card.addEventListener('click', function (e) {
+            e.preventDefault();
+            var section = this.dataset.section;
+            if (section) showSection(section);
+        });
+    });
+
+    navItems.forEach(function (item) {
+        item.addEventListener('click', function (e) {
+            var section = this.dataset.section;
+            e.preventDefault();
+            if (section === 'landing') showLanding();
+            else if (section) showSection(section);
+        });
+    });
+
+    var initialHash = window.location.hash.replace('#', '');
+    if (initialHash && document.getElementById(initialHash)) {
+        showSection(initialHash);
+    } else {
+        showLanding();
+    }
+
+    // ================================================================
+    // FEATURE CARD POPUP
+    // ================================================================
+    window.toggleFeatureInfo = function (card) {
+        document.querySelectorAll('.feature-card').forEach(function (c) {
             if (c !== card) c.classList.remove('active');
         });
         card.classList.toggle('active');
-    }
+    };
+})();
 </script>
 {% endblock %}

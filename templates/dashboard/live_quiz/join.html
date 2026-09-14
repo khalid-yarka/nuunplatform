@@ -32,6 +32,9 @@
         </div>
 
         <form method="POST" action="{{ url_for('live_quiz.join') }}">
+            {# CSRF token is required by validate_csrf() in live_quiz_bp.join() #}
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
             <div class="form-group" style="margin-bottom: 20px;">
                 <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
                     📌 {{ _('live_quiz.join.join_code') }} <span style="color: var(--primary);">*</span>
@@ -59,7 +62,7 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const input = document.querySelector('input[name="join_code"]');
+    var input = document.querySelector('input[name="join_code"]');
     if (input) {
         input.addEventListener('input', function() {
             this.value = this.value.toUpperCase();

@@ -175,8 +175,22 @@ const I18N = {
     badge_left:        "{{ _('live_quiz.waiting.badge_left') }}",
     notif_enabled:     "{{ _('live_quiz.waiting.notif_enabled') }}",
     notif_failed:      "{{ _('live_quiz.waiting.notif_failed') }}",
-    ready_updated_err: "{{ _('live_quiz.waiting.ready_updated_err') }}"
+    ready_updated_err: "{{ _('live_quiz.waiting.ready_updated_err') }}",
+    leave_confirm:     "{{ _('live_quiz.waiting.leave_confirm') }}"
 };
+
+// ============================================
+// EXIT WARNING
+// Fires when the user tries to close the tab, refresh, or navigate away
+// without using the in-app Leave / Delete / Start actions.
+// ============================================
+var quizExiting = false;
+window.addEventListener('beforeunload', function(e) {
+    if (quizExiting) return;
+    e.preventDefault();
+    e.returnValue = '';
+    return '';
+});
 
 document.addEventListener('DOMContentLoaded', function() {
     const quizId = '{{ quiz.id }}';
@@ -483,6 +497,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 isRedirecting = true;
+                quizExiting = true;
                 if (typeof window.showToast === 'function') {
                     window.showToast(I18N.quiz_started, 'success');
                 }
@@ -505,7 +520,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function leaveQuiz() {
-        if (!confirm("{{ _('live_quiz.waiting.leave_confirm') }}")) return;
+        if (!confirm(I18N.leave_confirm)) return;
         if (leaveBtn) {
             leaveBtn.disabled = true;
             leaveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + I18N.leaving;
@@ -522,6 +537,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
+                quizExiting = true;
                 if (typeof window.showToast === 'function') {
                     window.showToast(I18N.left_ok, 'info');
                 }
@@ -618,6 +634,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
+                quizExiting = true;
                 if (typeof window.showToast === 'function') {
                     window.showToast(I18N.delete_ok, 'success');
                 }
@@ -682,12 +699,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 if (data.redirect_url && !isRedirecting) {
                     isRedirecting = true;
+                    quizExiting = true;
                     window.location.replace(data.redirect_url);
                     return;
                 }
 
                 if (data.status === 'active' && !isRedirecting) {
                     isRedirecting = true;
+                    quizExiting = true;
                     document.getElementById('quizStartedAlert').classList.add('show');
                     if (typeof window.showToast === 'function') {
                         window.showToast(I18N.quiz_started, 'success');
@@ -716,12 +735,12 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
-    let redirectTimeout = null;
     function forceRedirectIfNeeded() {
         if (isRedirecting) return;
         const alert = document.getElementById('quizStartedAlert');
         if (alert && alert.classList.contains('show') && !isRedirecting) {
             console.warn('Quiz started alert shown but no redirect; forcing redirect.');
+            quizExiting = true;
             window.location.replace('/live-quiz/play/' + quizId);
         }
     }

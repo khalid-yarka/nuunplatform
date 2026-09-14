@@ -272,7 +272,6 @@ class TaskContext:
                   rows: List[Tuple[Any, ...]],
                   order: int = 500, category: str = 'general',
                   note: Optional[str] = None) -> None:
-        """Store a table for the markdown report."""
         self.tables[key] = {
             'title': title, 'headers': headers, 'rows': rows,
             'order': order, 'category': category, 'note': note,
@@ -281,7 +280,6 @@ class TaskContext:
     def add_kv_section(self, key: str, title: str,
                        pairs: List[Tuple[str, Any]],
                        order: int = 500, category: str = 'general') -> None:
-        """Store a key→value section for the markdown report."""
         self.kv_sections[key] = {
             'title': title, 'pairs': pairs,
             'order': order, 'category': category,
@@ -1085,6 +1083,32 @@ def task_top_active_users(ctx):
 
 
 # ===============================================================
+# ANALYTICS — REFRESH QUESTION MISS STATS (NEW)
+# ===============================================================
+
+@daily_task('analytics.refresh_question_miss_stats', category='analytics', order=545)
+def task_refresh_question_miss_stats(ctx):
+    """
+    Rebuild the materialized miss-rate table that powers the admin
+    question filters (miss=high|medium|low|any|never) and the
+    high-miss-rate review page (/admin/questions/hard).
+
+    Without this task, question_miss_stats stays empty and every
+    miss-rate filter returns zero rows (except 'never').
+    """
+    if ctx.dry_run:
+        return {'items': 0, 'status': 'skipped'}
+    try:
+        from db import refresh_question_miss_stats
+        rows = refresh_question_miss_stats(days=90)
+        ctx.set_metric('analytics.qms_rows', rows, 'analytics', 'rows')
+        return {'items': rows}
+    except Exception as e:
+        ctx.warn(f'refresh_question_miss_stats failed: {e}')
+        return {'items': 0, 'status': 'failed'}
+
+
+# ===============================================================
 # ANALYTICS — MOST MISSED QUESTIONS
 # ===============================================================
 
@@ -1220,7 +1244,6 @@ def task_top_pdfs(ctx):
                       ['Rank', 'Code', 'Title', 'Subject', 'Curriculum', 'Premium', 'Views'],
                       table, order=580, category='content')
 
-    # PDFs with zero views (underused)
     zero = _rows("""
         SELECT code, title, subject FROM pdfs
         WHERE (view_count IS NULL OR view_count = 0)
@@ -1261,7 +1284,6 @@ def task_recent_upgrades(ctx):
                       ['Request ID', 'User', 'Public ID', 'Tier', 'Duration', 'Amount', 'Approved'],
                       table, order=590, category='revenue')
 
-    # Top discount codes
     codes = _rows("""
         SELECT code, discount_type, discount_value, applies_to,
                used_count, max_uses, expires_at, is_active
@@ -1311,7 +1333,6 @@ def task_engagement(ctx):
     ctx.set_metric('analytics.stickiness_pct',
                    round(100.0 * dau / (mau or 1), 1), 'analytics', '%')
 
-    # Hourly activity (last 7 days)
     hourly = _rows("""
         SELECT CAST(strftime('%H', completed_at) AS INTEGER) AS hour,
                COUNT(*) AS n
@@ -1385,7 +1406,6 @@ def task_errors_breakdown(ctx):
                       ['Type', 'Severity', 'Count', 'Last Seen'],
                       table, order=620, category='health')
 
-    # Recent unhandled errors
     recent = _rows("""
         SELECT request_id, error_type, error_message, url, timestamp
         FROM error_logs
@@ -2257,7 +2277,6 @@ def run_preview_telegram(args):
         return 1
     ctx = TaskContext(dry_run=False)
 
-    # Run all analytics tasks (they are read-only)
     analytics_tasks = [t for t in _TASKS if t['category'] == 'analytics']
     for t in analytics_tasks:
         run_one_task(t, ctx, metric_date_key())

@@ -488,6 +488,18 @@ const I18N = {
     explanation_prefix:       "{{ _('live_quiz.playing.explanation_prefix') }}"
 };
 
+// ============================================
+// EXIT WARNING
+// Suppressed during redirects to results / completed state / explicit leave
+// ============================================
+var quizExiting = false;
+window.addEventListener('beforeunload', function(e) {
+    if (quizExiting) return;
+    e.preventDefault();
+    e.returnValue = '';
+    return '';
+});
+
 document.addEventListener('DOMContentLoaded', function() {
     const quizId = '{{ quiz.id }}';
     const quizTitle = '{{ quiz.title or 'Live Quiz' }}';
@@ -669,7 +681,11 @@ document.addEventListener('DOMContentLoaded', function() {
             })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success) { sessionStorage.removeItem('live_quiz_' + quizId); window.location.href = data.redirect; }
+                    if (data.success) {
+                        quizExiting = true;
+                        sessionStorage.removeItem('live_quiz_' + quizId);
+                        window.location.href = data.redirect;
+                    }
                     else { showToast(data.error || I18N.toast_leave_error, 'error'); leaveBtn.disabled = false; leaveBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> ' + I18N.leave_btn; }
                 })
                 .catch(() => { showToast(I18N.toast_network, 'error'); leaveBtn.disabled = false; leaveBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> ' + I18N.leave_btn; });
@@ -699,6 +715,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     updateTotalTimer(data.remaining_time);
                     if (data.remaining_time <= 0 && !isRedirecting && data.status === 'active') {
                         isRedirecting = true;
+                        quizExiting = true;
                         window.location.href = '/live-quiz/results/' + quizId;
                         return;
                     }
@@ -710,6 +727,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 if (data.redirect_url && !isRedirecting) {
                     isRedirecting = true;
+                    quizExiting = true;
                     clearInterval(timerInterval); clearTimeout(pollTimer);
                     if (leaderboardTimer) clearTimeout(leaderboardTimer);
                     window.location.href = data.redirect_url;
@@ -718,6 +736,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 if (data.status === 'finished' && !quizEnded) {
                     quizEnded = true;
+                    quizExiting = true;
                     sendBrowserNotification(I18N.notif_quiz_complete_title, I18N.notif_quiz_complete_body, '/live-quiz/results/' + quizId);
                     window.location.href = data.redirect_url || '/live-quiz/results/' + quizId;
                     return;
@@ -748,6 +767,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     if (data.all_completed && data.status === 'active') {
                         if (data.is_completed) {
+                            quizExiting = true;
                             sendBrowserNotification(I18N.notif_all_finished_title, I18N.notif_all_finished_body, '/live-quiz/results/' + quizId);
                             window.location.href = '/live-quiz/results/' + quizId;
                             return;

@@ -5,7 +5,9 @@
 #
 # Routes:
 #   GET  /admin/logs                              → logs viewer
-#   GET  /admin/logs/read                         → AJAX tail
+#   GET  /admin/logs/read                         → AJAX tail + filter
+#   GET  /admin/logs/download/<filename>          → download a log file
+#   GET  /admin/logs/stats/<filename>             → line count + size
 #   GET  /admin/cache                             → cache dashboard
 #   POST /admin/cache/clear                       → clear cache
 #   GET  /admin/sessions                          → sessions viewer
@@ -23,7 +25,7 @@
 
 from flask import (
     Blueprint, render_template, request, session, flash,
-    redirect, url_for, abort, jsonify,
+    redirect, url_for, abort, jsonify, send_file,
 )
 import os
 import sys
@@ -114,7 +116,6 @@ def _mask_config_value(key, value):
     """
     Mask sensitive values. Returns (display, is_masked, is_boolean).
     """
-    # These keys are never shown in full.
     always_masked = {
         'SECRET_KEY',
         'ADMIN_ERROR_PASSWORD',
@@ -145,7 +146,7 @@ def _mask_config_value(key, value):
 
 
 # ============================================================
-# LOGS — VIEWER
+# LOGS — VIEWER (rewritten)
 # ============================================================
 
 @admin_ops_bp.route('/logs', methods=['GET'], endpoint='logs')
@@ -162,10 +163,18 @@ def logs():
 @admin_can('logs.view')
 def logs_read():
     """
-    Return the last N lines of a log file, optionally filtered by level.
+    Return the last N lines of a log file, optionally filtered by level
+    and/or a search substring (case-insensitive).
+
+    Query params:
+        file    : filename (must be in _ALLOWED_LOG_FILES)
+        level   : ERROR | WARNING | INFO | DEBUG | CRITICAL (optional)
+        search  : substring (case-insensitive) (optional)
+        lines   : how many matching lines to return (default 300, max 2000)
     """
     name = (request.args.get('file') or '').strip()
     level = (request.args.get('level') or '').strip().upper()
+    search = (request.args.get('search') or '').strip()
     try:
         tail = int(request.args.get('lines', 300))
     except ValueError:
@@ -179,13 +188,13 @@ def logs_read():
     lines = []
     try:
         with open(path, 'r', encoding='utf-8', errors='replace') as f:
-            # Efficient tail: read the last ~256KB and split.
             f.seek(0, os.SEEK_END)
             size = f.tell()
-            chunk = min(size, 256 * 1024)
+            # Read at most ~512KB from the end
+            chunk = min(size, 512 * 1024)
             f.seek(size - chunk)
             data = f.read()
-            lines = data.splitlines()[-tail:]
+            lines = data.splitlines()
     except Exception as e:
         logger.error(f"logs_read failed for {name}: {e}")
         return jsonify({'error': 'Could not read log file.'}), 500
@@ -193,7 +202,60 @@ def logs_read():
     if level:
         lines = [l for l in lines if f' {level} ' in l or f'[{level}]' in l]
 
-    return jsonify({'lines': lines})
+    if search:
+        s = search.lower()
+        lines = [l for l in lines if s in l.lower()]
+
+    total_matched = len(lines)
+    shown = lines[-tail:]
+
+    return jsonify({
+        'lines': shown,
+        'total_matched': total_matched,
+        'shown': len(shown),
+        'file': name,
+    })
+
+
+@admin_ops_bp.route('/logs/download/<path:filename>', methods=['GET'],
+                    endpoint='logs_download')
+@admin_can('logs.view')
+def logs_download(filename):
+    """Download a whole log file (path-safe)."""
+    path = _resolve_log_path(filename)
+    if not path or not os.path.exists(path):
+        abort(404)
+    return send_file(
+        path,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='text/plain',
+    )
+
+
+@admin_ops_bp.route('/logs/stats/<path:filename>', methods=['GET'],
+                    endpoint='logs_stats')
+@admin_can('logs.view')
+def logs_stats(filename):
+    """Line count + size for the sidebar. Cheap: counts newlines only."""
+    path = _resolve_log_path(filename)
+    if not path or not os.path.exists(path):
+        return jsonify({'error': 'not found'}), 404
+
+    try:
+        size = os.path.getsize(path)
+        line_count = 0
+        with open(path, 'r', encoding='utf-8', errors='replace') as f:
+            for _ in f:
+                line_count += 1
+        return jsonify({
+            'file': filename,
+            'size_bytes': size,
+            'line_count': line_count,
+        })
+    except Exception as e:
+        logger.warning(f"logs_stats failed for {filename}: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 # ============================================================
@@ -266,12 +328,10 @@ def cache_clear():
     try:
         from cache import get_cache_manager
         mgr = get_cache_manager()
-        # Local backend — clear the dict
         local_backend = getattr(mgr, '_local', None)
         if local_backend is not None and hasattr(local_backend, '_cache'):
             with local_backend._lock:
                 local_backend._cache.clear()
-        # Reset metrics
         try:
             from cache import cache_metrics
             cache_metrics.reset()
@@ -306,7 +366,6 @@ def _collect_session_stats():
         'sessions': [],
     }
 
-    # Find the Flask session directory
     session_dir = None
     candidates = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'flask_session'),
@@ -329,7 +388,6 @@ def _collect_session_stats():
                     pass
         out['disk_usage_mb'] = round(total / (1024 * 1024), 2)
 
-    # Active sessions from the DB: users who logged in within 24h
     try:
         cursor = execute_with_retry("""
             SELECT id, public_id, first_name, last_name, last_login_at
@@ -438,31 +496,27 @@ def system_info():
         'cache_hit_pct': 0,
     }
 
-    # Flask version
     try:
         import flask
         info['flask_version'] = getattr(flask, '__version__', '—')
     except Exception:
         pass
 
-    # Uptime — assume the process started when this module first imported.
     try:
-        from app import app as _app  # may fail if circular
+        from app import app as _app
         started = getattr(_app, '_started_at', None)
         if started:
             info['uptime'] = _human_duration(time.time() - started)
     except Exception:
         pass
 
-    # Memory (best-effort, only on Linux)
     try:
         import resource
         usage = resource.getrusage(resource.RUSAGE_SELF)
-        info['memory_used_mb'] = round(usage.ru_maxrss / 1024, 1)  # KB → MB on Linux
+        info['memory_used_mb'] = round(usage.ru_maxrss / 1024, 1)
     except Exception:
         pass
 
-    # Disk
     try:
         stat = os.statvfs(Config.BACKUP_DIR)
         free_b = stat.f_bavail * stat.f_frsize
@@ -472,7 +526,6 @@ def system_info():
     except Exception:
         pass
 
-    # DB size
     try:
         db_path = Config.DATABASE_PATH
         if os.path.exists(db_path):
@@ -483,14 +536,12 @@ def system_info():
     except Exception:
         pass
 
-    # Sessions
     try:
         stats = _collect_session_stats()
         info['session_count'] = stats['count']
     except Exception:
         pass
 
-    # Cache
     try:
         c = _collect_cache_stats()
         info['cache_size'] = c['size']
@@ -519,7 +570,6 @@ def config():
             raw = getattr(Config, key)
         except Exception:
             continue
-        # Skip methods / classmethods
         if callable(raw):
             continue
         display, is_masked, is_boolean = _mask_config_value(key, raw)
@@ -574,7 +624,6 @@ def tasks_trigger(task_name):
         return jsonify({'error': 'Invalid task name.'}), 400
 
     try:
-        # Import the task registry and find the task
         from daily_tasks import _TASKS, TaskContext, run_one_task
         from utils import get_somali_time, get_somali_time_db
 

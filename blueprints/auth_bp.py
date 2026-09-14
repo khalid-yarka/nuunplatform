@@ -5,13 +5,15 @@
 # No email. No verification step. No password reset.
 # New users register with is_verified=0. Admin verifies manually.
 #
-# NOTE: login stores session['session_version'] from the DB so that
-# app.py::refresh_user_state_if_needed can detect a force-logout.
+# The help() route builds a WhatsApp prefill message that includes the
+# user's identity and a direct admin profile link when the user is
+# logged in, so support requests arrive with everything the admin needs.
 
 import time
 import secrets
 import logging
 import re
+from urllib.parse import quote as urlquote
 
 from flask import (
     Blueprint, render_template, request, session, flash,
@@ -21,7 +23,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 from config import Config
 from db import (
-    execute_with_retry, get_student_by_phone, get_somali_time_db,
+    execute_with_retry,
+    get_student_by_phone,
+    get_student_by_id,
+    get_somali_time_db,
 )
 from utils import ensure_csrf_token, validate_csrf
 
@@ -287,10 +292,8 @@ def login():
     # ------------------------------------------------------------------
     # SESSION BOOTSTRAP
     # ------------------------------------------------------------------
-    # IMPORTANT: session['session_version'] is stored here so that
+    # session['session_version'] is stored here so that
     # app.py::refresh_user_state_if_needed can detect a force-logout.
-    # If the DB value ever diverges from the session value, the session
-    # is killed on the user's next request.
     # ------------------------------------------------------------------
     session.clear()
     session['user_id'] = student['id']
@@ -347,12 +350,78 @@ def logout():
 # HELP
 # ============================================
 
+def _build_help_message(student, user_id):
+    """
+    Compose the WhatsApp prefill for the help button.
+
+    When the user is logged in and has a public_id, the message contains:
+      - their name
+      - their public id
+      - their phone number
+      - a direct admin profile URL (BASE_URL + /admin/users/<id>)
+    Otherwise a generic message asks them to include their phone manually.
+    """
+    base_url = (getattr(Config, 'BASE_URL', '') or '').rstrip('/')
+
+    if not student or not user_id:
+        return (
+            'Hello Admin, I need help with my NuunPlatform account. '
+            'Please assist.\n\n'
+            '(My phone number: __________)'
+        )
+
+    public_id = student.get('public_id') or '----'
+    name = (
+        f"{student.get('first_name', '')} {student.get('last_name', '')}".strip()
+        or 'Student'
+    )
+    phone = student.get('phone_number') or '—'
+
+    profile_url = f"{base_url}/admin/users/{user_id}" if base_url else None
+
+    lines = [
+        'Hello Admin, I need help with my NuunPlatform account.',
+        '',
+        f'👤 Name: {name}',
+        f'🆔 Public ID: {public_id}',
+        f'📞 Phone: {phone}',
+    ]
+    if profile_url:
+        lines.append(f'🔗 Profile: {profile_url}')
+    lines.append('')
+    lines.append('Please assist.')
+    return '\n'.join(lines)
+
+
 @auth_bp.route('/help')
 def help():
     ensure_csrf_token()
+
     phone = Config.SUPER_ADMIN_PHONE or ''
     phone_clean = re.sub(r'\D', '', phone) if phone else ''
-    return render_template('auth/help.html', super_admin_phone=phone_clean)
+
+    # Build the prefill message based on whether the user is logged in.
+    student = None
+    user_id = session.get('user_id')
+    if user_id:
+        try:
+            student = get_student_by_id(user_id)
+        except Exception as e:
+            logger.warning(f"help(): could not load student {user_id}: {e}")
+
+    prefill = _build_help_message(student, user_id)
+    help_wa_url = None
+    if phone_clean:
+        help_wa_url = (
+            f"https://wa.me/{phone_clean}?text={urlquote(prefill)}"
+        )
+
+    return render_template(
+        'auth/help.html',
+        super_admin_phone=phone_clean,
+        help_wa_url=help_wa_url,
+        help_prefill=prefill,
+    )
 
 
 # ============================================
@@ -367,7 +436,7 @@ def _generate_unique_public_id() -> str:
         candidate = ''.join(secrets.choice(_PUBLIC_ID_CHARS) for _ in range(4))
         cursor = execute_with_retry(
             "SELECT id FROM students WHERE public_id = ?",
-            (candidate,)
+            (candidate,),
         )
         if not cursor.fetchone():
             return candidate

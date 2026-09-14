@@ -70,6 +70,21 @@
         margin-top: 12px;
         line-height: 1.5;
     }
+    .help-preview {
+        background: var(--surface-alt, var(--background));
+        border: 1px dashed var(--border);
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        line-height: 1.55;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    .help-preview strong {
+        color: var(--text);
+    }
 </style>
 {% endblock %}
 
@@ -95,12 +110,17 @@
     <p>Any other account problems — the admin can help.</p>
 </div>
 
-{% if super_admin_phone %}
-    <a href="https://wa.me/{{ super_admin_phone }}?text={{ 'Hello Admin, I need help with my NuunPlatform account. Please assist.' | urlencode }}"
+{% if help_wa_url %}
+    <a href="{{ help_wa_url }}"
        target="_blank" rel="noopener"
        class="btn-whatsapp">
         <i class="fab fa-whatsapp"></i> Message Admin on WhatsApp
     </a>
+
+    <div class="help-preview">
+        <strong>What will be sent:</strong>
+        {{ help_prefill }}
+    </div>
 {% else %}
     <div class="help-block" style="text-align: center; background: #FFFBEB; border-color: #FDE68A;">
         <p style="color: #92400E;">

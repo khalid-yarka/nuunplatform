@@ -1127,11 +1127,18 @@ def admin_discount_create():
 
         if not code or discount_type not in ('percentage', 'fixed') or discount_value <= 0:
             flash('Please fill all required fields.', 'error')
-            return render_template('dashboard/admin/revenue/discount_form.html')
+            # Re-render with discount=None so the template behaves.
+            return render_template(
+                'dashboard/admin/revenue/discount_form.html',
+                discount=None,
+            )
 
         if discount_type == 'percentage' and discount_value > 100:
             flash('Percentage discount cannot exceed 100.', 'error')
-            return render_template('dashboard/admin/revenue/discount_form.html')
+            return render_template(
+                'dashboard/admin/revenue/discount_form.html',
+                discount=None,
+            )
 
         if applies_to not in ('all', 'premium', 'pro'):
             applies_to = 'all'
@@ -1172,7 +1179,12 @@ def admin_discount_create():
             flash('Error creating discount code. Please check the code is unique.',
                   'error')
 
-    return render_template('dashboard/admin/revenue/discount_form.html')
+    # GET — always pass discount=None so the template's `is_new` logic
+    # and any `discount.xxx` access resolve without raising.
+    return render_template(
+        'dashboard/admin/revenue/discount_form.html',
+        discount=None,
+    )
 
 
 # ============================================================
@@ -1212,13 +1224,17 @@ def admin_discount_edit(discount_id):
 
         if not code or discount_type not in ('percentage', 'fixed') or discount_value <= 0:
             flash('Please fill all required fields.', 'error')
-            return render_template('dashboard/admin/revenue/discount_form.html',
-                                   discount=discount)
+            return render_template(
+                'dashboard/admin/revenue/discount_form.html',
+                discount=discount,
+            )
 
         if discount_type == 'percentage' and discount_value > 100:
             flash('Percentage discount cannot exceed 100.', 'error')
-            return render_template('dashboard/admin/revenue/discount_form.html',
-                                   discount=discount)
+            return render_template(
+                'dashboard/admin/revenue/discount_form.html',
+                discount=discount,
+            )
 
         if applies_to not in ('all', 'premium', 'pro'):
             applies_to = 'all'
@@ -1257,8 +1273,10 @@ def admin_discount_edit(discount_id):
         flash('Discount code updated.', 'success')
         return redirect(url_for('upgrade.admin_discounts'))
 
-    return render_template('dashboard/admin/revenue/discount_form.html',
-                           discount=discount)
+    return render_template(
+        'dashboard/admin/revenue/discount_form.html',
+        discount=discount,
+    )
 
 
 # ============================================================

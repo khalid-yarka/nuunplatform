@@ -141,7 +141,6 @@
         let left = rect.right - popRect.width;
         let top = rect.bottom + 8;
 
-        // Clamp to viewport
         if (left < 8) left = 8;
         if (left + popRect.width > window.innerWidth - 8) {
             left = window.innerWidth - popRect.width - 8;
@@ -150,7 +149,6 @@
             top = rect.top - popRect.height - 8;
         }
 
-        // Append to body for absolute positioning
         pop.style.position = 'fixed';
         pop.style.left = left + 'px';
         pop.style.top = top + 'px';
@@ -166,7 +164,6 @@
             if (trigger) {
                 e.preventDefault();
                 const key = trigger.getAttribute('data-popover');
-                // The popover lives as the next sibling or by id
                 let pop = document.getElementById(key);
                 if (!pop) {
                     const parent = trigger.parentElement;
@@ -190,7 +187,6 @@
             if (e.key === 'Escape') closeActivePopover();
         });
 
-        // Reposition on scroll (or close if the trigger is out of view)
         window.addEventListener('scroll', function () {
             if (!_activePopover) return;
             const rect = _activePopover.trigger.getBoundingClientRect();
@@ -198,7 +194,6 @@
                 closeActivePopover();
                 return;
             }
-            // Reposition
             const pop = _activePopover.pop;
             const popRect = pop.getBoundingClientRect();
             let left = rect.right - popRect.width;
@@ -217,14 +212,6 @@
 
     // ------------------------------------------------------------
     // DIRTY-STATE TRACKER + FLOATING SAVE BAR
-    // Usage:
-    //   AdminCore.initDirtyForm(formEl, {
-    //       barId: 'adminDirtyBar',
-    //       onSave: () => formEl.requestSubmit()
-    //   });
-    //
-    // The bar element must exist in the DOM with the given id.
-    // It starts hidden and is toggled by the module.
     // ------------------------------------------------------------
     function initDirtyForm(form, opts) {
         opts = opts || {};
@@ -239,7 +226,6 @@
             const data = {};
             el.querySelectorAll('input, select, textarea').forEach(function (field) {
                 if (!field.name || field.name === 'csrf_token') return;
-                const key = field.name + '::' + (field.value !== undefined ? field.value : '');
                 if (field.type === 'checkbox' || field.type === 'radio') {
                     data[field.name + '::' + field.value] = field.checked;
                 } else {
@@ -301,7 +287,6 @@
             });
         }
 
-        // Warn on navigation
         window.addEventListener('beforeunload', function (e) {
             if (diffCount() > 0) {
                 e.preventDefault();
@@ -314,12 +299,16 @@
     // ------------------------------------------------------------
     // AUTO-SUBMIT ON FILTER CHANGE
     // Any <select> or <input type=date> with [data-autofilter]
-    // submits its parent form on change.
+    // submits its form on change.
+    //
+    // FIX: use `el.form` first (works even when the element is not
+    // a DOM descendant of the form, thanks to the `form="..."` attr),
+    // then fall back to `closest('form')` for the normal case.
     // ------------------------------------------------------------
     function initAutoFilters() {
         document.querySelectorAll('[data-autofilter]').forEach(function (el) {
             el.addEventListener('change', function () {
-                const form = this.closest('form');
+                const form = this.form || this.closest('form');
                 if (form) form.requestSubmit ? form.requestSubmit() : form.submit();
             });
         });
@@ -331,7 +320,7 @@
     // ------------------------------------------------------------
     function initSearchDebounce() {
         document.querySelectorAll('[data-search-form]').forEach(function (el) {
-            const form = el.closest('form');
+            const form = el.form || el.closest('form');
             if (!form) return;
             let timer = null;
             el.addEventListener('input', function () {
@@ -345,12 +334,6 @@
 
     // ------------------------------------------------------------
     // TABLE ROW SELECTION + BULK ACTIONS
-    // Elements:
-    //   [data-check-all]      — master checkbox
-    //   [data-check-row]      — per-row checkbox
-    //   [data-bulk-count]     — element that receives the count
-    //   [data-bulk-action]    — buttons that are enabled when count > 0
-    //   [data-bulk-form]      — form that receives the submitted action
     // ------------------------------------------------------------
     function initBulkSelection() {
         const master = document.querySelector('[data-check-all]');
@@ -412,7 +395,6 @@
 
     // ------------------------------------------------------------
     // COPY TO CLIPBOARD
-    // Any element with [data-copy="text"] copies on click.
     // ------------------------------------------------------------
     function initCopyButtons() {
         document.addEventListener('click', function (e) {

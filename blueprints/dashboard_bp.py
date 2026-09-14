@@ -1,18 +1,41 @@
 # blueprints/dashboard_bp.py
 # Tier-aware home dashboard.
+#
+# Insights gate (FIX):
+#   Previous code gated insights with `analytics_level >= 3`, where
+#   analytics_level = get_feature_level('basic_statistics').
+#   The seed defines basic_statistics as 2 for both Premium and Pro,
+#   so the ">= 3" check never fired for Pro users — they saw the
+#   "Upgrade" prompt on their own dashboard.
+#
+#   The correct feature is `personal_learning_insights`:
+#       free     level 0  (no insights)
+#       premium  level 1  (basic insights)
+#       pro      level 2  (full insights)
+#   We gate on `insights_level >= 1` and let the level decide the
+#   richness of what we build.
 
 from datetime import datetime, timedelta
 from flask import Blueprint, render_template, session, flash, redirect, url_for
 
 from db import (
-    get_student_by_id, get_user_quiz_history, get_user_subject_performance,
-    get_user_recent_scores, get_total_correct_answers, get_distinct_subjects_attempted,
-    get_user_active_quiz, get_live_quiz_by_id, execute_with_retry,
+    get_student_by_id,
+    get_user_quiz_history,
+    get_user_subject_performance,
+    get_user_recent_scores,
+    get_total_correct_answers,
+    get_distinct_subjects_attempted,
+    get_user_active_quiz,
+    get_live_quiz_by_id,
+    execute_with_retry,
 )
 from services.tier_service import (
-    get_current_user_tier, get_analytics_level,
-    get_feature_level, get_quiz_attempts_remaining,
-    get_history_retention_days, get_history_max_entries,
+    get_current_user_tier,
+    get_analytics_level,
+    get_feature_level,
+    get_quiz_attempts_remaining,
+    get_history_retention_days,
+    get_history_max_entries,
 )
 from utils import get_somali_time
 
@@ -27,7 +50,10 @@ def home():
 
     user_id = session['user_id']
     tier = get_current_user_tier()
-    analytics_level = get_analytics_level(user_id)
+
+    # ----- Feature levels -----
+    analytics_level = get_analytics_level(user_id)                          # basic stats
+    insights_level = get_feature_level(user_id, 'personal_learning_insights')
 
     student = get_student_by_id(user_id)
     if not student:
@@ -111,24 +137,16 @@ def home():
             'time': (q.get('completed_at') or '')[:16],
         })
 
-    # ---------- Insights (Pro only) ----------
+    # ---------- Insights (FIX: gate on insights_level, not analytics_level) ----------
     insights = []
-    if analytics_level >= 3 and subject_performance:
-        best = max(subject_performance, key=lambda x: x['avg_score'])
-        worst = min(subject_performance, key=lambda x: x['avg_score'])
-        insights.append({
-            'icon': '🌟',
-            'text': f"Strongest subject: <strong>{best['subject_name']}</strong> ({best['avg_score']:.0f}%)",
-        })
-        if worst['subject_name'] != best['subject_name']:
-            insights.append({
-                'icon': '🎯',
-                'text': f"Focus on <strong>{worst['subject_name']}</strong> ({worst['avg_score']:.0f}%)",
-            })
-        if success_rate >= 70:
-            insights.append({'icon': '💪', 'text': 'Consistency is paying off — keep going!'})
-        else:
-            insights.append({'icon': '📈', 'text': 'Daily practice will lift your scores.'})
+    if insights_level >= 1:
+        insights = _build_insights(
+            subject_performance=subject_performance,
+            success_rate=success_rate,
+            quiz_count=quiz_count,
+            streak=streak,
+            insights_level=insights_level,
+        )
 
     # ---------- Tier quotas ----------
     quiz_remaining = get_quiz_attempts_remaining(user_id)
@@ -182,6 +200,7 @@ def home():
         chart_data=chart_data,
         active_quiz=active_quiz,
         analytics_level=analytics_level,
+        insights_level=insights_level,
         insights=insights,
         quiz_remaining=quiz_remaining,
         history_retention=history_retention,
@@ -241,3 +260,99 @@ def _compute_streak(user_id: int) -> int:
         return streak
     except Exception:
         return 0
+
+
+def _build_insights(subject_performance, success_rate, quiz_count,
+                    streak, insights_level):
+    """
+    Build a list of personalized insight dicts.
+
+    insights_level:
+        0 → caller does not invoke this function
+        1 (premium) → 2–3 basic insights
+        2 (pro)     → up to 6 richer insights
+    """
+    insights = []
+
+    if not subject_performance and quiz_count == 0:
+        # Fresh user — a single welcoming hint
+        insights.append({
+            'icon': '🚀',
+            'text': 'Take your first quiz to unlock personalized insights here.',
+        })
+        return insights
+
+    # ---- Best / worst subject ----
+    if subject_performance:
+        try:
+            best = max(subject_performance, key=lambda x: x.get('avg_score', 0))
+            worst = min(subject_performance, key=lambda x: x.get('avg_score', 0))
+        except Exception:
+            best = worst = None
+
+        if best and best.get('avg_score', 0) >= 60:
+            insights.append({
+                'icon': '🌟',
+                'text': (
+                    f"Your strongest subject is "
+                    f"<strong>{best['subject_name']}</strong> "
+                    f"at {best['avg_score']:.0f}%."
+                ),
+            })
+
+        if worst and best and worst.get('subject_name') != best.get('subject_name'):
+            insights.append({
+                'icon': '🎯',
+                'text': (
+                    f"Focus on <strong>{worst['subject_name']}</strong> "
+                    f"({worst.get('avg_score', 0):.0f}%) — it's your lowest so far."
+                ),
+            })
+
+    # ---- Overall performance message ----
+    if success_rate >= 70:
+        insights.append({
+            'icon': '💪',
+            'text': f"Consistency is paying off — you're averaging <strong>{success_rate}%</strong>.",
+        })
+    elif success_rate > 0:
+        insights.append({
+            'icon': '📈',
+            'text': (
+                f"Your average is <strong>{success_rate}%</strong>. "
+                f"A little daily practice will lift it fast."
+            ),
+        })
+
+    # ---- Streak insight ----
+    if streak >= 3:
+        insights.append({
+            'icon': '🔥',
+            'text': f"You're on a <strong>{streak}-day streak</strong> — keep it alive!",
+        })
+
+    # ---- Level 2+ (Pro) — extra nuance ----
+    if insights_level >= 2:
+        if quiz_count >= 20:
+            insights.append({
+                'icon': '📚',
+                'text': (
+                    f"You've taken <strong>{quiz_count} quizzes</strong> recently "
+                    f"— great habit."
+                ),
+            })
+
+        if subject_performance and len(subject_performance) >= 3:
+            try:
+                top3 = sorted(subject_performance,
+                              key=lambda x: x.get('avg_score', 0),
+                              reverse=True)[:3]
+                names = ', '.join(s['subject_name'] for s in top3)
+                insights.append({
+                    'icon': '🏅',
+                    'text': f"Your top subjects right now: <strong>{names}</strong>.",
+                })
+            except Exception:
+                pass
+
+    return insights[:6]

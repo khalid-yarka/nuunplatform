@@ -1264,9 +1264,12 @@ def increment_pdf_view(pdf_id):
 
 def get_pdf_distinct_subjects():
     try:
-        cursor = execute_with_retry("SELECT DISTINCT subject FROM pdfs WHERE subject IS NOT NULL AND subject != ''")
-        rows = cursor.fetchall()
-        return [row['subject'] for row in rows]
+        cursor = execute_with_retry(
+            "SELECT DISTINCT subject FROM pdfs "
+            "WHERE subject IS NOT NULL AND subject != '' "
+            "ORDER BY subject"
+        )
+        return [row['subject'] for row in cursor.fetchall()]
     except Exception as e:
         logger.error(f"Error fetching distinct subjects: {e}")
         return []
@@ -1274,9 +1277,12 @@ def get_pdf_distinct_subjects():
 
 def get_pdf_distinct_classes():
     try:
-        cursor = execute_with_retry("SELECT DISTINCT class FROM pdfs WHERE class IS NOT NULL AND class != ''")
-        rows = cursor.fetchall()
-        return [row['class'] for row in rows]
+        cursor = execute_with_retry(
+            "SELECT DISTINCT class FROM pdfs "
+            "WHERE class IS NOT NULL AND class != '' "
+            "ORDER BY class"
+        )
+        return [row['class'] for row in cursor.fetchall()]
     except Exception as e:
         logger.error(f"Error fetching distinct classes: {e}")
         return []
@@ -1284,12 +1290,91 @@ def get_pdf_distinct_classes():
 
 def get_pdf_distinct_curricula():
     try:
-        cursor = execute_with_retry("SELECT DISTINCT curriculum FROM pdfs WHERE curriculum IS NOT NULL AND curriculum != ''")
-        rows = cursor.fetchall()
-        return [row['curriculum'] for row in rows]
+        cursor = execute_with_retry(
+            "SELECT DISTINCT curriculum FROM pdfs "
+            "WHERE curriculum IS NOT NULL AND curriculum != '' "
+            "ORDER BY curriculum"
+        )
+        return [row['curriculum'] for row in cursor.fetchall()]
     except Exception as e:
         logger.error(f"Error fetching distinct curricula: {e}")
         return []
+
+
+def check_pdf_codes_exist(codes) -> dict:
+    """
+    Given a list of PDF codes, return a dict mapping each code to:
+
+        {
+            'exists':     bool,             # found in main or bot DB
+            'source':     'main' | 'bot' | None,
+            'title':      str,
+            'is_premium': bool,
+        }
+
+    Codes not found anywhere get {'exists': False, 'source': None, ...}.
+
+    Used by:
+      • admin_content.questions        (per-row PDF chip)
+      • admin_content.question_edit    (edit form preview)
+      • admin_content.question_broken  (broken-links page)
+      • admin_content.pdfs_broken      (broken-PDF page)
+      • admin_content.bulk_import      (batch PDF verification)
+      • admin_content.pdf_info         (AJAX lookup fallback)
+    """
+    if not codes:
+        return {}
+
+    # Normalise + dedupe
+    wanted = set()
+    for c in codes:
+        if not c:
+            continue
+        s = str(c).strip().upper()
+        if s:
+            wanted.add(s)
+
+    if not wanted:
+        return {}
+
+    result = {code: {'exists': False, 'source': None,
+                     'title': '', 'is_premium': False}
+              for code in wanted}
+
+    # ---- Main DB lookup ----
+    try:
+        placeholders = ','.join('?' * len(wanted))
+        cursor = execute_with_retry(
+            f"SELECT code, title, is_premium FROM pdfs "
+            f"WHERE code IN ({placeholders})",
+            tuple(wanted),
+        )
+        for row in cursor.fetchall():
+            code = row['code']
+            if code in result:
+                result[code]['exists'] = True
+                result[code]['source'] = 'main'
+                result[code]['title'] = row['title'] or code
+                result[code]['is_premium'] = bool(row['is_premium'] or 0)
+    except Exception as e:
+        logger.warning(f"check_pdf_codes_exist (main) failed: {e}")
+
+    # ---- Bot DB fallback for still-missing codes ----
+    missing = [c for c in wanted if not result[c]['exists']]
+    if missing:
+        try:
+            from bot.db import get_bot_pdf_by_code
+            for code in missing:
+                bot_row = get_bot_pdf_by_code(code)
+                if bot_row:
+                    result[code]['exists'] = True
+                    result[code]['source'] = 'bot'
+                    result[code]['title'] = bot_row.get('title') or code
+                    result[code]['is_premium'] = bool(bot_row.get('is_premium', 0))
+        except Exception as e:
+            logger.warning(f"check_pdf_codes_exist (bot) failed: {e}")
+
+    return result
 
 
 def get_main_pdf_count(search='', subject='', curriculum='', class_filter=''):
@@ -2309,6 +2394,15 @@ def delete_live_quiz(quiz_id: int) -> bool:
 
 
 def get_user_active_quiz(user_id: int) -> Optional[int]:
+    """
+    Return the id of the user's most relevant unfinished quiz, or None.
+
+    Ordering:
+        1. 'active'    — a game is in progress (highest priority)
+        2. 'waiting'   — room open, waiting to start
+        3. 'scheduled' — auto-start scheduled for later
+    Ties are broken by most-recently-created quiz.
+    """
     try:
         cursor = execute_with_retry("""
             SELECT lqp.quiz_id
@@ -2317,6 +2411,14 @@ def get_user_active_quiz(user_id: int) -> Optional[int]:
             WHERE lqp.student_id = ?
               AND lqp.status != 'left'
               AND lq.status IN ('waiting', 'scheduled', 'active')
+            ORDER BY
+                CASE lq.status
+                    WHEN 'active'    THEN 0
+                    WHEN 'waiting'   THEN 1
+                    WHEN 'scheduled' THEN 2
+                    ELSE 3
+                END,
+                lq.created_at DESC
             LIMIT 1
         """, (user_id,))
         result = cursor.fetchone()
@@ -2325,6 +2427,57 @@ def get_user_active_quiz(user_id: int) -> Optional[int]:
         logger.error(f"Error getting user active quiz: {e}")
         return None
 
+def abandon_user_waiting_quiz(user_id: int) -> Optional[int]:
+    """
+    Soft-close the user's own waiting/scheduled quiz (if they are the
+    creator). Returns the quiz id that was closed, or None.
+
+    This is a thin helper that some callers use instead of hitting the
+    HTTP endpoint. It performs the same logic:
+        • creator + waiting/scheduled -> status='finished', participants left
+        • participant (not creator)   -> that user marked 'left'
+
+    Returns the quiz id that was affected, or None if nothing changed.
+    """
+    try:
+        quiz_id = get_user_active_quiz(user_id)
+        if not quiz_id:
+            return None
+
+        quiz = get_live_quiz_by_id(quiz_id)
+        if not quiz:
+            return None
+
+        if quiz['status'] not in ('waiting', 'scheduled'):
+            # active or finished — nothing to abandon here
+            return None
+
+        if quiz['creator_id'] == user_id:
+            # Soft-close the whole quiz
+            execute_with_retry(
+                "UPDATE live_quizzes SET status = 'finished', "
+                "ended_at = ?, scheduled_start = NULL WHERE id = ?",
+                (now(), quiz_id), commit=True,
+            )
+            execute_with_retry(
+                "UPDATE live_quiz_participants SET status = 'left' "
+                "WHERE quiz_id = ? AND status != 'left'",
+                (quiz_id,), commit=True,
+            )
+            logger.info(f"User {user_id} soft-closed quiz {quiz_id} (creator)")
+            return quiz_id
+
+        # Participant only
+        execute_with_retry(
+            "UPDATE live_quiz_participants SET status = 'left' "
+            "WHERE quiz_id = ? AND student_id = ?",
+            (quiz_id, user_id), commit=True,
+        )
+        logger.info(f"User {user_id} left quiz {quiz_id} (participant)")
+        return quiz_id
+    except Exception as e:
+        logger.error(f"abandon_user_waiting_quiz failed for {user_id}: {e}", exc_info=True)
+        return None
 
 def leave_live_quiz(quiz_id: int, student_id: int) -> bool:
     try:
@@ -2541,8 +2694,128 @@ def clean_history_entries():
     except Exception as e:
         logger.error(f"Failed to clean history entries: {e}")
         return 0
+def ensure_question_miss_stats_table() -> bool:
+    """
+    Create the materialized miss-rate table if it does not exist.
+    Populated by refresh_question_miss_stats().
+    """
+    try:
+        execute_with_retry("""
+            CREATE TABLE IF NOT EXISTS question_miss_stats (
+                question_id     INTEGER PRIMARY KEY,
+                total_attempts  INTEGER NOT NULL DEFAULT 0,
+                total_misses    INTEGER NOT NULL DEFAULT 0,
+                miss_rate       REAL    NOT NULL DEFAULT 0.0,
+                last_attempt_at TEXT,
+                updated_at      TEXT    DEFAULT (datetime('now', 'localtime')),
+                FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+            )
+        """, commit=True)
+        execute_with_retry(
+            "CREATE INDEX IF NOT EXISTS idx_qms_miss_rate "
+            "ON question_miss_stats(miss_rate DESC)",
+            commit=True,
+        )
+        execute_with_retry(
+            "CREATE INDEX IF NOT EXISTS idx_qms_misses "
+            "ON question_miss_stats(total_misses DESC)",
+            commit=True,
+        )
+        execute_with_retry(
+            "CREATE INDEX IF NOT EXISTS idx_qms_attempts "
+            "ON question_miss_stats(total_attempts DESC)",
+            commit=True,
+        )
+        return True
+    except Exception as e:
+        logger.error(f"ensure_question_miss_stats_table failed: {e}")
+        return False
+def refresh_question_miss_stats(days: int = 90) -> int:
+    """
+    Rebuild question_miss_stats from the last N days of quiz attempts.
 
+    Reads the JSON `answers` column from quiz_attempts, aggregates
+    per question, and rewrites the materialized table. Called from
+    daily_tasks.py.
 
+    Returns the number of question rows written.
+    """
+    ensure_question_miss_stats_table()
+
+    # Clear old data (table is small; safe to rewrite)
+    try:
+        execute_with_retry("DELETE FROM question_miss_stats", commit=True)
+    except Exception as e:
+        logger.error(f"refresh_question_miss_stats: clear failed: {e}")
+        return 0
+
+    # Read recent attempts
+    try:
+        cursor = execute_with_retry("""
+            SELECT answers, completed_at
+            FROM quiz_attempts
+            WHERE completed_at >= datetime('now', '-' || ? || ' days')
+        """, (int(days),))
+        rows = cursor.fetchall()
+    except Exception as e:
+        logger.error(f"refresh_question_miss_stats: read failed: {e}")
+        return 0
+
+    # Aggregate in Python (JSON parsing is safer here than in SQL)
+    stats: dict = {}
+    for row in rows:
+        raw = row['answers']
+        if not raw:
+            continue
+        try:
+            answers = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(answers, list):
+            continue
+
+        completed = row['completed_at'] or ''
+        for a in answers:
+            if not isinstance(a, dict):
+                continue
+            qid = a.get('question_id')
+            if qid is None:
+                continue
+            try:
+                qid = int(qid)
+            except (ValueError, TypeError):
+                continue
+
+            entry = stats.setdefault(qid, {
+                'attempts': 0, 'misses': 0, 'last_at': '',
+            })
+            entry['attempts'] += 1
+            if not a.get('correct'):
+                entry['misses'] += 1
+            if completed > entry['last_at']:
+                entry['last_at'] = completed
+
+    if not stats:
+        logger.info("refresh_question_miss_stats: no attempts in window")
+        return 0
+
+    params = []
+    for qid, s in stats.items():
+        miss_rate = round(100.0 * s['misses'] / s['attempts'], 2) if s['attempts'] else 0.0
+        params.append((qid, s['attempts'], s['misses'], miss_rate, s['last_at'] or None))
+
+    try:
+        execute_many_with_retry("""
+            INSERT OR REPLACE INTO question_miss_stats
+                (question_id, total_attempts, total_misses,
+                 miss_rate, last_attempt_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))
+        """, params, commit=True)
+        logger.info(f"refresh_question_miss_stats: wrote {len(params)} rows")
+        return len(params)
+    except Exception as e:
+        logger.error(f"refresh_question_miss_stats: insert failed: {e}")
+        return 0
 # ============================================
 # GROUP FUNCTIONS – Enhanced with curriculum support
 # ============================================
@@ -2960,55 +3233,162 @@ def get_question_stats() -> dict:
 def get_questions_paginated(
     search: str = '',
     subject_code: str = '',
-    pdf_filter: str = '',      # '', 'linked', 'unlinked'
-    status_filter: str = '',   # '', 'active', 'archived', 'draft'
-    sort: str = 'newest',      # newest, oldest, difficulty_high, difficulty_low
+    pdf_filter: str = '',       # '', 'linked', 'unlinked'
+    pdf_code: str = '',         # exact code
+    status_filter: str = '',    # '', 'active', 'archived', 'draft'
+    difficulty_min: int = None,
+    difficulty_max: int = None,
+    chapter: str = '',
+    date_from: str = '',
+    date_to: str = '',
+    interactions: str = '',     # '', 'has_reports', 'has_saves', 'has_likes', 'clean'
+    miss_filter: str = '',      # '', 'high', 'medium', 'low', 'any', 'never'
+    sort: str = 'newest',
     page: int = 1,
     per_page: int = 20,
 ):
-    """Return (questions, total) with filters and pagination."""
+    """
+    Return (questions, total) with the full set of filters.
+
+    Miss-rate filtering uses the materialized question_miss_stats table.
+    Call refresh_question_miss_stats() first if the stats are stale.
+    """
+    ensure_question_miss_stats_table()
+
     where = ["1=1"]
     params = []
 
+    # ---- Search ----
     if search:
         like = f"%{search}%"
-        where.append("(question_text LIKE ? OR chapter LIKE ? OR tags LIKE ?)")
-        params.extend([like, like, like])
+        where.append(
+            "(q.question_text LIKE ? OR q.chapter LIKE ? "
+            "OR q.tags LIKE ? OR q.pdf_code LIKE ?)"
+        )
+        params.extend([like, like, like, like])
 
+    # ---- Subject ----
     if subject_code:
-        where.append("subject_code = ?")
+        where.append("q.subject_code = ?")
         params.append(subject_code)
 
+    # ---- PDF linkage ----
     if pdf_filter == 'linked':
-        where.append("pdf_code IS NOT NULL AND pdf_code != ''")
+        where.append("q.pdf_code IS NOT NULL AND q.pdf_code != ''")
     elif pdf_filter == 'unlinked':
-        where.append("(pdf_code IS NULL OR pdf_code = '')")
+        where.append("(q.pdf_code IS NULL OR q.pdf_code = '')")
 
+    if pdf_code:
+        where.append("q.pdf_code = ?")
+        params.append(pdf_code)
+
+    # ---- Status ----
     if status_filter:
-        where.append("status = ?")
+        where.append("q.status = ?")
         params.append(status_filter)
+
+    # ---- Difficulty range ----
+    if difficulty_min is not None:
+        where.append("q.difficulty >= ?")
+        params.append(int(difficulty_min))
+    if difficulty_max is not None:
+        where.append("q.difficulty <= ?")
+        params.append(int(difficulty_max))
+
+    # ---- Chapter ----
+    if chapter:
+        where.append("q.chapter LIKE ?")
+        params.append(f"%{chapter}%")
+
+    # ---- Date range (created_at) ----
+    if date_from:
+        where.append("q.created_at >= ?")
+        params.append(date_from)
+    if date_to:
+        where.append("q.created_at <= ?")
+        params.append(date_to)
+
+    # ---- Interactions ----
+    if interactions == 'has_reports':
+        where.append(
+            "EXISTS (SELECT 1 FROM question_interactions qi "
+            "WHERE qi.question_id = q.id AND qi.interaction_type = 'report')"
+        )
+    elif interactions == 'has_saves':
+        where.append(
+            "EXISTS (SELECT 1 FROM question_interactions qi "
+            "WHERE qi.question_id = q.id AND qi.interaction_type = 'save')"
+        )
+    elif interactions == 'has_likes':
+        where.append(
+            "EXISTS (SELECT 1 FROM question_interactions qi "
+            "WHERE qi.question_id = q.id AND qi.interaction_type = 'like')"
+        )
+    elif interactions == 'clean':
+        where.append(
+            "NOT EXISTS (SELECT 1 FROM question_interactions qi "
+            "WHERE qi.question_id = q.id)"
+        )
+
+    # ---- Miss rate filter (uses materialized stats) ----
+    if miss_filter == 'high':
+        where.append(
+            "COALESCE(qms.miss_rate, 0) >= 70 "
+            "AND COALESCE(qms.total_attempts, 0) >= 3"
+        )
+    elif miss_filter == 'medium':
+        where.append(
+            "COALESCE(qms.miss_rate, 0) >= 40 "
+            "AND COALESCE(qms.miss_rate, 0) < 70"
+        )
+    elif miss_filter == 'low':
+        where.append(
+            "COALESCE(qms.miss_rate, 0) < 40 "
+            "AND COALESCE(qms.total_attempts, 0) >= 3"
+        )
+    elif miss_filter == 'any':
+        where.append("COALESCE(qms.total_misses, 0) > 0")
+    elif miss_filter == 'never':
+        where.append("COALESCE(qms.total_attempts, 0) = 0")
 
     where_sql = " AND ".join(where)
 
     sort_map = {
-        'newest': 'created_at DESC',
-        'oldest': 'created_at ASC',
-        'difficulty_high': 'difficulty DESC, created_at DESC',
-        'difficulty_low': 'difficulty ASC, created_at DESC',
+        'newest':            'q.created_at DESC',
+        'oldest':            'q.created_at ASC',
+        'difficulty_high':   'q.difficulty DESC, q.created_at DESC',
+        'difficulty_low':    'q.difficulty ASC, q.created_at DESC',
+        'miss_high':         'COALESCE(qms.miss_rate, 0) DESC, COALESCE(qms.total_misses, 0) DESC',
+        'miss_low':          'COALESCE(qms.miss_rate, 0) ASC, COALESCE(qms.total_attempts, 0) ASC',
+        'most_missed':       'COALESCE(qms.total_misses, 0) DESC, q.created_at DESC',
+        'least_attempted':   'COALESCE(qms.total_attempts, 0) ASC, q.created_at DESC',
+        'most_attempted':    'COALESCE(qms.total_attempts, 0) DESC, q.created_at DESC',
     }
-    order_sql = sort_map.get(sort, 'created_at DESC')
+    order_sql = sort_map.get(sort, 'q.created_at DESC')
 
+    base_from = """
+        FROM questions q
+        LEFT JOIN question_miss_stats qms ON qms.question_id = q.id
+    """
+
+    # ---- Count ----
     count_cursor = execute_with_retry(
-        f"SELECT COUNT(*) AS c FROM questions WHERE {where_sql}", params
+        f"SELECT COUNT(*) AS c {base_from} WHERE {where_sql}",
+        params,
     )
     total = count_cursor.fetchone()['c']
 
+    # ---- Page ----
     offset = max(0, (page - 1) * per_page)
     cursor = execute_with_retry(f"""
-        SELECT id, subject_code, question_text, options, correct_answer,
-               difficulty, chapter, tags, explanation, pdf_code, pdf_page,
-               status, created_at, updated_at
-        FROM questions
+        SELECT
+            q.id, q.subject_code, q.question_text, q.options, q.correct_answer,
+            q.difficulty, q.chapter, q.tags, q.explanation, q.pdf_code, q.pdf_page,
+            q.status, q.created_at, q.updated_at,
+            COALESCE(qms.total_attempts, 0) AS total_attempts,
+            COALESCE(qms.total_misses,   0) AS total_misses,
+            COALESCE(qms.miss_rate,      0) AS miss_rate
+        {base_from}
         WHERE {where_sql}
         ORDER BY {order_sql}
         LIMIT ? OFFSET ?
@@ -3027,71 +3407,51 @@ def get_questions_paginated(
 
 
 def get_questions_filter_options() -> dict:
-    """Return distinct subjects/chapters currently in use (for filter dropdowns)."""
-    try:
-        subj_cursor = execute_with_retry(
-            "SELECT DISTINCT subject_code FROM questions WHERE status != 'archived' ORDER BY subject_code"
-        )
-        subjects = [row['subject_code'] for row in subj_cursor.fetchall()]
-
-        chap_cursor = execute_with_retry(
-            "SELECT DISTINCT chapter FROM questions WHERE chapter IS NOT NULL AND chapter != '' ORDER BY chapter LIMIT 50"
-        )
-        chapters = [row['chapter'] for row in chap_cursor.fetchall()]
-
-        return {'subjects': subjects, 'chapters': chapters}
-    except Exception as e:
-        logger.error(f"Error fetching filter options: {e}")
-        return {'subjects': [], 'chapters': []}
-
-
-def check_pdf_codes_exist(codes: list) -> dict:
     """
-    Given a list of PDF codes, return:
-        { code: {exists: bool, title: str, source: 'main'|'bot'|None, is_premium: bool} }
-    Never raises.
+    Return dropdown options used by the admin questions toolbar:
+        subjects   — list of subject codes currently in use
+        chapters   — list of chapter names (up to 100)
+        pdf_codes  — list of {code, count} for the exact PDF filter
     """
-    result = {}
-    if not codes:
-        return result
+    result = {'subjects': [], 'chapters': [], 'pdf_codes': []}
 
-    unique = list({str(c).strip().upper() for c in codes if c})
-    for code in unique:
-        result[code] = {'exists': False, 'title': '', 'source': None, 'is_premium': False}
-
-    if not unique:
-        return result
-
-    # Main DB
     try:
-        placeholders = ','.join('?' * len(unique))
-        cursor = execute_with_retry(
-            f"SELECT code, title, is_premium FROM pdfs WHERE code IN ({placeholders})",
-            unique
-        )
-        for row in cursor.fetchall():
-            code = row['code']
-            if code in result:
-                result[code]['exists'] = True
-                result[code]['title'] = row['title'] or code
-                result[code]['is_premium'] = bool(row['is_premium'])
-                result[code]['source'] = 'main'
+        subj_cursor = execute_with_retry("""
+            SELECT DISTINCT subject_code
+            FROM questions
+            WHERE status != 'archived'
+            ORDER BY subject_code
+        """)
+        result['subjects'] = [row['subject_code'] for row in subj_cursor.fetchall()]
     except Exception as e:
-        logger.warning(f"check_pdf_codes_exist (main) failed: {e}")
+        logger.warning(f"get_questions_filter_options: subjects failed: {e}")
 
-    # Bot DB fallback
-    remaining = [c for c, v in result.items() if not v['exists']]
-    if remaining:
-        try:
-            from bot.db import get_bot_pdf_by_code
-            for code in remaining:
-                bot_pdf = get_bot_pdf_by_code(code)
-                if bot_pdf:
-                    result[code]['exists'] = True
-                    result[code]['title'] = bot_pdf.get('title') or code
-                    result[code]['is_premium'] = bool(bot_pdf.get('is_premium', 0))
-                    result[code]['source'] = 'bot'
-        except Exception as e:
-            logger.warning(f"check_pdf_codes_exist (bot) failed: {e}")
+    try:
+        chap_cursor = execute_with_retry("""
+            SELECT DISTINCT chapter
+            FROM questions
+            WHERE chapter IS NOT NULL AND chapter != ''
+            ORDER BY chapter
+            LIMIT 100
+        """)
+        result['chapters'] = [row['chapter'] for row in chap_cursor.fetchall()]
+    except Exception as e:
+        logger.warning(f"get_questions_filter_options: chapters failed: {e}")
+
+    try:
+        pdf_cursor = execute_with_retry("""
+            SELECT pdf_code, COUNT(*) AS c
+            FROM questions
+            WHERE pdf_code IS NOT NULL AND pdf_code != ''
+            GROUP BY pdf_code
+            ORDER BY c DESC, pdf_code ASC
+            LIMIT 100
+        """)
+        result['pdf_codes'] = [
+            {'code': row['pdf_code'], 'count': row['c']}
+            for row in pdf_cursor.fetchall()
+        ]
+    except Exception as e:
+        logger.warning(f"get_questions_filter_options: pdf codes failed: {e}")
 
     return result

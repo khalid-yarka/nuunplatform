@@ -32,6 +32,8 @@ import logging
 import re
 import time
 
+from urllib.parse import urlencode
+
 from config import Config
 from db import (
     execute_with_retry,
@@ -124,19 +126,44 @@ def _csrf_ok():
     return bool(token) and token == session.get('csrf_token')
 
 
+def _int_or_none(raw):
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    try:
+        return int(s)
+    except (ValueError, TypeError):
+        return None
+
+
 # ============================================================
-# QUESTIONS — LIST
+# QUESTIONS — LIST (with advanced filters)
 # ============================================================
 
 @admin_content_bp.route('/questions', methods=['GET'],
                         endpoint='questions')
 @admin_can('questions.view')
 def questions():
+    # ---- Simple filters ----
     search = (request.args.get('search') or '').strip()
     subject_code = (request.args.get('subject') or '').strip()
     pdf_filter = (request.args.get('pdf') or '').strip()
+    pdf_code = (request.args.get('pdf_code') or '').strip().upper()
     status_filter = (request.args.get('status') or '').strip()
+    chapter = (request.args.get('chapter') or '').strip()
+    interactions = (request.args.get('interactions') or '').strip()
+    miss_filter = (request.args.get('miss') or '').strip()
+    date_from = (request.args.get('from') or '').strip()
+    date_to = (request.args.get('to') or '').strip()
     sort = (request.args.get('sort') or 'newest').strip()
+
+    # ---- Difficulty range ----
+    difficulty_min = _int_or_none(request.args.get('difficulty_min'))
+    difficulty_max = _int_or_none(request.args.get('difficulty_max'))
+
+    # ---- Pagination ----
     page = max(1, int(request.args.get('page') or 1))
     per_page = 20
 
@@ -144,7 +171,15 @@ def questions():
         search=search,
         subject_code=subject_code,
         pdf_filter=pdf_filter,
+        pdf_code=pdf_code,
         status_filter=status_filter,
+        difficulty_min=difficulty_min,
+        difficulty_max=difficulty_max,
+        chapter=chapter,
+        date_from=date_from,
+        date_to=date_to,
+        interactions=interactions,
+        miss_filter=miss_filter,
         sort=sort,
         page=page,
         per_page=per_page,
@@ -157,6 +192,16 @@ def questions():
     codes_in_page = [q['pdf_code'] for q in questions_list if q.get('pdf_code')]
     pdf_map = check_pdf_codes_exist(codes_in_page) if codes_in_page else {}
 
+    # ---- Active filter chips (server-built so the template stays simple) ----
+    active_filters = _build_active_filters(
+        search=search, subject_code=subject_code,
+        pdf_filter=pdf_filter, pdf_code=pdf_code,
+        status_filter=status_filter, chapter=chapter,
+        interactions=interactions, miss_filter=miss_filter,
+        difficulty_min=difficulty_min, difficulty_max=difficulty_max,
+        date_from=date_from, date_to=date_to,
+    )
+
     return render_template(
         'dashboard/admin/content/questions.html',
         questions=questions_list,
@@ -168,12 +213,104 @@ def questions():
         subjects=get_all_subjects(),
         filter_options=filter_options,
         pdf_map=pdf_map,
+        # filter values (for the toolbar to remember state)
         search=search,
         subject_code=subject_code,
         pdf_filter=pdf_filter,
+        pdf_code=pdf_code,
         status_filter=status_filter,
+        chapter=chapter,
+        interactions=interactions,
+        miss_filter=miss_filter,
+        difficulty_min=difficulty_min,
+        difficulty_max=difficulty_max,
+        date_from=date_from,
+        date_to=date_to,
         sort=sort,
+        active_filters=active_filters,
     )
+
+
+def _build_active_filters(**kw):
+    """
+    Return a list of chips describing active filters.
+    Each chip includes:
+      - label    : display label ("Subject")
+      - value    : display value ("Geography")
+      - param    : query-string key (for metadata only)
+      - clear_url: full URL to navigate to when the chip is cleared
+    """
+    chips = []
+
+    def add(param, label, value, remove_keys=None, extra_params=None):
+        remove = set(remove_keys) if remove_keys else {param}
+        remaining = [(k, v) for k, v in request.args.items(multi=True) if k not in remove]
+        if extra_params:
+            remaining.extend(extra_params)
+        qs = urlencode(remaining)
+        clear_url = ('?' + qs) if qs else url_for('admin_content.questions')
+        chips.append({
+            'param': param,
+            'label': label,
+            'value': str(value),
+            'clear_url': clear_url,
+        })
+
+    if kw.get('search'):
+        add('search', 'Search', kw['search'])
+
+    if kw.get('subject_code'):
+        subj = get_subject(kw['subject_code'])
+        add('subject', 'Subject',
+            subj['name'] if subj else kw['subject_code'])
+
+    if kw.get('pdf_filter'):
+        label = 'PDF linked' if kw['pdf_filter'] == 'linked' else 'PDF unlinked'
+        add('pdf', 'PDF', label)
+
+    if kw.get('pdf_code'):
+        add('pdf_code', 'PDF code', kw['pdf_code'])
+
+    if kw.get('status_filter'):
+        add('status', 'Status', kw['status_filter'].capitalize())
+
+    if kw.get('chapter'):
+        add('chapter', 'Chapter', kw['chapter'])
+
+    if kw.get('interactions'):
+        labels = {
+            'has_reports': 'Has reports',
+            'has_saves':   'Has saves',
+            'has_likes':   'Has likes',
+            'clean':       'No interactions',
+        }
+        add('interactions', 'Interactions',
+            labels.get(kw['interactions'], kw['interactions']))
+
+    if kw.get('miss_filter'):
+        labels = {
+            'high':   'High miss rate',
+            'medium': 'Medium miss rate',
+            'low':    'Low miss rate',
+            'any':    'Has any miss',
+            'never':  'Never attempted',
+        }
+        add('miss', 'Miss rate',
+            labels.get(kw['miss_filter'], kw['miss_filter']))
+
+    dmin = kw.get('difficulty_min')
+    dmax = kw.get('difficulty_max')
+    if dmin is not None:
+        add('difficulty_min', 'Min difficulty', f'⭐ {dmin}')
+    if dmax is not None:
+        add('difficulty_max', 'Max difficulty', f'⭐ {dmax}')
+
+    if kw.get('date_from'):
+        add('from', 'From', kw['date_from'])
+    if kw.get('date_to'):
+        add('to', 'To', kw['date_to'])
+
+    return chips
 
 
 # ============================================================
@@ -484,21 +621,19 @@ def questions_hard():
     try:
         cursor = execute_with_retry("""
             SELECT q.id, q.question_text, q.subject_code, q.difficulty,
-                   COUNT(*) AS attempts,
-                   SUM(CASE WHEN json_extract(value, '$.correct') = 0 THEN 1 ELSE 0 END) AS misses
-            FROM quiz_attempts qa, json_each(qa.answers) AS value
-            JOIN questions q ON q.id = CAST(json_extract(value, '$.question_id') AS INTEGER)
-            WHERE qa.completed_at >= datetime('now', '-30 days')
-            GROUP BY q.id
-            HAVING misses >= 3
-            ORDER BY misses DESC, attempts DESC
-            LIMIT 50
+                   qms.total_attempts AS attempts,
+                   qms.total_misses   AS misses,
+                   qms.miss_rate
+            FROM question_miss_stats qms
+            JOIN questions q ON q.id = qms.question_id
+            WHERE qms.total_misses >= 3
+            ORDER BY qms.miss_rate DESC, qms.total_misses DESC
+            LIMIT 100
         """)
         for row in cursor.fetchall():
             r = dict(row)
             subj = get_subject(r['subject_code'])
             r['subject_name'] = subj['name'] if subj else r['subject_code']
-            r['miss_rate'] = round(100.0 * r['misses'] / r['attempts'], 1) if r['attempts'] else 0
             rows.append(r)
     except Exception as e:
         logger.warning(f"questions_hard query failed: {e}")
@@ -559,7 +694,6 @@ def pdf_info():
             out['preview_url'] = file_url
             return jsonify(out)
 
-        # No file_url → try bot for a file_id
         try:
             from bot.db import get_bot_pdf_by_code
             bot_pdf = get_bot_pdf_by_code(code)
@@ -570,7 +704,7 @@ def pdf_info():
                     if size <= _PDF_SIZE_CAP_BYTES:
                         out['can_preview'] = True
                         out['preview_url'] = url_for('pdfs.preview_telegram',
-                                                       code=code)
+                                                     code=code)
                     else:
                         out['reason'] = 'too_large'
                 else:
@@ -598,7 +732,7 @@ def pdf_info():
                 if size <= _PDF_SIZE_CAP_BYTES:
                     out['can_preview'] = True
                     out['preview_url'] = url_for('pdfs.preview_telegram',
-                                                   code=code)
+                                                 code=code)
                 else:
                     out['reason'] = 'too_large'
             else:
@@ -682,7 +816,6 @@ def bulk_import_apply():
         flash(f'Invalid PDF code format: "{pdf_code}"', 'error')
         return redirect(url_for('admin_content.bulk_import'))
 
-    # ---- Validation ----
     questions_to_import = []
     errors = []
     duplicates = []

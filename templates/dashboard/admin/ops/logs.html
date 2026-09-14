@@ -1,13 +1,15 @@
 {# ============================================================
    templates/dashboard/admin/ops/logs.html
-   Log file viewer — level filter, search, auto-refresh.
+   Log file viewer — sidebar, level filter, search, auto-refresh,
+   download, line count.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
 {% block admin_title_icon %}<i class="fas fa-file-alt header-icon"></i>{% endblock %}
 {% block admin_title %}Logs{% endblock %}
 {% block admin_subtitle %}
-    Tail of the application, worker, and error logs.
+    Tail of the application, worker, and error logs. Search filters
+    are case-insensitive and applied server-side.
 {% endblock %}
 
 {% block admin_breadcrumb %}
@@ -15,41 +17,94 @@
     <span class="current">Logs</span>
 {% endblock %}
 
+{% block admin_actions %}
+    <a href="{{ url_for('admin_ops.logs') }}" class="admin-btn secondary">
+        <i class="fas fa-sync"></i> Refresh list
+    </a>
+{% endblock %}
+
 {% block admin_content %}
 
 <div class="logs-layout">
 
+    {# ─────── SIDEBAR ─────── #}
     <aside class="logs-sidebar" id="logSidebar">
         {% for f in log_files %}
             <button type="button"
-                    class="file-btn {% if loop.first %}active{% endif %}"
-                    data-file="{{ f.name }}">
-                <span>{{ f.name }}</span>
-                <span class="size">{{ f.size_kb }} KB</span>
+                    class="file-btn {% if loop.first and f.exists %}active{% endif %} {% if not f.exists %}is-missing{% endif %}"
+                    data-file="{{ f.name }}"
+                    {% if not f.exists %}disabled{% endif %}>
+                <span class="file-name">
+                    <i class="fas fa-file-lines"></i>
+                    {{ f.name }}
+                </span>
+                <span class="file-meta">
+                    {% if f.exists %}
+                        <span class="size">{{ f.size_kb }} KB</span>
+                    {% else %}
+                        <span class="size missing">missing</span>
+                    {% endif %}
+                </span>
             </button>
         {% endfor %}
     </aside>
 
-    <div>
-        <div class="admin-toolbar" style="margin-bottom:10px;">
+    {# ─────── VIEWER ─────── #}
+    <div class="logs-main">
+
+        {# Toolbar #}
+        <div class="logs-toolbar">
+            <div class="logs-search">
+                <i class="fas fa-search"></i>
+                <input type="text"
+                       id="logSearchInput"
+                       placeholder="Search in log (case-insensitive)…"
+                       autocomplete="off" spellcheck="false">
+                <button type="button"
+                        class="logs-search-clear"
+                        id="logSearchClear"
+                        title="Clear search"
+                        style="display:none;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
             <select id="logLevelFilter" class="admin-select">
                 <option value="">All levels</option>
+                <option value="CRITICAL">CRITICAL</option>
                 <option value="ERROR">ERROR</option>
                 <option value="WARNING">WARNING</option>
                 <option value="INFO">INFO</option>
                 <option value="DEBUG">DEBUG</option>
             </select>
 
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
-                <input type="checkbox" id="logAutoRefresh" style="accent-color:var(--primary);">
-                Auto-refresh (5s)
+            <label class="logs-toggle">
+                <input type="checkbox" id="logAutoRefresh">
+                <span>Auto-refresh (5s)</span>
             </label>
 
-            <span class="toolbar-meta" id="logMeta">Click a file to load.</span>
+            <span class="logs-meta" id="logMeta">Click a file to load.</span>
+
+            <button type="button"
+                    class="admin-btn secondary sm"
+                    id="logDownloadBtn"
+                    disabled
+                    title="Download this log file">
+                <i class="fas fa-download"></i> Download
+            </button>
         </div>
 
-        <div class="logs-viewer" id="logViewer">
+        {# Viewer #}
+        <div class="logs-viewer" id="logViewer" tabindex="0">
             <span class="line INFO">Select a log file from the sidebar.</span>
+        </div>
+
+        {# Footer hint #}
+        <div class="logs-footer">
+            <span><i class="fas fa-lightbulb"></i> Click any line to copy it to your clipboard.</span>
+            <span id="logsPausedHint" style="display:none;color:#F59E0B;">
+                <i class="fas fa-pause-circle"></i> Auto-scroll paused — scroll to bottom to resume.
+            </span>
         </div>
     </div>
 

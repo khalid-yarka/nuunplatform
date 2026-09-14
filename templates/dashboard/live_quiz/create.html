@@ -93,6 +93,147 @@
     }
     .schedule-options input[type="radio"] { display: none; }
 
+    /* ============ ACTIVE QUIZ GUARD MODAL ============ */
+    .quiz-guard-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        z-index: 100000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        animation: qgFade 0.25s ease;
+    }
+    @keyframes qgFade {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    .quiz-guard-modal {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 32px 28px 24px;
+        max-width: 460px;
+        width: 100%;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+        animation: qgPop 0.35s cubic-bezier(0.22, 0.61, 0.36, 1);
+        text-align: center;
+    }
+    @keyframes qgPop {
+        from { transform: translateY(20px) scale(0.96); opacity: 0; }
+        to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    .quiz-guard-modal .qg-icon {
+        font-size: 56px;
+        line-height: 1;
+        margin-bottom: 12px;
+    }
+    .quiz-guard-modal h3 {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text);
+        margin: 0 0 8px;
+    }
+    .quiz-guard-modal p {
+        font-size: 14px;
+        color: var(--text-secondary);
+        line-height: 1.55;
+        margin: 0 0 10px;
+    }
+    .quiz-guard-modal p strong { color: var(--text); }
+    .quiz-guard-modal .qg-quiz-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 16px;
+        margin: 16px 0 20px;
+        text-align: left;
+    }
+    .quiz-guard-modal .qg-quiz-card .qg-emoji {
+        font-size: 26px;
+        flex-shrink: 0;
+    }
+    .quiz-guard-modal .qg-quiz-card .qg-info {
+        flex: 1;
+        min-width: 0;
+    }
+    .quiz-guard-modal .qg-quiz-card .qg-info .qg-name {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .quiz-guard-modal .qg-quiz-card .qg-info .qg-meta {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-top: 2px;
+    }
+    .quiz-guard-modal .qg-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .quiz-guard-modal .qg-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 12px 18px;
+        border-radius: 12px;
+        font-weight: 700;
+        font-size: 14px;
+        cursor: pointer;
+        transition: var(--transition);
+        border: none;
+        text-decoration: none;
+        font-family: inherit;
+    }
+    .quiz-guard-modal .qg-btn.primary {
+        background: var(--primary);
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(255, 49, 56, 0.28);
+    }
+    .quiz-guard-modal .qg-btn.primary:hover {
+        background: var(--primary-hover);
+        transform: translateY(-2px);
+        color: #fff;
+        text-decoration: none;
+    }
+    .quiz-guard-modal .qg-btn.secondary {
+        background: var(--surface);
+        color: var(--text);
+        border: 1px solid var(--border);
+    }
+    .quiz-guard-modal .qg-btn.secondary:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+        text-decoration: none;
+    }
+    .quiz-guard-modal .qg-btn.danger {
+        background: #EF4444;
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(239, 68, 68, 0.28);
+    }
+    .quiz-guard-modal .qg-btn.danger:hover {
+        background: #DC2626;
+        transform: translateY(-2px);
+        color: #fff;
+        text-decoration: none;
+    }
+    .quiz-guard-modal .qg-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none !important;
+    }
+
     [data-theme="dark"] .question-count-options label.selected {
         border-color: #FF6B70 !important;
         background: rgba(255, 107, 112, 0.15) !important;
@@ -116,12 +257,68 @@
         .privacy-option .privacy-desc { font-size: 11px; }
         .question-count-options { grid-template-columns: repeat(3, 1fr); }
         .schedule-options label { font-size: 12px; padding: 4px 10px; }
+        .quiz-guard-modal { padding: 24px 18px 18px; }
+        .quiz-guard-modal h3 { font-size: 17px; }
     }
 </style>
 {% endblock %}
 
 {% block dashboard_content %}
 <div style="max-width: 640px; margin: 0 auto;">
+
+    {# ================================================== #}
+    {# ACTIVE QUIZ GUARD MODAL                            #}
+    {# Shown when the user already has an unfinished quiz #}
+    {# ================================================== #}
+    {% if active_quiz %}
+    <div class="quiz-guard-overlay" id="quizGuardOverlay">
+        <div class="quiz-guard-modal">
+            <div class="qg-icon">⚠️</div>
+            <h3>You already have an unfinished quiz</h3>
+            <p>
+                You are
+                <strong>{% if active_quiz.is_creator %}the creator of{% else %}a participant in{% endif %}</strong>
+                an unfinished live quiz. You need to finish, leave, or
+                abandon it before creating a new one.
+            </p>
+
+            <div class="qg-quiz-card">
+                <span class="qg-emoji">{{ active_quiz.subject_icon or '📚' }}</span>
+                <div class="qg-info">
+                    <div class="qg-name">{{ active_quiz.title or 'Untitled Quiz' }}</div>
+                    <div class="qg-meta">
+                        {{ active_quiz.subject_name or active_quiz.subject_code }}
+                        · {{ active_quiz.status|capitalize }}
+                        · {{ active_quiz.question_count }} questions
+                    </div>
+                </div>
+            </div>
+
+            <div class="qg-actions">
+                <a href="{{ url_for('live_quiz.waiting_room', quiz_id=active_quiz.id) }}"
+                   class="qg-btn primary">
+                    <i class="fas fa-arrow-right"></i> Go to that quiz
+                </a>
+
+                {% if active_quiz.is_creator %}
+                    <button type="button" class="qg-btn danger" id="qgAbandonBtn"
+                            data-quiz-id="{{ active_quiz.id }}">
+                        <i class="fas fa-trash"></i> Abandon and continue here
+                    </button>
+                {% else %}
+                    <button type="button" class="qg-btn secondary" id="qgAbandonBtn"
+                            data-quiz-id="{{ active_quiz.id }}">
+                        <i class="fas fa-sign-out-alt"></i> Leave that quiz and continue here
+                    </button>
+                {% endif %}
+
+                <a href="{{ url_for('live_quiz.lobby') }}" class="qg-btn secondary">
+                    <i class="fas fa-arrow-left"></i> Go back to lobby
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <div class="breadcrumb">
         <a href="{{ url_for('live_quiz.lobby') }}">{{ _('live_quiz.lobby.page_title') }}</a>
@@ -295,26 +492,40 @@ document.addEventListener('DOMContentLoaded', function() {
     var titleInput = document.getElementById('quizTitleInput');
     var titleError = document.getElementById('titleError');
     var submitBtn = document.querySelector('#createForm button[type="submit"]');
+    var titleTouched = false;
 
     function validateTitle() {
         if (!titleInput) return true;
         var v = (titleInput.value || '').trim();
         var ok = v.length >= 3 && v.length <= 100;
-        if (titleError) titleError.style.display = ok ? 'none' : 'block';
-        titleInput.style.borderColor = ok ? 'var(--border)' : '#EF4444';
+
+        // Only show the error once the user has interacted with the field
+        // (or once they attempt to submit with an invalid value).
+        if (titleError) {
+            titleError.style.display = (!ok && titleTouched) ? 'block' : 'none';
+        }
+        titleInput.style.borderColor = (!ok && titleTouched) ? '#EF4444' : 'var(--border)';
         if (submitBtn) submitBtn.disabled = !ok;
         return ok;
     }
 
     if (titleInput) {
-        titleInput.addEventListener('input', validateTitle);
-        titleInput.addEventListener('blur', validateTitle);
+        titleInput.addEventListener('input', function() {
+            titleTouched = true;
+            validateTitle();
+        });
+        titleInput.addEventListener('blur', function() {
+            titleTouched = true;
+            validateTitle();
+        });
+        // Initial call: sets submit-button state only, error stays hidden
         validateTitle();
     }
 
     var createForm = document.getElementById('createForm');
     if (createForm) {
         createForm.addEventListener('submit', function(e) {
+            titleTouched = true;
             if (!validateTitle()) {
                 e.preventDefault();
                 if (titleInput) titleInput.focus();
@@ -324,18 +535,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.querySelectorAll('.question-count-options label').forEach(function(label) {
         label.addEventListener('click', function() {
-            const siblings = this.parentElement.querySelectorAll('label');
+            var siblings = this.parentElement.querySelectorAll('label');
             siblings.forEach(function(s) { s.classList.remove('selected'); });
             this.classList.add('selected');
-            const radio = this.querySelector('input[type="radio"]');
+            var radio = this.querySelector('input[type="radio"]');
             if (radio) radio.checked = true;
         });
     });
 
-    const publicLabel = document.getElementById('publicLabel');
-    const privateLabel = document.getElementById('privateLabel');
-    const publicRadio = document.querySelector('input[name="is_public"][value="1"]');
-    const privateRadio = document.querySelector('input[name="is_public"][value="0"]');
+    var publicLabel = document.getElementById('publicLabel');
+    var privateLabel = document.getElementById('privateLabel');
+    var publicRadio = document.querySelector('input[name="is_public"][value="1"]');
+    var privateRadio = document.querySelector('input[name="is_public"][value="0"]');
 
     function updatePrivacySelection() {
         if (publicRadio.checked) {
@@ -350,15 +561,66 @@ document.addEventListener('DOMContentLoaded', function() {
     privateLabel.addEventListener('click', function() { privateRadio.checked = true; updatePrivacySelection(); });
     updatePrivacySelection();
 
-    const scheduleLabels = document.querySelectorAll('#scheduleOptions label');
+    var scheduleLabels = document.querySelectorAll('#scheduleOptions label');
     scheduleLabels.forEach(function(label) {
         label.addEventListener('click', function() {
             scheduleLabels.forEach(function(l) { l.classList.remove('selected'); });
             this.classList.add('selected');
-            const radio = this.querySelector('input[type="radio"]');
+            var radio = this.querySelector('input[type="radio"]');
             if (radio) radio.checked = true;
         });
     });
+
+    // ============================================
+    // ACTIVE QUIZ GUARD — abandon handler
+    // ============================================
+    var abandonBtn = document.getElementById('qgAbandonBtn');
+    if (abandonBtn) {
+        abandonBtn.addEventListener('click', function() {
+            var quizId = this.getAttribute('data-quiz-id');
+            if (!quizId) return;
+
+            var isCreator = {{ 'true' if active_quiz and active_quiz.is_creator else 'false' }};
+            var verb = isCreator ? 'abandon' : 'leave';
+            var warning = isCreator
+                ? 'This will soft-close your current quiz and mark all its participants as left.\n\nContinue?'
+                : 'This will leave the quiz you are currently in.\n\nContinue?';
+
+            if (!window.confirm(warning)) return;
+
+            this.disabled = true;
+            var originalHTML = this.innerHTML;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing…';
+
+            var csrf = document.querySelector('meta[name="csrf-token"]');
+            var token = csrf ? csrf.content : '';
+
+            fetch('/live-quiz/abandon/' + quizId, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': token,
+                },
+                body: JSON.stringify({}),
+            })
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(resp) {
+                if (resp.ok && resp.data && resp.data.success) {
+                    // Reload to re-render without the guard modal
+                    window.location.href = resp.data.redirect || '{{ url_for("live_quiz.create") }}';
+                } else {
+                    alert((resp.data && resp.data.error) || 'Could not process the request.');
+                    abandonBtn.disabled = false;
+                    abandonBtn.innerHTML = originalHTML;
+                }
+            })
+            .catch(function() {
+                alert('Network error. Please try again.');
+                abandonBtn.disabled = false;
+                abandonBtn.innerHTML = originalHTML;
+            });
+        });
+    }
 });
 </script>
 {% endblock %}
