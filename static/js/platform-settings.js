@@ -129,7 +129,10 @@
             return this.settings[key];
         },
 
-        set(key, value) {
+        set(key, value, opts) {
+            opts = opts || {};
+            const silent = opts.silent === true;
+        
             const old = this.settings[key];
             this.settings[key] = value;
             this.applyAll();
@@ -162,7 +165,7 @@
                 }
                 this.applyAll();
                 this.syncToLocalStorage();
-                if (typeof window.showToast === 'function') {
+                if (!silent && typeof window.showToast === 'function') {
                     window.showToast('Setting updated', 'success');
                 }
                 return data;

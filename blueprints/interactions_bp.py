@@ -394,3 +394,52 @@ def report():
     except Exception as e:
         logger.error(f"Report endpoint error: {e}\n{traceback.format_exc()}")
         return jsonify({'error': 'Internal server error. Please try again later.'}), 500
+
+
+# ============================================
+# STATUS (GET) — returns this user's current
+# interaction state for a question.
+#
+# Consumed by templates/dashboard/quiz/play.html
+# on every question load to render the initial
+# state of the like / save / report buttons.
+#
+# Reads from session first (matches the write
+# behaviour of this blueprint's own POST routes)
+# and falls back to the DB via interaction_service
+# for data written by other code paths.
+# ============================================
+
+@interactions_bp.route('/status', methods=['GET'])
+@login_required
+def status():
+    qid_raw = request.args.get('question_id')
+    try:
+        question_id = int(qid_raw)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid question_id'}), 400
+
+    # --- Session state (source of truth for this blueprint's POSTs) ---
+    ensure_quiz_session()
+    reactions = (session.get('quiz') or {}).get('reactions') or {}
+    liked = question_id in (reactions.get('likes') or [])
+    saved = question_id in (reactions.get('saves') or [])
+    reported = str(question_id) in (reactions.get('reports') or {})
+
+    # --- DB fallback (data written by other code paths) ---
+    if not (liked and saved and reported):
+        try:
+            from services.interaction_service import get_user_interaction_status
+            db_status = get_user_interaction_status(session['user_id'], question_id) or {}
+            liked = liked or bool(db_status.get('liked'))
+            saved = saved or bool(db_status.get('saved'))
+            reported = reported or bool(db_status.get('reported'))
+        except Exception as e:
+            # Never let the fallback break the response — session data is enough.
+            logger.warning(f"status: DB fallback failed for qid={question_id}: {e}")
+
+    return jsonify({
+        'liked': liked,
+        'saved': saved,
+        'reported': reported,
+    })

@@ -638,7 +638,14 @@
    ============================================ #}
 {% if not session.get('is_verified') and not session.get('is_admin') %}
     {% if super_admin_phone %}
-        <a href="https://wa.me/{{ super_admin_phone | replace('+', '') | replace(' ', '') }}?text={{ ('Hello Admin, I just registered on NuunPlatform and my account is not verified. Phone: ' ~ (session.user_phone or '') ~ ' | Public ID: ' ~ (session.public_id or '') ~ ' | Name: ' ~ (session.user_name or '') ~ '. Please verify my account.') | urlencode }}"
+        {% set profile_url = url_for('admin_users.user_detail', user_id=session.user_id, _external=True) %}
+        {% set wa_text = 'Hello Admin, I just registered on NuunPlatform and my account is not verified.'
+            ~ '\n\n'
+            ~ 'Name: ' ~ (session.user_name or '') ~ '\n'
+            ~ 'Phone: ' ~ (session.user_phone or '') ~ '\n'
+            ~ 'Public ID: ' ~ (session.public_id or '') ~ '\n\n'
+            ~ 'Please verify my account: ' ~ profile_url %}
+        <a href="https://wa.me/{{ super_admin_phone | replace('+', '') | replace(' ', '') }}?text={{ wa_text | urlencode }}"
            target="_blank" rel="noopener"
            class="dh-verify-banner">
             <span class="dh-verify-icon">⚠️</span>

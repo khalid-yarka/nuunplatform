@@ -558,6 +558,16 @@ def set_user_verified(user_id: int, is_verified: bool, admin_id: int) -> bool:
             'verify' if is_verified else 'unverify',
             str(old), str(new),
         )
+
+        # Force the user's next request to reload their session state so the
+        # unverified banner disappears immediately. Same mechanism used by
+        # set_user_tier_admin (refresh_user touches instance/user_state_changes.flag).
+        try:
+            from services.entitlement_service import refresh_user
+            refresh_user(user_id)
+        except Exception as e:
+            logger.warning(f"refresh_user failed after verify change: {e}")
+
         return True
     except Exception as e:
         logger.error(f"set_user_verified failed: {e}")

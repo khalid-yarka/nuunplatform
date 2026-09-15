@@ -131,7 +131,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         function applyTheme(theme) {
             if (typeof NuunSettings !== 'undefined' && NuunSettings.initialized) {
-                NuunSettings.set('appearance.theme', theme);
+                // Silent — theme toggling is expected to be instant and
+                // self-evident from the page itself. No toast needed.
+                NuunSettings.set('appearance.theme', theme, { silent: true });
             } else {
                 if (theme === 'system') {
                     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;

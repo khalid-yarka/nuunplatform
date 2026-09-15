@@ -325,6 +325,45 @@
         .interaction-row { gap: 6px; }
         .action-divider { height: 24px; }
     }
+
+    /* ============================================
+       DARK MODE — correct/wrong highlight
+       Without these, the option text is near-white
+       on a pale background and becomes invisible.
+       ============================================ */
+    [data-theme="dark"] .option-btn.correct {
+        border-color: #10B981 !important;
+        background: #1A3A2E !important;
+        color: #D1FAE5 !important;
+    }
+    [data-theme="dark"] .option-btn.correct .letter {
+        color: #34D399 !important;
+    }
+    [data-theme="dark"] .option-btn.wrong {
+        border-color: #EF4444 !important;
+        background: #3A1A1A !important;
+        color: #FECACA !important;
+    }
+    [data-theme="dark"] .option-btn.wrong .letter {
+        color: #F87171 !important;
+    }
+
+    /* Feedback area — the explanation text inherits
+       --text-secondary, which is light grey in dark mode.
+       On the pale-green/pale-red background it's unreadable. */
+    [data-theme="dark"] .feedback-area.success {
+        background: #1A3A2E !important;
+        border-color: #10B981 !important;
+        color: #D1FAE5 !important;
+    }
+    [data-theme="dark"] .feedback-area.error {
+        background: #3A1A1A !important;
+        border-color: #EF4444 !important;
+        color: #FECACA !important;
+    }
+    [data-theme="dark"] .feedback-explanation {
+        color: #B0B0C8 !important;
+    }
 </style>
 {% endblock %}
 

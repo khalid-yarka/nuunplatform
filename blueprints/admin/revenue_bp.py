@@ -1118,7 +1118,9 @@ def admin_discount_create():
         applies_to = request.form.get('applies_to', 'all')
         max_uses = request.form.get('max_uses')
         expires_at = request.form.get('expires_at')
-        is_active = 1 if request.form.get('is_active') == 'on' else 0
+        # Checkbox value is "1" (see discount_form.html), so check truthiness —
+        # not equality against 'on'. Unchecked → None → 0.
+        is_active = 1 if request.form.get('is_active') else 0
 
         try:
             discount_value = int(discount_value_raw)
@@ -1215,7 +1217,7 @@ def admin_discount_edit(discount_id):
         applies_to = request.form.get('applies_to', 'all')
         max_uses = request.form.get('max_uses')
         expires_at = request.form.get('expires_at')
-        is_active = 1 if request.form.get('is_active') == 'on' else 0
+        is_active = 1 if request.form.get('is_active') else 0
 
         try:
             discount_value = int(discount_value_raw)
