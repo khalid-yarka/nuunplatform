@@ -144,27 +144,6 @@ body.auth-page {
 }
 .toggle-password:hover { color: var(--primary); }
 
-.name-row { display: flex; gap: 10px; }
-.name-row .input-wrapper { flex: 1; }
-.name-row .input-wrapper input {
-    padding: 14px 10px;
-    text-align: center;
-}
-.name-row .input-wrapper input::placeholder { text-align: center; }
-
-.school-manual {
-    display: none;
-    margin-top: 10px;
-}
-.school-manual.active {
-    display: block;
-    animation: slideDown 0.3s ease;
-}
-@keyframes slideDown {
-    from { opacity: 0; transform: translateY(-8px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-
 .error-message {
     color: var(--error);
     font-size: 12px;
@@ -262,16 +241,16 @@ body.auth-page {
 
 
 /* ============================================
-   REGISTRATION WIZARD — PROGRESS
+   REGISTRATION WIZARD — PROGRESS (5 STEPS)
    ============================================ */
 
 .wizard-progress {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 4px;
+    gap: 2px;
     margin: 4px 0 28px;
-    padding: 0 6px;
+    padding: 0 2px;
 }
 .wizard-step {
     display: flex;
@@ -283,8 +262,8 @@ body.auth-page {
     z-index: 1;
 }
 .wizard-step-circle {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -292,17 +271,17 @@ body.auth-page {
     background: var(--surface-alt);
     border: 2px solid var(--border);
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.wizard-step-circle .check { display: none; font-size: 13px; color: #ffffff; }
+.wizard-step-circle .check { display: none; font-size: 12px; color: #ffffff; }
 .wizard-step-label {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.4px;
+    letter-spacing: 0.3px;
     transition: color 0.3s ease;
     white-space: nowrap;
 }
@@ -327,9 +306,9 @@ body.auth-page {
     height: 2px;
     background: var(--border);
     border-radius: 2px;
-    margin-top: 17px;
+    margin-top: 15px;
     overflow: hidden;
-    min-width: 12px;
+    min-width: 6px;
 }
 .wizard-step-line .line-fill {
     height: 100%;
@@ -370,7 +349,7 @@ body.auth-page {
 
 
 /* ============================================
-   CARD SELECTORS
+   CARD SELECTORS (location / curriculum / grade)
    ============================================ */
 
 .card-grid { display: grid; gap: 8px; margin-top: 4px; }
@@ -433,31 +412,6 @@ body.auth-page {
 }
 .card-option input[type="radio"]:checked + .card-face .card-tag { color: var(--primary); }
 
-.card-option-manual .card-face {
-    border-style: dashed;
-    background: transparent;
-}
-.card-option-manual input[type="radio"]:checked + .card-face {
-    border-style: solid;
-    background: var(--primary-light);
-}
-
-.card-empty {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    padding: 20px;
-    background: var(--surface-alt);
-    border: 1px dashed var(--border);
-    border-radius: 12px;
-    color: var(--text-muted);
-    font-size: 13px;
-    font-weight: 500;
-}
-.card-empty i { font-size: 15px; opacity: 0.6; }
-
 
 /* ============================================
    CURRICULUM SLIDE-IN
@@ -476,6 +430,40 @@ body.auth-page {
     max-height: 320px;
     opacity: 1;
     margin-bottom: 18px;
+}
+
+
+/* ============================================
+   SCHOOL SUGGESTIONS
+   ============================================ */
+
+.school-suggestions {
+    display: none;
+    margin-top: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    max-height: 220px;
+    overflow-y: auto;
+    position: relative;
+    z-index: 10;
+}
+.school-suggestions.visible { display: block; }
+
+.school-suggestion {
+    padding: 11px 14px;
+    font-size: 14px;
+    color: var(--text);
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-light);
+    transition: background 0.15s ease, color 0.15s ease;
+    line-height: 1.35;
+}
+.school-suggestion:last-child { border-bottom: none; }
+.school-suggestion:hover {
+    background: var(--primary-light);
+    color: var(--primary);
 }
 
 
@@ -575,10 +563,6 @@ body.auth-page {
     background: var(--surface-alt) !important;
     color: var(--text-muted) !important;
 }
-.form-locked .wizard-panel .form-group:has(input:disabled) > label,
-.form-locked .wizard-panel .form-group:has(select:disabled) > label {
-    opacity: 0.55;
-}
 .form-locked .card-grid {
     opacity: 0.45;
     transition: opacity 0.2s ease;
@@ -608,6 +592,90 @@ body.auth-page {
     text-transform: uppercase;
     letter-spacing: 0.4px;
     white-space: nowrap;
+}
+
+
+/* ============================================
+   REVIEW PANEL (STEP 5)
+   ============================================ */
+
+.review-section {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+}
+.review-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.review-section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.1px;
+}
+.review-edit {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--primary);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+.review-edit:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+}
+.review-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    font-size: 13px;
+    line-height: 1.4;
+    border-bottom: 1px solid var(--border-light);
+}
+.review-row:last-child { border-bottom: none; padding-bottom: 0; }
+.review-k {
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    font-weight: 500;
+}
+.review-v {
+    color: var(--text);
+    font-weight: 600;
+    text-align: right;
+    word-break: break-word;
+    min-width: 0;
+}
+
+.review-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    margin-top: 4px;
+    background: #EFF6FF;
+    border: 1px solid #BFDBFE;
+    border-radius: 10px;
+    font-size: 12px;
+    color: #1E40AF;
+    line-height: 1.5;
+}
+.review-notice i {
+    color: #3B82F6;
+    font-size: 15px;
+    margin-top: 1px;
+    flex-shrink: 0;
 }
 
 
@@ -686,9 +754,7 @@ body.auth-page {
     cursor: not-allowed;
     transform: none;
 }
-.btn-finish.submitting {
-    cursor: wait;
-}
+.btn-finish.submitting { cursor: wait; }
 
 
 /* ============================================
@@ -869,19 +935,12 @@ body.auth-page {
     border-color: #F87171 !important;
     background: rgba(248, 113, 113, 0.1) !important;
 }
-[data-theme="dark"] .input-wrapper.error input,
-[data-theme="dark"] .input-wrapper.error select {
-    color: #FECACA !important;
-}
 [data-theme="dark"] .error-message.visible { color: #F87171 !important; }
 [data-theme="dark"] .auth-title { color: var(--text) !important; }
 [data-theme="dark"] .auth-subtitle { color: var(--text-secondary) !important; }
 [data-theme="dark"] .auth-footer { color: var(--text-secondary) !important; }
 [data-theme="dark"] .auth-footer a { color: #FF6B70 !important; }
 [data-theme="dark"] .auth-footer .terms { color: var(--text-muted) !important; }
-[data-theme="dark"] .divider {
-    background: linear-gradient(to right, transparent, var(--border), transparent) !important;
-}
 [data-theme="dark"] .btn-submit { background: #8B1A1A !important; }
 [data-theme="dark"] .btn-submit:hover { background: #6A1414 !important; }
 
@@ -906,10 +965,6 @@ body.auth-page {
 [data-theme="dark"] .card-option input[type="radio"]:checked + .card-face {
     background: var(--primary-light);
     border-color: #FF6B70;
-}
-[data-theme="dark"] .card-empty {
-    background: var(--surface-alt);
-    border-color: var(--border);
 }
 [data-theme="dark"] .btn-back {
     background: transparent;
@@ -940,6 +995,41 @@ body.auth-page {
     color: var(--text-muted) !important;
 }
 
+[data-theme="dark"] .school-suggestions {
+    background: var(--surface-alt);
+    border-color: var(--border);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+[data-theme="dark"] .school-suggestion {
+    color: var(--text);
+    border-color: var(--border);
+}
+[data-theme="dark"] .school-suggestion:hover {
+    background: var(--primary-light);
+    color: #FF6B70;
+}
+
+[data-theme="dark"] .review-section {
+    background: var(--surface-alt);
+    border-color: var(--border);
+}
+[data-theme="dark"] .review-edit {
+    background: var(--surface);
+    border-color: var(--border);
+    color: #FF6B70;
+}
+[data-theme="dark"] .review-edit:hover {
+    background: var(--primary-light);
+    border-color: #FF6B70;
+}
+[data-theme="dark"] .review-row { border-color: var(--border); }
+[data-theme="dark"] .review-notice {
+    background: #1A2A4A;
+    border-color: #3B82F6;
+    color: #93C5FD;
+}
+[data-theme="dark"] .review-notice i { color: #60A5FA; }
+
 [data-theme="dark"] .auth-alert-success {
     background: linear-gradient(135deg, #1A3A2E, #0F2A20);
     border-color: #10B981;
@@ -966,19 +1056,6 @@ body.auth-page {
 
 
 /* ============================================
-   TRANSITIONS
-   ============================================ */
-
-.wizard-panel input,
-.wizard-panel select,
-.wizard-panel .card-grid,
-.wizard-panel .card-option,
-.wizard-panel .form-group > label {
-    transition: opacity 0.25s ease, background 0.25s ease, color 0.25s ease;
-}
-
-
-/* ============================================
    RESPONSIVE
    ============================================ */
 
@@ -987,30 +1064,25 @@ body.auth-page {
         padding: 28px 18px;
         border-radius: 20px;
     }
-    .name-row {
-        flex-direction: column;
-        gap: 10px;
-    }
-    .name-row .input-wrapper input {
-        text-align: left;
-        padding: 14px 12px;
-    }
-    .name-row .input-wrapper input::placeholder { text-align: left; }
     .auth-title { font-size: 22px; }
     .btn-submit { font-size: 15px; padding: 14px; }
     .auth-logo img { height: 48px; }
 
     .wizard-progress { margin-bottom: 20px; padding: 0; }
-    .wizard-step-circle { width: 30px; height: 30px; font-size: 12px; }
-    .wizard-step-circle .check { font-size: 11px; }
-    .wizard-step-label { font-size: 9px; letter-spacing: 0.3px; }
-    .wizard-step-line { margin-top: 14px; }
+    .wizard-step-circle { width: 28px; height: 28px; font-size: 11px; }
+    .wizard-step-circle .check { font-size: 10px; }
+    .wizard-step-label { font-size: 9px; letter-spacing: 0.2px; }
+    .wizard-step-line { margin-top: 13px; }
     .card-grid-4 { grid-template-columns: repeat(2, 1fr); }
     .card-option .card-face { padding: 12px 6px; min-height: 60px; }
     .card-option .card-tag { font-size: 16px; }
     .wizard-actions { gap: 8px; flex-wrap: wrap; }
     .btn-wizard { padding: 11px 16px; font-size: 13px; }
     .btn-finish { flex: 1; max-width: none; padding: 12px 18px; }
+
+    .review-section { padding: 12px 14px; }
+    .review-row { font-size: 12px; }
+    .review-notice { font-size: 11px; }
 
     .auth-alert {
         padding: 12px 40px 12px 14px;
@@ -1022,14 +1094,17 @@ body.auth-page {
     .auth-alert-close { top: 10px; right: 10px; width: 24px; height: 24px; }
 }
 
+@media (max-width: 400px) {
+    .wizard-step-label { display: none; }
+}
+
 @media (max-width: 360px) {
     .auth-card { padding: 20px 14px; }
     .phone-prefix { font-size: 13px; padding-left: 10px; }
     .input-wrapper input,
     .input-wrapper select { font-size: 14px; padding: 12px 10px 12px 8px; }
 
-    .wizard-step-circle { width: 26px; height: 26px; }
-    .wizard-step-label { display: none; }
-    .wizard-step-line { margin-top: 12px; }
+    .wizard-step-circle { width: 24px; height: 24px; font-size: 10px; }
+    .wizard-step-line { margin-top: 11px; }
     .card-grid-3 { grid-template-columns: repeat(2, 1fr); }
 }

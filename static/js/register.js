@@ -26,15 +26,13 @@ document.addEventListener('DOMContentLoaded', function () {
     const curriculumGroup  = document.getElementById('curriculumGroup');
     const city             = document.getElementById('city');
 
-    const schoolCards      = document.getElementById('schoolCards');
-    const schoolInput      = document.getElementById('school');
-    const schoolManual     = document.getElementById('schoolManual');
-    const schoolManualInput= document.getElementById('schoolManualInput');
+    const schoolInput      = document.getElementById('schoolInput');
+    const schoolSuggestions = document.getElementById('schoolSuggestions');
 
     const gradeRadios      = form.querySelectorAll('input[name="grade"]');
     const passwordStrength = document.getElementById('passwordStrength');
 
-    const TOTAL_STEPS = 4;
+    const TOTAL_STEPS = 5;
     let currentStep = 1;
 
     // ---------- State ----------
@@ -51,12 +49,9 @@ document.addEventListener('DOMContentLoaded', function () {
     let phoneCheckTimer = null;
     let lastCheckedPhone = '';
 
-    const schoolData = {
-        'SO': ['Mogadishu Secondary School','Kismayo High School','Baidoa School','Jowhar Academy'],
-        'PL': ['Garowe Secondary School','Bosaso High School','Galkayo School','Qardho Academy'],
-        'SL': ['Sheikh Secondary School','Amoud School','Hargeisa High School','Burco Academy']
-    };
-
+    const LOCATION_LABELS = { 'SO': 'Somalia', 'PL': 'Puntland', 'SL': 'Somaliland' };
+    const CURRICULUM_LABELS = { 'general': 'General', 'science': 'Science', 'arts': 'Arts' };
+    const GRADE_LABELS = { 'G7': 'Grade 7', 'G8': 'Grade 8', 'F3': 'Form 3', 'F4': 'Form 4' };
 
     // ============================================
     // LOCK / UNLOCK
@@ -90,7 +85,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-
     // ============================================
     // HELPERS
     // ============================================
@@ -107,6 +101,20 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function getSelectedLocation() {
+        const r = form.querySelector('input[name="location"]:checked');
+        return r ? r.value : '';
+    }
+
+    function getSelectedCurriculum() {
+        const r = form.querySelector('input[name="curriculum"]:checked');
+        return r ? r.value : '';
+    }
+
+    function getSelectedGrade() {
+        const r = form.querySelector('input[name="grade"]:checked');
+        return r ? r.value : '';
+    }
 
     // ============================================
     // VALIDATORS
@@ -212,22 +220,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function validateSchool() {
-        const val = schoolInput.value;
-        if (val === 'manual') {
-            const manual = schoolManualInput.value.trim();
-            const words = manual.split(/\s+/).filter(w => w.length > 0);
-            const valid = words.length >= 2 &&
-                          words.every(w => w.length >= 4 && /^[A-Za-z]+$/.test(w));
-            showErrorState(schoolManualInput, document.getElementById('schoolManualError'),
-                           valid, 'Min 2 words, each 4+ letters, no numbers');
-            document.getElementById('schoolError').classList.remove('visible');
-            fieldStates.school = valid;
-            return valid;
-        }
-        const valid = val !== '';
-        const errorEl = document.getElementById('schoolError');
-        if (valid) errorEl.classList.remove('visible');
-        else errorEl.classList.add('visible');
+        const val = schoolInput.value.trim();
+        const words = val.split(/\s+/).filter(w => w.length > 0);
+        const valid = words.length >= 2 &&
+                      words.every(w => w.length >= 4 && /^[A-Za-z]+$/.test(w));
+        showErrorState(schoolInput, document.getElementById('schoolError'),
+                       valid, 'Min 2 words, each 4+ letters, no numbers');
         fieldStates.school = valid;
         return valid;
     }
@@ -241,7 +239,6 @@ document.addEventListener('DOMContentLoaded', function () {
         fieldStates.grade = valid;
         return valid;
     }
-
 
     // ============================================
     // PHONE AJAX CHECK
@@ -289,6 +286,96 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // ============================================
+    // SCHOOL AUTOCOMPLETE (DB-driven)
+    // ============================================
+
+    let schoolReqToken = 0;
+    let schoolDebounce = null;
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function hideSchoolSuggestions() {
+        if (schoolSuggestions) {
+            schoolSuggestions.innerHTML = '';
+            schoolSuggestions.classList.remove('visible');
+        }
+    }
+
+    function renderSchoolSuggestions(list) {
+        if (!list || !list.length) {
+            hideSchoolSuggestions();
+            return;
+        }
+        const html = list.map(function (s) {
+            return '<div class="school-suggestion" data-value="' +
+                   escapeHtml(s) + '">' + escapeHtml(s) + '</div>';
+        }).join('');
+        schoolSuggestions.innerHTML = html;
+        schoolSuggestions.classList.add('visible');
+
+        schoolSuggestions.querySelectorAll('.school-suggestion').forEach(function (el) {
+            el.addEventListener('click', function () {
+                schoolInput.value = this.dataset.value;
+                hideSchoolSuggestions();
+                validateSchool();
+                schoolInput.focus();
+            });
+        });
+    }
+
+    function fetchSchoolSuggestions() {
+        const q = (schoolInput.value || '').trim();
+        const loc = getSelectedLocation();
+
+        if (q.length < 3 || !loc) {
+            hideSchoolSuggestions();
+            return;
+        }
+
+        const token = ++schoolReqToken;
+
+        fetch('/auth/school-suggestions?q=' +
+              encodeURIComponent(q) +
+              '&location=' + encodeURIComponent(loc))
+            .then(r => r.json())
+            .then(data => {
+                if (token !== schoolReqToken) return;
+                renderSchoolSuggestions(data.suggestions || []);
+            })
+            .catch(function () {
+                if (token !== schoolReqToken) return;
+                hideSchoolSuggestions();
+            });
+    }
+
+    if (schoolInput) {
+        schoolInput.addEventListener('input', function () {
+            validateSchool();
+            clearTimeout(schoolDebounce);
+            schoolDebounce = setTimeout(fetchSchoolSuggestions, 300);
+        });
+        schoolInput.addEventListener('focus', function () {
+            if ((schoolInput.value || '').trim().length >= 3) {
+                fetchSchoolSuggestions();
+            }
+        });
+        schoolInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') hideSchoolSuggestions();
+        });
+    }
+
+    document.addEventListener('click', function (e) {
+        if (!schoolSuggestions) return;
+        if (!schoolSuggestions.contains(e.target) && e.target !== schoolInput) {
+            hideSchoolSuggestions();
+        }
+    });
 
     // ============================================
     // STEP VALIDATION
@@ -301,10 +388,42 @@ document.addEventListener('DOMContentLoaded', function () {
             case 2: return validateFirstName() && validateMiddleName() && validateLastName();
             case 3: return validateLocation() && validateCurriculum() && validateCity();
             case 4: return validateSchool() && validateGrade();
+            case 5: return true; // review panel — no inputs to validate
             default: return false;
         }
     }
 
+    // ============================================
+    // REVIEW POPULATION (Step 5)
+    // ============================================
+
+    function populateReview() {
+        const phoneVal = (phone.value || '').replace(/\D/g, '');
+        const loc = getSelectedLocation();
+        const curr = getSelectedCurriculum();
+        const grade = getSelectedGrade();
+
+        const set = function (key, value) {
+            const el = document.querySelector('[data-review="' + key + '"]');
+            if (el) el.textContent = value && value.length ? value : '—';
+        };
+
+        set('phone', phoneVal ? '+252 ' + phoneVal : '');
+        set('first_name', firstName.value.trim());
+        set('middle_name', middleName.value.trim());
+        set('last_name', lastName.value.trim());
+        set('location', LOCATION_LABELS[loc] || loc || '');
+        set('curriculum', curr ? (CURRICULUM_LABELS[curr] || curr) : '');
+        set('city', city.value.trim());
+        set('school', schoolInput.value.trim());
+        set('grade', GRADE_LABELS[grade] || grade || '');
+
+        // Hide the curriculum row when not Puntland
+        const currRow = document.querySelector('[data-review-row="curriculum"]');
+        if (currRow) {
+            currRow.style.display = (loc === 'PL') ? '' : 'none';
+        }
+    }
 
     // ============================================
     // NAVIGATION
@@ -325,6 +444,11 @@ document.addEventListener('DOMContentLoaded', function () {
         backBtn.style.display = (step === 1) ? 'none' : 'inline-flex';
         nextBtn.style.display = (step === TOTAL_STEPS) ? 'none' : 'inline-flex';
         submitBtn.style.display = (step === TOTAL_STEPS) ? 'inline-flex' : 'none';
+
+        // Populate review when entering step 5
+        if (step === TOTAL_STEPS) {
+            populateReview();
+        }
 
         setTimeout(function () {
             const first = form.querySelector(
@@ -353,14 +477,20 @@ document.addEventListener('DOMContentLoaded', function () {
         if (currentStep > 1) showStep(currentStep - 1);
     }
 
+    // Review "Edit" buttons jump back to their step
+    document.querySelectorAll('.review-edit').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const target = parseInt(this.dataset.backTo, 10);
+            if (!isNaN(target)) showStep(target);
+        });
+    });
 
     // ============================================
-    // LOCATION → CURRICULUM + SCHOOL
+    // LOCATION CHANGE
     // ============================================
 
     function onLocationChange() {
-        const selected = form.querySelector('input[name="location"]:checked');
-        const loc = selected ? selected.value : '';
+        const loc = getSelectedLocation();
 
         if (loc === 'PL') {
             curriculumGroup.classList.add('visible');
@@ -370,64 +500,21 @@ document.addEventListener('DOMContentLoaded', function () {
             if (c) c.checked = false;
         }
 
-        buildSchoolCards(loc);
+        // Location changed → the previously-entered school (and any
+        // suggestions shown) are no longer scoped correctly.
+        if (schoolInput.value.trim().length > 0) {
+            schoolInput.value = '';
+            fieldStates.school = false;
+            const wrapper = schoolInput.closest('.input-wrapper');
+            if (wrapper) wrapper.classList.remove('error');
+            const errEl = document.getElementById('schoolError');
+            if (errEl) errEl.classList.remove('visible');
+        }
+        hideSchoolSuggestions();
+
         validateLocation();
         validateCurriculum();
     }
-
-    function buildSchoolCards(loc) {
-        schoolCards.innerHTML = '';
-
-        if (!loc || !schoolData[loc] || schoolData[loc].length === 0) {
-            schoolCards.innerHTML =
-                '<div class="card-empty"><i class="fas fa-arrow-up"></i><span>Select a location first</span></div>';
-            schoolInput.value = '';
-            return;
-        }
-
-        schoolData[loc].forEach(function (school) {
-            const label = document.createElement('label');
-            label.className = 'card-option';
-            label.innerHTML =
-                '<input type="radio" name="school_choice" value="' + school + '" />' +
-                '<span class="card-face">' +
-                    '<span class="card-icon"><i class="fas fa-school"></i></span>' +
-                    '<span class="card-title">' + school + '</span>' +
-                '</span>';
-            schoolCards.appendChild(label);
-            label.querySelector('input').addEventListener('change', function () {
-                if (this.checked) {
-                    schoolInput.value = school;
-                    schoolManual.classList.remove('active');
-                    schoolManualInput.value = '';
-                    validateSchool();
-                }
-            });
-        });
-
-        const manualLabel = document.createElement('label');
-        manualLabel.className = 'card-option card-option-manual';
-        manualLabel.innerHTML =
-            '<input type="radio" name="school_choice" value="manual" />' +
-            '<span class="card-face">' +
-                '<span class="card-icon"><i class="fas fa-pen"></i></span>' +
-                '<span class="card-title">Add manually</span>' +
-            '</span>';
-        schoolCards.appendChild(manualLabel);
-        manualLabel.querySelector('input').addEventListener('change', function () {
-            if (this.checked) {
-                schoolInput.value = 'manual';
-                schoolManual.classList.add('active');
-                setTimeout(function () { schoolManualInput.focus(); }, 100);
-                validateSchool();
-            }
-        });
-
-        schoolInput.value = '';
-        schoolManual.classList.remove('active');
-        schoolManualInput.value = '';
-    }
-
 
     // ============================================
     // PASSWORD STRENGTH
@@ -462,7 +549,6 @@ document.addEventListener('DOMContentLoaded', function () {
         text.className = 'strength-text ' + cls;
     }
 
-
     // ============================================
     // IMMEDIATE ERROR CLEARING
     // ============================================
@@ -482,8 +568,7 @@ document.addEventListener('DOMContentLoaded', function () {
     clearWhenValid(middleName, validateMiddleName);
     clearWhenValid(lastName, validateLastName);
     clearWhenValid(city, validateCity);
-    clearWhenValid(schoolManualInput, validateSchool);
-
+    clearWhenValid(schoolInput, validateSchool);
 
     // ============================================
     // PHONE INPUT — ALWAYS UNLOCK ON EDIT
@@ -502,7 +587,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-
     // ============================================
     // EVENT BINDINGS
     // ============================================
@@ -514,7 +598,13 @@ document.addEventListener('DOMContentLoaded', function () {
     middleName.addEventListener('blur', validateMiddleName);
     lastName.addEventListener('blur', validateLastName);
     city.addEventListener('blur', validateCity);
-    schoolManualInput.addEventListener('blur', validateSchool);
+    schoolInput.addEventListener('blur', function () {
+        // Delay so a suggestion click can fire first
+        setTimeout(function () {
+            validateSchool();
+            hideSchoolSuggestions();
+        }, 180);
+    });
     gradeRadios.forEach(function (r) { r.addEventListener('change', validateGrade); });
 
     document.querySelectorAll('#locationCards input[type="radio"]').forEach(function (r) {
@@ -527,7 +617,6 @@ document.addEventListener('DOMContentLoaded', function () {
     nextBtn.addEventListener('click', goNext);
     backBtn.addEventListener('click', goBack);
 
-
     // ============================================
     // KEYBOARD
     // ============================================
@@ -539,21 +628,13 @@ document.addEventListener('DOMContentLoaded', function () {
         if (e.key === 'Escape' && currentStep > 1) { e.preventDefault(); goBack(); }
     });
 
-
     // ============================================
-    // FINAL SUBMIT — FIXED (deferred disable)
+    // FINAL SUBMIT
     // ============================================
 
     form.addEventListener('submit', function (e) {
-
-        if (isSubmitting) {
-            e.preventDefault();
-            return;
-        }
-        if (formLocked) {
-            e.preventDefault();
-            return;
-        }
+        if (isSubmitting) { e.preventDefault(); return; }
+        if (formLocked) { e.preventDefault(); return; }
 
         for (let s = 1; s <= TOTAL_STEPS; s++) {
             if (!isStepValid(s)) {
@@ -573,12 +654,10 @@ document.addEventListener('DOMContentLoaded', function () {
         submitBtn.classList.add('submitting');
         submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Creating account...';
 
-        // Defer disable so the browser can complete the POST
         setTimeout(function () {
             submitBtn.disabled = true;
         }, 0);
 
-        // Safety: restore the button if the server never responds
         setTimeout(function () {
             if (isSubmitting) {
                 isSubmitting = false;
@@ -589,14 +668,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }, 8000);
     });
 
-
     // ============================================
     // INIT
     // ============================================
 
     showStep(1);
 });
-
 
 // ============================================
 // GLOBAL — password toggle

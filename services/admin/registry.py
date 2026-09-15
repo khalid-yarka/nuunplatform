@@ -38,7 +38,7 @@ GROUPS = [
 
 
 # ============================================================
-# THE REGISTRY — 60 capabilities across 10 groups
+# THE REGISTRY
 # ============================================================
 
 CAPABILITY_REGISTRY: tuple[Capability, ...] = (
@@ -569,6 +569,14 @@ CAPABILITY_REGISTRY: tuple[Capability, ...] = (
         description='Run a daily task on demand.',
         default_for_admin=False,
         reserved=False,
+    ),
+    Capability(
+        key='safety.view',
+        group='Diagnostics',
+        label='View the safety shadow database',
+        description='Read-only view of mirrored rows in safety/safety.db.',
+        default_for_admin=False,
+        reserved=True,
     ),
 
     # ---------- Communication ----------

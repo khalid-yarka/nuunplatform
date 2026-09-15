@@ -17,7 +17,7 @@
 
 {% block admin_actions %}
     {% if admin_can('users.export') %}
-        <a href="{{ url_for('admin_users.users_export', search=search, tier=tier_filter, location=location_filter, curriculum=curriculum_filter, sort=sort) }}"
+        <a href="{{ url_for('admin_users.users_export', search=search, tier=tier_filter, location=location_filter, curriculum=curriculum_filter, verified=verified_filter, sort=sort) }}"
            class="admin-btn secondary">
             <i class="fas fa-download"></i> Export CSV
         </a>
@@ -42,10 +42,11 @@
     </div>
     <div class="admin-stat tone-amber">
         <div class="stat-head">
-            <span class="stat-icon"><i class="fas fa-user-shield"></i></span>
+            <span class="stat-icon"><i class="fas fa-user-check"></i></span>
         </div>
-        <span class="stat-value">{{ stats.admins }}</span>
-        <span class="stat-label">Admins</span>
+        <span class="stat-value">{{ stats.unverified }}</span>
+        <span class="stat-label">Unverified</span>
+        <span class="stat-sub">{{ stats.verified }} verified</span>
     </div>
     <div class="admin-stat tone-green">
         <div class="stat-head">
@@ -74,6 +75,12 @@
                autocomplete="off" spellcheck="false">
     </div>
 
+    <select name="verified" class="admin-select" data-autofilter style="min-width: 140px;">
+        <option value="">All statuses</option>
+        <option value="1" {% if verified_filter == '1' %}selected{% endif %}>✅ Verified</option>
+        <option value="0" {% if verified_filter == '0' %}selected{% endif %}>⏳ Unverified</option>
+    </select>
+
     <select name="tier" class="admin-select" data-autofilter style="min-width: 110px;">
         <option value="">All tiers</option>
         <option value="free"    {% if tier_filter == 'free' %}selected{% endif %}>Free</option>
@@ -98,7 +105,7 @@
         <option value="tier_high"   {% if sort == 'tier_high' %}selected{% endif %}>Tier high → low</option>
     </select>
 
-    {% if search or tier_filter or location_filter or curriculum_filter %}
+    {% if search or tier_filter or location_filter or curriculum_filter or verified_filter %}
         <a href="{{ url_for('admin_users.list_users') }}" class="admin-btn secondary">
             <i class="fas fa-times"></i> Clear
         </a>
@@ -125,6 +132,10 @@
         </span>
         <div class="toolbar-spacer"></div>
         <button type="button" class="admin-btn success sm"
+                data-bulk-action="verify" data-bulk-verb="Verify" disabled>
+            <i class="fas fa-user-check"></i> Verify
+        </button>
+        <button type="button" class="admin-btn secondary sm"
                 data-bulk-action="promote_admin" data-bulk-verb="Make admin" disabled>
             <i class="fas fa-user-shield"></i> Make Admin
         </button>
@@ -153,6 +164,7 @@
                     <th class="hide-mobile">Public ID</th>
                     <th class="hide-mobile">Phone</th>
                     <th>Tier</th>
+                    <th class="hide-mobile" style="text-align:center;">Verified</th>
                     <th style="text-align: right;">Points</th>
                     <th class="hide-mobile">Joined</th>
                     <th style="text-align: right;">Actions</th>
@@ -221,6 +233,14 @@
                             </span>
                         </td>
 
+                        <td class="hide-mobile" style="text-align: center;">
+                            {% if u.is_verified %}
+                                <span class="admin-chip green" title="Verified">✅</span>
+                            {% else %}
+                                <span class="admin-chip amber" title="Unverified">⏳</span>
+                            {% endif %}
+                        </td>
+
                         <td class="cell-num">
                             {{ u.total_points or 0 }}
                         </td>
@@ -230,6 +250,17 @@
                         </td>
 
                         <td class="cell-actions">
+                            {% if not u.is_verified %}
+                                <form method="POST"
+                                      action="{{ url_for('admin_users.verify_user', user_id=u.id) }}"
+                                      style="display:inline;"
+                                      onsubmit="return confirm('Verify {{ u.first_name }}?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <button type="submit" class="admin-btn success sm" title="Verify account">
+                                        <i class="fas fa-user-check"></i>
+                                    </button>
+                                </form>
+                            {% endif %}
                             <a href="{{ url_for('admin_users.user_detail', user_id=u.id) }}"
                                class="admin-btn primary sm" title="View">
                                 <i class="fas fa-eye"></i>
@@ -255,7 +286,7 @@
 {# ─────── PAGINATION ─────── #}
 {% if total_pages > 1 %}
 <div class="admin-pagination">
-    {% set base_params = 'search=' ~ search ~ '&tier=' ~ tier_filter ~ '&location=' ~ location_filter ~ '&curriculum=' ~ curriculum_filter ~ '&sort=' ~ sort %}
+    {% set base_params = 'search=' ~ search ~ '&tier=' ~ tier_filter ~ '&location=' ~ location_filter ~ '&curriculum=' ~ curriculum_filter ~ '&verified=' ~ verified_filter ~ '&sort=' ~ sort %}
     <a href="?page=1&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
         <i class="fas fa-angle-double-left"></i>
     </a>
@@ -283,7 +314,7 @@
     <span class="empty-icon">🔍</span>
     <h3>No matching users</h3>
     <p>Try adjusting your search terms or clearing the filters.</p>
-    {% if search or tier_filter or location_filter or curriculum_filter %}
+    {% if search or tier_filter or location_filter or curriculum_filter or verified_filter %}
         <a href="{{ url_for('admin_users.list_users') }}" class="admin-btn primary">
             <i class="fas fa-times"></i> Clear filters
         </a>

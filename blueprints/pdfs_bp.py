@@ -5,8 +5,10 @@ from flask import (
     redirect, url_for, abort, send_file, Response, jsonify,
 )
 from db import (
-    get_all_pdfs, get_pdf_by_code, get_pdf_by_id, increment_pdf_view,
-    get_pdf_distinct_subjects, get_pdf_distinct_classes, get_pdf_distinct_curricula,
+    get_all_pdfs, get_pdf_by_code, get_pdf_by_id,
+    increment_pdf_view, increment_pdf_view_by_code,
+    get_pdf_distinct_subjects, get_pdf_distinct_classes,
+    get_pdf_distinct_curricula,
 )
 from services.tier_service import (
     can_access_premium_resources, get_user_tier, get_feature_level,
@@ -72,6 +74,10 @@ def list_pdfs():
                          is_logged_in=bool(user_id))
 
 
+# ============================================================
+# READ — opens the in-browser reader
+# ============================================================
+
 @pdfs_bp.route('/view/<pdf_id>')
 def view_pdf(pdf_id):
     if 'user_id' not in session:
@@ -88,7 +94,10 @@ def view_pdf(pdf_id):
         flash('This is a premium resource. Upgrade to access it.', 'error')
         return redirect(url_for('pdfs.list_pdfs'))
 
-    increment_pdf_view(pdf_id)
+    # Bump the counter and reflect the fresh value on the page.
+    new_count = increment_pdf_view(pdf_id)
+    if new_count is not None:
+        pdf['view_count'] = new_count
 
     add_history_entry(
         user_id=user_id,
@@ -97,13 +106,17 @@ def view_pdf(pdf_id):
         metadata={
             'title': pdf['title'],
             'subject': pdf.get('subject'),
-            'code': pdf['code']
+            'code': pdf['code'],
         }
     )
 
     user_tier = get_user_tier(user_id)
     return render_template('dashboard/pdf_view.html', pdf=pdf, user_tier=user_tier)
 
+
+# ============================================================
+# DOWNLOAD — by id
+# ============================================================
 
 @pdfs_bp.route('/download/<pdf_id>')
 def download_pdf(pdf_id):
@@ -122,6 +135,8 @@ def download_pdf(pdf_id):
         flash('This is a premium resource. Upgrade to access it.', 'error')
         return redirect(url_for('pdfs.list_pdfs'))
 
+    increment_pdf_view(pdf_id)
+
     add_history_entry(
         user_id=user_id,
         entry_type='pdf_download',
@@ -129,27 +144,34 @@ def download_pdf(pdf_id):
         metadata={
             'title': pdf['title'],
             'subject': pdf.get('subject'),
-            'code': pdf['code']
+            'code': pdf['code'],
         }
     )
 
     if user_tier == 'pro' and pdf.get('file_url'):
         file_path = pdf['file_url']
         if os.path.exists(file_path):
-            return send_file(file_path, as_attachment=True, download_name=pdf.get('title', 'document.pdf'))
-        else:
-            return redirect(pdf['file_url'])
+            return send_file(file_path, as_attachment=True,
+                             download_name=pdf.get('title', 'document.pdf'))
+        return redirect(pdf['file_url'])
 
     return redirect(url_for('pdfs.telegram_download', code=pdf['code']))
 
 
+# ============================================================
+# TELEGRAM DOWNLOAD — redirect to bot
+# ============================================================
+
 @pdfs_bp.route('/telegram/<code>')
 def telegram_download(code):
-    """Direct Telegram link – no intermediate page."""
+    """Direct Telegram link – counts as a view since the user is
+    proceeding to fetch the file from the bot."""
     pdf = get_pdf_by_code(code)
     if not pdf:
         flash('PDF not found.', 'error')
         return redirect(url_for('pdfs.list_pdfs'))
+
+    increment_pdf_view_by_code(code)
 
     if 'user_id' in session:
         add_history_entry(
@@ -159,7 +181,7 @@ def telegram_download(code):
             metadata={
                 'title': pdf['title'],
                 'subject': pdf.get('subject'),
-                'code': pdf['code']
+                'code': pdf['code'],
             }
         )
 
@@ -168,9 +190,13 @@ def telegram_download(code):
     return redirect(telegram_link)
 
 
+# ============================================================
+# STREAM / PREVIEW
+# ============================================================
+
 @pdfs_bp.route('/stream/<code>')
 def stream_pdf(code):
-    """Stream a PDF from Telegram using its code."""
+    """Stream a PDF from Telegram — counts as a view."""
     if 'user_id' not in session:
         return jsonify({'error': 'Please login first.'}), 401
 
@@ -191,6 +217,9 @@ def stream_pdf(code):
     if not bot_pdf:
         return jsonify({'error': 'PDF not available in Telegram storage.'}), 404
 
+    # Count the view as soon as we know we're going to serve bytes.
+    increment_pdf_view_by_code(code)
+
     try:
         bot = get_bot()
         file_info = bot.get_file(bot_pdf['file_id'])
@@ -207,8 +236,9 @@ def stream_pdf(code):
             response.iter_content(chunk_size=65536),
             content_type='application/pdf',
             headers={
-                'Content-Disposition': f'inline; filename="{bot_pdf.get("title", "document.pdf")}"',
-                'Cache-Control': 'no-store'
+                'Content-Disposition':
+                    f'inline; filename="{bot_pdf.get("title", "document.pdf")}"',
+                'Cache-Control': 'no-store',
             }
         )
     except Exception as e:

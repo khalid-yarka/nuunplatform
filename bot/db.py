@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 BOT_DB_PATH = Config.BOT_DATABASE_PATH
 
+
 def _get_connection():
     db_dir = os.path.dirname(BOT_DB_PATH)
     if db_dir and not os.path.exists(db_dir):
@@ -20,11 +21,12 @@ def _get_connection():
     conn.execute("PRAGMA busy_timeout = 30000")
     return conn
 
+
 def init_bot_db():
     conn = _get_connection()
     cursor = conn.cursor()
 
-    # Pending PDFs (intake)
+    # ---- Pending PDFs (intake) ----
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS pending_pdfs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,9 +37,12 @@ def init_bot_db():
             uploaded_at TEXT DEFAULT (datetime('now', 'localtime'))
         )
     """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_pending_pdfs_uploaded_at ON pending_pdfs(uploaded_at DESC)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pending_pdfs_uploaded_at "
+        "ON pending_pdfs(uploaded_at DESC)"
+    )
 
-    # Fulfilled Bot PDFs
+    # ---- Fulfilled Bot PDFs (staging) ----
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS pdfs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,19 +65,36 @@ def init_bot_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bot_pdfs_file_unique_id ON pdfs(file_unique_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bot_pdfs_subject ON pdfs(subject)")
 
+    # ---- Migration: add original_filename if missing ----
+    try:
+        cursor.execute("PRAGMA table_info(pdfs)")
+        existing_cols = {row[1] for row in cursor.fetchall()}
+        if 'original_filename' not in existing_cols:
+            cursor.execute(
+                "ALTER TABLE pdfs ADD COLUMN original_filename TEXT DEFAULT ''"
+            )
+            logger.info("Added original_filename column to bot pdfs table")
+    except Exception as e:
+        logger.warning(f"Could not add original_filename column: {e}")
+
     conn.commit()
     conn.close()
     logger.info("Bot database initialized with pending_pdfs and pdfs tables")
 
-# ---- Pending PDF functions ----
+
+# ============================================================
+# Pending PDFs
+# ============================================================
 
 def insert_pending_pdf(file_id, file_unique_id, filename, uploaded_by):
     try:
         conn = _get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO pending_pdfs (file_id, file_unique_id, filename, uploaded_by) VALUES (?, ?, ?, ?)",
-            (file_id, file_unique_id, filename, uploaded_by)
+            "INSERT INTO pending_pdfs "
+            "(file_id, file_unique_id, filename, uploaded_by) "
+            "VALUES (?, ?, ?, ?)",
+            (file_id, file_unique_id, filename, uploaded_by),
         )
         conn.commit()
         pdf_id = cursor.lastrowid
@@ -82,6 +104,7 @@ def insert_pending_pdf(file_id, file_unique_id, filename, uploaded_by):
         logger.error(f"Failed to save pending PDF: {e}")
         return 0
 
+
 def get_pending_pdf_by_id(pending_id):
     conn = _get_connection()
     cursor = conn.cursor()
@@ -89,6 +112,7 @@ def get_pending_pdf_by_id(pending_id):
     row = cursor.fetchone()
     conn.close()
     return dict(row) if row else None
+
 
 def get_pending_pdf_list(limit=50, offset=0):
     conn = _get_connection()
@@ -102,6 +126,7 @@ def get_pending_pdf_list(limit=50, offset=0):
     conn.close()
     return [dict(row) for row in rows]
 
+
 def count_pending_pdfs():
     conn = _get_connection()
     cursor = conn.cursor()
@@ -109,6 +134,7 @@ def count_pending_pdfs():
     row = cursor.fetchone()
     conn.close()
     return row['count'] if row else 0
+
 
 def delete_pending_pdf(pending_id):
     try:
@@ -121,20 +147,28 @@ def delete_pending_pdf(pending_id):
     except Exception:
         return False
 
+
 def is_pending_duplicate(file_unique_id):
     conn = _get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM pending_pdfs WHERE file_unique_id = ?", (file_unique_id,))
+    cursor.execute(
+        "SELECT id FROM pending_pdfs WHERE file_unique_id = ?",
+        (file_unique_id,),
+    )
     result = cursor.fetchone() is not None
     conn.close()
     return result
 
-# ---- Bot PDFs (fulfilled) functions ----
+
+# ============================================================
+# Bot PDFs (fulfilled / staged)
+# ============================================================
 
 def insert_bot_pdf(data):
     """
-    data keys: code, title, description, curriculum, class, subject, chapter,
-               tags, is_premium, file_id, file_unique_id, uploaded_by
+    data keys: code, title, description, curriculum, class, subject,
+               chapter, tags, is_premium, file_id, file_unique_id,
+               uploaded_by, original_filename
     """
     try:
         conn = _get_connection()
@@ -142,14 +176,23 @@ def insert_bot_pdf(data):
         cursor.execute("""
             INSERT INTO pdfs (
                 code, title, description, curriculum, class, subject,
-                chapter, tags, is_premium, file_id, file_unique_id, uploaded_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                chapter, tags, is_premium, file_id, file_unique_id,
+                uploaded_by, original_filename
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            data['code'], data['title'], data.get('description', ''),
-            data.get('curriculum', 'PL'), data.get('class', ''),
-            data['subject'], data.get('chapter', ''), data.get('tags', ''),
-            data.get('is_premium', 0), data['file_id'],
-            data['file_unique_id'], data.get('uploaded_by')
+            data['code'],
+            data['title'],
+            data.get('description', ''),
+            data.get('curriculum', 'PL'),
+            data.get('class', ''),
+            data['subject'],
+            data.get('chapter', ''),
+            data.get('tags', ''),
+            data.get('is_premium', 0),
+            data['file_id'],
+            data['file_unique_id'],
+            data.get('uploaded_by'),
+            data.get('original_filename', ''),
         ))
         conn.commit()
         pdf_id = cursor.lastrowid
@@ -159,6 +202,7 @@ def insert_bot_pdf(data):
         logger.error(f"Failed to insert bot PDF: {e}")
         return 0
 
+
 def get_bot_pdf_by_code(code):
     conn = _get_connection()
     cursor = conn.cursor()
@@ -166,6 +210,7 @@ def get_bot_pdf_by_code(code):
     row = cursor.fetchone()
     conn.close()
     return dict(row) if row else None
+
 
 def get_bot_pdf_by_id(pdf_id):
     conn = _get_connection()
@@ -175,13 +220,16 @@ def get_bot_pdf_by_id(pdf_id):
     conn.close()
     return dict(row) if row else None
 
-def get_bot_pdfs(limit=100, offset=0, search='', subject='', curriculum='', class_filter=''):
+
+def get_bot_pdfs(limit=100, offset=0, search='', subject='',
+                 curriculum='', class_filter=''):
     conn = _get_connection()
     cursor = conn.cursor()
     query = "SELECT * FROM pdfs WHERE 1=1"
     params = []
     if search:
-        query += " AND (title LIKE ? OR description LIKE ? OR code LIKE ? OR subject LIKE ?)"
+        query += (" AND (title LIKE ? OR description LIKE ? "
+                  "OR code LIKE ? OR subject LIKE ?)")
         like = f"%{search}%"
         params.extend([like, like, like, like])
     if subject:
@@ -200,13 +248,15 @@ def get_bot_pdfs(limit=100, offset=0, search='', subject='', curriculum='', clas
     conn.close()
     return [dict(row) for row in rows]
 
+
 def count_bot_pdfs(search='', subject='', curriculum='', class_filter=''):
     conn = _get_connection()
     cursor = conn.cursor()
     query = "SELECT COUNT(*) as count FROM pdfs WHERE 1=1"
     params = []
     if search:
-        query += " AND (title LIKE ? OR description LIKE ? OR code LIKE ? OR subject LIKE ?)"
+        query += (" AND (title LIKE ? OR description LIKE ? "
+                  "OR code LIKE ? OR subject LIKE ?)")
         like = f"%{search}%"
         params.extend([like, like, like, like])
     if subject:
@@ -223,13 +273,15 @@ def count_bot_pdfs(search='', subject='', curriculum='', class_filter=''):
     conn.close()
     return row['count'] if row else 0
 
+
 def update_bot_pdf(pdf_id, data):
     try:
         conn = _get_connection()
         cursor = conn.cursor()
         fields = []
         params = []
-        allowed = ['title', 'description', 'curriculum', 'class', 'subject', 'chapter', 'tags', 'is_premium']
+        allowed = ['title', 'description', 'curriculum', 'class',
+                   'subject', 'chapter', 'tags', 'is_premium']
         for key in allowed:
             if key in data:
                 fields.append(f"{key} = ?")
@@ -237,13 +289,17 @@ def update_bot_pdf(pdf_id, data):
         if not fields:
             return False
         params.append(pdf_id)
-        cursor.execute(f"UPDATE pdfs SET {', '.join(fields)} WHERE id = ?", params)
+        cursor.execute(
+            f"UPDATE pdfs SET {', '.join(fields)} WHERE id = ?",
+            params,
+        )
         conn.commit()
         conn.close()
         return True
     except Exception as e:
         logger.error(f"Failed to update bot PDF: {e}")
         return False
+
 
 def delete_bot_pdf(pdf_id):
     try:
@@ -256,13 +312,18 @@ def delete_bot_pdf(pdf_id):
     except Exception:
         return False
 
+
 def is_bot_duplicate(file_unique_id):
     conn = _get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM pdfs WHERE file_unique_id = ?", (file_unique_id,))
+    cursor.execute(
+        "SELECT id FROM pdfs WHERE file_unique_id = ?",
+        (file_unique_id,),
+    )
     result = cursor.fetchone() is not None
     conn.close()
     return result
+
 
 def is_duplicate_in_bot(file_unique_id):
     """Check both pending and bot pdfs."""

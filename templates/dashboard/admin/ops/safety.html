@@ -1,0 +1,236 @@
+{# ============================================================
+   templates/dashboard/admin/ops/safety.html
+   Super-admin viewer for the safety shadow database.
+   Populated automatically by safe_db.py on every mirrored write.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-shield-halved header-icon"></i>{% endblock %}
+{% block admin_title %}Safety Database{% endblock %}
+{% block admin_subtitle %}
+    Read-only mirror of every INSERT/UPDATE for the whitelisted tables.
+    DELETE operations are intentionally NOT mirrored — the shadow keeps
+    the last-known-good state of every row.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Safety</span>
+{% endblock %}
+
+{% block admin_actions %}
+    {% if active_table %}
+        <a href="{{ url_for('admin_safety.index') }}" class="admin-btn secondary">
+            <i class="fas fa-arrow-left"></i> All tables
+        </a>
+    {% endif %}
+    <a href="{{ url_for('admin_ops.system_info') }}" class="admin-btn secondary">
+        <i class="fas fa-server"></i> System Info
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+{# ─────── INFO BAR ─────── #}
+<div class="roster-info-bar">
+    <i class="fas fa-info-circle"></i>
+    <div>
+        The safety database is a fire-and-forget mirror. It is <strong>never</strong>
+        read by the application at runtime. Use it to recover a row that was
+        accidentally overwritten or deleted in the main database.
+        Restores are manual — copy the value from here into the main DB.
+    </div>
+</div>
+
+{# ─────── STATS ─────── #}
+<div class="admin-stats" style="margin-top:16px;">
+    <div class="admin-stat tone-blue">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-database"></i></span>
+        </div>
+        <span class="stat-value">{{ overview.total_rows }}</span>
+        <span class="stat-label">Mirrored rows</span>
+    </div>
+    <div class="admin-stat tone-purple">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-table"></i></span>
+        </div>
+        <span class="stat-value">{{ tables|length }}</span>
+        <span class="stat-label">Whitelisted tables</span>
+    </div>
+    <div class="admin-stat tone-slate">
+        <div class="stat-head">
+            <span class="stat-icon"><i class="fas fa-hdd"></i></span>
+        </div>
+        <span class="stat-value">{{ overview.size_mb }} MB</span>
+        <span class="stat-label">Shadow file size</span>
+    </div>
+    <div class="admin-stat {% if overview.exists %}tone-green{% else %}tone-red{% endif %}">
+        <div class="stat-head">
+            <span class="stat-icon">
+                <i class="fas {% if overview.exists %}fa-check-circle{% else %}fa-times-circle{% endif %}"></i>
+            </span>
+        </div>
+        <span class="stat-value">{% if overview.exists %}Present{% else %}Missing{% endif %}</span>
+        <span class="stat-label">Mirror state</span>
+        <span class="stat-sub" style="font-family:'Courier New',monospace;font-size:11px;">
+            {{ overview.path }}
+        </span>
+    </div>
+</div>
+
+{# ─────── TABLE PICKER ─────── #}
+<section class="admin-card" style="margin-top:20px;">
+    <div class="admin-card-head">
+        <h3><i class="fas fa-list"></i> Mirrored tables</h3>
+        <span class="hint">Click a table to browse its rows</span>
+    </div>
+    <div class="admin-card-body" style="padding:0;">
+        {% for t in tables %}
+            <a href="{{ url_for('admin_safety.table', table_name=t.name) }}"
+               style="display:flex;align-items:center;gap:14px;
+                      padding:14px 20px;border-bottom:1px solid var(--border-light);
+                      text-decoration:none;color:inherit;
+                      {% if active_table == t.name %}background:var(--primary-light);{% endif %}">
+                <div style="width:38px;height:38px;border-radius:10px;
+                            background:var(--background);
+                            display:flex;align-items:center;justify-content:center;
+                            font-size:16px;flex-shrink:0;
+                            {% if active_table == t.name %}color:var(--primary);{% endif %}">
+                    <i class="fas fa-table"></i>
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:14px;font-weight:600;color:var(--text);
+                                font-family:'Courier New',monospace;">
+                        {{ t.name }}
+                    </div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">
+                        {{ t.count }} row{{ '' if t.count == 1 else 's' }} mirrored
+                    </div>
+                </div>
+                <i class="fas fa-arrow-right" style="color:var(--text-muted);"></i>
+            </a>
+        {% endfor %}
+    </div>
+</section>
+
+{# ─────── ROW VIEWER (only when a table is selected) ─────── #}
+{% if active_table %}
+
+<section class="admin-card" style="margin-top:20px;">
+    <div class="admin-card-head">
+        <h3>
+            <i class="fas fa-table"></i>
+            <code style="font-family:'Courier New',monospace;color:var(--primary);">
+                {{ active_table }}
+            </code>
+        </h3>
+        <span class="hint">
+            <strong>{{ total_rows }}</strong>
+            row{{ '' if total_rows == 1 else 's' }}
+            {% if search %}· filtered{% endif %}
+        </span>
+    </div>
+
+    {# Search bar #}
+    <form method="GET"
+          action="{{ url_for('admin_safety.table', table_name=active_table) }}"
+          class="admin-toolbar"
+          style="border-radius:0;border-left:none;border-right:none;border-top:none;">
+        <div class="admin-search">
+            <i class="fas fa-search"></i>
+            <input type="text" name="search"
+                   value="{{ search }}"
+                   placeholder="Search across every column…"
+                   autocomplete="off" spellcheck="false">
+        </div>
+        {% if search %}
+            <a href="{{ url_for('admin_safety.table', table_name=active_table) }}"
+               class="admin-btn secondary">
+                <i class="fas fa-times"></i> Clear
+            </a>
+        {% endif %}
+        <span class="toolbar-meta">
+            Page <strong>{{ page }}</strong> of {{ total_pages }}
+        </span>
+    </form>
+
+    {# Table #}
+    {% if rows %}
+    <div class="admin-table-scroll" style="max-height:600px;overflow:auto;">
+        <table class="admin-table" style="min-width:100%;">
+            <thead style="position:sticky;top:0;z-index:1;">
+                <tr>
+                    {% for col in columns %}
+                        <th style="white-space:nowrap;">{{ col }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    {% for col in columns %}
+                        {% set val = row.get(col) %}
+                        <td style="font-size:12px;font-family:'Courier New',monospace;
+                                   max-width:280px;overflow:hidden;text-overflow:ellipsis;
+                                   white-space:nowrap;"
+                            title="{{ val if val is not none else '' }}">
+                            {% if val is none %}
+                                <span style="color:var(--text-muted);">—</span>
+                            {% elif val is string and val|length > 120 %}
+                                {{ val[:120] }}…
+                            {% else %}
+                                {{ val }}
+                            {% endif %}
+                        </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+        <div class="admin-empty" style="border:none;">
+            <span class="empty-icon">🗄️</span>
+            <h3>No rows{% if search %} match “{{ search }}”{% endif %}</h3>
+            <p>
+                {% if search %}
+                    Try a different search term, or clear the filter.
+                {% else %}
+                    This table has no mirrored rows yet.
+                {% endif %}
+            </p>
+        </div>
+    {% endif %}
+
+    {# Pagination #}
+    {% if total_pages > 1 %}
+    <div class="admin-pagination" style="padding:14px 20px;">
+        {% set base_params = 'search=' ~ (search|urlencode) ~ '&per_page=' ~ per_page %}
+        <a href="?page=1&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
+            <i class="fas fa-angle-double-left"></i>
+        </a>
+        <a href="?page={{ page - 1 }}&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
+            <i class="fas fa-angle-left"></i>
+        </a>
+        {% for p in range(1, total_pages + 1) %}
+            {% if p == page %}
+                <span class="active">{{ p }}</span>
+            {% elif p <= page + 2 and p >= page - 2 %}
+                <a href="?page={{ p }}&{{ base_params }}">{{ p }}</a>
+            {% endif %}
+        {% endfor %}
+        <a href="?page={{ page + 1 }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}">
+            <i class="fas fa-angle-right"></i>
+        </a>
+        <a href="?page={{ total_pages }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}">
+            <i class="fas fa-angle-double-right"></i>
+        </a>
+    </div>
+    {% endif %}
+
+</section>
+
+{% endif %}
+
+{% endblock %}

@@ -32,9 +32,14 @@ class Config:
     # ============================================
     # SECURITY
     # ============================================
-    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
-    ADMIN_ERROR_PASSWORD = os.getenv('ADMIN_ERROR_PASSWORD', 'samir')
+    SECRET_KEY = os.getenv('SECRET_KEY')
+    ADMIN_ERROR_PASSWORD = os.getenv('ADMIN_ERROR_PASSWORD')
     SUPER_ADMIN_PHONE = os.getenv('SUPER_ADMIN_PHONE', '')
+
+    if not SECRET_KEY:
+        raise ValueError("SECRET_KEY environment variable must be set")
+    if not ADMIN_ERROR_PASSWORD:
+        raise ValueError("ADMIN_ERROR_PASSWORD environment variable must be set")
 
     # ============================================
     # DATABASE (Main)
@@ -172,11 +177,14 @@ class Config:
     # ============================================
     # TELEGRAM BOT (Webhook Mode)
     # ============================================
-    TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
+    TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
     TELEGRAM_BOT_USERNAME = os.getenv('TELEGRAM_BOT_USERNAME', 'nuunplatform_bot')
     TELEGRAM_ADMIN_IDS = os.getenv('TELEGRAM_ADMIN_IDS', '')
     TELEGRAM_SUPER_ADMIN_IDS = os.getenv('TELEGRAM_SUPER_ADMIN_IDS', '')
     BASE_URL = os.getenv('BASE_URL', 'https://yourdomain.com')
+
+    if not TELEGRAM_BOT_TOKEN:
+        raise ValueError("TELEGRAM_BOT_TOKEN environment variable must be set for Telegram bot functionality")
 
     # ============================================
     # FLASK / RUN
@@ -218,6 +226,10 @@ class Config:
                 errors.append("SMTP_PASSWORD is missing")
             if not cls.SMTP_TO:
                 errors.append("SMTP_TO is missing")
+        if not cls.TELEGRAM_BOT_TOKEN:
+            errors.append("TELEGRAM_BOT_TOKEN must be set for Telegram bot functionality")
+        if not cls.BASE_URL or cls.BASE_URL == 'https://yourdomain.com':
+            errors.append("BASE_URL must be set to a valid domain")
         return errors
 
     # ============================================

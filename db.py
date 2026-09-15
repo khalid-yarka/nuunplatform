@@ -1,4 +1,4 @@
-# db.py – complete file with redesigned PDF system
+# db.py – complete file with redesigned PDF system + safety DB mirror
 # Uses main database (nuunplatform.db) for all platform data.
 # Pending PDF operations are handled via bot.db (separate file).
 #
@@ -6,6 +6,10 @@
 #      Background threads (live quiz, activity logger, history flusher)
 #      and module-level startup code get a per-thread connection.
 #      Requests still use `g.db` as before.
+#
+# SAFETY MIRROR: every successful INSERT/UPDATE commit is mirrored to
+#                safety/safety.db by safe_db.py (fire-and-forget). The
+#                mirror is best-effort and never affects the main write.
 
 import sqlite3
 import json
@@ -22,6 +26,23 @@ from config import Config
 from utils import get_somali_time, get_somali_time_db, format_somali_time
 from subjects_config import get_subject, get_subjects_for_user
 from tier_config import normalize_tier  # PHASE 2
+
+# ============================================
+# SAFETY MIRROR (best-effort, never raises)
+# ============================================
+try:
+    from safe_db import mirror_write as _safe_mirror_write
+    from safe_db import mirror_write_batch as _safe_mirror_write_batch
+    _SAFE_DB_AVAILABLE = True
+except Exception as _safe_import_err:
+    _safe_mirror_write = None
+    _safe_mirror_write_batch = None
+    _SAFE_DB_AVAILABLE = False
+    logging.getLogger(__name__).warning(
+        f"safe_db mirror unavailable ({_safe_import_err}). "
+        f"Writes will NOT be mirrored to the safety database."
+    )
+
 
 # ============================================
 # DATABASE CONFIGURATION
@@ -41,6 +62,7 @@ logger = logging.getLogger(__name__)
 # ============================================
 
 _thread_local = threading.local()
+
 
 # ============================================
 # RETRY UTILITY
@@ -212,6 +234,12 @@ def execute_with_retry(query, params=(), max_retries=MAX_RETRIES, commit=True, o
             cursor.execute(query, params)
             if commit:
                 conn.commit()
+                # ── SAFETY MIRROR (best-effort, never raises) ──
+                if _SAFE_DB_AVAILABLE and _safe_mirror_write is not None:
+                    try:
+                        _safe_mirror_write(query, params)
+                    except Exception:
+                        pass
             return cursor
         except sqlite3.OperationalError as e:
             error_msg = str(e)
@@ -273,6 +301,12 @@ def execute_many_with_retry(query, params_list, max_retries=MAX_RETRIES, commit=
             cursor.executemany(query, params_list)
             if commit:
                 conn.commit()
+                # ── SAFETY MIRROR (best-effort, never raises) ──
+                if _SAFE_DB_AVAILABLE and _safe_mirror_write_batch is not None:
+                    try:
+                        _safe_mirror_write_batch(query, params_list)
+                    except Exception:
+                        pass
             return cursor
         except sqlite3.OperationalError as e:
             error_msg = str(e)
@@ -599,8 +633,8 @@ def create_question(data: dict):
             data.get('chapter', ''),
             data.get('tags', ''),
             data.get('explanation', ''),
-            data.get('pdf_code'),                 # NEW
-            data.get('pdf_page'),                 # NEW
+            data.get('pdf_code'),
+            data.get('pdf_page'),
             data.get('created_by'),
             data.get('updated_by'),
             data.get('status', 'active'),
@@ -701,8 +735,8 @@ def bulk_create_questions(questions_data: list, admin_id: int):
                         q.get('chapter', ''),
                         q.get('tags', ''),
                         q.get('explanation', ''),
-                        q.get('pdf_code'),        # may be None
-                        q.get('pdf_page'),        # may be None
+                        q.get('pdf_code'),
+                        q.get('pdf_page'),
                         admin_id,
                         admin_id,
                         'active',
@@ -713,6 +747,14 @@ def bulk_create_questions(questions_data: list, admin_id: int):
 
                 cursor.executemany(INSERT_SQL, batch_params)
                 conn.commit()
+
+                # ── SAFETY MIRROR (best-effort) ──
+                if _SAFE_DB_AVAILABLE and _safe_mirror_write_batch is not None:
+                    try:
+                        _safe_mirror_write_batch(INSERT_SQL, batch_params)
+                    except Exception:
+                        pass
+
                 imported_count += len(batch)
 
                 try:
@@ -768,7 +810,9 @@ def bulk_create_questions(questions_data: list, admin_id: int):
             'validation_failed': True,
         }
 
+
 def update_question(question_id: int, data: dict):
+    """Update an existing question, including PDF linkage fields."""
     try:
         execute_with_retry("""
             UPDATE questions SET
@@ -780,6 +824,9 @@ def update_question(question_id: int, data: dict):
                 chapter = ?,
                 tags = ?,
                 explanation = ?,
+                pdf_code = ?,
+                pdf_page = ?,
+                status = ?,
                 updated_by = ?,
                 updated_at = ?
             WHERE id = ?
@@ -792,6 +839,9 @@ def update_question(question_id: int, data: dict):
             data.get('chapter', ''),
             data.get('tags', ''),
             data.get('explanation', ''),
+            data.get('pdf_code'),
+            data.get('pdf_page'),
+            data.get('status', 'active'),
             data.get('updated_by'),
             now(),
             question_id
@@ -1251,15 +1301,47 @@ def delete_main_pdf(pdf_id):
 
 
 def increment_pdf_view(pdf_id):
+    """
+    Atomically bump the view counter for a main-library PDF by id.
+    Returns the new count, or None on failure.
+    """
     try:
-        execute_with_retry(
-            "UPDATE pdfs SET view_count = view_count + 1 WHERE id = ?",
-            (pdf_id,), commit=True
+        cursor = execute_with_retry(
+            "UPDATE pdfs SET view_count = COALESCE(view_count, 0) + 1 "
+            "WHERE id = ?",
+            (pdf_id,), commit=True,
         )
-        return True
+        cursor = execute_with_retry(
+            "SELECT view_count FROM pdfs WHERE id = ?",
+            (pdf_id,),
+        )
+        row = cursor.fetchone()
+        return int(row['view_count']) if row and row['view_count'] is not None else None
     except Exception as e:
         logger.error(f"Error incrementing PDF view: {e}")
-        return False
+        return None
+
+
+def increment_pdf_view_by_code(code):
+    """
+    Same as increment_pdf_view but keyed by PDF code.
+    Used by routes that receive a code instead of an id.
+    """
+    try:
+        cursor = execute_with_retry(
+            "UPDATE pdfs SET view_count = COALESCE(view_count, 0) + 1 "
+            "WHERE code = ?",
+            (code,), commit=True,
+        )
+        cursor = execute_with_retry(
+            "SELECT view_count FROM pdfs WHERE code = ?",
+            (code,),
+        )
+        row = cursor.fetchone()
+        return int(row['view_count']) if row and row['view_count'] is not None else None
+    except Exception as e:
+        logger.error(f"Error incrementing PDF view by code: {e}")
+        return None
 
 
 def get_pdf_distinct_subjects():
@@ -1304,28 +1386,12 @@ def get_pdf_distinct_curricula():
 def check_pdf_codes_exist(codes) -> dict:
     """
     Given a list of PDF codes, return a dict mapping each code to:
-
-        {
-            'exists':     bool,             # found in main or bot DB
-            'source':     'main' | 'bot' | None,
-            'title':      str,
-            'is_premium': bool,
-        }
-
-    Codes not found anywhere get {'exists': False, 'source': None, ...}.
-
-    Used by:
-      • admin_content.questions        (per-row PDF chip)
-      • admin_content.question_edit    (edit form preview)
-      • admin_content.question_broken  (broken-links page)
-      • admin_content.pdfs_broken      (broken-PDF page)
-      • admin_content.bulk_import      (batch PDF verification)
-      • admin_content.pdf_info         (AJAX lookup fallback)
+        {'exists': bool, 'source': 'main'|'bot'|None,
+         'title': str, 'is_premium': bool}
     """
     if not codes:
         return {}
 
-    # Normalise + dedupe
     wanted = set()
     for c in codes:
         if not c:
@@ -2396,12 +2462,7 @@ def delete_live_quiz(quiz_id: int) -> bool:
 def get_user_active_quiz(user_id: int) -> Optional[int]:
     """
     Return the id of the user's most relevant unfinished quiz, or None.
-
-    Ordering:
-        1. 'active'    — a game is in progress (highest priority)
-        2. 'waiting'   — room open, waiting to start
-        3. 'scheduled' — auto-start scheduled for later
-    Ties are broken by most-recently-created quiz.
+    Ordering: active > waiting > scheduled > most recent.
     """
     try:
         cursor = execute_with_retry("""
@@ -2427,17 +2488,11 @@ def get_user_active_quiz(user_id: int) -> Optional[int]:
         logger.error(f"Error getting user active quiz: {e}")
         return None
 
+
 def abandon_user_waiting_quiz(user_id: int) -> Optional[int]:
     """
     Soft-close the user's own waiting/scheduled quiz (if they are the
     creator). Returns the quiz id that was closed, or None.
-
-    This is a thin helper that some callers use instead of hitting the
-    HTTP endpoint. It performs the same logic:
-        • creator + waiting/scheduled -> status='finished', participants left
-        • participant (not creator)   -> that user marked 'left'
-
-    Returns the quiz id that was affected, or None if nothing changed.
     """
     try:
         quiz_id = get_user_active_quiz(user_id)
@@ -2449,11 +2504,9 @@ def abandon_user_waiting_quiz(user_id: int) -> Optional[int]:
             return None
 
         if quiz['status'] not in ('waiting', 'scheduled'):
-            # active or finished — nothing to abandon here
             return None
 
         if quiz['creator_id'] == user_id:
-            # Soft-close the whole quiz
             execute_with_retry(
                 "UPDATE live_quizzes SET status = 'finished', "
                 "ended_at = ?, scheduled_start = NULL WHERE id = ?",
@@ -2467,7 +2520,6 @@ def abandon_user_waiting_quiz(user_id: int) -> Optional[int]:
             logger.info(f"User {user_id} soft-closed quiz {quiz_id} (creator)")
             return quiz_id
 
-        # Participant only
         execute_with_retry(
             "UPDATE live_quiz_participants SET status = 'left' "
             "WHERE quiz_id = ? AND student_id = ?",
@@ -2478,6 +2530,7 @@ def abandon_user_waiting_quiz(user_id: int) -> Optional[int]:
     except Exception as e:
         logger.error(f"abandon_user_waiting_quiz failed for {user_id}: {e}", exc_info=True)
         return None
+
 
 def leave_live_quiz(quiz_id: int, student_id: int) -> bool:
     try:
@@ -2694,6 +2747,8 @@ def clean_history_entries():
     except Exception as e:
         logger.error(f"Failed to clean history entries: {e}")
         return 0
+
+
 def ensure_question_miss_stats_table() -> bool:
     """
     Create the materialized miss-rate table if it does not exist.
@@ -2730,26 +2785,21 @@ def ensure_question_miss_stats_table() -> bool:
     except Exception as e:
         logger.error(f"ensure_question_miss_stats_table failed: {e}")
         return False
+
+
 def refresh_question_miss_stats(days: int = 90) -> int:
     """
     Rebuild question_miss_stats from the last N days of quiz attempts.
-
-    Reads the JSON `answers` column from quiz_attempts, aggregates
-    per question, and rewrites the materialized table. Called from
-    daily_tasks.py.
-
-    Returns the number of question rows written.
+    Called from daily_tasks.py.
     """
     ensure_question_miss_stats_table()
 
-    # Clear old data (table is small; safe to rewrite)
     try:
         execute_with_retry("DELETE FROM question_miss_stats", commit=True)
     except Exception as e:
         logger.error(f"refresh_question_miss_stats: clear failed: {e}")
         return 0
 
-    # Read recent attempts
     try:
         cursor = execute_with_retry("""
             SELECT answers, completed_at
@@ -2761,7 +2811,6 @@ def refresh_question_miss_stats(days: int = 90) -> int:
         logger.error(f"refresh_question_miss_stats: read failed: {e}")
         return 0
 
-    # Aggregate in Python (JSON parsing is safer here than in SQL)
     stats: dict = {}
     for row in rows:
         raw = row['answers']
@@ -2816,14 +2865,14 @@ def refresh_question_miss_stats(days: int = 90) -> int:
     except Exception as e:
         logger.error(f"refresh_question_miss_stats: insert failed: {e}")
         return 0
+
+
 # ============================================
 # GROUP FUNCTIONS – Enhanced with curriculum support
 # ============================================
 
 def get_all_groups_advanced(limit=50, offset=0, curriculum=None, platform=None, category=None, status=None):
-    """
-    Get groups with advanced filtering for admin panel.
-    """
+    """Get groups with advanced filtering for admin panel."""
     try:
         query = "SELECT * FROM groups WHERE 1=1"
         params = []
@@ -2850,12 +2899,7 @@ def get_all_groups_advanced(limit=50, offset=0, curriculum=None, platform=None, 
 
 
 def create_group_advanced(data):
-    """
-    Create a group with all new fields.
-    data keys: name, platform, invite_link, description, category,
-               curriculum, subjects, tier_required, is_active,
-               is_featured, display_order, group_type, icon, created_by
-    """
+    """Create a group with all new fields."""
     try:
         cursor = execute_with_retry("""
             INSERT INTO groups (
@@ -2872,7 +2916,7 @@ def create_group_advanced(data):
             data.get('category', ''),
             data.get('curriculum', ''),
             data.get('subjects', ''),
-            normalize_tier(data.get('tier_required') or 'free'),  # PHASE 2
+            normalize_tier(data.get('tier_required') or 'free'),
             data.get('is_active', 1),
             data.get('is_featured', 0),
             data.get('display_order', 0),
@@ -2890,9 +2934,7 @@ def create_group_advanced(data):
 
 
 def update_group_advanced(group_id, data):
-    """
-    Update a group with all fields.
-    """
+    """Update a group with all fields."""
     try:
         fields = []
         params = []
@@ -3046,10 +3088,7 @@ def get_featured_groups(limit=5):
 
 
 def get_groups_by_curriculum(user_curriculum=None):
-    """
-    Get groups filtered by user's curriculum.
-    If user_curriculum is None, show all.
-    """
+    """Get groups filtered by user's curriculum. If None, show all."""
     try:
         if user_curriculum:
             query = """
@@ -3163,49 +3202,6 @@ def get_available_curricula():
         logger.error(f"Error fetching curricula: {e}")
         return []
 
-def update_question(question_id: int, data: dict):
-    """Update an existing question, including PDF linkage fields."""
-    try:
-        execute_with_retry("""
-            UPDATE questions SET
-                subject_code = ?,
-                question_text = ?,
-                options = ?,
-                correct_answer = ?,
-                difficulty = ?,
-                chapter = ?,
-                tags = ?,
-                explanation = ?,
-                pdf_code = ?,
-                pdf_page = ?,
-                status = ?,
-                updated_by = ?,
-                updated_at = ?
-            WHERE id = ?
-        """, (
-            data['subject_code'],
-            data['question_text'],
-            to_json(data['options']),
-            data['correct_answer'],
-            data.get('difficulty', 1),
-            data.get('chapter', ''),
-            data.get('tags', ''),
-            data.get('explanation', ''),
-            data.get('pdf_code'),
-            data.get('pdf_page'),
-            data.get('status', 'active'),
-            data.get('updated_by'),
-            now(),
-            question_id
-        ), commit=True)
-        return True
-    except Exception as e:
-        try:
-            current_app.logger.error(f"Error updating question: {e}")
-        except RuntimeError:
-            logger.error(f"Error updating question: {e}")
-        return False
-
 
 def get_question_stats() -> dict:
     """Aggregate question stats for the admin dashboard header."""
@@ -3233,32 +3229,29 @@ def get_question_stats() -> dict:
 def get_questions_paginated(
     search: str = '',
     subject_code: str = '',
-    pdf_filter: str = '',       # '', 'linked', 'unlinked'
-    pdf_code: str = '',         # exact code
-    status_filter: str = '',    # '', 'active', 'archived', 'draft'
+    pdf_filter: str = '',
+    pdf_code: str = '',
+    status_filter: str = '',
     difficulty_min: int = None,
     difficulty_max: int = None,
     chapter: str = '',
     date_from: str = '',
     date_to: str = '',
-    interactions: str = '',     # '', 'has_reports', 'has_saves', 'has_likes', 'clean'
-    miss_filter: str = '',      # '', 'high', 'medium', 'low', 'any', 'never'
+    interactions: str = '',
+    miss_filter: str = '',
     sort: str = 'newest',
     page: int = 1,
     per_page: int = 20,
 ):
     """
     Return (questions, total) with the full set of filters.
-
     Miss-rate filtering uses the materialized question_miss_stats table.
-    Call refresh_question_miss_stats() first if the stats are stale.
     """
     ensure_question_miss_stats_table()
 
     where = ["1=1"]
     params = []
 
-    # ---- Search ----
     if search:
         like = f"%{search}%"
         where.append(
@@ -3267,12 +3260,10 @@ def get_questions_paginated(
         )
         params.extend([like, like, like, like])
 
-    # ---- Subject ----
     if subject_code:
         where.append("q.subject_code = ?")
         params.append(subject_code)
 
-    # ---- PDF linkage ----
     if pdf_filter == 'linked':
         where.append("q.pdf_code IS NOT NULL AND q.pdf_code != ''")
     elif pdf_filter == 'unlinked':
@@ -3282,12 +3273,10 @@ def get_questions_paginated(
         where.append("q.pdf_code = ?")
         params.append(pdf_code)
 
-    # ---- Status ----
     if status_filter:
         where.append("q.status = ?")
         params.append(status_filter)
 
-    # ---- Difficulty range ----
     if difficulty_min is not None:
         where.append("q.difficulty >= ?")
         params.append(int(difficulty_min))
@@ -3295,12 +3284,10 @@ def get_questions_paginated(
         where.append("q.difficulty <= ?")
         params.append(int(difficulty_max))
 
-    # ---- Chapter ----
     if chapter:
         where.append("q.chapter LIKE ?")
         params.append(f"%{chapter}%")
 
-    # ---- Date range (created_at) ----
     if date_from:
         where.append("q.created_at >= ?")
         params.append(date_from)
@@ -3308,7 +3295,6 @@ def get_questions_paginated(
         where.append("q.created_at <= ?")
         params.append(date_to)
 
-    # ---- Interactions ----
     if interactions == 'has_reports':
         where.append(
             "EXISTS (SELECT 1 FROM question_interactions qi "
@@ -3330,7 +3316,6 @@ def get_questions_paginated(
             "WHERE qi.question_id = q.id)"
         )
 
-    # ---- Miss rate filter (uses materialized stats) ----
     if miss_filter == 'high':
         where.append(
             "COALESCE(qms.miss_rate, 0) >= 70 "
@@ -3371,14 +3356,12 @@ def get_questions_paginated(
         LEFT JOIN question_miss_stats qms ON qms.question_id = q.id
     """
 
-    # ---- Count ----
     count_cursor = execute_with_retry(
         f"SELECT COUNT(*) AS c {base_from} WHERE {where_sql}",
         params,
     )
     total = count_cursor.fetchone()['c']
 
-    # ---- Page ----
     offset = max(0, (page - 1) * per_page)
     cursor = execute_with_retry(f"""
         SELECT
@@ -3409,9 +3392,7 @@ def get_questions_paginated(
 def get_questions_filter_options() -> dict:
     """
     Return dropdown options used by the admin questions toolbar:
-        subjects   — list of subject codes currently in use
-        chapters   — list of chapter names (up to 100)
-        pdf_codes  — list of {code, count} for the exact PDF filter
+        subjects, chapters, pdf_codes
     """
     result = {'subjects': [], 'chapters': [], 'pdf_codes': []}
 

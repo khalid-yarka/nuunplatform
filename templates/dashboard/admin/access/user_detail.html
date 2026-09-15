@@ -1,7 +1,7 @@
 {# ============================================================
    templates/dashboard/admin/access/user_detail.html
    Advanced single-user profile with integrated password
-   management and editable identity form.
+   management, editable identity form, and verification controls.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -28,6 +28,17 @@
     <a href="{{ url_for('admin_users.list_users') }}" class="admin-btn secondary">
         <i class="fas fa-arrow-left"></i> Back
     </a>
+    {% if not user.is_verified %}
+        <form method="POST"
+              action="{{ url_for('admin_users.verify_user', user_id=user.id) }}"
+              style="display:inline;"
+              onsubmit="return confirm('Verify this account? The user will be able to log in.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="admin-btn success">
+                <i class="fas fa-user-check"></i> Verify account
+            </button>
+        </form>
+    {% endif %}
     {% if user.phone_number %}
         <a href="https://wa.me/{{ user.phone_number|replace('+','')|replace(' ','') }}"
            target="_blank" rel="noopener"
@@ -102,7 +113,6 @@
     .um-kv .k { color: var(--text-secondary); }
     .um-kv .v { color: var(--text); font-weight: 600; text-align: right; word-break: break-word; }
 
-    /* ---- Profile edit form ---- */
     .um-form-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -110,7 +120,6 @@
     }
     .um-form-grid .admin-form-group { margin-bottom: 0; }
 
-    /* ---- Password panel ---- */
     .pw-panel {
         background: #FEF9E7;
         border: 1px solid #FDE68A;
@@ -239,6 +248,32 @@
         color: #EF4444; font-size: 15px; margin-top: 1px;
         flex-shrink: 0;
     }
+
+    /* Verification banner */
+    .verify-banner {
+        display: flex; align-items: center; gap: 14px;
+        padding: 14px 18px; margin-top: 16px;
+        background: #FFFBEB;
+        border: 1px solid #FDE68A;
+        border-left: 4px solid #F59E0B;
+        border-radius: var(--radius);
+        flex-wrap: wrap;
+    }
+    .verify-banner.verified {
+        background: #ECFDF5;
+        border-color: #A7F3D0;
+        border-left-color: #10B981;
+    }
+    .verify-banner .vb-icon { font-size: 26px; flex-shrink: 0; line-height: 1; }
+    .verify-banner .vb-body { flex: 1; min-width: 200px; }
+    .verify-banner .vb-title {
+        font-size: 14px; font-weight: 700; color: #92400E;
+    }
+    .verify-banner.verified .vb-title { color: #065F46; }
+    .verify-banner .vb-sub {
+        font-size: 12px; color: #B45309; margin-top: 2px; line-height: 1.4;
+    }
+    .verify-banner.verified .vb-sub { color: #047857; }
 </style>
 {% endblock %}
 
@@ -286,6 +321,49 @@
     </div>
 </div>
 
+{# ═══════════ VERIFICATION BANNER ═══════════ #}
+{% if not user.is_verified %}
+<div class="verify-banner">
+    <span class="vb-icon">⏳</span>
+    <div class="vb-body">
+        <div class="vb-title">Account pending verification</div>
+        <div class="vb-sub">
+            This user cannot log in until their account is verified.
+            Approve the account to grant access.
+        </div>
+    </div>
+    {% if user.id != session.user_id %}
+        <form method="POST"
+              action="{{ url_for('admin_users.verify_user', user_id=user.id) }}"
+              onsubmit="return confirm('Verify this account now?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="admin-btn success">
+                <i class="fas fa-user-check"></i> Verify account
+            </button>
+        </form>
+    {% endif %}
+</div>
+{% else %}
+<div class="verify-banner verified">
+    <span class="vb-icon">✅</span>
+    <div class="vb-body">
+        <div class="vb-title">Account verified</div>
+        <div class="vb-sub">
+            This user has full access to the platform.
+        </div>
+    </div>
+    {% if user.id != session.user_id and admin_can('users.view') %}
+        <form method="POST"
+              action="{{ url_for('admin_users.unverify_user', user_id=user.id) }}"
+              onsubmit="return confirm('Unverify this account? The user will not be able to log in until re-verified.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="admin-btn danger">
+                <i class="fas fa-user-slash"></i> Unverify
+            </button>
+        </form>
+    {% endif %}
+</div>
+{% endif %}
 
 {# ═══════════ STATS ═══════════ #}
 <div class="admin-stats" style="margin-top:16px;">
@@ -312,7 +390,7 @@
 </div>
 
 
-{# ═══════════ EDIT PROFILE (super admin) ═══════════ #}
+{# ═══════════ EDIT PROFILE ═══════════ #}
 {% if admin_can('users.view') %}
 <section class="um-section" id="edit-profile">
     <div class="um-section-head">
@@ -631,6 +709,28 @@
     </div>
     <div class="um-section-body">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+
+            {% if not user.is_verified %}
+                <form method="POST"
+                      action="{{ url_for('admin_users.verify_user', user_id=user.id) }}"
+                      onsubmit="return confirm('Verify this account? The user will be able to log in.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="admin-btn success lg"
+                            style="width:100%;justify-content:flex-start;">
+                        <i class="fas fa-user-check"></i> Verify account
+                    </button>
+                </form>
+            {% else %}
+                <form method="POST"
+                      action="{{ url_for('admin_users.unverify_user', user_id=user.id) }}"
+                      onsubmit="return confirm('Unverify this account? The user will not be able to log in.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="admin-btn danger lg"
+                            style="width:100%;justify-content:flex-start;">
+                        <i class="fas fa-user-slash"></i> Unverify account
+                    </button>
+                </form>
+            {% endif %}
 
             {% if admin_can('users.set_tier') %}
                 <a href="{{ url_for('admin_users.manage_user_tier', user_id=user.id) }}"

@@ -31,6 +31,9 @@ from blueprints.admin.backup_bp     import admin_backup_bp
 from blueprints.admin.errors_bp     import admin_errors_bp
 from blueprints.admin.platform_bp   import admin_platform_bp
 
+# ── Safety shadow viewer (new) ──
+from blueprints.admin.safety_bp     import admin_safety_bp
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,8 +41,7 @@ logger = logging.getLogger(__name__)
 # REGISTRATION ORDER
 # ============================================================
 # The shim is registered FIRST so its endpoint name `admin.dashboard`
-# is available to url_for() everywhere in the app. It sits at
-# /admin/_legacy/dashboard, which never collides with real routes.
+# is available to url_for() everywhere in the app.
 # ============================================================
 
 ADMIN_BLUEPRINTS = (
@@ -56,18 +58,20 @@ ADMIN_BLUEPRINTS = (
     admin_ops_bp,
     admin_system_bp,
 
-    # specialist blueprints (moved from blueprints/admin_*.py)
+    # specialist blueprints
     admin_activity_bp,
     admin_backup_bp,
     admin_errors_bp,
     admin_platform_bp,
+
+    # safety shadow viewer
+    admin_safety_bp,
 )
 
 
 def register_admin_blueprints(app):
     """
     Register every admin sub-blueprint on the given Flask app.
-
     Idempotent: if a blueprint is already registered under the same
     name, registration is skipped with a warning instead of raising.
     """
@@ -114,6 +118,7 @@ __all__ = [
     'admin_backup_bp',
     'admin_errors_bp',
     'admin_platform_bp',
+    'admin_safety_bp',
     'ADMIN_BLUEPRINTS',
     'register_admin_blueprints',
 ]

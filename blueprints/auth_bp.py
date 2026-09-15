@@ -1,13 +1,16 @@
 # blueprints/auth_bp.py
-# Authentication routes: register, login, logout, help, check-phone.
+# Authentication routes: register, login, logout, help, check-phone,
+# school-suggestions.
 #
 # Password hashing: werkzeug.security (generate/check).
 # No email. No verification step. No password reset.
 # New users register with is_verified=0. Admin verifies manually.
 #
-# The help() route builds a WhatsApp prefill message that includes the
-# user's identity and a direct admin profile link when the user is
-# logged in, so support requests arrive with everything the admin needs.
+# Back-button fix: auth pages send Cache-Control: no-store so the
+# browser cannot serve them from the back-forward cache after login.
+#
+# Registration side-effect: a Telegram DM is sent to super admins
+# with a direct link to the user's admin panel page.
 
 import time
 import secrets
@@ -33,6 +36,21 @@ from utils import ensure_csrf_token, validate_csrf
 logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth', __name__, url_prefix='')
+
+
+# ============================================
+# NO-CACHE HEADERS ON AUTH PAGES
+# ============================================
+# Without this, pressing "Back" after login serves the login page
+# from the browser's back-forward cache and never hits the server,
+# so the "already logged in -> redirect to /home" check never runs.
+
+@auth_bp.after_request
+def _no_cache_for_auth_pages(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 
 # ============================================
@@ -87,7 +105,133 @@ def _normalize_phone(phone: str) -> str:
     return '+252' + phone
 
 
+def _escape_like(value: str) -> str:
+    """
+    Escape SQL LIKE metacharacters. Uses '!' as the escape character
+    so we never clash with backslash handling across Python/SQL layers.
+    """
+    if not value:
+        return ''
+    return (
+        value.replace('!', '!!')
+             .replace('%', '!%')
+             .replace('_', '!_')
+    )
+
+
 VALID_GRADES = ('G7', 'G8', 'F3', 'F4')
+
+
+# ============================================
+# TELEGRAM NOTIFICATION ON NEW REGISTRATION
+# ============================================
+
+def _notify_new_registration(student: dict) -> None:
+    """
+    Send a Telegram DM to super admins announcing a new registration.
+    Never raises. Failure is logged and swallowed.
+    """
+    try:
+        from services.telegram_notify import (
+            notify_super_admins,
+            build_markdown_document,
+            make_report_filename,
+            summary_row,
+            truncate,
+        )
+    except Exception as e:
+        logger.warning(f"telegram_notify import failed: {e}")
+        return
+
+    base_url = (getattr(Config, 'BASE_URL', '') or '').rstrip('/')
+    user_id = student.get('id')
+    admin_url = f"{base_url}/admin/users/{user_id}" if (base_url and user_id) else None
+
+    full_name = (
+        f"{student.get('first_name', '')} "
+        f"{student.get('middle_name', '') or ''} "
+        f"{student.get('last_name', '')}"
+    ).strip() or 'Unknown'
+    public_id = student.get('public_id') or '----'
+    phone = student.get('phone_number') or '—'
+
+    meta = {
+        'type': 'user_registered',
+        'user_id': user_id,
+        'public_id': public_id,
+        'phone': phone,
+        'location': student.get('location'),
+        'school': student.get('school'),
+        'grade': student.get('grade'),
+    }
+
+    sections = []
+
+    identity_table = '\n'.join([
+        '| Field | Value |',
+        '|:--|:--|',
+        f'| Name | {full_name} |',
+        f'| Public ID | `{public_id}` |',
+        f'| Phone | `{phone}` |',
+    ])
+    sections.append(('👤 Identity', identity_table))
+
+    edu_table = '\n'.join([
+        '| Field | Value |',
+        '|:--|:--|',
+        f"| Location | {student.get('location') or '—'} |",
+        f"| City | {student.get('city') or '—'} |",
+        f"| School | {student.get('school') or '—'} |",
+        f"| Grade | {student.get('grade') or '—'} |",
+        f"| Curriculum | {student.get('curriculum') or '—'} |",
+    ])
+    sections.append(('🎓 Education', edu_table))
+
+    actions = [
+        '- [ ] Open the user panel and review the profile',
+        '- [ ] Verify the account so the user can log in',
+        '- [ ] Contact the user on WhatsApp if anything looks wrong',
+    ]
+    if admin_url:
+        actions.append(f'- [ ] [Open user panel →]({admin_url})')
+    sections.append(('🛠️ Next Steps', '\n'.join(actions)))
+
+    try:
+        md_body = build_markdown_document(
+            title=f"New registration — {full_name}",
+            severity='info',
+            meta=meta,
+            sections=sections,
+            footer_id=f'USR-{public_id}',
+        )
+    except Exception as e:
+        logger.error(f"build_markdown_document failed: {e}", exc_info=True)
+        return
+
+    filename = make_report_filename('new_user', public_id)
+
+    summary = [
+        summary_row('👤', 'Name', full_name),
+        summary_row('📞', 'Phone', phone),
+        summary_row('📍', 'Location', student.get('location') or '—'),
+        summary_row('🏫', 'School', truncate(student.get('school') or '—', 60)),
+    ]
+
+    try:
+        notify_super_admins(
+            event_type='user_registered',
+            title=f'New user registered: {full_name}',
+            md_body=md_body,
+            md_filename=filename,
+            summary=summary,
+            primary_url=admin_url,
+            primary_url_label='Open user panel',
+            severity='info',
+            reference_id=f'USR-{public_id}',
+            icon='🆕',
+        )
+    except Exception as e:
+        logger.error(f"notify_super_admins failed: {e}", exc_info=True)
 
 
 # ============================================
@@ -114,6 +258,50 @@ def check_phone():
         return jsonify({'valid': True, 'taken': False}), 200
 
     return jsonify({'valid': True, 'taken': bool(existing)}), 200
+
+
+# ============================================
+# SCHOOL SUGGESTIONS (AJAX — for registration form)
+# ============================================
+# Returns up to 10 distinct school names that already exist in the
+# students table for the given location, matching the typed prefix.
+# Ranked by frequency (most-used schools first).
+#
+# No hardcoded suggestions — if the DB is empty, returns [].
+
+@auth_bp.route('/auth/school-suggestions', methods=['GET'])
+def school_suggestions():
+    if not _rate_limit(f'school:{_client_ip()}', max_calls=60, window_seconds=60):
+        return jsonify({'suggestions': []}), 429
+
+    q = (request.args.get('q') or '').strip()
+    location = (request.args.get('location') or '').strip().upper()
+
+    if len(q) < 3:
+        return jsonify({'suggestions': []}), 200
+
+    if location not in ('SO', 'PL', 'SL'):
+        return jsonify({'suggestions': []}), 200
+
+    pattern = _escape_like(q) + '%'
+
+    try:
+        cursor = execute_with_retry("""
+            SELECT school, COUNT(*) AS n
+            FROM students
+            WHERE school IS NOT NULL AND school != ''
+              AND location = ?
+              AND LOWER(school) LIKE LOWER(?) ESCAPE '!'
+            GROUP BY school
+            ORDER BY n DESC, school ASC
+            LIMIT 10
+        """, (location, pattern))
+        suggestions = [row['school'] for row in cursor.fetchall()]
+    except Exception as e:
+        logger.warning(f"school_suggestions query failed: {e}")
+        suggestions = []
+
+    return jsonify({'suggestions': suggestions}), 200
 
 
 # ============================================
@@ -146,7 +334,6 @@ def register():
     location = (request.form.get('location') or '').strip()
     city = (request.form.get('city') or '').strip()
     school = (request.form.get('school') or '').strip()
-    school_manual = (request.form.get('school_manual') or '').strip()
     grade = (request.form.get('grade') or '').strip()
     curriculum = (request.form.get('curriculum') or '').strip()
 
@@ -186,9 +373,12 @@ def register():
         flash('Please select a valid grade.', 'error')
         return render_template('auth/register.html')
 
-    school_value = school_manual if school == 'manual' and school_manual else school
-    if not school_value:
-        flash('Please select or enter your school.', 'error')
+    # School validation: 2+ words, each 4+ letters
+    school_words = school.split()
+    if len(school_words) < 2 or not all(
+        len(w) >= 4 and w.isalpha() for w in school_words
+    ):
+        flash('School must be at least 2 words, each 4+ letters.', 'error')
         return render_template('auth/register.html')
 
     if location == 'PL':
@@ -230,7 +420,7 @@ def register():
             last_name,
             location,
             city,
-            school_value,
+            school,
             grade,
             curriculum,
             get_somali_time_db(),
@@ -239,6 +429,14 @@ def register():
         logger.error(f"Failed to insert new student: {e}", exc_info=True)
         flash('An error occurred while saving your details. Please try again.', 'error')
         return render_template('auth/register.html')
+
+    # Notify super admins via Telegram (fire-and-forget).
+    try:
+        new_user = get_student_by_phone(phone)
+        if new_user:
+            _notify_new_registration(new_user)
+    except Exception as e:
+        logger.warning(f"Registration notification failed (non-fatal): {e}")
 
     flash('Registration successful! Please login.', 'success')
     return redirect(url_for('auth.login'))
@@ -289,12 +487,6 @@ def login():
         flash('Invalid phone number or password.', 'error')
         return render_template('auth/login.html')
 
-    # ------------------------------------------------------------------
-    # SESSION BOOTSTRAP
-    # ------------------------------------------------------------------
-    # session['session_version'] is stored here so that
-    # app.py::refresh_user_state_if_needed can detect a force-logout.
-    # ------------------------------------------------------------------
     session.clear()
     session['user_id'] = student['id']
     session['public_id'] = student.get('public_id', '----')
@@ -351,16 +543,6 @@ def logout():
 # ============================================
 
 def _build_help_message(student, user_id):
-    """
-    Compose the WhatsApp prefill for the help button.
-
-    When the user is logged in and has a public_id, the message contains:
-      - their name
-      - their public id
-      - their phone number
-      - a direct admin profile URL (BASE_URL + /admin/users/<id>)
-    Otherwise a generic message asks them to include their phone manually.
-    """
     base_url = (getattr(Config, 'BASE_URL', '') or '').rstrip('/')
 
     if not student or not user_id:
@@ -376,7 +558,6 @@ def _build_help_message(student, user_id):
         or 'Student'
     )
     phone = student.get('phone_number') or '—'
-
     profile_url = f"{base_url}/admin/users/{user_id}" if base_url else None
 
     lines = [
@@ -400,7 +581,6 @@ def help():
     phone = Config.SUPER_ADMIN_PHONE or ''
     phone_clean = re.sub(r'\D', '', phone) if phone else ''
 
-    # Build the prefill message based on whether the user is logged in.
     student = None
     user_id = session.get('user_id')
     if user_id:
@@ -412,9 +592,7 @@ def help():
     prefill = _build_help_message(student, user_id)
     help_wa_url = None
     if phone_clean:
-        help_wa_url = (
-            f"https://wa.me/{phone_clean}?text={urlquote(prefill)}"
-        )
+        help_wa_url = f"https://wa.me/{phone_clean}?text={urlquote(prefill)}"
 
     return render_template(
         'auth/help.html',

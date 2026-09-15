@@ -138,5 +138,15 @@
             });
         });
     });
+
+    // ── BACK-BUTTON GUARD ──
+    // If a logged-in user lands here via the browser's back button,
+    // reload so the server can redirect them to /home instead of
+    // showing the login form from the back-forward cache.
+    window.addEventListener('pageshow', function (e) {
+        if (e.persisted) {
+            window.location.reload();
+        }
+    });
 </script>
 {% endblock %}

@@ -16,10 +16,6 @@
 # included in the pulse ONLY when is_super_admin() is true. Regular
 # admins receive pulse without revenue keys and the template hides
 # those tiles anyway.
-#
-# NOTE: The standalone PDF intake panel (pdf_admin) is no longer
-# referenced from admin UI. All PDF work flows through /admin/pdfs
-# using the admin session.
 # ============================================================
 
 import os
@@ -194,7 +190,111 @@ def dashboard():
         )
 
 
-def _build_pulse(include_revenue: bool = False):
+# ============================================================
+# GLOBAL SEARCH
+# ============================================================
+
+@admin_system_bp.route('/search', methods=['GET'], endpoint='search')
+@admin_can('search.use')
+def search():
+    """
+    Global admin search across users, questions, PDFs, and groups.
+    Every block runs its own query; failures are non-fatal so a
+    partially-broken domain never blocks the whole search.
+    """
+    q = (request.args.get('q') or '').strip()
+    users = []
+    questions = []
+    pdfs = []
+    groups = []
+
+    if q:
+        like = f"%{q}%"
+        limit = 10
+
+        # ---------- Users ----------
+        try:
+            users = _rows("""
+                SELECT id, public_id, first_name, middle_name, last_name,
+                       phone_number, school, tier, is_admin
+                FROM students
+                WHERE first_name LIKE ?
+                   OR middle_name LIKE ?
+                   OR last_name LIKE ?
+                   OR phone_number LIKE ?
+                   OR public_id LIKE ?
+                   OR school LIKE ?
+                ORDER BY first_name
+                LIMIT ?
+            """, (like, like, like, like, like, like, limit))
+        except Exception as e:
+            logger.debug(f"search: users failed: {e}")
+
+        # ---------- Questions ----------
+        try:
+            questions = _rows("""
+                SELECT id, question_text, subject_code, chapter,
+                       pdf_code, difficulty
+                FROM questions
+                WHERE question_text LIKE ?
+                   OR chapter LIKE ?
+                   OR tags LIKE ?
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (like, like, like, limit))
+
+            from subjects_config import get_subject
+            for qst in questions:
+                subj = get_subject(qst.get('subject_code'))
+                qst['subject_name'] = subj['name'] if subj else qst.get('subject_code')
+        except Exception as e:
+            logger.debug(f"search: questions failed: {e}")
+
+        # ---------- PDFs ----------
+        try:
+            pdfs = _rows("""
+                SELECT id, code, title, subject, curriculum, class, is_premium
+                FROM pdfs
+                WHERE title LIKE ?
+                   OR code LIKE ?
+                   OR subject LIKE ?
+                   OR tags LIKE ?
+                ORDER BY uploaded_at DESC
+                LIMIT ?
+            """, (like, like, like, like, limit))
+        except Exception as e:
+            logger.debug(f"search: pdfs failed: {e}")
+
+        # ---------- Groups ----------
+        try:
+            groups = _rows("""
+                SELECT id, name, platform, category, icon,
+                       is_featured, is_active
+                FROM groups
+                WHERE name LIKE ?
+                   OR description LIKE ?
+                   OR category LIKE ?
+                ORDER BY is_featured DESC, click_count DESC
+                LIMIT ?
+            """, (like, like, like, limit))
+        except Exception as e:
+            logger.debug(f"search: groups failed: {e}")
+
+    return render_template(
+        'dashboard/admin/search.html',
+        query=q,
+        users=users,
+        questions=questions,
+        pdfs=pdfs,
+        groups=groups,
+    )
+
+
+# ============================================================
+# PULSE / ALERTS / SYSTEM / ACTIVITY HELPERS
+# ============================================================
+
+def _build_pulse(include_revenue=False):
     """
     Build the pulse dict.
 
@@ -262,8 +362,14 @@ def _build_pulse(include_revenue: bool = False):
 
 
 def _build_alerts(pulse):
+    """
+    Super-admin alert strip at the top of the command centre.
+    Ordered by operational urgency: approvals → publishing → errors
+    → backup → disk.
+    """
     alerts = []
 
+    # ─── Pending upgrade requests ───
     if pulse.get('upgrades_pending', 0) > 0:
         alerts.append({
             'icon': '🚀',
@@ -272,6 +378,28 @@ def _build_alerts(pulse):
             'link': url_for('upgrade.admin_list', status='pending'),
         })
 
+    # ─── Staged PDFs ready to publish (super admin only) ───
+    if is_super_admin():
+        try:
+            from bot.db import count_bot_pdfs
+            staged = count_bot_pdfs()
+            if staged > 0:
+                alerts.append({
+                    'icon': '☁️',
+                    'title': (
+                        f"{staged} staged PDF{'s' if staged != 1 else ''} "
+                        f"ready to publish"
+                    ),
+                    'subtitle': (
+                        'Fulfilled Telegram uploads awaiting release '
+                        'to the platform.'
+                    ),
+                    'link': url_for('admin_content.pdfs', tab='staging'),
+                })
+        except Exception as e:
+            logger.debug(f"staged pdf count failed: {e}")
+
+    # ─── Unresolved errors ───
     if pulse.get('errors_open', 0) > 5:
         alerts.append({
             'icon': '⚠️',
@@ -280,6 +408,7 @@ def _build_alerts(pulse):
             'link': url_for('admin_errors.index', resolved='0'),
         })
 
+    # ─── Backup freshness ───
     age = pulse.get('backup_age_days')
     if age is None or age > 3:
         alerts.append({
@@ -292,6 +421,7 @@ def _build_alerts(pulse):
             'link': url_for('admin_backup.dashboard'),
         })
 
+    # ─── Disk pressure ───
     if pulse.get('disk_used_pct', 0) >= 85:
         alerts.append({
             'icon': '💽',
@@ -367,16 +497,44 @@ def _build_recent_actions():
     return out
 
 
+def _build_recent_own_actions():
+    """
+    Recent audit entries authored by the current admin.
+    Powers the 'Your recent actions' panel on the regular-admin
+    workbench view of the overview page.
+    """
+    uid = session.get('user_id')
+    if not uid:
+        return []
+
+    rows = _rows("""
+        SELECT action, target_type, created_at, severity
+        FROM admin_audit_log
+        WHERE actor_id = ?
+        ORDER BY created_at DESC
+        LIMIT 10
+    """, (uid,))
+
+    out = []
+    for r in rows:
+        out.append({
+            'icon': '✅' if r.get('severity') == 'info' else '⚠️',
+            'description': r.get('action', '') or '',
+            'time': (r.get('created_at') or '')[:16],
+        })
+    return out
+
+
 def _build_pending_work():
     """
-    Regular-admin workbench: pending items only, no revenue.
-
-    NOTE: The standalone PDF intake panel (pdf_admin) is no longer
-    surfaced here. PDF work is handled through /admin/pdfs using the
-    same admin session.
+    Regular-admin workbench: queued items that need attention.
+    No revenue. No staging publish — that's super-admin only.
+    Ordered by the admin's most common workflow:
+        reports → PDF intake → (silent when empty)
     """
     items = []
 
+    # ─── Reported questions ───
     try:
         n = _scalar(
             "SELECT COUNT(*) FROM question_interactions "
@@ -390,122 +548,49 @@ def _build_pending_work():
                 'count': n,
                 'link': url_for('admin_community.reports'),
             })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"report count failed: {e}")
+
+    # ─── PDFs waiting for intake ───
+    try:
+        from services.admin.capabilities import admin_can as _admin_can
+        if _admin_can('pdfs.intake'):
+            from bot.db import count_pending_pdfs
+            n = count_pending_pdfs()
+            if n > 0:
+                items.append({
+                    'icon': '📥',
+                    'label': 'PDFs waiting for intake',
+                    'description': (
+                        'Telegram uploads not yet processed into staging.'
+                    ),
+                    'count': n,
+                    'link': url_for('admin_content.pdfs', tab='intake'),
+                })
+    except Exception as e:
+        logger.debug(f"pending pdf count failed: {e}")
+
+    # ─── Staged PDFs awaiting platform publish (super admin only) ───
+    try:
+        from services.admin.capabilities import admin_can as _admin_can
+        if _admin_can('pdfs.publish'):
+            from bot.db import count_bot_pdfs
+            n = count_bot_pdfs()
+            if n > 0:
+                items.append({
+                    'icon': '☁️',
+                    'label': 'Staged PDFs ready to publish',
+                    'description': (
+                        'Fulfilled uploads awaiting a super admin to release.'
+                    ),
+                    'count': n,
+                    'link': url_for('admin_content.pdfs', tab='staging'),
+                })
+    except Exception as e:
+        logger.debug(f"staged pdf count failed: {e}")
 
     total = sum(i['count'] for i in items)
     return {'total': total, 'items': items}
-
-
-def _build_recent_own_actions():
-    uid = session.get('user_id')
-    if not uid:
-        return []
-    rows = _rows("""
-        SELECT action, target_type, created_at, severity
-        FROM admin_audit_log
-        WHERE actor_id = ?
-        ORDER BY created_at DESC
-        LIMIT 10
-    """, (uid,))
-    out = []
-    for r in rows:
-        out.append({
-            'icon': '✅' if r.get('severity') == 'info' else '⚠️',
-            'description': f"{r.get('action', '')}",
-            'time': (r.get('created_at') or '')[:16],
-        })
-    return out
-
-
-# ============================================================
-# GLOBAL SEARCH
-# ============================================================
-
-@admin_system_bp.route('/search', methods=['GET'], endpoint='search')
-@admin_can('search.use')
-def search():
-    q = (request.args.get('q') or '').strip()
-    users = []
-    questions = []
-    pdfs = []
-    groups = []
-
-    if q:
-        like = f"%{q}%"
-        limit = 10
-
-        try:
-            users = _rows("""
-                SELECT id, public_id, first_name, middle_name, last_name,
-                       phone_number, school, tier, is_admin
-                FROM students
-                WHERE first_name LIKE ?
-                   OR middle_name LIKE ?
-                   OR last_name LIKE ?
-                   OR phone_number LIKE ?
-                   OR public_id LIKE ?
-                   OR school LIKE ?
-                ORDER BY first_name
-                LIMIT ?
-            """, (like, like, like, like, like, like, limit))
-        except Exception:
-            pass
-
-        try:
-            questions = _rows("""
-                SELECT id, question_text, subject_code, chapter,
-                       pdf_code, difficulty
-                FROM questions
-                WHERE question_text LIKE ?
-                   OR chapter LIKE ?
-                   OR tags LIKE ?
-                ORDER BY created_at DESC
-                LIMIT ?
-            """, (like, like, like, limit))
-            from subjects_config import get_subject
-            for qst in questions:
-                subj = get_subject(qst.get('subject_code'))
-                qst['subject_name'] = subj['name'] if subj else qst.get('subject_code')
-        except Exception:
-            pass
-
-        try:
-            pdfs = _rows("""
-                SELECT id, code, title, subject, curriculum, class, is_premium
-                FROM pdfs
-                WHERE title LIKE ?
-                   OR code LIKE ?
-                   OR subject LIKE ?
-                   OR tags LIKE ?
-                ORDER BY uploaded_at DESC
-                LIMIT ?
-            """, (like, like, like, like, limit))
-        except Exception:
-            pass
-
-        try:
-            groups = _rows("""
-                SELECT id, name, platform, category, icon,
-                       is_featured, is_active
-                FROM groups
-                WHERE name LIKE ?
-                   OR description LIKE ?
-                   OR category LIKE ?
-                ORDER BY is_featured DESC, click_count DESC
-                LIMIT ?
-            """, (like, like, like, limit))
-        except Exception:
-            pass
-
-    return render_template(
-        'dashboard/admin/search.html',
-        query=q,
-        users=users,
-        questions=questions,
-        pdfs=pdfs,
-        groups=groups,
-    )
 
 
 # ============================================================

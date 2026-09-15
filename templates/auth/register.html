@@ -29,6 +29,11 @@
         <div class="wizard-step-circle"><span class="num">4</span><i class="fas fa-check check"></i></div>
         <div class="wizard-step-label">School</div>
     </div>
+    <div class="wizard-step-line"><div class="line-fill"></div></div>
+    <div class="wizard-step" data-step="5">
+        <div class="wizard-step-circle"><span class="num">5</span><i class="fas fa-check check"></i></div>
+        <div class="wizard-step-label">Confirm</div>
+    </div>
 </div>
 
 <form method="POST" action="{{ url_for('auth.register') }}" class="auth-form" id="registerForm" novalidate>
@@ -223,26 +228,16 @@
 
         <div class="form-group">
             <label>🏫 School <span class="required">*</span></label>
-            <div class="card-grid card-grid-2" id="schoolCards">
-                <div class="card-empty">
-                    <i class="fas fa-arrow-up"></i>
-                    <span>Select a location first</span>
-                </div>
+            <div class="input-wrapper" id="schoolWrapper">
+                <span class="input-icon"><i class="fas fa-school"></i></span>
+                <input type="text" name="school" id="schoolInput"
+                       placeholder="Type at least 3 letters to see suggestions"
+                       autocomplete="off" spellcheck="false"
+                       required maxlength="120" />
             </div>
-            <input type="hidden" name="school" id="school" />
-
-            <div class="school-manual" id="schoolManual">
-                <div class="input-wrapper" id="schoolManualWrapper">
-                    <span class="input-icon"><i class="fas fa-pen"></i></span>
-                    <input type="text" name="school_manual" id="schoolManualInput"
-                           placeholder="Enter school name" />
-                </div>
-                <div class="error-message" id="schoolManualError">
-                    Min 2 words, each 4+ letters
-                </div>
-            </div>
+            <div class="school-suggestions" id="schoolSuggestions"></div>
             <div class="error-message" id="schoolError">
-                Please select or enter your school
+                Min 2 words, each 4+ letters
             </div>
         </div>
 
@@ -279,6 +274,87 @@
                 </label>
             </div>
             <div class="error-message" id="gradeError">Please select your grade</div>
+        </div>
+    </div>
+
+    <!-- STEP 5 — REVIEW & CONFIRM -->
+    <div class="wizard-panel" data-step="5">
+        <div class="wizard-panel-head">
+            <h3>Review your details</h3>
+            <p>Make sure everything is correct before creating your account.</p>
+        </div>
+
+        <div class="review-section">
+            <div class="review-section-head">
+                <span class="review-section-title">🔐 Account</span>
+                <button type="button" class="review-edit" data-back-to="1">Edit</button>
+            </div>
+            <div class="review-row">
+                <span class="review-k">Phone</span>
+                <span class="review-v" data-review="phone">—</span>
+            </div>
+            <div class="review-row">
+                <span class="review-k">Password</span>
+                <span class="review-v" style="color:var(--text-muted);letter-spacing:2px;">••••••••</span>
+            </div>
+        </div>
+
+        <div class="review-section">
+            <div class="review-section-head">
+                <span class="review-section-title">👤 Name</span>
+                <button type="button" class="review-edit" data-back-to="2">Edit</button>
+            </div>
+            <div class="review-row">
+                <span class="review-k">First name</span>
+                <span class="review-v" data-review="first_name">—</span>
+            </div>
+            <div class="review-row">
+                <span class="review-k">Middle name</span>
+                <span class="review-v" data-review="middle_name">—</span>
+            </div>
+            <div class="review-row">
+                <span class="review-k">Last name</span>
+                <span class="review-v" data-review="last_name">—</span>
+            </div>
+        </div>
+
+        <div class="review-section">
+            <div class="review-section-head">
+                <span class="review-section-title">📍 Location</span>
+                <button type="button" class="review-edit" data-back-to="3">Edit</button>
+            </div>
+            <div class="review-row">
+                <span class="review-k">Location</span>
+                <span class="review-v" data-review="location">—</span>
+            </div>
+            <div class="review-row" data-review-row="curriculum">
+                <span class="review-k">Curriculum</span>
+                <span class="review-v" data-review="curriculum">—</span>
+            </div>
+            <div class="review-row">
+                <span class="review-k">City</span>
+                <span class="review-v" data-review="city">—</span>
+            </div>
+        </div>
+
+        <div class="review-section">
+            <div class="review-section-head">
+                <span class="review-section-title">🏫 Education</span>
+                <button type="button" class="review-edit" data-back-to="4">Edit</button>
+            </div>
+            <div class="review-row">
+                <span class="review-k">School</span>
+                <span class="review-v" data-review="school">—</span>
+            </div>
+            <div class="review-row">
+                <span class="review-k">Grade</span>
+                <span class="review-v" data-review="grade">—</span>
+            </div>
+        </div>
+
+        <div class="review-notice">
+            <i class="fas fa-info-circle"></i>
+            <span>Fadlan Xogtada inay saxantahay iska hubi, inad wax kabadasho hadhow melaha qaar kuma surta galayso</span>
         </div>
     </div>
 

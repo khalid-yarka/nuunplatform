@@ -32,7 +32,8 @@ from admin_users_db import (
     force_user_logout,
     set_user_public_id, get_user_admin_history, get_user_recent_quizzes_admin,
     get_user_recent_live_quizzes, bulk_user_action, log_admin_user_action,
-    update_user_profile,     # ← NEW
+    update_user_profile,
+    set_user_verified,
 )
 from utils import validate_csrf
 from services.admin.guards import admin_can
@@ -59,6 +60,7 @@ def list_users():
     tier_filter = (request.args.get('tier') or '').strip().lower()
     location_filter = (request.args.get('location') or '').strip().upper()
     curriculum_filter = (request.args.get('curriculum') or '').strip().lower()
+    verified_filter = (request.args.get('verified') or '').strip()
     only_admins = request.args.get('admins') == '1'
     only_inactive = request.args.get('inactive') == '1'
     sort = (request.args.get('sort') or 'newest').strip()
@@ -69,6 +71,7 @@ def list_users():
         search=search, tier_filter=tier_filter,
         location_filter=location_filter, curriculum_filter=curriculum_filter,
         only_admins=only_admins, only_inactive=only_inactive,
+        verified_filter=verified_filter,
         sort=sort, page=page, per_page=per_page,
     )
     total_pages = (total + per_page - 1) // per_page if total > 0 else 1
@@ -82,8 +85,8 @@ def list_users():
         users=users, total=total, page=page, per_page=per_page,
         total_pages=total_pages, stats=stats, search=search,
         tier_filter=tier_filter, location_filter=location_filter,
-        curriculum_filter=curriculum_filter, only_admins=only_admins,
-        only_inactive=only_inactive, sort=sort,
+        curriculum_filter=curriculum_filter, verified_filter=verified_filter,
+        only_admins=only_admins, only_inactive=only_inactive, sort=sort,
     )
 
 
@@ -102,6 +105,7 @@ def users_export():
         curriculum_filter=(request.args.get('curriculum') or '').strip().lower(),
         only_admins=request.args.get('admins') == '1',
         only_inactive=request.args.get('inactive') == '1',
+        verified_filter=(request.args.get('verified') or '').strip(),
         sort=(request.args.get('sort') or 'newest').strip(),
     )
 
@@ -172,18 +176,13 @@ def user_detail(user_id):
 
 
 # ============================================================
-# PROFILE EDIT (NEW — fixes "super admin can't edit user details")
+# PROFILE EDIT
 # ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/profile', methods=['POST'],
                       endpoint='edit_profile')
 @admin_can('users.view')
 def edit_profile(user_id):
-    """
-    Update a user's profile as super admin. Every changed field is
-    audited. Guarded by users.view for now — change to a dedicated
-    users.edit_profile capability if you want to restrict further.
-    """
     validate_csrf()
 
     user = get_student_by_id(user_id)
@@ -219,6 +218,79 @@ def edit_profile(user_id):
         flash(msg or 'No changes.', 'info')
     else:
         flash(msg or 'Failed to update profile.', 'error')
+
+    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
+
+# ============================================================
+# VERIFY / UNVERIFY
+# ============================================================
+
+@admin_users_bp.route('/users/<int:user_id>/verify', methods=['POST'],
+                      endpoint='verify_user')
+@admin_can('users.view')
+def verify_user(user_id):
+    validate_csrf()
+
+    if user_id == session['user_id']:
+        flash('You cannot verify your own account.', 'error')
+        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
+    user = get_student_by_id(user_id)
+    if not user:
+        flash('User not found.', 'error')
+        return redirect(url_for('admin_users.list_users'))
+
+    if set_user_verified(user_id, True, session['user_id']):
+        write_audit(
+            action='user.verify', target_type='user', target_id=user_id,
+            before={'is_verified': 0}, after={'is_verified': 1},
+            severity='info',
+        )
+        # Best-effort: notify the user in-app
+        try:
+            from db import create_notification
+            create_notification(
+                user_id=user_id,
+                type='account',
+                title='✅ Account Verified',
+                body='Your account has been verified. You can now log in and start learning.',
+                link='/login',
+                icon='✅',
+            )
+        except Exception:
+            pass
+        flash('User verified.', 'success')
+    else:
+        flash('Failed to verify user.', 'error')
+
+    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
+
+@admin_users_bp.route('/users/<int:user_id>/unverify', methods=['POST'],
+                      endpoint='unverify_user')
+@admin_can('users.view')
+def unverify_user(user_id):
+    validate_csrf()
+
+    if user_id == session['user_id']:
+        flash('You cannot unverify your own account.', 'error')
+        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
+    user = get_student_by_id(user_id)
+    if not user:
+        flash('User not found.', 'error')
+        return redirect(url_for('admin_users.list_users'))
+
+    if set_user_verified(user_id, False, session['user_id']):
+        write_audit(
+            action='user.unverify', target_type='user', target_id=user_id,
+            before={'is_verified': 1}, after={'is_verified': 0},
+            severity='warning',
+        )
+        flash('User unverified.', 'info')
+    else:
+        flash('Failed to unverify user.', 'error')
 
     return redirect(url_for('admin_users.user_detail', user_id=user_id))
 

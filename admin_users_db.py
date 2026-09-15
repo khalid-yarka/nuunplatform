@@ -74,6 +74,7 @@ def ensure_admin_user_schema() -> bool:
             "CREATE INDEX IF NOT EXISTS idx_students_created ON students(created_at DESC)",
             "CREATE INDEX IF NOT EXISTS idx_students_points ON students(total_points DESC)",
             "CREATE INDEX IF NOT EXISTS idx_students_location ON students(location)",
+            "CREATE INDEX IF NOT EXISTS idx_students_verified ON students(is_verified)",
         ]:
             try:
                 cursor.execute(idx_sql)
@@ -132,6 +133,7 @@ def _build_user_filter_sql(
     curriculum_filter: str = '',
     only_admins: bool = False,
     only_inactive: bool = False,
+    verified_filter: str = '',
 ) -> Tuple[str, List[Any]]:
     where = ["1=1"]
     params: List[Any] = []
@@ -161,6 +163,11 @@ def _build_user_filter_sql(
     if only_admins:
         where.append("is_admin = 1")
 
+    if verified_filter == '1':
+        where.append("is_verified = 1")
+    elif verified_filter == '0':
+        where.append("is_verified = 0")
+
     if only_inactive:
         where.append("""
             id NOT IN (
@@ -180,6 +187,7 @@ def get_users_admin(
     curriculum_filter: str = '',
     only_admins: bool = False,
     only_inactive: bool = False,
+    verified_filter: str = '',
     sort: str = 'newest',
     page: int = 1,
     per_page: int = 25,
@@ -188,7 +196,7 @@ def get_users_admin(
 
     where_sql, params = _build_user_filter_sql(
         search, tier_filter, location_filter, curriculum_filter,
-        only_admins, only_inactive,
+        only_admins, only_inactive, verified_filter,
     )
     order_sql = SORT_MAP.get(sort, SORT_MAP['newest'])
 
@@ -202,7 +210,7 @@ def get_users_admin(
         f"""
         SELECT id, public_id, first_name, middle_name, last_name,
                phone_number, location, city, school, grade, curriculum,
-               total_points, is_admin, tier, created_at,
+               total_points, is_admin, is_verified, tier, created_at,
                COALESCE(admin_note, '') AS admin_note,
                last_login_at
         FROM students
@@ -223,12 +231,13 @@ def get_users_admin_export(
     curriculum_filter: str = '',
     only_admins: bool = False,
     only_inactive: bool = False,
+    verified_filter: str = '',
     sort: str = 'newest',
 ) -> List[Dict]:
     ensure_admin_user_schema()
     where_sql, params = _build_user_filter_sql(
         search, tier_filter, location_filter, curriculum_filter,
-        only_admins, only_inactive,
+        only_admins, only_inactive, verified_filter,
     )
     order_sql = SORT_MAP.get(sort, SORT_MAP['newest'])
 
@@ -236,7 +245,7 @@ def get_users_admin_export(
         f"""
         SELECT id, public_id, first_name, middle_name, last_name,
                phone_number, location, city, school, grade, curriculum,
-               total_points, is_admin, tier, created_at, last_login_at
+               total_points, is_admin, is_verified, tier, created_at, last_login_at
         FROM students
         WHERE {where_sql}
         ORDER BY {order_sql}
@@ -252,7 +261,7 @@ def users_to_csv(users: List[Dict]) -> str:
     writer.writerow([
         'Public ID', 'First Name', 'Middle Name', 'Last Name',
         'Phone', 'Location', 'City', 'School', 'Grade', 'Curriculum',
-        'Tier', 'Points', 'Admin', 'Joined', 'Last Login',
+        'Tier', 'Points', 'Verified', 'Admin', 'Joined', 'Last Login',
     ])
     for u in users:
         writer.writerow([
@@ -268,6 +277,7 @@ def users_to_csv(users: List[Dict]) -> str:
             u.get('curriculum') or '',
             normalize_tier(u.get('tier') or 'free').upper(),
             u.get('total_points') or 0,
+            'YES' if u.get('is_verified') else 'NO',
             'YES' if u.get('is_admin') else 'NO',
             u.get('created_at') or '',
             u.get('last_login_at') or '',
@@ -282,6 +292,8 @@ def get_users_admin_stats() -> Dict[str, int]:
             SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN is_admin = 1 THEN 1 ELSE 0 END) AS admins,
+                SUM(CASE WHEN is_verified = 1 THEN 1 ELSE 0 END) AS verified,
+                SUM(CASE WHEN is_verified = 0 THEN 1 ELSE 0 END) AS unverified,
                 SUM(CASE WHEN tier = 'free'    THEN 1 ELSE 0 END) AS free,
                 SUM(CASE WHEN tier = 'premium' THEN 1 ELSE 0 END) AS premium,
                 SUM(CASE WHEN tier = 'pro'     THEN 1 ELSE 0 END) AS pro,
@@ -296,6 +308,7 @@ def get_users_admin_stats() -> Dict[str, int]:
         logger.error(f"get_users_admin_stats failed: {e}")
     return {
         'total': 0, 'admins': 0,
+        'verified': 0, 'unverified': 0,
         'free': 0, 'premium': 0, 'pro': 0,
         'this_week': 0, 'today': 0,
     }
@@ -374,11 +387,9 @@ def get_user_recent_live_quizzes(user_id: int, limit: int = 10) -> List[Dict]:
 
 
 # ============================================
-# PROFILE EDIT (NEW)
+# PROFILE EDIT
 # ============================================
 
-# Validation rules shared with auth_bp — kept here so admin edits and
-# registration stay in sync.
 _VALID_GRADES = ('G7', 'G8', 'F3', 'F4')
 _VALID_LOCATIONS = ('SO', 'PL', 'SL')
 _VALID_CURRICULA = ('general', 'science', 'arts')
@@ -411,21 +422,7 @@ def _normalize_phone(raw: str) -> str:
 def update_user_profile(user_id: int, data: Dict[str, Any], admin_id: int) -> Tuple[bool, str, Dict[str, Any]]:
     """
     Update a user's profile fields as a super admin.
-
-    Accepts the following keys in `data` (all optional):
-        first_name, middle_name, last_name,
-        phone_number, school, grade, city, location, curriculum
-
     Returns (ok, message, changed_fields).
-
-    Validation:
-      - names:   >= 4 letters, alphabetic only
-      - school:  >= 2 words, each >= 4 letters
-      - city:    >= 5 letters
-      - grade:   one of G7, G8, F3, F4
-      - location: one of SO, PL, SL
-      - curriculum: only for PL; must be one of general/science/arts
-      - phone:   normalized to +252XXXXXXXXX; must be unique
     """
     ensure_admin_user_schema()
 
@@ -435,7 +432,6 @@ def update_user_profile(user_id: int, data: Dict[str, Any], admin_id: int) -> Tu
 
     old = dict(user)
 
-    # -------- normalize inputs --------
     new_first = (data.get('first_name') or old.get('first_name') or '').strip()
     new_middle = (data.get('middle_name') or '').strip() if 'middle_name' in data else (old.get('middle_name') or '')
     new_last = (data.get('last_name') or old.get('last_name') or '').strip()
@@ -444,13 +440,11 @@ def update_user_profile(user_id: int, data: Dict[str, Any], admin_id: int) -> Tu
     new_city = (data.get('city') or old.get('city') or '').strip()
     new_location = (data.get('location') or old.get('location') or '').strip()
 
-    # curriculum: only meaningful for PL
     if 'curriculum' in data:
         new_curriculum = (data.get('curriculum') or '').strip() or None
     else:
         new_curriculum = old.get('curriculum')
 
-    # phone — optional in the form
     new_phone_raw = (data.get('phone_number') or '').strip()
     new_phone = None
     if new_phone_raw:
@@ -459,7 +453,6 @@ def update_user_profile(user_id: int, data: Dict[str, Any], admin_id: int) -> Tu
             return False, 'Phone number must be exactly 9 digits.', {}
         new_phone = _normalize_phone(digits)
 
-    # -------- validate --------
     if not _valid_name(new_first):
         return False, 'First name must be at least 4 letters (A–Z).', {}
     if new_middle and not re.fullmatch(r'[A-Za-z]+', new_middle):
@@ -489,7 +482,6 @@ def update_user_profile(user_id: int, data: Dict[str, Any], admin_id: int) -> Tu
         if cursor.fetchone():
             return False, 'This phone number is already used by another account.', {}
 
-    # -------- build diff --------
     candidate = {
         'first_name': new_first,
         'middle_name': new_middle,
@@ -512,7 +504,6 @@ def update_user_profile(user_id: int, data: Dict[str, Any], admin_id: int) -> Tu
     if not changed_fields:
         return True, 'No changes.', {}
 
-    # -------- persist --------
     try:
         set_clauses = []
         params = []
@@ -535,6 +526,42 @@ def update_user_profile(user_id: int, data: Dict[str, Any], admin_id: int) -> Tu
     except Exception as e:
         logger.error(f"update_user_profile failed: {e}", exc_info=True)
         return False, 'Database error while saving.', {}
+
+
+# ============================================
+# VERIFICATION
+# ============================================
+
+def set_user_verified(user_id: int, is_verified: bool, admin_id: int) -> bool:
+    """
+    Set a user's verification status. Returns True on success (including
+    a no-op when the value is unchanged).
+    """
+    ensure_admin_user_schema()
+    try:
+        user = get_student_by_id(user_id)
+        if not user:
+            return False
+
+        old = int(user.get('is_verified', 0) or 0)
+        new = 1 if is_verified else 0
+
+        if old == new:
+            return True
+
+        execute_with_retry(
+            "UPDATE students SET is_verified = ? WHERE id = ?",
+            (new, user_id), commit=True,
+        )
+        log_admin_user_action(
+            admin_id, user_id,
+            'verify' if is_verified else 'unverify',
+            str(old), str(new),
+        )
+        return True
+    except Exception as e:
+        logger.error(f"set_user_verified failed: {e}")
+        return False
 
 
 # ============================================
@@ -809,6 +836,28 @@ def bulk_user_action(
                     (uid,), commit=True
                 )
                 log_admin_user_action(admin_id, uid, 'toggle_admin', '1', '0')
+                succeeded += 1
+
+            elif action == 'verify':
+                if user.get('is_verified'):
+                    failed += 1
+                    continue
+                execute_with_retry(
+                    "UPDATE students SET is_verified = 1 WHERE id = ?",
+                    (uid,), commit=True
+                )
+                log_admin_user_action(admin_id, uid, 'verify', '0', '1')
+                succeeded += 1
+
+            elif action == 'unverify':
+                if not user.get('is_verified'):
+                    failed += 1
+                    continue
+                execute_with_retry(
+                    "UPDATE students SET is_verified = 0 WHERE id = ?",
+                    (uid,), commit=True
+                )
+                log_admin_user_action(admin_id, uid, 'unverify', '1', '0')
                 succeeded += 1
 
             elif action == 'delete':

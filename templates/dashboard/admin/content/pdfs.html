@@ -287,10 +287,20 @@
 
                     <div class="pdf-staging-body">
                         <div class="pdf-staging-title">{{ p.title }}</div>
+
+                        {% if p.original_filename %}
+                            <div class="pdf-staging-original">
+                                <i class="fas fa-paperclip"></i>
+                                Original: <span>{{ p.original_filename }}</span>
+                            </div>
+                        {% endif %}
+
                         <div class="pdf-staging-meta">
                             {% if p.subject %}<span>{{ p.subject }}</span>{% endif %}
                             {% if p.curriculum %}<span>{{ p.curriculum }}</span>{% endif %}
                             {% if p.class %}<span>{{ p.class }}</span>{% endif %}
+                            {% if p.chapter %}<span>{{ p.chapter }}</span>{% endif %}
+                            {% if p.tags %}<span>{{ p.tags }}</span>{% endif %}
                             {% if p.is_premium %}<span class="pdf-meta-chip premium">💎 Premium</span>{% endif %}
                             <span class="pdf-staging-date">{{ (p.uploaded_at or '')[:10] }}</span>
                         </div>
@@ -320,8 +330,6 @@
         {% if can_publish %}
             </form>
 
-            {# Individual delete forms live OUTSIDE the publish form
-               to avoid nested form submission issues. #}
             {% if can_delete %}
                 {% for p in staging_list %}
                     <form method="POST"
