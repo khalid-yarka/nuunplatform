@@ -1,4 +1,4 @@
-# bot/db.py – redesigned for two-database PDF system
+# bot/db.py – two-database PDF system with published-flag safety layer
 
 import os
 import sqlite3
@@ -58,24 +58,37 @@ def init_bot_db():
             file_id TEXT NOT NULL,
             file_unique_id TEXT UNIQUE NOT NULL,
             uploaded_by INTEGER,
-            uploaded_at TEXT DEFAULT (datetime('now', 'localtime'))
+            uploaded_at TEXT DEFAULT (datetime('now', 'localtime')),
+            original_filename TEXT DEFAULT '',
+            published INTEGER NOT NULL DEFAULT 0,
+            published_at TEXT
         )
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bot_pdfs_code ON pdfs(code)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bot_pdfs_file_unique_id ON pdfs(file_unique_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bot_pdfs_subject ON pdfs(subject)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_bot_pdfs_published ON pdfs(published)")
 
-    # ---- Migration: add original_filename if missing ----
+    # ---- Idempotent migrations for existing installs ----
     try:
         cursor.execute("PRAGMA table_info(pdfs)")
         existing_cols = {row[1] for row in cursor.fetchall()}
+
         if 'original_filename' not in existing_cols:
-            cursor.execute(
-                "ALTER TABLE pdfs ADD COLUMN original_filename TEXT DEFAULT ''"
-            )
+            cursor.execute("ALTER TABLE pdfs ADD COLUMN original_filename TEXT DEFAULT ''")
             logger.info("Added original_filename column to bot pdfs table")
+
+        if 'published' not in existing_cols:
+            cursor.execute(
+                "ALTER TABLE pdfs ADD COLUMN published INTEGER NOT NULL DEFAULT 0"
+            )
+            logger.info("Added published column to bot pdfs table")
+
+        if 'published_at' not in existing_cols:
+            cursor.execute("ALTER TABLE pdfs ADD COLUMN published_at TEXT")
+            logger.info("Added published_at column to bot pdfs table")
     except Exception as e:
-        logger.warning(f"Could not add original_filename column: {e}")
+        logger.warning(f"Could not run pdfs column migrations: {e}")
 
     conn.commit()
     conn.close()
@@ -114,23 +127,41 @@ def get_pending_pdf_by_id(pending_id):
     return dict(row) if row else None
 
 
-def get_pending_pdf_list(limit=50, offset=0):
+def get_pending_pdf_list(limit=100, offset=0, search=''):
+    """Return pending PDFs. Optional filename search."""
     conn = _get_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM pending_pdfs
-        ORDER BY uploaded_at DESC
-        LIMIT ? OFFSET ?
-    """, (limit, offset))
+    if search:
+        like = "%" + search + "%"
+        cursor.execute("""
+            SELECT * FROM pending_pdfs
+            WHERE filename LIKE ?
+            ORDER BY uploaded_at DESC
+            LIMIT ? OFFSET ?
+        """, (like, limit, offset))
+    else:
+        cursor.execute("""
+            SELECT * FROM pending_pdfs
+            ORDER BY uploaded_at DESC
+            LIMIT ? OFFSET ?
+        """, (limit, offset))
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
 
-def count_pending_pdfs():
+def count_pending_pdfs(search=''):
+    """Total pending count. If search is set, counts matches only."""
     conn = _get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) as count FROM pending_pdfs")
+    if search:
+        like = "%" + search + "%"
+        cursor.execute(
+            "SELECT COUNT(*) as count FROM pending_pdfs WHERE filename LIKE ?",
+            (like,),
+        )
+    else:
+        cursor.execute("SELECT COUNT(*) as count FROM pending_pdfs")
     row = cursor.fetchone()
     conn.close()
     return row['count'] if row else 0
@@ -177,8 +208,8 @@ def insert_bot_pdf(data):
             INSERT INTO pdfs (
                 code, title, description, curriculum, class, subject,
                 chapter, tags, is_premium, file_id, file_unique_id,
-                uploaded_by, original_filename
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                uploaded_by, original_filename, published
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         """, (
             data['code'],
             data['title'],
@@ -221,8 +252,23 @@ def get_bot_pdf_by_id(pdf_id):
     return dict(row) if row else None
 
 
+def _build_published_clause(published_filter):
+    """
+    published_filter:
+        None  → no filter (return all rows)
+        False → only unpublished (published = 0 or NULL)
+        True  → only published   (published = 1)
+    """
+    if published_filter is None:
+        return "", []
+    if published_filter is True:
+        return " AND COALESCE(published, 0) = 1", []
+    # False
+    return " AND COALESCE(published, 0) = 0", []
+
+
 def get_bot_pdfs(limit=100, offset=0, search='', subject='',
-                 curriculum='', class_filter=''):
+                 curriculum='', class_filter='', published_filter=None):
     conn = _get_connection()
     cursor = conn.cursor()
     query = "SELECT * FROM pdfs WHERE 1=1"
@@ -241,6 +287,11 @@ def get_bot_pdfs(limit=100, offset=0, search='', subject='',
     if class_filter:
         query += " AND class = ?"
         params.append(class_filter)
+
+    pub_clause, pub_params = _build_published_clause(published_filter)
+    query += pub_clause
+    params.extend(pub_params)
+
     query += " ORDER BY uploaded_at DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
     cursor.execute(query, params)
@@ -249,7 +300,8 @@ def get_bot_pdfs(limit=100, offset=0, search='', subject='',
     return [dict(row) for row in rows]
 
 
-def count_bot_pdfs(search='', subject='', curriculum='', class_filter=''):
+def count_bot_pdfs(search='', subject='', curriculum='', class_filter='',
+                   published_filter=None):
     conn = _get_connection()
     cursor = conn.cursor()
     query = "SELECT COUNT(*) as count FROM pdfs WHERE 1=1"
@@ -268,6 +320,11 @@ def count_bot_pdfs(search='', subject='', curriculum='', class_filter=''):
     if class_filter:
         query += " AND class = ?"
         params.append(class_filter)
+
+    pub_clause, pub_params = _build_published_clause(published_filter)
+    query += pub_clause
+    params.extend(pub_params)
+
     cursor.execute(query, params)
     row = cursor.fetchone()
     conn.close()
@@ -301,7 +358,39 @@ def update_bot_pdf(pdf_id, data):
         return False
 
 
+def mark_bot_pdf_published(pdf_id, published=True):
+    """
+    Flag a staging row as published (or revert). Does NOT delete.
+    The row stays in bot_data.db as a permanent backup of the file_id.
+    """
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        if published:
+            cursor.execute(
+                "UPDATE pdfs SET published = 1, "
+                "published_at = datetime('now', 'localtime') WHERE id = ?",
+                (pdf_id,),
+            )
+        else:
+            cursor.execute(
+                "UPDATE pdfs SET published = 0, published_at = NULL WHERE id = ?",
+                (pdf_id,),
+            )
+        conn.commit()
+        affected = cursor.rowcount
+        conn.close()
+        return affected > 0
+    except Exception as e:
+        logger.error(f"Failed to mark bot PDF {pdf_id} published={published}: {e}")
+        return False
+
+
 def delete_bot_pdf(pdf_id):
+    """
+    Hard-delete a staging row. Used by the admin panel's manual delete.
+    Normal publish flow does NOT call this — it marks as published instead.
+    """
     try:
         conn = _get_connection()
         cursor = conn.cursor()

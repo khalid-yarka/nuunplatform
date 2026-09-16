@@ -187,7 +187,23 @@ def _generate_staging_pdf_code():
            ''.join(secrets.choice(chars) for _ in range(4))
 
 
-def _load_unverified_pdfs(show_confirmed=False, limit=500):
+def _count_unverified_pdfs(show_confirmed=False):
+    """Count unverified_pdfs rows. By default only confirmed=0."""
+    try:
+        if show_confirmed:
+            row = execute_with_retry(
+                "SELECT COUNT(*) AS cnt FROM unverified_pdfs"
+            ).fetchone()
+        else:
+            row = execute_with_retry(
+                "SELECT COUNT(*) AS cnt FROM unverified_pdfs WHERE confirmed = 0"
+            ).fetchone()
+        return row['cnt'] if row else 0
+    except Exception:
+        return 0
+
+
+def _load_unverified_pdfs(show_confirmed=False, limit=100, offset=0):
     """
     Return unverified_pdfs joined with their library metadata.
     Only rows whose pdf_id still exists in the library render.
@@ -206,8 +222,8 @@ def _load_unverified_pdfs(show_confirmed=False, limit=500):
     params = []
     if not show_confirmed:
         query += " WHERE up.confirmed = 0"
-    query += " ORDER BY up.published_at DESC LIMIT ?"
-    params.append(limit)
+    query += " ORDER BY up.published_at DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
 
     try:
         cursor = execute_with_retry(query, params)
@@ -221,16 +237,6 @@ def _load_unverified_pdfs(show_confirmed=False, limit=500):
         r['subject_name'] = subj['name'] if subj else r['subject']
 
     return rows
-
-
-def _count_unverified_pdfs():
-    try:
-        row = execute_with_retry(
-            "SELECT COUNT(*) AS cnt FROM unverified_pdfs WHERE confirmed = 0"
-        ).fetchone()
-        return row['cnt'] if row else 0
-    except Exception:
-        return 0
 
 
 # ============================================================
@@ -1124,6 +1130,8 @@ def pdfs():
     can_edit    = admin_can('pdfs.edit')
     can_delete  = admin_can('pdfs.delete')
 
+    PER_PAGE = 100
+
     tab = (request.args.get('tab') or 'library').strip().lower()
     if tab not in ('library', 'intake', 'staging', 'unverified'):
         tab = 'library'
@@ -1134,51 +1142,133 @@ def pdfs():
     if tab == 'unverified' and not can_intake:
         tab = 'library'
 
-    # ---------- Library ----------
+    def _page_param(name='page'):
+        try:
+            p = int(request.args.get(name) or 1)
+        except (ValueError, TypeError):
+            p = 1
+        return max(1, p)
+
+    # ==================================================
+    # LIBRARY TAB
+    # ==================================================
     search = (request.args.get('search') or '').strip()
     subject_filter = (request.args.get('subject') or '').strip()
     curriculum_filter = (request.args.get('curriculum') or '').strip()
     class_filter = (request.args.get('class') or '').strip()
 
+    lib_page = _page_param()
+    lib_offset = (lib_page - 1) * PER_PAGE
+    lib_total = get_main_pdf_count(
+        search=search,
+        subject=subject_filter,
+        curriculum=curriculum_filter,
+        class_filter=class_filter,
+    )
+    lib_total_pages = max(1, (lib_total + PER_PAGE - 1) // PER_PAGE)
+    if lib_page > lib_total_pages:
+        lib_page = lib_total_pages
+        lib_offset = (lib_page - 1) * PER_PAGE
+
     pdf_list = get_all_pdfs(
-        limit=200, offset=0,
+        limit=PER_PAGE, offset=lib_offset,
         search=search,
         subject=subject_filter,
         curriculum=curriculum_filter,
         class_filter=class_filter,
     )
 
-    # ---------- Intake ----------
+    # ==================================================
+    # INTAKE TAB
+    # ==================================================
+    q = (request.args.get('q') or '').strip()
+    intake_page = _page_param()
+    intake_offset = (intake_page - 1) * PER_PAGE
+
     pending_list = []
-    pending_count = 0
+    pending_count = 0            # total unfiltered (for the tab badge)
+    intake_filtered_count = 0    # filtered count (for "Showing X of Y")
+    intake_total_pages = 1
+
     if can_intake:
         try:
             from bot.db import get_pending_pdf_list, count_pending_pdfs
             pending_count = count_pending_pdfs()
-            pending_list = get_pending_pdf_list(limit=200, offset=0)
+            intake_filtered_count = count_pending_pdfs(search=q) if q else pending_count
+            intake_total_pages = max(1, (intake_filtered_count + PER_PAGE - 1) // PER_PAGE)
+            if intake_page > intake_total_pages:
+                intake_page = intake_total_pages
+                intake_offset = (intake_page - 1) * PER_PAGE
+            pending_list = get_pending_pdf_list(
+                limit=PER_PAGE, offset=intake_offset, search=q
+            )
         except Exception as e:
             logger.warning(f"pending list load failed: {e}")
 
-    # ---------- Staging ----------
+    # ==================================================
+    # STAGING TAB
+    # ==================================================
+    show_published = (request.args.get('show_published') == '1')
+    staging_page = _page_param()
+    staging_offset = (staging_page - 1) * PER_PAGE
+
     staging_list = []
     staging_count = 0
+    staging_published_count = 0
+    staging_filtered_count = 0
+    staging_total_pages = 1
+
     if can_intake or can_publish:
         try:
             from bot.db import get_bot_pdfs, count_bot_pdfs
-            staging_count = count_bot_pdfs()
-            staging_list = get_bot_pdfs(limit=200, offset=0)
+
+            staging_count = count_bot_pdfs(published_filter=False)
+            staging_published_count = count_bot_pdfs(published_filter=True)
+
+            view_filter = None if show_published else False
+            staging_filtered_count = (
+                staging_count + staging_published_count
+                if show_published else staging_count
+            )
+            staging_total_pages = max(1, (staging_filtered_count + PER_PAGE - 1) // PER_PAGE)
+            if staging_page > staging_total_pages:
+                staging_page = staging_total_pages
+                staging_offset = (staging_page - 1) * PER_PAGE
+
+            staging_list = get_bot_pdfs(
+                limit=PER_PAGE, offset=staging_offset,
+                published_filter=view_filter,
+            )
         except Exception as e:
             logger.warning(f"staging list load failed: {e}")
 
-    # ---------- Unverified ----------
+    # ==================================================
+    # UNVERIFIED TAB
+    # ==================================================
+    show_confirmed = (request.args.get('show_confirmed') == '1')
+    unverified_page = _page_param()
+    unverified_offset = (unverified_page - 1) * PER_PAGE
+
     unverified_list = []
     unverified_count = 0
-    show_confirmed = (request.args.get('show_confirmed') == '1')
+    unverified_filtered_count = 0
+    unverified_total_pages = 1
+
     if can_intake:
         try:
             unverified_count = _count_unverified_pdfs()
+            unverified_filtered_count = _count_unverified_pdfs(
+                show_confirmed=show_confirmed
+            ) if show_confirmed else unverified_count
+            unverified_total_pages = max(1, (unverified_filtered_count + PER_PAGE - 1) // PER_PAGE)
+            if unverified_page > unverified_total_pages:
+                unverified_page = unverified_total_pages
+                unverified_offset = (unverified_page - 1) * PER_PAGE
+
             unverified_list = _load_unverified_pdfs(
-                show_confirmed=show_confirmed, limit=500
+                show_confirmed=show_confirmed,
+                limit=PER_PAGE,
+                offset=unverified_offset,
             )
         except Exception as e:
             logger.warning(f"unverified list load failed: {e}")
@@ -1190,6 +1280,8 @@ def pdfs():
         can_publish=can_publish,
         can_edit=can_edit,
         can_delete=can_delete,
+
+        # library
         pdfs=pdf_list,
         subjects=get_all_subjects(),
         curricula=get_pdf_distinct_curricula(),
@@ -1198,12 +1290,33 @@ def pdfs():
         subject_filter=subject_filter,
         curriculum_filter=curriculum_filter,
         class_filter=class_filter,
+        lib_page=lib_page,
+        lib_total=lib_total,
+        lib_total_pages=lib_total_pages,
+
+        # intake
         pending_list=pending_list,
         pending_count=pending_count,
+        intake_filtered_count=intake_filtered_count,
+        intake_page=intake_page,
+        intake_total_pages=intake_total_pages,
+        q=q,
+
+        # staging
         staging_list=staging_list,
         staging_count=staging_count,
+        staging_published_count=staging_published_count,
+        staging_filtered_count=staging_filtered_count,
+        staging_page=staging_page,
+        staging_total_pages=staging_total_pages,
+        show_published=show_published,
+
+        # unverified
         unverified_list=unverified_list,
         unverified_count=unverified_count,
+        unverified_filtered_count=unverified_filtered_count,
+        unverified_page=unverified_page,
+        unverified_total_pages=unverified_total_pages,
         show_confirmed=show_confirmed,
     )
 

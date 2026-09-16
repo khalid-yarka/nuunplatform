@@ -1271,26 +1271,42 @@ def get_pdf_by_id(pdf_id):
 
 def create_main_pdf(data):
     """
-    Insert a new main PDF.
-    data keys: code, title, description, curriculum, class, subject,
-               chapter, tags, is_premium, file_url, uploaded_by
+    Insert a new main PDF row.
+
+    data keys:
+        code, title, description, curriculum, class, subject,
+        chapter, tags, is_premium, file_url, file_id, file_unique_id,
+        uploaded_by
+
+    file_id / file_unique_id are copied from the bot staging row so the
+    main table can serve PDFs independently — the bot staging row is
+    kept as a backup, not consumed.
     """
     try:
-        cursor = execute_with_retry("""
+        execute_with_retry("""
             INSERT INTO pdfs (
                 code, title, description, curriculum, class, subject,
-                chapter, tags, is_premium, file_url, uploaded_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                chapter, tags, is_premium,
+                file_url, file_id, file_unique_id, uploaded_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            data['code'], data['title'], data.get('description', ''),
-            data.get('curriculum', 'PL'), data.get('class', ''),
-            data['subject'], data.get('chapter', ''), data.get('tags', ''),
-            data.get('is_premium', 0), data.get('file_url'),
-            data.get('uploaded_by', 'NUUN')
+            data['code'],
+            data['title'],
+            data.get('description', ''),
+            data.get('curriculum', 'PL'),
+            data.get('class', ''),
+            data['subject'],
+            data.get('chapter', ''),
+            data.get('tags', ''),
+            data.get('is_premium', 0),
+            data.get('file_url'),
+            data.get('file_id'),
+            data.get('file_unique_id'),
+            data.get('uploaded_by', 'NUUN'),
         ), commit=True)
         return True
     except Exception as e:
-        logger.error(f"Error creating main PDF: {e}")
+        logger.error(f"Error creating main PDF: {e}", exc_info=True)
         return False
 
 
@@ -1472,14 +1488,30 @@ def get_main_pdf_count(search='', subject='', curriculum='', class_filter=''):
 
 
 def publish_bot_pdf_to_main(bot_pdf_id):
-    """Copy a bot PDF to main database using its code."""
-    from bot.db import get_bot_pdf_by_id
+    """
+    Copy a bot staging PDF to the main library.
+
+    - Copies file_id / file_unique_id so main is self-sufficient.
+    - On success, MARKS the staging row as published (does NOT delete).
+      The staging row remains in bot_data.db as a permanent backup of
+      the original Telegram file pointer, so a future loss of the main
+      DB can be recovered from the bot DB.
+    - On failure, staging row state is untouched.
+    - If the code already exists in main, the staging row is marked
+      as published too (to stop it cluttering the pending view) and
+      the function returns False with a clear reason.
+    """
+    from bot.db import get_bot_pdf_by_id, mark_bot_pdf_published
+
     bot_pdf = get_bot_pdf_by_id(bot_pdf_id)
     if not bot_pdf:
         return False, "Bot PDF not found"
 
     existing = get_pdf_by_code(bot_pdf['code'])
     if existing:
+        # Main already has this code. Still flag staging as published
+        # so it doesn't stay in the pending queue forever.
+        mark_bot_pdf_published(bot_pdf_id, True)
         return False, f"Code {bot_pdf['code']} already exists in main"
 
     main_data = {
@@ -1493,12 +1525,24 @@ def publish_bot_pdf_to_main(bot_pdf_id):
         'tags': bot_pdf.get('tags', ''),
         'is_premium': bot_pdf.get('is_premium', 0),
         'file_url': None,
-        'uploaded_by': 'NUUN'
+        'file_id': bot_pdf.get('file_id'),
+        'file_unique_id': bot_pdf.get('file_unique_id'),
+        'uploaded_by': 'NUUN',
     }
 
-    if create_main_pdf(main_data):
-        return True, "Published successfully"
-    return False, "Failed to create main PDF"
+    if not create_main_pdf(main_data):
+        return False, "Failed to create main PDF"
+
+    # Mark staging as published. Never delete — this is the backup layer.
+    try:
+        mark_bot_pdf_published(bot_pdf_id, True)
+    except Exception as e:
+        logger.warning(
+            f"Published {bot_pdf['code']} to main but could not mark "
+            f"staging row #{bot_pdf_id} as published: {e}"
+        )
+
+    return True, "Published successfully"
 
 
 # ============================================

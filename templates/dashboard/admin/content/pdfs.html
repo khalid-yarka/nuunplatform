@@ -1,21 +1,71 @@
 {# ============================================================
    templates/dashboard/admin/content/pdfs.html
    Unified PDF workspace — Library / Intake / Staging / Unverified.
-   Tabs and actions hide based on capabilities.
+   Pagination: 100 rows per tab.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
+
+{# ─── Shared pagination macro ────────────────────────────── #}
+{% macro pager(page, total_pages, tab, extra={}) %}
+    {% if total_pages > 1 %}
+        <nav class="pdf-pager" aria-label="Pagination">
+            {% if page > 1 %}
+                <a href="{{ url_for('admin_content.pdfs', tab=tab, page=page-1, **extra) }}"
+                   class="pdf-pager__btn" aria-label="Previous page">
+                    <i class="fas fa-chevron-left"></i>
+                </a>
+            {% else %}
+                <span class="pdf-pager__btn is-disabled" aria-disabled="true">
+                    <i class="fas fa-chevron-left"></i>
+                </span>
+            {% endif %}
+
+            <span class="pdf-pager__info">
+                Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong>
+            </span>
+
+            {% if page < total_pages %}
+                <a href="{{ url_for('admin_content.pdfs', tab=tab, page=page+1, **extra) }}"
+                   class="pdf-pager__btn" aria-label="Next page">
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+            {% else %}
+                <span class="pdf-pager__btn is-disabled" aria-disabled="true">
+                    <i class="fas fa-chevron-right"></i>
+                </span>
+            {% endif %}
+        </nav>
+    {% endif %}
+{% endmacro %}
 
 {% block admin_title_icon %}<i class="fas fa-file-pdf header-icon"></i>{% endblock %}
 {% block admin_title %}PDFs{% endblock %}
 {% block admin_subtitle %}
     {% if tab == 'library' %}
-        Browse and manage the published PDF library.
+        {% if search or subject_filter or curriculum_filter or class_filter %}
+            {{ lib_total }} match{{ '' if lib_total == 1 else 'es' }} · page {{ lib_page }} of {{ lib_total_pages }}
+        {% else %}
+            {{ lib_total }} PDF{{ '' if lib_total == 1 else 's' }} in the library.
+        {% endif %}
     {% elif tab == 'intake' %}
-        {{ pending_count }} file{{ '' if pending_count == 1 else 's' }} waiting for review.
+        {% if q %}
+            {{ intake_filtered_count }} of {{ pending_count }} match your search.
+        {% else %}
+            {{ pending_count }} file{{ '' if pending_count == 1 else 's' }} waiting for review.
+        {% endif %}
     {% elif tab == 'staging' %}
-        {{ staging_count }} staged PDF{{ '' if staging_count == 1 else 's' }} awaiting publish.
+        {% if show_published %}
+            {{ staging_filtered_count }} staged PDF{{ '' if staging_filtered_count == 1 else 's' }}
+            ({{ staging_count }} pending · {{ staging_published_count }} published).
+        {% else %}
+            {{ staging_count }} pending staged PDF{{ '' if staging_count == 1 else 's' }}.
+        {% endif %}
     {% elif tab == 'unverified' %}
-        {{ unverified_count }} PDF{{ '' if unverified_count == 1 else 's' }} awaiting confirmation.
+        {% if show_confirmed %}
+            {{ unverified_filtered_count }} record{{ '' if unverified_filtered_count == 1 else 's' }} in the review queue.
+        {% else %}
+            {{ unverified_count }} awaiting review.
+        {% endif %}
     {% else %}
         Manage library, intake, staging, and the review queue.
     {% endif %}
@@ -30,7 +80,7 @@
     {% if tab == 'staging' and can_publish and staging_count > 0 %}
         <form method="POST"
               action="{{ url_for('admin_content.pdf_staging_publish_all') }}"
-              onsubmit="return confirm('Publish ALL {{ staging_count }} staged PDFs to the platform?');"
+              onsubmit="return confirm('Publish ALL {{ staging_count }} pending staged PDFs?');"
               style="display:inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="admin-btn primary">
@@ -49,7 +99,9 @@
        role="tab">
         <i class="fas fa-book"></i>
         <span>Library</span>
-        <span class="pdf-tab-count">{{ pdfs|length }}</span>
+        {% if lib_total > 0 %}
+            <span class="pdf-tab-count">{{ lib_total }}</span>
+        {% endif %}
     </a>
 
     {% if can_intake %}
@@ -76,13 +128,15 @@
         </a>
     {% endif %}
 
-    {% if can_intake and unverified_count > 0 %}
+    {% if can_intake %}
         <a href="{{ url_for('admin_content.pdfs', tab='unverified') }}"
            class="pdf-tab {% if tab == 'unverified' %}active{% endif %}"
            role="tab">
             <i class="fas fa-clipboard-check"></i>
             <span>Unverified</span>
-            <span class="pdf-tab-count unverified">{{ unverified_count }}</span>
+            {% if unverified_count > 0 %}
+                <span class="pdf-tab-count unverified">{{ unverified_count }}</span>
+            {% endif %}
         </a>
     {% endif %}
 </nav>
@@ -92,7 +146,7 @@
    ═══════════════════════════════════════════════════════════ #}
 {% if tab == 'library' %}
 
-    <form method="GET" class="admin-toolbar" style="margin-bottom:18px;">
+    <form method="GET" class="admin-toolbar pdf-filter-bar" style="margin-bottom:18px;">
         <input type="hidden" name="tab" value="library">
         <div class="admin-search">
             <i class="fas fa-search"></i>
@@ -177,11 +231,27 @@
                 </div>
             {% endfor %}
         </div>
+
+        {{ pager(lib_page, lib_total_pages, 'library', {
+            'search': search or None,
+            'subject': subject_filter or None,
+            'curriculum': curriculum_filter or None,
+            'class': class_filter or None,
+        }) }}
     {% else %}
         <div class="admin-empty">
-            <span class="empty-icon">📄</span>
-            <h3>No PDFs found</h3>
-            <p>Try clearing the filters, or publish some from the Staging tab.</p>
+            {% if search or subject_filter or curriculum_filter or class_filter %}
+                <span class="empty-icon">🔍</span>
+                <h3>No matches</h3>
+                <p>Nothing in the library matches those filters.</p>
+                <a href="{{ url_for('admin_content.pdfs', tab='library') }}" class="admin-btn primary">
+                    <i class="fas fa-times"></i> Clear filters
+                </a>
+            {% else %}
+                <span class="empty-icon">📄</span>
+                <h3>Library is empty</h3>
+                <p>Publish PDFs from the Staging tab to see them here.</p>
+            {% endif %}
         </div>
     {% endif %}
 
@@ -192,19 +262,32 @@
    ═══════════════════════════════════════════════════════════ #}
 {% if tab == 'intake' and can_intake %}
 
-    {% if pending_list %}
+    <form method="GET" class="admin-toolbar pdf-filter-bar" style="margin-bottom:12px;">
+        <input type="hidden" name="tab" value="intake">
+        <div class="admin-search">
+            <i class="fas fa-search"></i>
+            <input type="text" name="q" value="{{ q }}"
+                   placeholder="Search filenames…"
+                   autocomplete="off" spellcheck="false">
+        </div>
+        {% if q %}
+            <a href="{{ url_for('admin_content.pdfs', tab='intake') }}" class="admin-btn secondary">
+                <i class="fas fa-times"></i> Clear
+            </a>
+        {% endif %}
+    </form>
 
-        {# ─── Super-admin bulk toolbar (only when can_publish) ─── #}
+    {% if pending_list %}
         {% if can_publish %}
             <form method="POST"
                   action="{{ url_for('admin_content.pdf_intake_publish_direct') }}"
                   id="intakeBulkForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-                <div class="pdf-staging-toolbar" style="margin-bottom:12px;">
+                <div class="pdf-bulk-toolbar-compact">
                     <label class="pdf-staging-check">
                         <input type="checkbox" id="intakeSelectAll">
-                        <span>Select all</span>
+                        <span>Select this page</span>
                     </label>
                     <span class="pdf-staging-count">
                         <strong id="intakeCount">0</strong> selected
@@ -267,11 +350,22 @@
             </form>
         {% endif %}
 
+        {{ pager(intake_page, intake_total_pages, 'intake', {'q': q or None}) }}
+
     {% else %}
         <div class="admin-empty">
-            <span class="empty-icon">🎉</span>
-            <h3>Inbox is empty</h3>
-            <p>The intake queue is clear. New Telegram uploads will appear here automatically.</p>
+            {% if q %}
+                <span class="empty-icon">🔍</span>
+                <h3>No matches</h3>
+                <p>No files match "<strong>{{ q }}</strong>".</p>
+                <a href="{{ url_for('admin_content.pdfs', tab='intake') }}" class="admin-btn primary">
+                    <i class="fas fa-times"></i> Clear search
+                </a>
+            {% else %}
+                <span class="empty-icon">🎉</span>
+                <h3>Inbox is empty</h3>
+                <p>The intake queue is clear. New Telegram uploads will appear here automatically.</p>
+            {% endif %}
         </div>
     {% endif %}
 
@@ -282,52 +376,78 @@
    ═══════════════════════════════════════════════════════════ #}
 {% if tab == 'staging' and (can_intake or can_publish) %}
 
-    {% if staging_list %}
+    {# ----- Toolbar (always visible, even when empty) ----- #}
+    <div class="pdf-staging-toolbar">
+        <a href="{{ url_for('admin_content.pdfs', tab='staging',
+                            show_published=('0' if show_published else '1')) }}"
+           class="pdf-staging-toggle">
+            {% if show_published %}
+                <i class="fas fa-eye-slash"></i>
+                <span>Hide published</span>
+            {% else %}
+                <i class="fas fa-eye"></i>
+                <span>Show published{% if staging_published_count > 0 %} ({{ staging_published_count }}){% endif %}</span>
+            {% endif %}
+        </a>
 
-        {% if can_publish %}
+        <span class="pdf-staging-count">
+            {% if show_published %}
+                {{ staging_filtered_count }} total
+                <span class="pdf-staging-count-sep">·</span>
+                {{ staging_count }} pending
+            {% else %}
+                {{ staging_count }} pending
+            {% endif %}
+        </span>
+
+        <div class="pdf-staging-spacer"></div>
+    </div>
+
+    {% if staging_list %}
+        {% if can_publish and not show_published %}
             <form method="POST"
                   action="{{ url_for('admin_content.pdf_staging_publish') }}"
                   id="stagingForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        {% endif %}
 
-        <div class="pdf-staging-toolbar">
-            {% if can_publish %}
-                <label class="pdf-staging-check">
-                    <input type="checkbox" id="stagingSelectAll">
-                    <span>Select all</span>
-                </label>
-                <span class="pdf-staging-count">
-                    <strong id="stagingCount">0</strong> selected
-                </span>
-                <div class="pdf-staging-spacer"></div>
-                <button type="submit" class="admin-btn primary" id="stagingPublishBtn" disabled>
-                    <i class="fas fa-cloud-upload-alt"></i> Publish selected
-                </button>
-            {% else %}
-                <span class="pdf-staging-count">
-                    {{ staging_count }} staged PDF{{ '' if staging_count == 1 else 's' }}
-                    · waiting for a super admin to publish
-                </span>
-            {% endif %}
-        </div>
+                <div class="pdf-bulk-toolbar-compact">
+                    <label class="pdf-staging-check">
+                        <input type="checkbox" id="stagingSelectAll">
+                        <span>Select this page</span>
+                    </label>
+                    <span class="pdf-staging-count">
+                        <strong id="stagingCount">0</strong> selected
+                    </span>
+                    <div class="pdf-staging-spacer"></div>
+                    <button type="submit" class="admin-btn primary" id="stagingPublishBtn" disabled>
+                        <i class="fas fa-cloud-upload-alt"></i> Publish selected
+                    </button>
+                </div>
+        {% endif %}
 
         <div class="pdf-staging-list">
             {% for p in staging_list %}
-                <div class="pdf-staging-row">
-                    {% if can_publish %}
+                <div class="pdf-staging-row {% if p.published %}is-published{% endif %}">
+                    {% if can_publish and not p.published and not show_published %}
                         <label class="pdf-staging-check">
                             <input type="checkbox"
                                    name="staging_ids"
                                    value="{{ p.id }}"
                                    class="pdf-staging-checkbox">
                         </label>
+                    {% else %}
+                        <span class="pdf-staging-checkbox-placeholder" aria-hidden="true"></span>
                     {% endif %}
 
                     <div class="pdf-staging-code">{{ p.code }}</div>
 
                     <div class="pdf-staging-body">
-                        <div class="pdf-staging-title">{{ p.title }}</div>
+                        <div class="pdf-staging-title">
+                            {{ p.title }}
+                            {% if p.published %}
+                                <span class="pdf-chip published">✓ Published</span>
+                            {% endif %}
+                        </div>
 
                         {% if p.original_filename %}
                             <div class="pdf-staging-original">
@@ -343,7 +463,11 @@
                             {% if p.chapter %}<span>{{ p.chapter }}</span>{% endif %}
                             {% if p.tags %}<span>{{ p.tags }}</span>{% endif %}
                             {% if p.is_premium %}<span class="pdf-meta-chip premium">💎 Premium</span>{% endif %}
-                            <span class="pdf-staging-date">{{ (p.uploaded_at or '')[:10] }}</span>
+                            {% if p.published %}
+                                <span class="pdf-staging-date">published {{ (p.published_at or '')[:10] }}</span>
+                            {% else %}
+                                <span class="pdf-staging-date">{{ (p.uploaded_at or '')[:10] }}</span>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -368,30 +492,38 @@
             {% endfor %}
         </div>
 
-        {% if can_publish %}
+        {% if can_publish and not show_published %}
             </form>
-
-            {% if can_delete %}
-                {% for p in staging_list %}
-                    <form method="POST"
-                          action="{{ url_for('admin_content.pdf_staging_delete', staging_id=p.id) }}"
-                          id="staging-delete-{{ p.id }}"
-                          style="display:none;">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    </form>
-                {% endfor %}
-            {% endif %}
         {% endif %}
+
+        {% if can_delete %}
+            {% for p in staging_list %}
+                <form method="POST"
+                      action="{{ url_for('admin_content.pdf_staging_delete', staging_id=p.id) }}"
+                      id="staging-delete-{{ p.id }}"
+                      style="display:none;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                </form>
+            {% endfor %}
+        {% endif %}
+
+        {{ pager(staging_page, staging_total_pages, 'staging',
+                  {'show_published': ('1' if show_published else None)}) }}
 
     {% else %}
         <div class="admin-empty">
-            <span class="empty-icon">📭</span>
-            <h3>Nothing staged yet</h3>
-            <p>Process pending uploads from the Intake tab to populate staging.</p>
-            {% if can_intake %}
-                <a href="{{ url_for('admin_content.pdfs', tab='intake') }}" class="admin-btn primary">
-                    <i class="fas fa-inbox"></i> Open Intake
-                </a>
+            {% if show_published %}
+                <span class="empty-icon">📭</span>
+                <h3>No staged PDFs at all</h3>
+                <p>Nothing is in the staging archive. New intake processing will populate it.</p>
+            {% else %}
+                <span class="empty-icon">✅</span>
+                <h3>Nothing pending</h3>
+                <p>All staged PDFs have been published.
+                   {% if staging_published_count > 0 %}
+                       Use <strong>Show published</strong> above to view the archive.
+                   {% endif %}
+                </p>
             {% endif %}
         </div>
     {% endif %}
@@ -403,25 +535,29 @@
    ═══════════════════════════════════════════════════════════ #}
 {% if tab == 'unverified' and can_intake %}
 
-    <div class="pdf-staging-toolbar" style="margin-bottom:12px;">
-        <span class="pdf-staging-count">
-            {% if unverified_list %}
-                Showing {{ unverified_list|length }} of {{ unverified_count }}
-                awaiting review
-            {% else %}
-                Nothing awaiting review
-            {% endif %}
-        </span>
-        <div class="pdf-staging-spacer"></div>
+    {# ----- Toolbar (always visible, even when empty) ----- #}
+    <div class="pdf-staging-toolbar">
         <a href="{{ url_for('admin_content.pdfs', tab='unverified',
-                            show_confirmed='0' if show_confirmed else '1') }}"
-           class="admin-btn secondary">
+                            show_confirmed=('0' if show_confirmed else '1')) }}"
+           class="pdf-staging-toggle">
             {% if show_confirmed %}
-                <i class="fas fa-eye-slash"></i> Show only unconfirmed
+                <i class="fas fa-eye-slash"></i>
+                <span>Show unconfirmed only</span>
             {% else %}
-                <i class="fas fa-eye"></i> Show all
+                <i class="fas fa-eye"></i>
+                <span>Show verified records</span>
             {% endif %}
         </a>
+
+        <span class="pdf-staging-count">
+            {% if show_confirmed %}
+                {{ unverified_filtered_count }} total
+            {% else %}
+                {{ unverified_count }} pending review
+            {% endif %}
+        </span>
+
+        <div class="pdf-staging-spacer"></div>
     </div>
 
     {% if unverified_list %}
@@ -429,10 +565,10 @@
         <form method="POST" id="unverifiedForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-            <div class="pdf-staging-toolbar">
+            <div class="pdf-bulk-toolbar-compact">
                 <label class="pdf-staging-check">
                     <input type="checkbox" id="unverifiedSelectAll">
-                    <span>Select all</span>
+                    <span>Select this page</span>
                 </label>
                 <span class="pdf-staging-count">
                     <strong id="unverifiedCount">0</strong> selected
@@ -503,21 +639,28 @@
             </div>
         </form>
 
+        {{ pager(unverified_page, unverified_total_pages, 'unverified',
+                  {'show_confirmed': ('1' if show_confirmed else None)}) }}
+
     {% else %}
         <div class="admin-empty">
-            <span class="empty-icon">✅</span>
-            <h3>Nothing to review</h3>
-            <p>
-                All directly-published PDFs have been confirmed.
-                {% if not show_confirmed %}
-                    <br>Use "Show all" above to view confirmed records.
-                {% endif %}
-            </p>
+            {% if show_confirmed %}
+                <span class="empty-icon">📭</span>
+                <h3>No records</h3>
+                <p>Nothing has been tracked in the review queue yet.</p>
+            {% else %}
+                <span class="empty-icon">✅</span>
+                <h3>Nothing to review</h3>
+                <p>All directly-published PDFs have been confirmed.
+                   Use <strong>Show verified records</strong> above to view the archive.</p>
+            {% endif %}
         </div>
     {% endif %}
 
 {% endif %}
+
+{% endblock %}
+
 {% block admin_js %}
 <script src="{{ url_for('static', filename='js/admin/content.js') }}"></script>
-{% endblock %}
 {% endblock %}

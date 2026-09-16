@@ -122,36 +122,61 @@ CREATE INDEX IF NOT EXISTS idx_groups_featured ON groups(is_featured);
 CREATE INDEX IF NOT EXISTS idx_groups_click_count ON groups(click_count DESC);
 
 -- ============================================
--- BOT DATABASE — FULFILLED / STAGED PDFs
--- Location: bot_data.db
+-- MAIN PDFs — Published library
+-- Location: nuunplatform.db (main DB)
+--
+-- The bot's staging `pdfs` table (with file_id / file_unique_id /
+-- original_filename) lives in bot_data.db and is created by
+-- bot/db.py::init_bot_db(). Do NOT add the bot schema here.
+--
+-- The `file_id` and `file_unique_id` columns below are COPIED from
+-- the bot staging row at publish time, so main is self-sufficient
+-- and the staging row can remain as a permanent backup.
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS pdfs (
-    id                 INTEGER  PRIMARY KEY AUTOINCREMENT,
-    code               TEXT     UNIQUE NOT NULL,
-    title              TEXT     NOT NULL,
-    description        TEXT     DEFAULT '',
-    curriculum         TEXT     DEFAULT 'PL' CHECK (curriculum IN ('PL', 'SO', 'SL')),
-    class              TEXT     DEFAULT ''   CHECK (class IN ('', '7aad', '8aad', 'F3', 'F4')),
-    subject            TEXT     NOT NULL,
-    chapter            TEXT     DEFAULT '',
-    tags               TEXT     DEFAULT '',
-    is_premium         INTEGER  DEFAULT 0,
-    file_id            TEXT     NOT NULL,
-    file_unique_id     TEXT     UNIQUE NOT NULL,
-    uploaded_by        INTEGER,
-    uploaded_at        TEXT     DEFAULT (datetime('now', 'localtime')),
-    original_filename  TEXT     DEFAULT ''
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    code           TEXT UNIQUE NOT NULL,
+    title          TEXT NOT NULL,
+    description    TEXT DEFAULT '',
+    curriculum     TEXT DEFAULT 'PL' CHECK (curriculum IN ('PL', 'SO', 'SL')),
+    class          TEXT DEFAULT ''   CHECK (class IN ('', '7aad', '8aad', 'F3', 'F4')),
+    subject        TEXT NOT NULL,
+    chapter        TEXT DEFAULT '',
+    tags           TEXT DEFAULT '',
+    is_premium     INTEGER DEFAULT 0,
+    file_url       TEXT,
+    file_id        TEXT,
+    file_unique_id TEXT UNIQUE,
+    uploaded_by    TEXT NOT NULL DEFAULT 'NUUN',
+    uploaded_at    TEXT DEFAULT (datetime('now', 'localtime')),
+    view_count     INTEGER DEFAULT 0
 );
 
-CREATE INDEX IF NOT EXISTS idx_bot_pdfs_code
-    ON pdfs(code);
+CREATE INDEX IF NOT EXISTS idx_pdfs_code           ON pdfs(code);
+CREATE INDEX IF NOT EXISTS idx_pdfs_curriculum     ON pdfs(curriculum);
+CREATE INDEX IF NOT EXISTS idx_pdfs_class          ON pdfs(class);
+CREATE INDEX IF NOT EXISTS idx_pdfs_subject        ON pdfs(subject);
+CREATE INDEX IF NOT EXISTS idx_pdfs_view_count     ON pdfs(view_count DESC);
+CREATE INDEX IF NOT EXISTS idx_pdfs_uploaded_at    ON pdfs(uploaded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pdfs_file_unique_id ON pdfs(file_unique_id);
 
-CREATE INDEX IF NOT EXISTS idx_bot_pdfs_file_unique_id
-    ON pdfs(file_unique_id);
+-- ============================================
+-- UNVERIFIED PDFs (direct-publish review queue)
+-- ============================================
 
-CREATE INDEX IF NOT EXISTS idx_bot_pdfs_subject
-    ON pdfs(subject);
+CREATE TABLE IF NOT EXISTS unverified_pdfs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    pdf_id        INTEGER NOT NULL UNIQUE,
+    published_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    confirmed     INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_unverified_pdfs_confirmed
+    ON unverified_pdfs(confirmed);
+CREATE INDEX IF NOT EXISTS idx_unverified_pdfs_published
+    ON unverified_pdfs(published_at DESC);
 
 -- ============================================
 -- LIVE QUIZZES TABLE

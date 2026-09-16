@@ -896,7 +896,12 @@ def utility_processor():
         'super_admin_phone': Config.SUPER_ADMIN_PHONE,
         'has_focus_access': has_focus_access,
     }
-
+# At the end of app.py, or in _run_bot_db_init
+try:
+    from safe_db import prime_schema
+    prime_schema()
+except Exception:
+    pass
 
 # ============================================
 # RUN APP

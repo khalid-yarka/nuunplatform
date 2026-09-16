@@ -1,401 +1,548 @@
-# ============================================================
-# safe_db.py
-# Insert + Update mirror into safety/safety.db.
+# safe_db.py — shadow mirror of writes to safety/safety.db
 #
-# This module is intentionally self-contained:
-#   • Uses raw sqlite3 — never imports db.py.
-#   • Never raises — every failure is logged and swallowed.
-#   • Only mirrors INSERT and UPDATE against a whitelist.
-#   • DELETE is intentionally NOT mirrored, so deleted rows
-#     remain recoverable from the shadow.
+# Fire-and-forget. Never raises, never blocks the main write path.
 #
-# Called from db.execute_with_retry / execute_many_with_retry
-# AFTER the main connection has committed.
-# ============================================================
+# ─── DEFENSIVE BEHAVIOUR ────────────────────────────────────────
+#   • Lazy init — DB is created on the first mirrored write.
+#   • Schema is auto-synced from the main DB per table:
+#       - Table missing → created from main's exact DDL.
+#       - Table exists but missing columns → missing columns added
+#         via ALTER TABLE (constraints relaxed, since SQLite won't
+#         let us add NOT NULL / UNIQUE / PK columns post-hoc).
+#   • Per-write verification: if a needed column is still missing
+#     after a sync attempt, the write is skipped with a SINGLE
+#     warning per (table, column) pair — no log spam.
+#   • Any exception is swallowed. The main DB is never affected.
+# ─────────────────────────────────────────────────────────────────
 
 import os
 import re
 import sqlite3
-import threading
 import logging
-from pathlib import Path
+import threading
+from config import Config
 
 logger = logging.getLogger(__name__)
 
+SAFETY_DB_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), 'safety', 'safety.db'
+)
 
-# ============================================================
-# PATHS
-# ============================================================
+MAIN_DB_PATH = Config.DATABASE_PATH
 
-BASE_DIR = Path(__file__).resolve().parent
-SAFETY_DIR = BASE_DIR / 'safety'
-SAFETY_DB_PATH = str(SAFETY_DIR / 'safety.db')
-
-
-# ============================================================
-# WHITELIST
-# ============================================================
-# Only these tables are mirrored. Anything else is a no-op.
-
-MIRROR_TABLES = frozenset({
+# Only these tables are mirrored. Everything else is ignored.
+WHITELISTED_TABLES = {
     'students',
     'questions',
     'pdfs',
     'groups',
     'question_interactions',
     'upgrade_requests',
-})
+}
 
 
-# ============================================================
-# SQL PARSER
-# ============================================================
-# Matches only INSERT and UPDATE. Everything else returns None.
+# ============================================
+# MODULE STATE (thread-safe)
+# ============================================
 
-_WRITE_RE = re.compile(
-    r'^\s*(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE)\s+'
-    r'["\'`\[]?([A-Za-z_][A-Za-z0-9_]*)',
-    re.IGNORECASE,
-)
-
-
-# ============================================================
-# PER-THREAD CONNECTION + ONE-TIME INIT
-# ============================================================
-
-_thread_local = threading.local()
-_init_lock = threading.Lock()
+_lock = threading.RLock()
+_shadow_conn = None
 _initialized = False
+_warned = set()          # dedup for warnings
+_synced_tables = set()   # tables we've already checked this session
 
 
-def _open_connection():
-    """Open (creating if needed) the shadow DB with standard pragmas."""
-    os.makedirs(SAFETY_DIR, exist_ok=True)
-    conn = sqlite3.connect(SAFETY_DB_PATH, timeout=30)
+def _warn_once(key, message):
+    """Log a warning at most once per process for the given key."""
+    with _lock:
+        if key in _warned:
+            return
+        _warned.add(key)
+    try:
+        logger.warning(message)
+    except Exception:
+        pass
+
+
+# ============================================
+# CONNECTION HELPERS
+# ============================================
+
+def _open_connection(path):
+    conn = sqlite3.connect(path, timeout=10)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA busy_timeout = 30000")
-    conn.execute("PRAGMA synchronous = NORMAL")
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.execute("PRAGMA synchronous = NORMAL")
+    except Exception:
+        pass
     return conn
 
 
 def _open_main_connection():
-    """Open the main DB read-only, only to copy schema."""
-    try:
-        from config import Config
-        main_path = Config.DATABASE_PATH
-        if not os.path.isabs(main_path):
-            main_path = str(BASE_DIR / main_path)
-        conn = sqlite3.connect(main_path, timeout=30)
-        conn.row_factory = sqlite3.Row
-        return conn
-    except Exception as e:
-        logger.warning(f"safe_db: cannot open main DB for schema: {e}")
+    if not os.path.exists(MAIN_DB_PATH):
         return None
-
-
-def _copy_schema_from_main(shadow_conn):
-    """
-    For every whitelisted table, ensure the shadow has the same
-    schema as the main DB. Creates the table if missing, adds any
-    columns that have been added to main since the shadow was
-    created.
-    """
-    main_conn = _open_main_connection()
-    if main_conn is None:
-        return False
-
-    ok = True
     try:
-        for table in sorted(MIRROR_TABLES):
-            try:
-                row = main_conn.execute(
-                    "SELECT sql FROM sqlite_master "
-                    "WHERE type='table' AND name=?",
-                    (table,),
-                ).fetchone()
-                if not row or not row['sql']:
-                    logger.warning(
-                        f"safe_db: no schema for '{table}' in main DB"
-                    )
-                    ok = False
-                    continue
-
-                # Create in shadow if missing.
-                shadow_conn.execute(row['sql'])
-
-                # Column drift: add any columns missing from shadow.
-                main_cols = main_conn.execute(
-                    f"PRAGMA table_info({table})"
-                ).fetchall()
-                shadow_cols = {
-                    r['name'] for r in shadow_conn.execute(
-                        f"PRAGMA table_info({table})"
-                    ).fetchall()
-                }
-                for cinfo in main_cols:
-                    col = cinfo['name']
-                    if col in shadow_cols:
-                        continue
-                    ddl = f"ALTER TABLE {table} ADD COLUMN {col} {cinfo['type']}"
-                    if cinfo['dflt_value'] is not None:
-                        ddl += f" DEFAULT {cinfo['dflt_value']}"
-                    try:
-                        shadow_conn.execute(ddl)
-                        logger.info(
-                            f"safe_db: added column {table}.{col}"
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f"safe_db: cannot add {table}.{col}: {e}"
-                        )
-
-            except Exception as e:
-                logger.warning(
-                    f"safe_db: schema copy failed for '{table}': {e}"
-                )
-                ok = False
-
-        try:
-            shadow_conn.commit()
-        except Exception:
-            pass
-    finally:
-        try:
-            main_conn.close()
-        except Exception:
-            pass
-
-    return ok
-
-
-def _ensure_init():
-    """Create the shadow DB and its schema on first use."""
-    global _initialized
-    if _initialized:
-        return True
-    with _init_lock:
-        if _initialized:
-            return True
-        try:
-            conn = _open_connection()
-            _copy_schema_from_main(conn)
-            conn.commit()
-            conn.close()
-            _initialized = True
-            logger.info(f"safe_db: initialized at {SAFETY_DB_PATH}")
-            return True
-        except Exception as e:
-            logger.error(f"safe_db: initialization failed: {e}")
-            return False
+        return _open_connection(MAIN_DB_PATH)
+    except Exception:
+        return None
 
 
 def _get_shadow_connection():
-    """Per-thread cached connection."""
-    if not _ensure_init():
-        return None
-    conn = getattr(_thread_local, 'conn', None)
-    if conn is None:
+    """Lazy-open the shadow DB. Returns None on any failure."""
+    global _shadow_conn
+
+    with _lock:
+        if _shadow_conn is not None:
+            return _shadow_conn
+
         try:
-            conn = _open_connection()
-            _thread_local.conn = conn
+            os.makedirs(os.path.dirname(SAFETY_DB_PATH), exist_ok=True)
+            _shadow_conn = _open_connection(SAFETY_DB_PATH)
         except Exception as e:
-            logger.warning(f"safe_db: connection failed: {e}")
-            return None
-    return conn
+            _warn_once('shadow_open', f"safe_db: could not open shadow DB: {e}")
+            _shadow_conn = None
+
+        return _shadow_conn
 
 
-# ============================================================
-# TABLE DETECTION
-# ============================================================
+# ============================================
+# SCHEMA INTROSPECTION
+# ============================================
 
-def _table_of(sql):
-    """Return the mirrored table name if this SQL should be mirrored."""
-    if not sql:
-        return None
-    m = _WRITE_RE.match(sql)
-    if not m:
-        return None
-    table = m.group(1).lower()
-    if table not in MIRROR_TABLES:
-        return None
-    return table
-
-
-# ============================================================
-# PUBLIC — MIRROR WRITE
-# ============================================================
-
-def mirror_write(sql, params=()):
-    """
-    Mirror a single INSERT/UPDATE to the shadow. Never raises.
-    Called by db.execute_with_retry after a successful main commit.
-    """
-    table = _table_of(sql)
-    if table is None:
-        return
-
-    conn = _get_shadow_connection()
-    if conn is None:
-        return
-
-    try:
-        conn.execute(sql, params)
-        conn.commit()
-    except sqlite3.IntegrityError as e:
-        # A row already exists in the shadow (unlikely but harmless).
-        # Leave the shadow as-is; the older value is the "origin".
-        logger.debug(f"safe_db: integrity clash for {table}: {e}")
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-    except sqlite3.OperationalError as e:
-        logger.warning(f"safe_db: op error for {table}: {e}")
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-    except Exception as e:
-        logger.warning(f"safe_db: unexpected error for {table}: {e}")
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-
-
-def mirror_write_batch(sql, params_list):
-    """
-    Mirror a batched INSERT/UPDATE to the shadow. Never raises.
-    Called by db.execute_many_with_retry after a successful commit.
-    """
-    if not params_list:
-        return
-    table = _table_of(sql)
-    if table is None:
-        return
-
-    conn = _get_shadow_connection()
-    if conn is None:
-        return
-
-    try:
-        conn.executemany(sql, params_list)
-        conn.commit()
-    except sqlite3.IntegrityError as e:
-        logger.debug(f"safe_db: integrity clash (batch) for {table}: {e}")
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-    except sqlite3.OperationalError as e:
-        logger.warning(f"safe_db: op error (batch) for {table}: {e}")
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-    except Exception as e:
-        logger.warning(f"safe_db: unexpected error (batch) for {table}: {e}")
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-
-
-# ============================================================
-# READ-ONLY HELPERS FOR THE SUPER-ADMIN VIEWER
-# ============================================================
-
-def list_tables():
-    """Return [{name, count}] for every whitelisted table."""
-    conn = _get_shadow_connection()
-    if conn is None:
-        return []
-    out = []
-    for t in sorted(MIRROR_TABLES):
-        try:
-            n = conn.execute(
-                f"SELECT COUNT(*) AS c FROM {t}"
-            ).fetchone()['c']
-            out.append({'name': t, 'count': int(n or 0)})
-        except Exception:
-            out.append({'name': t, 'count': 0})
-    return out
-
-
-def table_columns(table):
-    """Return the ordered column names for a mirrored table."""
-    if table not in MIRROR_TABLES:
-        return []
-    conn = _get_shadow_connection()
+def _columns_of(conn, table):
+    """Return list of column names for a table, or [] if missing."""
     if conn is None:
         return []
     try:
-        return [
-            r['name'] for r in conn.execute(
-                f"PRAGMA table_info({table})"
-            ).fetchall()
-        ]
+        cur = conn.execute("PRAGMA table_info(" + table + ")")
+        return [r['name'] for r in cur.fetchall()]
     except Exception:
         return []
 
 
-def table_rows(table, limit=50, offset=0, search=''):
-    """
-    Return (rows, total) for a mirrored table.
-    Read-only. Never raises.
-    """
-    if table not in MIRROR_TABLES:
-        return [], 0
-    conn = _get_shadow_connection()
+def _table_exists(conn, table):
     if conn is None:
-        return [], 0
+        return False
+    try:
+        cur = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            (table,),
+        )
+        return cur.fetchone() is not None
+    except Exception:
+        return False
 
-    where = ''
-    params = []
 
-    if search:
-        cols = table_columns(table)
-        if cols:
-            where = 'WHERE ' + ' OR '.join(
-                f"CAST({c} AS TEXT) LIKE ?" for c in cols
-            )
-            params.extend([f'%{search}%'] * len(cols))
+def _fetch_ddl(conn, table):
+    """Return the CREATE TABLE statement for a table, or None."""
+    if conn is None:
+        return None
+    try:
+        cur = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+            (table,),
+        )
+        row = cur.fetchone()
+        return row['sql'] if row else None
+    except Exception:
+        return None
+
+
+def _fetch_indexes(conn, table):
+    """Return list of CREATE INDEX statements for a table."""
+    if conn is None:
+        return []
+    try:
+        cur = conn.execute(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
+            (table,),
+        )
+        return [r['sql'] for r in cur.fetchall() if r['sql']]
+    except Exception:
+        return []
+
+
+def _column_definition(conn, table, column):
+    """
+    Return a safe SQL fragment for adding a column.
+
+    SQLite's ALTER TABLE ADD COLUMN doesn't allow NOT NULL without a
+    default, UNIQUE, or PRIMARY KEY. We relax those — the mirror just
+    needs the column to exist so writes don't fail.
+    """
+    if conn is None:
+        return None
+    try:
+        cur = conn.execute("PRAGMA table_info(" + table + ")")
+        for r in cur.fetchall():
+            if r['name'] == column:
+                col_type = r['type'] or 'TEXT'
+                default = r['dflt_value']
+                frag = column + " " + col_type
+                if default is not None:
+                    frag += " DEFAULT " + str(default)
+                return frag
+    except Exception:
+        pass
+    # Fallback: bare TEXT column
+    return column + " TEXT"
+
+
+# ============================================
+# SCHEMA SYNC
+# ============================================
+
+def _sync_table_schema(shadow, table, force=False):
+    """
+    Ensure the shadow table exists and has all columns the main table has.
+
+    - Table missing → CREATE from main's DDL + indexes.
+    - Columns missing → ALTER TABLE ADD COLUMN for each.
+
+    Returns True on success (or nothing-to-do), False on hard failure.
+    """
+    if shadow is None:
+        return False
+
+    if not force and table in _synced_tables:
+        return True
+
+    main = _open_main_connection()
+    if main is None:
+        return False
 
     try:
-        total = conn.execute(
-            f"SELECT COUNT(*) AS c FROM {table} {where}", params
-        ).fetchone()['c']
+        # ---- Table missing in shadow ----
+        if not _table_exists(shadow, table):
+            ddl = _fetch_ddl(main, table)
+            if not ddl:
+                return False
+            try:
+                shadow.execute(ddl)
+                shadow.commit()
+            except sqlite3.OperationalError as e:
+                # Race: another thread created it just now. Fall through
+                # to column check below.
+                if 'already exists' not in str(e).lower():
+                    _warn_once(
+                        f'schema_create_{table}',
+                        f"safe_db: could not create {table}: {e}"
+                    )
+                    return False
 
-        rows = conn.execute(
-            f"SELECT * FROM {table} {where} "
-            f"ORDER BY rowid DESC LIMIT ? OFFSET ?",
-            params + [int(limit), int(offset)],
-        ).fetchall()
+            # Copy indexes (best-effort, ignore conflicts)
+            for idx_sql in _fetch_indexes(main, table):
+                try:
+                    shadow.execute(idx_sql)
+                except Exception:
+                    pass
+            try:
+                shadow.commit()
+            except Exception:
+                pass
 
-        return [dict(r) for r in rows], int(total or 0)
+        # ---- Column drift ----
+        shadow_cols = set(_columns_of(shadow, table))
+        main_cols = set(_columns_of(main, table))
+        missing = main_cols - shadow_cols
+
+        if missing:
+            added = 0
+            for col in sorted(missing):
+                frag = _column_definition(main, table, col)
+                if not frag:
+                    continue
+                try:
+                    shadow.execute(
+                        "ALTER TABLE " + table + " ADD COLUMN " + frag
+                    )
+                    added += 1
+                except sqlite3.OperationalError as e:
+                    err = str(e).lower()
+                    if 'duplicate column' in err:
+                        added += 1
+                        continue
+                    _warn_once(
+                        f'alter_{table}_{col}',
+                        f"safe_db: could not add column {table}.{col}: {e}"
+                    )
+            if added:
+                try:
+                    shadow.commit()
+                except Exception:
+                    pass
+
+        with _lock:
+            _synced_tables.add(table)
+        return True
+    finally:
+        try:
+            main.close()
+        except Exception:
+            pass
+
+
+# ============================================
+# SQL PARSING
+# ============================================
+
+_INSERT_RE = re.compile(
+    r'^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+["`\[]?(\w+)["`\]]?\s*\(([^)]+)\)',
+    re.IGNORECASE | re.DOTALL,
+)
+_UPDATE_RE = re.compile(
+    r'^\s*UPDATE\s+["`\[]?(\w+)["`\]]?\s+SET\s+',
+    re.IGNORECASE,
+)
+_COL_NAME_RE = re.compile(r'["`\[]?(\w+)["`\]]?')
+
+
+def _table_of(sql):
+    """Extract the table name from an INSERT or UPDATE statement."""
+    if not sql:
+        return None
+    m = _INSERT_RE.match(sql) or _UPDATE_RE.match(sql)
+    if not m:
+        return None
+    return m.group(1)
+
+
+def _columns_in_insert(sql):
+    """Extract explicit column list from an INSERT (may be empty)."""
+    m = _INSERT_RE.match(sql)
+    if not m:
+        return []
+    raw = m.group(2)
+    return [c.strip(' "`[]') for c in raw.split(',') if c.strip()]
+
+
+# ============================================
+# WRITE MIRROR
+# ============================================
+
+def _do_mirror(conn, sql, params):
+    """Run one mirror write. Returns True on success."""
+    try:
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        conn.commit()
+        return True
+    except sqlite3.OperationalError as e:
+        err = str(e).lower()
+        # Schema drift signals — caller may retry after a force-sync.
+        if ('no column named' in err
+                or 'has no column' in err
+                or 'no such table' in err
+                or 'no such column' in err):
+            raise
+        # Anything else: log once and skip.
+        _warn_once('op_' + str(e)[:60], f"safe_db: write error: {e}")
+        return False
     except Exception as e:
-        logger.warning(f"safe_db: read failed for {table}: {e}")
-        return [], 0
+        _warn_once('op_' + str(e)[:60], f"safe_db: write error: {e}")
+        return False
+
+
+def mirror_write(sql, params=()):
+    """
+    Mirror a single INSERT / UPDATE to the shadow DB.
+    Never raises. Never affects the main write path.
+    """
+    try:
+        table = _table_of(sql)
+        if not table or table not in WHITELISTED_TABLES:
+            return
+
+        conn = _get_shadow_connection()
+        if conn is None:
+            return
+
+        # ---- Attempt 1: normal sync ----
+        try:
+            _sync_table_schema(conn, table)
+            if _do_mirror(conn, sql, params):
+                return
+        except sqlite3.OperationalError as e:
+            err = str(e).lower()
+            if not ('no column' in err or 'no such' in err):
+                _warn_once(f'mirror1_{table}', f"safe_db: {table}: {e}")
+                return
+
+        # ---- Attempt 2: force re-sync (column drift, race) ----
+        try:
+            with _lock:
+                _synced_tables.discard(table)
+            _sync_table_schema(conn, table, force=True)
+            _do_mirror(conn, sql, params)
+        except sqlite3.OperationalError as e:
+            # Still failing — one warning, give up.
+            err = str(e).lower()
+            if 'no column' in err:
+                # Extract the column name if possible for a cleaner message.
+                m = re.search(r'no column named\s+(\w+)', err)
+                col = m.group(1) if m else '?'
+                _warn_once(
+                    f'col_{table}_{col}',
+                    f"safe_db: skipping mirrors for {table}.{col} "
+                    f"(column missing in shadow)."
+                )
+            else:
+                _warn_once(f'mirror2_{table}', f"safe_db: {table}: {e}")
+        except Exception as e:
+            _warn_once(f'mirror2_{table}', f"safe_db: {table}: {e}")
+    except Exception as e:
+        # Absolute last-resort guard — should never fire.
+        _warn_once('mirror_fatal', f"safe_db: fatal: {e}")
+
+
+def mirror_write_batch(sql, params_list):
+    """
+    Mirror many INSERTs / UPDATEs with the same SQL.
+    Never raises. Never affects the main write path.
+    """
+    if not params_list:
+        return
+
+    try:
+        table = _table_of(sql)
+        if not table or table not in WHITELISTED_TABLES:
+            return
+
+        conn = _get_shadow_connection()
+        if conn is None:
+            return
+
+        # Ensure schema once
+        try:
+            _sync_table_schema(conn, table)
+        except Exception as e:
+            _warn_once(f'batch_sync_{table}', f"safe_db: {table}: {e}")
+            return
+
+        # Attempt in one transaction.
+        try:
+            cur = conn.cursor()
+            cur.executemany(sql, params_list)
+            conn.commit()
+            return
+        except sqlite3.OperationalError as e:
+            err = str(e).lower()
+            if not ('no column' in err or 'no such' in err):
+                _warn_once(f'batch_{table}', f"safe_db: {table}: {e}")
+                return
+            # Roll back the partial batch, then retry below.
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+        # Force re-sync, retry once.
+        try:
+            with _lock:
+                _synced_tables.discard(table)
+            _sync_table_schema(conn, table, force=True)
+            cur = conn.cursor()
+            cur.executemany(sql, params_list)
+            conn.commit()
+        except sqlite3.OperationalError as e:
+            err = str(e).lower()
+            m = re.search(r'no column named\s+(\w+)', err)
+            if m:
+                _warn_once(
+                    f'batch_col_{table}_{m.group(1)}',
+                    f"safe_db: batch skipping {table}.{m.group(1)} "
+                    f"(column missing in shadow)."
+                )
+            else:
+                _warn_once(f'batch2_{table}', f"safe_db: {table}: {e}")
+        except Exception as e:
+            _warn_once(f'batch2_{table}', f"safe_db: {table}: {e}")
+    except Exception as e:
+        _warn_once('batch_fatal', f"safe_db: batch fatal: {e}")
+
+
+# ============================================
+# READ-ONLY VIEWER (used by admin safety panel)
+# ============================================
+
+def list_tables():
+    """Return all tables present in the shadow DB."""
+    conn = _get_shadow_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE type='table' AND name NOT LIKE 'sqlite_%' "
+            "ORDER BY name"
+        )
+        return [r['name'] for r in cur.fetchall()]
+    except Exception:
+        return []
+
+
+def table_columns(table):
+    """Return column names for a shadow table."""
+    conn = _get_shadow_connection()
+    return _columns_of(conn, table)
+
+
+def table_rows(table, limit=100, offset=0):
+    """Return up to `limit` rows from a shadow table."""
+    conn = _get_shadow_connection()
+    if conn is None or table not in list_tables():
+        return []
+    try:
+        cur = conn.execute(
+            "SELECT * FROM " + table + " LIMIT ? OFFSET ?",
+            (limit, offset),
+        )
+        return [dict(r) for r in cur.fetchall()]
+    except Exception:
+        return []
 
 
 def stats():
-    """Aggregate counts + file size for the overview header."""
-    out = {
-        'path': SAFETY_DB_PATH,
-        'exists': os.path.exists(SAFETY_DB_PATH),
-        'size_mb': 0.0,
-        'tables': [],
-        'total_rows': 0,
-    }
-    if out['exists']:
+    """Return basic stats about the shadow DB."""
+    conn = _get_shadow_connection()
+    if conn is None:
+        return {'exists': False}
+
+    try:
+        out = {
+            'exists': True,
+            'path': SAFETY_DB_PATH,
+            'tables': {},
+        }
+        for t in list_tables():
+            try:
+                row = conn.execute("SELECT COUNT(*) FROM " + t).fetchone()
+                out['tables'][t] = row[0] if row else 0
+            except Exception:
+                out['tables'][t] = None
+        return out
+    except Exception:
+        return {'exists': True, 'error': 'read failed'}
+
+
+# ============================================
+# STARTUP (optional)
+# ============================================
+
+def prime_schema():
+    """
+    Optional: sync all whitelisted tables once at startup.
+    Not required — lazy sync happens on first write — but calling this
+    after app startup avoids the first-write hiccup.
+    """
+    conn = _get_shadow_connection()
+    if conn is None:
+        return
+    for t in WHITELISTED_TABLES:
         try:
-            out['size_mb'] = round(
-                os.path.getsize(SAFETY_DB_PATH) / (1024 * 1024), 2
-            )
+            _sync_table_schema(conn, t)
         except Exception:
             pass
-    tables = list_tables()
-    out['tables'] = tables
-    out['total_rows'] = sum(t['count'] for t in tables)
-    return out
