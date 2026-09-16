@@ -34,6 +34,7 @@ REQUIRED_TABLES = [
     'achievements',
     'user_achievements',
     'question_interactions',
+    'unverified_pdfs',
 ]
 
 REQUIRED_COLUMNS = {

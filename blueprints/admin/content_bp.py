@@ -43,6 +43,17 @@
 #   Super admin publishes →  pdfs         (main db) ← "library"
 # ============================================================
 
+#
+# PDF flow (unified in the admin system):
+#   Telegram bot uploads  →  pending_pdfs (bot.db)
+#   Admin processes       →  pdfs         (bot.db)  ← "staging"
+#   Super admin publishes →  pdfs         (main db) ← "library"
+#
+# Super-admin fast path (Bulk Direct Publish):
+#   pending_pdfs  →  [bulk edit page]  →  pdfs (bot.db) + pdfs (main db)
+#   + tracking row in unverified_pdfs (main db) for later review.
+# ============================================================
+
 from flask import (
     Blueprint, render_template, request, session, flash,
     redirect, url_for, abort, jsonify, Response, send_file,
@@ -82,7 +93,7 @@ from db import (
     publish_bot_pdf_to_main,
 )
 from subjects_config import get_all_subjects, get_subject, get_all_subject_codes
-from utils import validate_csrf
+from utils import validate_csrf, get_somali_time_db
 from services.admin.guards import admin_can
 from services.admin.audit import write_audit
 from services.pdf_naming import suggest_from_filename
@@ -174,6 +185,52 @@ def _generate_staging_pdf_code():
             return code
     return ''.join(secrets.choice(chars) for _ in range(4)) + '-' + \
            ''.join(secrets.choice(chars) for _ in range(4))
+
+
+def _load_unverified_pdfs(show_confirmed=False, limit=500):
+    """
+    Return unverified_pdfs joined with their library metadata.
+    Only rows whose pdf_id still exists in the library render.
+    """
+    query = """
+        SELECT up.id            AS tracking_id,
+               up.pdf_id,
+               up.published_at,
+               up.confirmed,
+               p.code, p.title, p.subject, p.curriculum,
+               p.class, p.chapter, p.tags, p.is_premium,
+               p.view_count, p.uploaded_at
+        FROM unverified_pdfs up
+        INNER JOIN pdfs p ON p.id = up.pdf_id
+    """
+    params = []
+    if not show_confirmed:
+        query += " WHERE up.confirmed = 0"
+    query += " ORDER BY up.published_at DESC LIMIT ?"
+    params.append(limit)
+
+    try:
+        cursor = execute_with_retry(query, params)
+        rows = [dict(r) for r in cursor.fetchall()]
+    except Exception as e:
+        logger.error(f"_load_unverified_pdfs failed: {e}")
+        return []
+
+    for r in rows:
+        subj = get_subject(r['subject'])
+        r['subject_name'] = subj['name'] if subj else r['subject']
+
+    return rows
+
+
+def _count_unverified_pdfs():
+    try:
+        row = execute_with_retry(
+            "SELECT COUNT(*) AS cnt FROM unverified_pdfs WHERE confirmed = 0"
+        ).fetchone()
+        return row['cnt'] if row else 0
+    except Exception:
+        return 0
 
 
 # ============================================================
@@ -282,24 +339,18 @@ def _build_active_filters(**kw):
 
     if kw.get('search'):
         add('search', 'Search', kw['search'])
-
     if kw.get('subject_code'):
         subj = get_subject(kw['subject_code'])
         add('subject', 'Subject', subj['name'] if subj else kw['subject_code'])
-
     if kw.get('pdf_filter'):
         label = 'PDF linked' if kw['pdf_filter'] == 'linked' else 'PDF unlinked'
         add('pdf', 'PDF', label)
-
     if kw.get('pdf_code'):
         add('pdf_code', 'PDF code', kw['pdf_code'])
-
     if kw.get('status_filter'):
         add('status', 'Status', kw['status_filter'].capitalize())
-
     if kw.get('chapter'):
         add('chapter', 'Chapter', kw['chapter'])
-
     if kw.get('interactions'):
         labels = {
             'has_reports': 'Has reports',
@@ -309,7 +360,6 @@ def _build_active_filters(**kw):
         }
         add('interactions', 'Interactions',
             labels.get(kw['interactions'], kw['interactions']))
-
     if kw.get('miss_filter'):
         labels = {
             'high':   'High miss rate',
@@ -320,19 +370,16 @@ def _build_active_filters(**kw):
         }
         add('miss', 'Miss rate',
             labels.get(kw['miss_filter'], kw['miss_filter']))
-
     dmin = kw.get('difficulty_min')
     dmax = kw.get('difficulty_max')
     if dmin is not None:
         add('difficulty_min', 'Min difficulty', f'⭐ {dmin}')
     if dmax is not None:
         add('difficulty_max', 'Max difficulty', f'⭐ {dmax}')
-
     if kw.get('date_from'):
         add('from', 'From', kw['date_from'])
     if kw.get('date_to'):
         add('to', 'To', kw['date_to'])
-
     return chips
 
 
@@ -1071,22 +1118,20 @@ def bulk_preview():
 @admin_content_bp.route('/pdfs', methods=['GET'], endpoint='pdfs')
 @admin_can('pdfs.view')
 def pdfs():
-    """
-    Unified PDF workspace: library / intake / staging.
-    Tabs are hidden from the template when the current admin
-    lacks the corresponding capability.
-    """
+    """Unified PDF workspace: library / intake / staging / unverified."""
     can_intake  = admin_can('pdfs.intake')
     can_publish = admin_can('pdfs.publish')
     can_edit    = admin_can('pdfs.edit')
     can_delete  = admin_can('pdfs.delete')
 
     tab = (request.args.get('tab') or 'library').strip().lower()
-    if tab not in ('library', 'intake', 'staging'):
+    if tab not in ('library', 'intake', 'staging', 'unverified'):
         tab = 'library'
     if tab == 'intake' and not can_intake:
         tab = 'library'
     if tab == 'staging' and not (can_intake or can_publish):
+        tab = 'library'
+    if tab == 'unverified' and not can_intake:
         tab = 'library'
 
     # ---------- Library ----------
@@ -1110,7 +1155,7 @@ def pdfs():
         try:
             from bot.db import get_pending_pdf_list, count_pending_pdfs
             pending_count = count_pending_pdfs()
-            pending_list = get_pending_pdf_list(limit=60, offset=0)
+            pending_list = get_pending_pdf_list(limit=200, offset=0)
         except Exception as e:
             logger.warning(f"pending list load failed: {e}")
 
@@ -1121,9 +1166,22 @@ def pdfs():
         try:
             from bot.db import get_bot_pdfs, count_bot_pdfs
             staging_count = count_bot_pdfs()
-            staging_list = get_bot_pdfs(limit=60, offset=0)
+            staging_list = get_bot_pdfs(limit=200, offset=0)
         except Exception as e:
             logger.warning(f"staging list load failed: {e}")
+
+    # ---------- Unverified ----------
+    unverified_list = []
+    unverified_count = 0
+    show_confirmed = (request.args.get('show_confirmed') == '1')
+    if can_intake:
+        try:
+            unverified_count = _count_unverified_pdfs()
+            unverified_list = _load_unverified_pdfs(
+                show_confirmed=show_confirmed, limit=500
+            )
+        except Exception as e:
+            logger.warning(f"unverified list load failed: {e}")
 
     return render_template(
         'dashboard/admin/content/pdfs.html',
@@ -1144,6 +1202,9 @@ def pdfs():
         pending_count=pending_count,
         staging_list=staging_list,
         staging_count=staging_count,
+        unverified_list=unverified_list,
+        unverified_count=unverified_count,
+        show_confirmed=show_confirmed,
     )
 
 
@@ -1199,6 +1260,15 @@ def pdf_update(pdf_id):
         """, (title, description, curriculum, class_filter,
               subject, chapter, tags, is_premium, pdf_id), commit=True)
 
+        # Auto-confirm in the unverified queue (if tracked)
+        try:
+            execute_with_retry(
+                "UPDATE unverified_pdfs SET confirmed = 1 WHERE pdf_id = ?",
+                (pdf_id,), commit=True,
+            )
+        except Exception:
+            pass
+
         write_audit(
             action='pdf.update', target_type='pdf', target_id=pdf_id,
             before={'title': pdf.get('title'), 'subject': pdf.get('subject')},
@@ -1224,6 +1294,7 @@ def pdf_delete(pdf_id):
     if not pdf:
         abort(404)
     if delete_main_pdf(pdf_id):
+        # unverified_pdfs row cascades automatically via FK
         write_audit(
             action='pdf.delete', target_type='pdf', target_id=pdf_id,
             before={'title': pdf.get('title'), 'code': pdf.get('code')},
@@ -1344,7 +1415,6 @@ def pdf_intake_process(pending_id):
         flash(f'PDF staged with code {code}.', 'success')
         return redirect(url_for('admin_content.pdfs', tab='staging'))
 
-    # GET — build suggestions and a fresh code.
     auto_code = _generate_staging_pdf_code()
     suggested = suggest_from_filename(filename)
 
@@ -1407,6 +1477,245 @@ def pdf_intake_preview(pending_id):
             exc_info=True,
         )
         abort(502)
+
+
+# ============================================================
+# PDFs — INTAKE BULK PUBLISH (super admin direct publish)
+# ============================================================
+
+@admin_content_bp.route('/pdfs/intake/publish-direct', methods=['POST'],
+                        endpoint='pdf_intake_publish_direct')
+@admin_can('pdfs.publish')
+def pdf_intake_publish_direct():
+    """
+    Step 1 of direct publish: super admin selects pending PDFs.
+    Renders a bulk-edit page with auto-suggested metadata.
+    """
+    if not validate_csrf():
+        abort(403)
+
+    pending_ids = request.form.getlist('pending_ids')
+    if not pending_ids:
+        flash('No PDFs selected.', 'error')
+        return redirect(url_for('admin_content.pdfs', tab='intake'))
+
+    from bot.db import get_pending_pdf_by_id
+
+    rows = []
+    skipped = 0
+    for pid in pending_ids:
+        try:
+            pid_int = int(pid)
+        except (ValueError, TypeError):
+            skipped += 1
+            continue
+        pending = get_pending_pdf_by_id(pid_int)
+        if not pending:
+            skipped += 1
+            continue
+
+        filename = pending.get('filename') or ''
+        suggested = suggest_from_filename(filename)
+        auto_code = _generate_staging_pdf_code()
+
+        default_title = (
+            suggested.get('title')
+            or filename.replace('.pdf', '').replace('_', ' ').replace('-', ' ').title()
+        )
+
+        rows.append({
+            'pending_id': pid_int,
+            'filename': filename,
+            'file_id': pending.get('file_id', ''),
+            'file_unique_id': pending.get('file_unique_id', ''),
+            'uploaded_by': pending.get('uploaded_by'),
+            'uploaded_at': pending.get('uploaded_at', ''),
+            'code': auto_code,
+            'title': default_title,
+            'subject': suggested.get('subject') or '',
+            'curriculum': 'PL',
+            'class': '',
+            'chapter': suggested.get('chapter') or '',
+            'tags': suggested.get('tags') or '',
+            'is_premium': 0,
+        })
+
+    if not rows:
+        flash('No valid pending PDFs found.', 'error')
+        return redirect(url_for('admin_content.pdfs', tab='intake'))
+
+    if skipped:
+        flash(f'{skipped} pending PDF(s) could not be loaded and were skipped.',
+              'warning')
+
+    return render_template(
+        'dashboard/admin/content/pdf_intake_bulk.html',
+        rows=rows,
+        subjects=get_all_subjects(),
+        curricula=[('PL', 'Puntland'), ('SO', 'Somalia'), ('SL', 'Somaliland')],
+        classes=['7aad', '8aad', 'F3', 'F4'],
+    )
+
+
+@admin_content_bp.route('/pdfs/intake/publish-commit', methods=['POST'],
+                        endpoint='pdf_intake_publish_commit')
+@admin_can('pdfs.publish')
+def pdf_intake_publish_commit():
+    """
+    Step 2 of direct publish: receives edited rows, stages + publishes
+    each PDF directly to the library, and creates tracking rows in
+    unverified_pdfs.
+    """
+    if not validate_csrf():
+        abort(403)
+
+    rows_json = request.form.get('rows_json') or ''
+    if not rows_json:
+        flash('No data submitted.', 'error')
+        return redirect(url_for('admin_content.pdfs', tab='intake'))
+
+    try:
+        rows = json.loads(rows_json)
+    except json.JSONDecodeError as e:
+        flash(f'Invalid data: {e}', 'error')
+        return redirect(url_for('admin_content.pdfs', tab='intake'))
+
+    if not isinstance(rows, list) or not rows:
+        flash('No rows to publish.', 'error')
+        return redirect(url_for('admin_content.pdfs', tab='intake'))
+
+    from bot.db import (
+        get_pending_pdf_by_id, insert_bot_pdf,
+        delete_pending_pdf, get_bot_pdf_by_code,
+    )
+
+    published = 0
+    failed = 0
+    failures = []
+
+    for idx, row in enumerate(rows, 1):
+        try:
+            pending_id = int(row.get('pending_id'))
+        except (ValueError, TypeError):
+            failed += 1
+            failures.append(f'Row {idx}: invalid pending id')
+            continue
+
+        code = (row.get('code') or '').strip().upper()
+        title = (row.get('title') or '').strip()
+        subject = (row.get('subject') or '').strip()
+        curriculum = (row.get('curriculum') or 'PL').strip()
+        class_filter = (row.get('class') or '').strip()
+        chapter = (row.get('chapter') or '').strip()
+        tags = (row.get('tags') or '').strip()
+        is_premium = 1 if row.get('is_premium') else 0
+
+        # ---- Validation ----
+        if not code or not _validate_pdf_code_format(code):
+            failed += 1
+            failures.append(f'#{pending_id}: invalid code "{code}"')
+            continue
+        if not title:
+            failed += 1
+            failures.append(f'#{pending_id}: title required')
+            continue
+        if not subject:
+            failed += 1
+            failures.append(f'#{pending_id}: subject required')
+            continue
+        if curriculum not in ('PL', 'SO', 'SL'):
+            failed += 1
+            failures.append(f'#{pending_id}: invalid curriculum')
+            continue
+        if class_filter and class_filter not in ('7aad', '8aad', 'F3', 'F4'):
+            failed += 1
+            failures.append(f'#{pending_id}: invalid class')
+            continue
+
+        # ---- Code availability ----
+        if get_bot_pdf_by_code(code) or get_pdf_by_code(code):
+            failed += 1
+            failures.append(f'#{pending_id}: code "{code}" already used')
+            continue
+
+        # ---- Fetch pending row ----
+        pending = get_pending_pdf_by_id(pending_id)
+        if not pending:
+            failed += 1
+            failures.append(f'#{pending_id}: not found')
+            continue
+
+        # ---- Stage ----
+        bot_pdf_id = insert_bot_pdf({
+            'code': code,
+            'title': title,
+            'description': '',
+            'curriculum': curriculum,
+            'class': class_filter,
+            'subject': subject,
+            'chapter': chapter,
+            'tags': tags,
+            'is_premium': is_premium,
+            'file_id': pending['file_id'],
+            'file_unique_id': pending['file_unique_id'],
+            'uploaded_by': pending['uploaded_by'],
+            'original_filename': pending.get('filename', ''),
+        })
+
+        if not bot_pdf_id:
+            failed += 1
+            failures.append(f'#{pending_id}: staging insert failed')
+            continue
+
+        # ---- Publish to main ----
+        ok, msg = publish_bot_pdf_to_main(bot_pdf_id)
+        if not ok:
+            failed += 1
+            failures.append(f'#{pending_id}: publish failed ({msg})')
+            continue
+
+        # ---- Track as unverified ----
+        try:
+            main_pdf = get_pdf_by_code(code)
+            if main_pdf:
+                execute_with_retry(
+                    "INSERT OR IGNORE INTO unverified_pdfs (pdf_id) VALUES (?)",
+                    (main_pdf['id'],),
+                    commit=True,
+                )
+        except Exception as e:
+            logger.warning(
+                f"unverified_pdfs insert failed for code {code}: {e}"
+            )
+
+        # ---- Cleanup pending ----
+        delete_pending_pdf(pending_id)
+        published += 1
+
+    # ---- Audit ----
+    write_audit(
+        action='pdf.intake.super_publish',
+        target_type='pdf',
+        before=None,
+        after={
+            'published': published,
+            'failed': failed,
+            'sample_failures': failures[:5],
+        },
+        severity='warning',
+    )
+
+    if published:
+        flash(
+            f'{published} PDF{"s" if published != 1 else ""} published '
+            f'directly to the library.',
+            'success',
+        )
+    if failed:
+        first = failures[0] if failures else ''
+        flash(f'{failed} failed. First: {first}', 'error')
+
+    return redirect(url_for('admin_content.pdfs', tab='unverified'))
 
 
 # ============================================================
@@ -1588,3 +1897,110 @@ def pdf_staging_publish_all():
         flash(f'{failed} already existed or failed to publish.', 'info')
 
     return redirect(url_for('admin_content.pdfs', tab='staging'))
+
+
+# ============================================================
+# PDFs — UNVERIFIED (review queue)
+# ============================================================
+
+@admin_content_bp.route('/pdfs/unverified/confirm', methods=['POST'],
+                        endpoint='pdf_unverified_confirm')
+@admin_can('pdfs.intake')
+def pdf_unverified_confirm():
+    """Any admin can mark unverified PDFs as reviewed."""
+    if not validate_csrf():
+        abort(403)
+
+    ids = request.form.getlist('unverified_ids')
+    if not ids:
+        flash('No PDFs selected.', 'error')
+        return redirect(url_for('admin_content.pdfs', tab='unverified'))
+
+    clean_ids = []
+    for i in ids:
+        try:
+            clean_ids.append(int(i))
+        except (ValueError, TypeError):
+            continue
+
+    if not clean_ids:
+        flash('No valid records selected.', 'error')
+        return redirect(url_for('admin_content.pdfs', tab='unverified'))
+
+    placeholders = ','.join('?' for _ in clean_ids)
+    try:
+        cursor = execute_with_retry(
+            f"UPDATE unverified_pdfs SET confirmed = 1 "
+            f"WHERE id IN ({placeholders})",
+            clean_ids, commit=True,
+        )
+        count = cursor.rowcount or 0
+        write_audit(
+            action='pdf.unverified.confirm',
+            target_type='unverified_pdf',
+            before=None,
+            after={'count': count, 'ids': clean_ids},
+            severity='info',
+        )
+        flash(
+            f'{count} PDF{"s" if count != 1 else ""} marked as reviewed.',
+            'success',
+        )
+    except Exception as e:
+        logger.error(f"unverified confirm failed: {e}")
+        flash('Error updating records.', 'error')
+
+    return redirect(url_for('admin_content.pdfs', tab='unverified'))
+
+
+@admin_content_bp.route('/pdfs/unverified/delete', methods=['POST'],
+                        endpoint='pdf_unverified_delete')
+@admin_can('pdfs.publish')  # super admin only
+def pdf_unverified_delete():
+    """
+    Remove tracking rows from the unverified queue.
+    The PDF itself stays live in the library.
+    """
+    if not validate_csrf():
+        abort(403)
+
+    ids = request.form.getlist('unverified_ids')
+    if not ids:
+        flash('No records selected.', 'error')
+        return redirect(url_for('admin_content.pdfs', tab='unverified'))
+
+    clean_ids = []
+    for i in ids:
+        try:
+            clean_ids.append(int(i))
+        except (ValueError, TypeError):
+            continue
+
+    if not clean_ids:
+        flash('No valid records selected.', 'error')
+        return redirect(url_for('admin_content.pdfs', tab='unverified'))
+
+    placeholders = ','.join('?' for _ in clean_ids)
+    try:
+        cursor = execute_with_retry(
+            f"DELETE FROM unverified_pdfs WHERE id IN ({placeholders})",
+            clean_ids, commit=True,
+        )
+        count = cursor.rowcount or 0
+        write_audit(
+            action='pdf.unverified.remove_from_queue',
+            target_type='unverified_pdf',
+            before={'ids': clean_ids, 'count': count},
+            after=None,
+            severity='warning',
+        )
+        flash(
+            f'{count} record{"s" if count != 1 else ""} removed from the '
+            f'review queue. The PDFs themselves remain in the library.',
+            'info',
+        )
+    except Exception as e:
+        logger.error(f"unverified delete failed: {e}")
+        flash('Error removing records.', 'error')
+
+    return redirect(url_for('admin_content.pdfs', tab='unverified'))

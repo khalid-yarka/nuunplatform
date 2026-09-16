@@ -1,0 +1,128 @@
+{# ============================================================
+   templates/dashboard/admin/content/pdf_intake_bulk.html
+   Super-admin bulk direct publish from intake. Editable table —
+   every row can be fixed inline before publishing.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-bolt header-icon"></i>{% endblock %}
+{% block admin_title %}Bulk Direct Publish{% endblock %}
+{% block admin_subtitle %}
+    {{ rows|length }} pending PDF{{ '' if rows|length == 1 else 's' }}
+    ready for review before publishing straight to the library.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_content.pdfs', tab='intake') }}">Intake</a>
+    <span class="sep">/</span>
+    <span class="current">Bulk Direct Publish</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_content.pdfs', tab='intake') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Cancel
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="pdf-bulk-editor">
+
+    <div class="pdf-bulk-toolbar">
+        <div class="pdf-bulk-toolbar-info">
+            <i class="fas fa-info-circle"></i>
+            <div>
+                <strong>{{ rows|length }}</strong> PDFs will be published directly
+                to the library. Metadata is auto-generated — edit anything inline
+                before publishing.
+                <div class="pdf-bulk-toolbar-hint">
+                    Use the checkboxes to exclude rows you don't want to publish now.
+                    They'll stay in the intake queue.
+                </div>
+            </div>
+        </div>
+        <div class="pdf-bulk-toolbar-actions">
+            <button type="button" class="admin-btn secondary lg" id="bulkCancelBtn">
+                Cancel
+            </button>
+            <button type="button" class="admin-btn primary lg" id="bulkPublishTop">
+                <i class="fas fa-cloud-upload-alt"></i>
+                Publish <span id="bulkCountTop">{{ rows|length }}</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="pdf-bulk-toolbar-aux">
+        <label class="pdf-staging-check">
+            <input type="checkbox" id="bulkSelectAll" checked>
+            <span>Include all</span>
+        </label>
+        <span class="pdf-staging-count">
+            <strong id="bulkIncludedCount">{{ rows|length }}</strong> of
+            <strong>{{ rows|length }}</strong> included
+        </span>
+        <div class="pdf-staging-spacer"></div>
+        <span class="pdf-bulk-page-info" id="bulkPageInfo"></span>
+        <button type="button" class="admin-btn secondary sm" id="bulkPrevPage">
+            <i class="fas fa-chevron-left"></i>
+        </button>
+        <button type="button" class="admin-btn secondary sm" id="bulkNextPage">
+            <i class="fas fa-chevron-right"></i>
+        </button>
+    </div>
+
+    <div class="pdf-bulk-table-wrap">
+        <table class="pdf-bulk-table">
+            <thead>
+                <tr>
+                    <th style="width:34px;"></th>
+                    <th style="width:34px;">#</th>
+                    <th style="width:34px;"></th>
+                    <th style="width:120px;">Code</th>
+                    <th style="width:220px;">Title</th>
+                    <th style="width:150px;">Subject</th>
+                    <th style="width:110px;">Curriculum</th>
+                    <th style="width:100px;">Class</th>
+                    <th style="width:120px;">Chapter</th>
+                    <th style="width:160px;">Tags</th>
+                    <th style="width:50px;" title="Premium">💎</th>
+                </tr>
+            </thead>
+            <tbody id="bulkTableBody"></tbody>
+        </table>
+    </div>
+
+    <div class="pdf-bulk-toolbar-bottom">
+        <button type="button" class="admin-btn secondary lg" id="bulkCancelBtn2">
+            Cancel
+        </button>
+        <button type="button" class="admin-btn primary lg" id="bulkPublishBottom">
+            <i class="fas fa-cloud-upload-alt"></i>
+            Publish <span id="bulkCountBottom">{{ rows|length }}</span>
+        </button>
+    </div>
+
+</div>
+
+<form method="POST"
+      action="{{ url_for('admin_content.pdf_intake_publish_commit') }}"
+      id="bulkCommitForm" style="display:none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="rows_json" id="bulkRowsJson">
+</form>
+
+<script>
+window.NUUN_BULK_ROWS     = {{ rows|tojson }};
+window.NUUN_BULK_SUBJECTS = {{ subjects|tojson }};
+window.NUUN_BULK_CURRICULA = {{ curricula|tojson }};
+window.NUUN_BULK_CLASSES  = {{ classes|tojson }};
+window.NUUN_BULK_PREVIEW_BASE = "{{ url_for('admin_content.pdf_intake_preview', pending_id=0)|string }}".replace('/0/', '/__PID__/');
+window.NUUN_BULK_INTAKE_URL = "{{ url_for('admin_content.pdfs', tab='intake') }}";
+</script>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/content.js') }}"></script>
+{% endblock %}

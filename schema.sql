@@ -823,3 +823,26 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_log_severity
     ON admin_audit_log(severity, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_log_created
     ON admin_audit_log(created_at DESC);
+
+
+
+-- ============================================
+-- UNVERIFIED PDFs (direct-publish review queue)
+-- ============================================
+-- Records PDFs published directly from intake via the super-admin
+-- "Super Publish" action. Metadata was auto-generated from the
+-- filename and needs review by any admin.
+-- Deleting a row here does NOT delete the PDF from the library.
+
+CREATE TABLE IF NOT EXISTS unverified_pdfs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    pdf_id        INTEGER NOT NULL UNIQUE,
+    published_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    confirmed     INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_unverified_pdfs_confirmed
+    ON unverified_pdfs(confirmed);
+CREATE INDEX IF NOT EXISTS idx_unverified_pdfs_published
+    ON unverified_pdfs(published_at DESC);

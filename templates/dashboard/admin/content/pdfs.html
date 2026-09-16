@@ -1,8 +1,7 @@
 {# ============================================================
    templates/dashboard/admin/content/pdfs.html
-   Unified PDF workspace — Library / Intake / Staging tabs.
-   Tabs and actions are hidden when the current admin lacks the
-   corresponding capability.
+   Unified PDF workspace — Library / Intake / Staging / Unverified.
+   Tabs and actions hide based on capabilities.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -14,9 +13,11 @@
     {% elif tab == 'intake' %}
         {{ pending_count }} file{{ '' if pending_count == 1 else 's' }} waiting for review.
     {% elif tab == 'staging' %}
-        {{ staging_count }} staged PDF{{ '' if staging_count == 1 else 's' }} awaiting publish to the platform.
+        {{ staging_count }} staged PDF{{ '' if staging_count == 1 else 's' }} awaiting publish.
+    {% elif tab == 'unverified' %}
+        {{ unverified_count }} PDF{{ '' if unverified_count == 1 else 's' }} awaiting confirmation.
     {% else %}
-        Manage library, intake, and staging in one place.
+        Manage library, intake, staging, and the review queue.
     {% endif %}
 {% endblock %}
 
@@ -26,12 +27,6 @@
 {% endblock %}
 
 {% block admin_actions %}
-    {% if tab == 'library' and can_intake %}
-        <a href="{{ url_for('admin_content.pdfs', tab='intake') }}" class="admin-btn secondary">
-            <i class="fas fa-inbox"></i> Intake
-            {% if pending_count > 0 %}<span class="admin-chip amber" style="margin-left:6px;">{{ pending_count }}</span>{% endif %}
-        </a>
-    {% endif %}
     {% if tab == 'staging' and can_publish and staging_count > 0 %}
         <form method="POST"
               action="{{ url_for('admin_content.pdf_staging_publish_all') }}"
@@ -78,6 +73,16 @@
             {% if staging_count > 0 %}
                 <span class="pdf-tab-count">{{ staging_count }}</span>
             {% endif %}
+        </a>
+    {% endif %}
+
+    {% if can_intake and unverified_count > 0 %}
+        <a href="{{ url_for('admin_content.pdfs', tab='unverified') }}"
+           class="pdf-tab {% if tab == 'unverified' %}active{% endif %}"
+           role="tab">
+            <i class="fas fa-clipboard-check"></i>
+            <span>Unverified</span>
+            <span class="pdf-tab-count unverified">{{ unverified_count }}</span>
         </a>
     {% endif %}
 </nav>
@@ -177,11 +182,6 @@
             <span class="empty-icon">📄</span>
             <h3>No PDFs found</h3>
             <p>Try clearing the filters, or publish some from the Staging tab.</p>
-            {% if can_intake %}
-                <a href="{{ url_for('admin_content.pdfs', tab='intake') }}" class="admin-btn primary">
-                    <i class="fas fa-inbox"></i> View Intake
-                </a>
-            {% endif %}
         </div>
     {% endif %}
 
@@ -193,9 +193,45 @@
 {% if tab == 'intake' and can_intake %}
 
     {% if pending_list %}
+
+        {# ─── Super-admin bulk toolbar (only when can_publish) ─── #}
+        {% if can_publish %}
+            <form method="POST"
+                  action="{{ url_for('admin_content.pdf_intake_publish_direct') }}"
+                  id="intakeBulkForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+                <div class="pdf-staging-toolbar" style="margin-bottom:12px;">
+                    <label class="pdf-staging-check">
+                        <input type="checkbox" id="intakeSelectAll">
+                        <span>Select all</span>
+                    </label>
+                    <span class="pdf-staging-count">
+                        <strong id="intakeCount">0</strong> selected
+                    </span>
+                    <div class="pdf-staging-spacer"></div>
+                    <button type="submit" class="admin-btn primary"
+                            id="intakeSuperPublishBtn" disabled>
+                        <i class="fas fa-bolt"></i> Super Publish selected
+                    </button>
+                </div>
+        {% endif %}
+
         <div class="pdf-intake-list">
             {% for p in pending_list %}
-                <div class="pdf-intake-row">
+                <div class="pdf-intake-row pdf-intake-row--clickable"
+                     data-preview-url="{{ url_for('admin_content.pdf_intake_preview', pending_id=p.id) }}"
+                     role="link" tabindex="0">
+
+                    {% if can_publish %}
+                        <label class="pdf-intake-checkbox">
+                            <input type="checkbox"
+                                   name="pending_ids"
+                                   value="{{ p.id }}"
+                                   class="pdf-intake-checkbox-input">
+                        </label>
+                    {% endif %}
+
                     <div class="pdf-intake-icon">
                         <i class="fas fa-file-pdf"></i>
                     </div>
@@ -213,19 +249,24 @@
                     </div>
 
                     <div class="pdf-intake-actions">
-                        <a href="{{ url_for('admin_content.pdf_intake_preview', pending_id=p.id) }}"
-                           target="_blank" rel="noopener"
-                           class="admin-btn secondary sm">
-                            <i class="fas fa-eye"></i> Preview
-                        </a>
                         <a href="{{ url_for('admin_content.pdf_intake_process', pending_id=p.id) }}"
-                           class="admin-btn primary sm">
+                           class="admin-btn primary sm"
+                           data-stop-row-click="1">
                             <i class="fas fa-arrow-right"></i> Process
                         </a>
                     </div>
+
+                    <span class="pdf-intake-hint" aria-hidden="true">
+                        <i class="fas fa-external-link-alt"></i>
+                    </span>
                 </div>
             {% endfor %}
         </div>
+
+        {% if can_publish %}
+            </form>
+        {% endif %}
+
     {% else %}
         <div class="admin-empty">
             <span class="empty-icon">🎉</span>
@@ -357,4 +398,126 @@
 
 {% endif %}
 
+{# ═══════════════════════════════════════════════════════════
+   UNVERIFIED TAB
+   ═══════════════════════════════════════════════════════════ #}
+{% if tab == 'unverified' and can_intake %}
+
+    <div class="pdf-staging-toolbar" style="margin-bottom:12px;">
+        <span class="pdf-staging-count">
+            {% if unverified_list %}
+                Showing {{ unverified_list|length }} of {{ unverified_count }}
+                awaiting review
+            {% else %}
+                Nothing awaiting review
+            {% endif %}
+        </span>
+        <div class="pdf-staging-spacer"></div>
+        <a href="{{ url_for('admin_content.pdfs', tab='unverified',
+                            show_confirmed='0' if show_confirmed else '1') }}"
+           class="admin-btn secondary">
+            {% if show_confirmed %}
+                <i class="fas fa-eye-slash"></i> Show only unconfirmed
+            {% else %}
+                <i class="fas fa-eye"></i> Show all
+            {% endif %}
+        </a>
+    </div>
+
+    {% if unverified_list %}
+
+        <form method="POST" id="unverifiedForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+            <div class="pdf-staging-toolbar">
+                <label class="pdf-staging-check">
+                    <input type="checkbox" id="unverifiedSelectAll">
+                    <span>Select all</span>
+                </label>
+                <span class="pdf-staging-count">
+                    <strong id="unverifiedCount">0</strong> selected
+                </span>
+                <div class="pdf-staging-spacer"></div>
+                <button type="submit"
+                        class="admin-btn secondary"
+                        id="unverifiedConfirmBtn"
+                        formaction="{{ url_for('admin_content.pdf_unverified_confirm') }}"
+                        disabled>
+                    <i class="fas fa-check"></i> Mark as reviewed
+                </button>
+                {% if can_publish %}
+                    <button type="submit"
+                            class="admin-btn danger"
+                            id="unverifiedDeleteBtn"
+                            formaction="{{ url_for('admin_content.pdf_unverified_delete') }}"
+                            disabled
+                            onclick="return confirm('Remove the selected record(s) from the review queue?\n\nThe PDF files themselves will remain live in the library.');">
+                        <i class="fas fa-times"></i> Remove from queue
+                    </button>
+                {% endif %}
+            </div>
+
+            <div class="pdf-unverified-list">
+                {% for u in unverified_list %}
+                    <div class="pdf-unverified-row {% if u.confirmed %}confirmed{% endif %}">
+                        <label class="pdf-staging-check">
+                            <input type="checkbox"
+                                   name="unverified_ids"
+                                   value="{{ u.tracking_id }}"
+                                   class="pdf-unverified-checkbox">
+                        </label>
+
+                        <div class="pdf-staging-code">{{ u.code }}</div>
+
+                        <div class="pdf-staging-body">
+                            <div class="pdf-staging-title">
+                                {{ u.title }}
+                                {% if u.confirmed %}
+                                    <span class="pdf-chip verified">✓ Verified</span>
+                                {% else %}
+                                    <span class="pdf-chip pending">Pending review</span>
+                                {% endif %}
+                            </div>
+
+                            <div class="pdf-staging-meta">
+                                {% if u.subject_name %}<span>{{ u.subject_name }}</span>{% endif %}
+                                {% if u.curriculum %}<span>{{ u.curriculum }}</span>{% endif %}
+                                {% if u.class %}<span>{{ u.class }}</span>{% endif %}
+                                {% if u.chapter %}<span>{{ u.chapter }}</span>{% endif %}
+                                {% if u.tags %}<span>{{ u.tags }}</span>{% endif %}
+                                {% if u.is_premium %}<span class="pdf-meta-chip premium">💎 Premium</span>{% endif %}
+                                <span class="pdf-staging-date">
+                                    Published {{ (u.published_at or '')[:16] }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="pdf-staging-actions">
+                            <a href="{{ url_for('admin_content.pdf_edit', pdf_id=u.pdf_id) }}"
+                               class="admin-btn secondary sm" title="Edit and confirm">
+                                <i class="fas fa-pen"></i> Edit
+                            </a>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </form>
+
+    {% else %}
+        <div class="admin-empty">
+            <span class="empty-icon">✅</span>
+            <h3>Nothing to review</h3>
+            <p>
+                All directly-published PDFs have been confirmed.
+                {% if not show_confirmed %}
+                    <br>Use "Show all" above to view confirmed records.
+                {% endif %}
+            </p>
+        </div>
+    {% endif %}
+
+{% endif %}
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/content.js') }}"></script>
+{% endblock %}
 {% endblock %}
