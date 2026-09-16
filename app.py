@@ -675,6 +675,25 @@ def telegram_webhook_legacy():
 def favicon():
     return '', 204
 
+from flask import send_from_directory
+
+@app.route('/manifest.json')
+def manifest():
+    return send_from_directory('static', 'manifest.json',
+                               mimetype='application/manifest+json')
+
+@app.route('/sw.js')
+def service_worker():
+    resp = send_from_directory('static', 'sw.js', mimetype='application/javascript')
+    resp.headers['Service-Worker-Allowed'] = '/'
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+@app.route('/offline.html')
+def offline():
+    return render_template('offline.html'), 200
+
+
 
 @app.route('/health', methods=['GET'])
 def health_check():

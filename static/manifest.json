@@ -1,0 +1,23 @@
+{
+  "name": "NuunPlatform",
+  "short_name": "Nuun",
+  "description": "Learn, quiz, and grow with NuunPlatform.",
+  "start_url": "/home?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFF8F6",
+  "theme_color": "#FF3138",
+  "lang": "so",
+  "dir": "ltr",
+  "icons": [
+    { "src": "/static/images/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/images/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/images/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Take a Quiz", "url": "/quiz", "icons": [{ "src": "/static/images/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Live Quiz",   "url": "/live-quiz/lobby", "icons": [{ "src": "/static/images/icon-192.png", "sizes": "192x192" }] },
+    { "name": "History",     "url": "/history", "icons": [{ "src": "/static/images/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
