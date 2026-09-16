@@ -87,9 +87,9 @@ def list_groups():
 def get_curriculum_label(curriculum):
     """Get display label for curriculum."""
     labels = {
-        'PL': '🇸🇴 Puntland',
+        'PL': '🇸🇱 Puntland',
         'SO': '🇸🇴 Somalia',
-        'SL': '🇸🇴 Somaliland'
+        'SL': '🇮🇷 Somaliland'
     }
     return labels.get(curriculum, curriculum or 'All')
 

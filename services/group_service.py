@@ -28,9 +28,9 @@ logger = logging.getLogger(__name__)
 
 def get_curriculum_label(curriculum):
     labels = {
-        'PL': '🇸🇴 Puntland',
+        'PL': '🇸🇱 Puntland',
         'SO': '🇸🇴 Somalia',
-        'SL': '🇸🇴 Somaliland'
+        'SL': '🇮🇷 Somaliland'
     }
     return labels.get(curriculum, curriculum or 'All')
 

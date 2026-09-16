@@ -74,9 +74,9 @@ def _csrf_ok():
 
 CURRICULUM_OPTIONS = [
     {'code': '',   'label': 'Any curriculum',  'flag': '🌍'},
-    {'code': 'PL', 'label': 'Puntland',        'flag': '🇸🇴'},
+    {'code': 'PL', 'label': 'Puntland',        'flag': '🇸🇱'},
     {'code': 'SO', 'label': 'Somalia',         'flag': '🇸🇴'},
-    {'code': 'SL', 'label': 'Somaliland',      'flag': '🇸🇴'},
+    {'code': 'SL', 'label': 'Somaliland',      'flag': '🇮🇷'},
 ]
 
 TIER_OPTIONS = [
