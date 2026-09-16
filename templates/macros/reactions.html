@@ -1,0 +1,74 @@
+{#
+  Shared reactions macro — used by both regular quiz and live quiz.
+  Renders: Like / Save / Report buttons with text labels that flip
+  on active state ("Like" → "Liked"). Consumed by static/js/reactions.js.
+
+  Params:
+    question_id   int    Required. The question being reacted to.
+    status_url    str    Required. GET endpoint, returns {liked,saved,reported}.
+    like_url      str    Required. POST endpoint for like toggle.
+    save_url      str    Required. POST endpoint for save toggle.
+    report_url    str    Required. POST endpoint for report submit.
+    mode          str    'regular' | 'live'. CSS hook only.
+    save_locked   bool   Show lock icon on Save (free tier).
+    show_report   bool   Hide the report button entirely if false.
+#}
+
+{% macro render_reactions(
+    question_id,
+    status_url,
+    like_url,
+    save_url,
+    report_url,
+    mode='regular',
+    save_locked=false,
+    show_report=true
+) %}
+<div class="nuun-reactions nuun-reactions--{{ mode }}"
+     data-question-id="{{ question_id }}"
+     data-status-url="{{ status_url }}"
+     data-like-url="{{ like_url }}"
+     data-save-url="{{ save_url }}"
+     data-report-url="{{ report_url }}"
+     data-save-locked="{{ 'true' if save_locked else 'false' }}">
+
+    <button type="button" class="nuun-reaction-btn nuun-reaction-btn--like"
+            data-action="like" aria-pressed="false"
+            title="{{ _('reactions.like') }}">
+        <span class="nuun-reaction-icon" aria-hidden="true">♡</span>
+        <span class="nuun-reaction-label"
+              data-label-default="{{ _('reactions.like') }}"
+              data-label-active="{{ _('reactions.liked') }}">
+            {{ _('reactions.like') }}
+        </span>
+    </button>
+
+    <button type="button"
+            class="nuun-reaction-btn nuun-reaction-btn--save{% if save_locked %} is-locked{% endif %}"
+            data-action="save" aria-pressed="false"
+            title="{{ _('reactions.save_locked') if save_locked else _('reactions.save') }}">
+        <span class="nuun-reaction-icon" aria-hidden="true">🔖</span>
+        <span class="nuun-reaction-label"
+              data-label-default="{{ _('reactions.save') }}"
+              data-label-active="{{ _('reactions.saved') }}">
+            {{ _('reactions.save') }}
+        </span>
+        {% if save_locked %}
+        <span class="nuun-reaction-lock" aria-hidden="true">🔒</span>
+        {% endif %}
+    </button>
+
+    {% if show_report %}
+    <button type="button" class="nuun-reaction-btn nuun-reaction-btn--report"
+            data-action="report" aria-pressed="false"
+            title="{{ _('reactions.report') }}">
+        <span class="nuun-reaction-icon" aria-hidden="true">⚑</span>
+        <span class="nuun-reaction-label"
+              data-label-default="{{ _('reactions.report') }}"
+              data-label-active="{{ _('reactions.reported') }}">
+            {{ _('reactions.report') }}
+        </span>
+    </button>
+    {% endif %}
+</div>
+{% endmacro %}

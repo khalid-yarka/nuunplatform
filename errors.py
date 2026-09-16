@@ -74,6 +74,43 @@ def _should_dispatch(error_hash: str, severity: str) -> bool:
 
 
 # ============================================
+# SILENT-DENY DETECTION
+# ============================================
+# services/admin/guards.py::admin_can deliberately aborts with 404 for
+# non-admins ("silent deny") so that probing admin URLs reveals nothing.
+# That intent is defeated if we log every such 404 as an error and
+# dispatch it to Telegram — the whole point is to be invisible.
+#
+# Detection rules:
+#   - status is 404
+#   - a route WAS matched (request.endpoint is set) — this distinguishes
+#     "guard denied access" from "URL does not exist"
+#   - the request path is under an admin area
+#
+# Genuine 404s (missing routes, deleted resources) still get logged and
+# dispatched because their endpoint is None or the path is non-admin.
+
+def _is_silent_deny(status_code: int) -> bool:
+    """Return True if this 404 is a deliberate admin-guard silent deny."""
+    if status_code != 404:
+        return False
+    try:
+        # No endpoint → route didn't match → this is a real 404, log it.
+        if not request.endpoint:
+            return False
+
+        p = request.path or ''
+        if p == '/admin' or p.startswith('/admin/'):
+            return True
+        if p == '/upgrade/admin' or p.startswith('/upgrade/admin/'):
+            return True
+        return False
+    except Exception:
+        # If we can't tell, prefer logging (fail-open for observability).
+        return False
+
+
+# ============================================
 # TELEGRAM REPORTING
 # ============================================
 
@@ -381,10 +418,21 @@ def register_error_handlers(app):
 
     @app.errorhandler(404)
     def not_found(e):
+        request_id = getattr(g, 'request_id', 'no-req')
+
+        # Silent deny — admin guard rejected a non-admin. Serve the 404 page
+        # but do NOT log or dispatch, so the deny stays invisible (its intent)
+        # and the error dashboard stays clean.
+        if _is_silent_deny(404):
+            logger.debug(f"[{request_id}] silent-deny 404 on {request.path}")
+            if _wants_json():
+                return jsonify({'error': 'Not Found', 'request_id': request_id}), 404
+            return render_template('404.html', request_id=request_id), 404
+
         handle_error(e, 404, SEVERITY_WARNING)
         if _wants_json():
-            return jsonify({'error': 'Not Found', 'request_id': getattr(g, 'request_id', 'no-req')}), 404
-        return render_template('404.html', request_id=getattr(g, 'request_id', 'no-req')), 404
+            return jsonify({'error': 'Not Found', 'request_id': request_id}), 404
+        return render_template('404.html', request_id=request_id), 404
 
     @app.errorhandler(405)
     def method_not_allowed(e):

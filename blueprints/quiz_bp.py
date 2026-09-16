@@ -1,7 +1,15 @@
 # blueprints/quiz_bp.py
-# Complete updated file with fixed leaderboard
+# Regular quiz blueprint.
+#
+# REACTION UNIFICATION (this version):
+#   - submit_rating()            — DELETED. No UI callers existed.
+#   - skip_rating()              — kept as the "advance" endpoint.
+#   - end_quiz()                 — NEW. Saves partial attempt + flushes reactions.
+#   - results()                  — flushes reactions before saving the attempt.
+#   - flush_quiz_reactions()     — called once per completed/ended quiz.
 
 import json
+import logging
 from flask import Blueprint, render_template, request, session, flash, redirect, url_for, jsonify
 from db import (
     get_questions_by_subject, save_quiz_attempt,
@@ -26,8 +34,35 @@ from services.achievement_service import check_and_award_achievements
 from services.settings_service import SettingsService
 from history_logger import add_history_entry
 
+logger = logging.getLogger(__name__)
+
 quiz_bp = Blueprint('quiz', __name__, url_prefix='/quiz')
 
+
+# ============================================
+# HELPERS
+# ============================================
+
+def _empty_reactions():
+    return {'likes': [], 'saves': [], 'reports': {}}
+
+
+def _flush_reactions_safe(user_id, reactions):
+    """Best-effort flush of likes + saves. Never raises."""
+    try:
+        from services.interaction_service import flush_quiz_reactions
+        flush_quiz_reactions(
+            user_id,
+            reactions.get('likes') or [],
+            reactions.get('saves') or [],
+        )
+    except Exception as e:
+        logger.error(f"_flush_reactions_safe failed for user {user_id}: {e}", exc_info=True)
+
+
+# ============================================
+# SETUP / START
+# ============================================
 
 @quiz_bp.route('/')
 def index():
@@ -47,7 +82,6 @@ def index():
         flash('Please set your location and curriculum in your profile to access quizzes.', 'error')
         return redirect(url_for('dashboard.profile'))
 
-    # Load user settings
     settings = session.get('settings', {})
     default_subject = settings.get('quiz.default_subject', '')
     default_question_count = settings.get('quiz.default_question_count', 10)
@@ -126,16 +160,17 @@ def start_quiz():
         'current_index': 0,
         'score': 0,
         'answers': [],
-        'ratings': [],
-        'reactions': {
-            'likes': [],
-            'saves': [],
-            'reports': {}
-        }
+        'ratings': [],           # kept for legacy sessions only
+        'reactions': _empty_reactions(),
     }
+    session.modified = True
 
     return redirect(url_for('quiz.play'))
 
+
+# ============================================
+# PLAY
+# ============================================
 
 @quiz_bp.route('/play')
 def play():
@@ -147,6 +182,13 @@ def play():
     if not quiz_data or not quiz_data.get('questions'):
         flash('No quiz in progress. Start a new quiz.', 'error')
         return redirect(url_for('quiz.index'))
+
+    # Ensure reactions bucket exists even for sessions started before
+    # the unification deploy.
+    if 'reactions' not in quiz_data:
+        quiz_data['reactions'] = _empty_reactions()
+        session['quiz'] = quiz_data
+        session.modified = True
 
     questions = quiz_data['questions']
     current_index = quiz_data['current_index']
@@ -167,9 +209,14 @@ def play():
                            current=current_index,
                            total=total,
                            score=score,
-                           user_settings={'auto_skip_enabled': auto_skip_enabled, 'show_correct_immediately': show_correct_immediately},
+                           user_settings={'auto_skip_enabled': auto_skip_enabled,
+                                          'show_correct_immediately': show_correct_immediately},
                            user_tier=get_user_tier(user_id))
 
+
+# ============================================
+# SUBMIT ANSWER
+# ============================================
 
 @quiz_bp.route('/submit_answer', methods=['POST'])
 def submit_answer():
@@ -188,7 +235,7 @@ def submit_answer():
     if current_index >= len(questions):
         return jsonify({'error': 'Quiz already completed'}), 400
 
-    answer = request.json.get('answer', '')
+    answer = (request.json or {}).get('answer', '')
     question = questions[current_index]
     is_correct = answer == question['correct_answer']
 
@@ -206,7 +253,6 @@ def submit_answer():
     session['quiz'] = quiz_data
     session.modified = True
 
-    user_id = session['user_id']
     settings = session.get('settings', {})
     show_correct_immediately = settings.get('quiz.show_correct_immediately', True)
 
@@ -228,43 +274,13 @@ def submit_answer():
     return jsonify(response)
 
 
-@quiz_bp.route('/submit_rating', methods=['POST'])
-def submit_rating():
-    if 'user_id' not in session:
-        return jsonify({'error': 'Not logged in'}), 401
-
-    if not validate_csrf():
-        return jsonify({'error': 'CSRF token missing or invalid'}), 403
-
-    quiz_data = session.get('quiz')
-    if not quiz_data:
-        return jsonify({'error': 'No quiz in progress'}), 400
-
-    questions = quiz_data['questions']
-    current_index = quiz_data['current_index']
-    if current_index >= len(questions):
-        return jsonify({'error': 'Quiz already completed'}), 400
-
-    rating = request.json.get('rating', '')
-    ratings = quiz_data['ratings']
-    ratings.append({
-        'question_id': questions[current_index]['id'],
-        'rating': rating
-    })
-    quiz_data['ratings'] = ratings
-    quiz_data['current_index'] += 1
-    session['quiz'] = quiz_data
-    session.modified = True
-
-    if quiz_data['current_index'] >= len(questions):
-        user_id = session['user_id']
-        score = quiz_data['score']
-        total = len(questions)
-        check_and_award_achievements(user_id, 'quiz_completed', {'score': score, 'total': total})
-        return jsonify({'complete': True})
-
-    return jsonify({'complete': False, 'next': quiz_data['current_index']})
-
+# ============================================
+# ADVANCE (was skip_rating)
+# ============================================
+# IMPORTANT: the endpoint name and URL are UNCHANGED for backwards
+# compatibility with any in-flight pages during deploy. Semantically it
+# is now "advance to next question" — it no longer records any rating.
+# ============================================
 
 @quiz_bp.route('/skip_rating', methods=['POST'])
 def skip_rating():
@@ -297,6 +313,95 @@ def skip_rating():
     return jsonify({'complete': False, 'next': quiz_data['current_index']})
 
 
+# ============================================
+# END QUIZ (NEW) — partial save + flush
+# ============================================
+
+@quiz_bp.route('/end', methods=['POST'])
+def end_quiz():
+    """
+    End the quiz early. Persists a partial attempt, flushes reactions,
+    awards points for what was earned, and clears the session.
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    if not validate_csrf():
+        return jsonify({'error': 'CSRF token missing or invalid'}), 403
+
+    quiz_data = session.get('quiz')
+    if not quiz_data or not quiz_data.get('questions'):
+        return jsonify({'error': 'No quiz in progress'}), 400
+
+    user_id = session['user_id']
+    questions = quiz_data['questions']
+    answers = quiz_data.get('answers', [])
+    score = quiz_data.get('score', 0)
+    total = len(questions)
+    subject_code = quiz_data['subject_code']
+    reactions = quiz_data.get('reactions') or _empty_reactions()
+
+    # 1) Save partial attempt
+    try:
+        save_quiz_attempt(
+            user_id, subject_code, score, total, answers,
+            [],                 # ratings kept for schema compat, always empty now
+            reactions,
+            ended_early=True,
+        )
+    except Exception as e:
+        logger.error(f"end_quiz: save_quiz_attempt failed for user {user_id}: {e}", exc_info=True)
+
+    # 2) Flush reactions (single executemany — no per-click writes)
+    _flush_reactions_safe(user_id, reactions)
+
+    # 3) Award points for what was earned
+    try:
+        student = get_student_by_id(user_id)
+        if student:
+            current_points = student.get('total_points', 0) or 0
+            update_student_points(user_id, current_points + score)
+    except Exception as e:
+        logger.error(f"end_quiz: update points failed: {e}")
+
+    # 4) History entry
+    try:
+        add_history_entry(
+            user_id=user_id,
+            entry_type='quiz_attempt',
+            action='completed',
+            metadata={
+                'subject': subject_code,
+                'score': score,
+                'total': total,
+                'percentage': round((score / total) * 100, 1) if total > 0 else 0,
+                'ended_early': True,
+            },
+        )
+    except Exception as e:
+        logger.error(f"end_quiz: history entry failed: {e}")
+
+    # 5) Achievement check (partial)
+    try:
+        check_and_award_achievements(user_id, 'quiz_completed', {'score': score, 'total': total})
+    except Exception:
+        pass
+
+    # 6) Clear session
+    session.pop('quiz', None)
+    session.modified = True
+
+    return jsonify({
+        'success': True,
+        'redirect': url_for('quiz.index'),
+        'score': score,
+        'total': total,
+    })
+
+
+# ============================================
+# RESULTS
+# ============================================
+
 @quiz_bp.route('/results')
 def results():
     if 'user_id' not in session:
@@ -313,46 +418,58 @@ def results():
     score = quiz_data['score']
     total = len(questions)
     subject_code = quiz_data['subject_code']
-    ratings = quiz_data['ratings']
-    reactions = quiz_data['reactions']
+    ratings = quiz_data.get('ratings', [])
+    reactions = quiz_data.get('reactions') or _empty_reactions()
 
+    user_id = session['user_id']
+
+    # 1) Save attempt
     save_quiz_attempt(
-        session['user_id'],
+        user_id,
         subject_code,
         score,
         total,
         answers,
         ratings,
-        reactions
+        reactions,
+        ended_early=False,
     )
 
+    # 2) Flush reactions (idempotent — safe even if already flushed)
+    _flush_reactions_safe(user_id, reactions)
+
+    # 3) History
     add_history_entry(
-        user_id=session['user_id'],
+        user_id=user_id,
         entry_type='quiz_attempt',
         action='completed',
         metadata={
             'subject': subject_code,
             'score': score,
             'total': total,
-            'percentage': round((score/total)*100, 1) if total > 0 else 0
+            'percentage': round((score / total) * 100, 1) if total > 0 else 0,
         }
     )
 
-    student = get_student_by_id(session['user_id'])
+    # 4) Award points
+    student = get_student_by_id(user_id)
     if student:
-        current_points = student.get('total_points', 0)
-        new_points = current_points + score
-        update_student_points(session['user_id'], new_points)
+        current_points = student.get('total_points', 0) or 0
+        update_student_points(user_id, current_points + score)
 
     return render_template('dashboard/quiz/results.html',
-                         score=score,
-                         total=total,
-                         percentage=round((score/total)*100) if total > 0 else 0,
-                         answers=answers,
-                         ratings=ratings,
-                         reactions=reactions,
-                         questions=questions)
+                           score=score,
+                           total=total,
+                           percentage=round((score / total) * 100) if total > 0 else 0,
+                           answers=answers,
+                           ratings=ratings,
+                           reactions=reactions,
+                           questions=questions)
 
+
+# ============================================
+# HISTORY / LEADERBOARD
+# ============================================
 
 @quiz_bp.route('/history')
 def history():
@@ -370,12 +487,6 @@ def leaderboard():
         flash('Please login first.', 'error')
         return redirect(url_for('auth.login'))
 
-    # Privacy filter:
-    #   show_on_leaderboard=0 -> user excluded entirely
-    #   show_public_id=0     -> user included but public_id blanked
-    #
-    # NOTE: user_settings stores flat dot-keys (e.g. "privacy.show_public_id"),
-    # so json_extract must use a QUOTED path segment: $."privacy.show_public_id"
     query = """
         SELECT
             CASE
@@ -398,15 +509,12 @@ def leaderboard():
     leaders = [dict(row) for row in cursor.fetchall()]
 
     user_rank = None
-    # NOTE: don't compare by public_id here anymore — it may be masked.
-    # Use the logged-in user's id to find their rank.
     cursor = execute_with_retry(
         "SELECT id FROM students WHERE id = ?",
         (session['user_id'],)
     )
     row = cursor.fetchone()
     if row:
-        # Count how many visible users have more points than the current user.
         rank_cursor = execute_with_retry("""
             SELECT COUNT(*) AS c
             FROM students s
@@ -427,6 +535,6 @@ def leaderboard():
     level = get_feature_level("detailed_ranking_stats", session['user_id'])
 
     return render_template('dashboard/quiz/leaderboard.html',
-                         leaders=leaders,
-                         user_rank=user_rank,
-                         ranking_level=level)
+                           leaders=leaders,
+                           user_rank=user_rank,
+                           ranking_level=level)

@@ -908,13 +908,15 @@ def check_question_exists(question_text: str, subject_code: str):
 # QUIZ ATTEMPT FUNCTIONS
 # ============================================
 
-def save_quiz_attempt(student_id: int, subject_code: str, score: int, total: int, answers: list, ratings: list, reactions: dict = None):
+def save_quiz_attempt(student_id: int, subject_code: str, score: int, total: int,
+                      answers: list, ratings: list, reactions: dict = None,
+                      ended_early: bool = False):
     try:
         execute_with_retry("""
             INSERT INTO quiz_attempts (
                 student_id, subject_code, score, total_questions,
-                answers, ratings, reactions, completed_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                answers, ratings, reactions, ended_early, completed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             student_id,
             subject_code,
@@ -923,6 +925,7 @@ def save_quiz_attempt(student_id: int, subject_code: str, score: int, total: int
             to_json(answers),
             to_json(ratings),
             to_json(reactions) if reactions else None,
+            1 if ended_early else 0,
             now()
         ), commit=True)
         return True

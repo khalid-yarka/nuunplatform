@@ -4,7 +4,7 @@
 import logging
 import traceback
 from typing import Optional, Dict, Any, List
-from db import execute_with_retry, get_db, get_question_by_id
+from db import execute_with_retry, execute_many_with_retry, get_db, get_question_by_id
 from services.tier_service import get_saved_content_limit
 from utils import get_somali_time_db
 
@@ -320,3 +320,60 @@ def get_question_likes(question_id: int) -> int:
     )
     row = cursor.fetchone()
     return row['count'] if row else 0
+
+# ============================================
+# QUIZ REACTION FLUSH (batch)
+# ============================================
+# Called once at quiz finalization (regular quiz /quiz/results or /quiz/end;
+# live quiz finalize_live_quiz). Writes all accumulated likes + saves in one
+# executemany. INSERT OR IGNORE means re-flushing is idempotent.
+#
+# Reports are NOT flushed here — they are written through at submit time
+# so the Telegram dispatch fires immediately.
+# ============================================
+
+def flush_quiz_reactions(user_id: int, likes, saves) -> int:
+    """
+    Batch-insert likes and saves accumulated during a quiz.
+    Returns the number of rows attempted (0 if nothing to write).
+
+    Safe to call multiple times for the same user — UNIQUE(user_id,
+    question_id, interaction_type) makes this a no-op on repeat.
+    """
+    rows = []
+
+    for qid in (likes or []):
+        try:
+            rows.append((user_id, int(qid), 'like'))
+        except (TypeError, ValueError):
+            continue
+
+    for qid in (saves or []):
+        try:
+            rows.append((user_id, int(qid), 'save'))
+        except (TypeError, ValueError):
+            continue
+
+    if not rows:
+        return 0
+
+    try:
+        execute_many_with_retry(
+            "INSERT OR IGNORE INTO question_interactions "
+            "(user_id, question_id, interaction_type) VALUES (?, ?, ?)",
+            rows,
+            commit=True,
+            operation_name=f"flush_quiz_reactions(user={user_id}, rows={len(rows)})",
+        )
+        logger.info(
+            f"flush_quiz_reactions: user={user_id} "
+            f"likes={len(likes or [])} saves={len(saves or [])} "
+            f"-> {len(rows)} rows"
+        )
+        return len(rows)
+    except Exception as e:
+        logger.error(
+            f"flush_quiz_reactions failed for user {user_id}: {e}",
+            exc_info=True,
+        )
+        return 0

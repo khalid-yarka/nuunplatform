@@ -1,368 +1,173 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}{{ _('quiz.play.page_title') }}{% endblock %}
+{% from "macros/reactions.html" import render_reactions %}
 
+{% block title %}{{ _('quiz.play.page_title') }}{% endblock %}
 {% block page_title %}{{ _('quiz.play.page_title') }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/reactions.css') }}" />
+<script>window.csrfToken = "{{ session.get('csrf_token', '') }}";</script>
+<script src="{{ url_for('static', filename='js/reactions.js') }}" defer></script>
 <style>
-    .option-btn {
+    /* ============================================
+       TOP BAR — Question counter, score, End Quiz
+       ============================================ */
+    .nuun-quiz-topbar {
         display: flex;
         align-items: center;
-        gap: 14px;
-        padding: 14px 18px;
-        background: var(--surface);
-        border: 2px solid var(--border);
-        border-radius: var(--radius-sm);
-        cursor: pointer;
-        transition: all 0.3s ease;
-        font-size: 16px;
-        color: var(--text);
-        width: 100%;
-        text-align: left;
-    }
-    .option-btn:hover:not(:disabled) {
-        border-color: var(--primary);
-        background: var(--primary-light);
-    }
-    .option-btn:disabled {
-        cursor: not-allowed;
-        opacity: 0.6;
-    }
-    .option-btn .letter {
-        font-weight: 700;
-        color: var(--text-secondary);
-        min-width: 28px;
-    }
-    .option-btn.correct {
-        border-color: #10B981;
-        background: #ECFDF5;
-    }
-    .option-btn.correct .letter { color: #10B981; }
-    .option-btn.wrong {
-        border-color: #EF4444;
-        background: #FEF2F2;
-    }
-    .option-btn.wrong .letter { color: #EF4444; }
-
-    .feedback-area {
-        margin-top: 16px;
-        padding: 16px 20px;
-        border-radius: var(--radius-sm);
-    }
-    .feedback-area.success {
-        background: #ECFDF5;
-        border: 1px solid #A7F3D0;
-    }
-    .feedback-area.error {
-        background: #FEF2F2;
-        border: 1px solid #FCA5A5;
-    }
-    .feedback-title {
-        font-weight: 600;
-        font-size: 16px;
-    }
-    .feedback-explanation {
-        font-size: 14px;
-        margin-top: 6px;
-        color: var(--text-secondary);
-    }
-
-    .interaction-row {
-        display: flex;
+        justify-content: space-between;
+        gap: 12px;
         flex-wrap: wrap;
-        gap: 10px;
-        margin-top: 16px;
-        align-items: center;
-        justify-content: center;
-    }
-    .interaction-btn {
-        background: transparent;
-        border: none;
-        font-size: 26px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        color: var(--text-muted);
-        padding: 6px 10px;
-        border-radius: 50%;
-        width: 48px;
-        height: 48px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        position: relative;
-    }
-    .interaction-btn:hover:not(.locked):not(:disabled) {
-        transform: scale(1.15);
-        background: var(--primary-light);
-        color: var(--primary);
-    }
-    .interaction-btn.active-like { color: #EF4444; }
-    .interaction-btn.active-save { color: var(--primary); }
-    .interaction-btn.locked {
-        opacity: 0.4;
-        cursor: not-allowed;
-    }
-    .interaction-btn:disabled {
-        opacity: 0.3;
-        cursor: not-allowed;
-    }
-
-    .btn-next {
-        background: var(--primary);
-        color: white;
-        border: none;
-        border-radius: var(--radius-sm);
-        padding: 10px 24px;
-        font-weight: 600;
-        font-size: 15px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        box-shadow: 0 4px 14px rgba(255, 49, 56, 0.25);
-        margin-top: 4px;
-    }
-    .btn-next:hover:not(:disabled) {
-        background: var(--primary-hover);
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(255, 49, 56, 0.35);
-    }
-    .btn-next:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-        transform: none !important;
-    }
-    .btn-next .icon { font-size: 18px; }
-
-    .action-divider {
-        width: 1px;
-        height: 30px;
-        background: var(--border);
-        margin: 0 4px;
-    }
-
-    .help-icon {
-        font-size: 18px;
-        color: var(--text-muted);
-        cursor: pointer;
-        transition: var(--transition);
-        background: none;
-        border: none;
-        padding: 6px 8px;
-        border-radius: 50%;
-    }
-    .help-icon:hover {
-        color: var(--primary);
-        background: var(--primary-light);
-    }
-    .interaction-wrapper {
-        position: relative;
-        display: inline-block;
-    }
-    .help-popup {
-        display: none;
-        position: absolute;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        padding: 12px 16px;
-        box-shadow: var(--shadow-lg);
-        max-width: 260px;
-        z-index: 100;
-        font-size: 13px;
-        color: var(--text-secondary);
-        line-height: 1.5;
-        top: 100%;
-        right: 0;
-        margin-top: 6px;
-    }
-    .help-popup.show { display: block; }
-    .help-popup .item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 2px;
-    }
-    .help-popup .item .icon {
-        font-size: 18px;
-        min-width: 28px;
-        text-align: center;
-    }
-    .help-popup .note {
-        margin-top: 6px;
-        padding-top: 6px;
-        border-top: 1px solid var(--border-light);
-        font-size: 12px;
-        color: var(--text-muted);
-        font-style: italic;
-    }
-
-    .auto-skip-indicator {
-        font-size: 12px;
-        color: var(--text-muted);
-        margin-top: 8px;
-        text-align: center;
-        opacity: 0.7;
-    }
-    .auto-skip-indicator .spinner {
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border: 2px solid var(--border);
-        border-top: 2px solid var(--primary);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-        vertical-align: middle;
-        margin-right: 6px;
-    }
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-
-    .report-modal {
-        display: none;
-        position: fixed;
-        inset: 0;
-        background: var(--modal-overlay);
-        z-index: 9999;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-        backdrop-filter: blur(4px);
-    }
-    .report-modal.show { display: flex; }
-    .report-modal .modal-content {
-        background: var(--surface);
-        border-radius: var(--radius);
-        padding: 28px 24px;
-        max-width: 460px;
-        width: 100%;
-        box-shadow: var(--shadow-lg);
-        max-height: 90vh;
-        overflow-y: auto;
-        border: 1px solid var(--border);
-    }
-    .report-modal .modal-title {
-        font-size: 18px;
-        font-weight: 700;
-        color: var(--text);
-        margin-bottom: 4px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    .report-modal .modal-sub {
-        color: var(--text-secondary);
-        font-size: 14px;
         margin-bottom: 16px;
     }
-    .report-modal .form-group { margin-bottom: 14px; }
-    .report-modal .form-group label {
-        display: block;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--text);
-        margin-bottom: 4px;
-    }
-    .report-modal .form-group select,
-    .report-modal .form-group textarea {
-        width: 100%;
-        padding: 10px 12px;
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        font-size: 14px;
-        background: var(--surface);
-        color: var(--text);
-    }
-    .report-modal .form-group select:focus,
-    .report-modal .form-group textarea:focus {
-        border-color: var(--primary);
-        outline: none;
-        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.1);
-    }
-    .report-modal .modal-actions {
+    .nuun-quiz-topbar__meta {
         display: flex;
-        gap: 10px;
-        margin-top: 16px;
-        justify-content: flex-end;
-    }
-    .report-modal .modal-actions .btn {
-        padding: 8px 20px;
-        border-radius: var(--radius-sm);
-        font-weight: 600;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
         font-size: 14px;
-        border: none;
-        cursor: pointer;
-        transition: var(--transition);
     }
-    .report-modal .modal-actions .btn-secondary {
-        background: var(--surface);
-        color: var(--text);
-        border: 1px solid var(--border);
+    .nuun-quiz-topbar__counter {
+        color: var(--text-secondary);
     }
-    .report-modal .modal-actions .btn-secondary:hover {
-        background: var(--background);
-        border-color: var(--primary);
+    .nuun-quiz-topbar__score {
         color: var(--primary);
+        font-weight: 600;
     }
-    .report-modal .modal-actions .btn-primary {
-        background: var(--primary);
-        color: white;
+    .nuun-quiz-topbar__end {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text-secondary);
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        -webkit-tap-highlight-color: transparent;
     }
-    .report-modal .modal-actions .btn-primary:hover {
-        background: var(--primary-hover);
+    .nuun-quiz-topbar__end:hover:not(:disabled) {
+        border-color: var(--error);
+        color: var(--error);
+        background: #FEF2F2;
     }
-
-    @media (max-width: 480px) {
-        .option-btn { font-size: 14px; padding: 10px 14px; }
-        .interaction-btn { font-size: 20px; width: 40px; height: 40px; }
-        .btn-next { font-size: 13px; padding: 8px 16px; }
-        .report-modal .modal-content { padding: 16px; }
-        .interaction-row { gap: 6px; }
-        .action-divider { height: 24px; }
+    .nuun-quiz-topbar__end:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    .nuun-quiz-topbar__end-icon {
+        font-size: 13px;
+        line-height: 1;
+    }
+    [data-theme="dark"] .nuun-quiz-topbar__end:hover:not(:disabled) {
+        background: #3A1A1A;
     }
 
     /* ============================================
-       DARK MODE — correct/wrong highlight
-       Without these, the option text is near-white
-       on a pale background and becomes invisible.
+       PROGRESS BAR
        ============================================ */
-    [data-theme="dark"] .option-btn.correct {
-        border-color: #10B981 !important;
-        background: #1A3A2E !important;
-        color: #D1FAE5 !important;
+    .nuun-quiz-progress {
+        width: 100%;
+        height: 6px;
+        background: var(--border);
+        border-radius: 10px;
+        margin-bottom: 24px;
+        overflow: hidden;
     }
-    [data-theme="dark"] .option-btn.correct .letter {
-        color: #34D399 !important;
-    }
-    [data-theme="dark"] .option-btn.wrong {
-        border-color: #EF4444 !important;
-        background: #3A1A1A !important;
-        color: #FECACA !important;
-    }
-    [data-theme="dark"] .option-btn.wrong .letter {
-        color: #F87171 !important;
+    .nuun-quiz-progress__fill {
+        height: 100%;
+        background: var(--primary);
+        transition: width 0.5s ease;
+        border-radius: 10px;
     }
 
-    /* Feedback area — the explanation text inherits
-       --text-secondary, which is light grey in dark mode.
-       On the pale-green/pale-red background it's unreadable. */
+    /* ============================================
+       QUESTION CARD
+       ============================================ */
+    .nuun-question-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 28px 24px;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .option-btn {
+        display: flex; align-items: center; gap: 14px;
+        padding: 14px 18px; background: var(--surface);
+        border: 2px solid var(--border); border-radius: var(--radius-sm);
+        cursor: pointer; transition: all 0.3s ease;
+        font-size: 16px; color: var(--text);
+        width: 100%; text-align: left;
+        font-family: inherit;
+    }
+    .option-btn:hover:not(:disabled) {
+        border-color: var(--primary); background: var(--primary-light);
+    }
+    .option-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+    .option-btn .letter { font-weight: 700; color: var(--text-secondary); min-width: 28px; }
+    .option-btn.correct { border-color: #10B981; background: #ECFDF5; }
+    .option-btn.correct .letter { color: #10B981; }
+    .option-btn.wrong { border-color: #EF4444; background: #FEF2F2; }
+    .option-btn.wrong .letter { color: #EF4444; }
+
+    .feedback-area {
+        margin-top: 16px; padding: 16px 20px; border-radius: var(--radius-sm);
+    }
+    .feedback-area.success { background: #ECFDF5; border: 1px solid #A7F3D0; }
+    .feedback-area.error { background: #FEF2F2; border: 1px solid #FCA5A5; }
+    .feedback-title { font-weight: 600; font-size: 16px; }
+    .feedback-explanation { font-size: 14px; margin-top: 6px; color: var(--text-secondary); }
+
+    /* ============================================
+       AUTO-SKIP INDICATOR
+       ============================================ */
+    .auto-skip-indicator {
+        font-size: 12px; color: var(--text-muted); margin-top: 12px;
+        text-align: center; opacity: 0.7;
+    }
+    .auto-skip-indicator .spinner {
+        display: inline-block; width: 12px; height: 12px;
+        border: 2px solid var(--border); border-top: 2px solid var(--primary);
+        border-radius: 50%; animation: spin 0.8s linear infinite;
+        vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ============================================
+       DARK MODE
+       ============================================ */
+    [data-theme="dark"] .option-btn.correct {
+        border-color: #10B981 !important; background: #1A3A2E !important; color: #D1FAE5 !important;
+    }
+    [data-theme="dark"] .option-btn.correct .letter { color: #34D399 !important; }
+    [data-theme="dark"] .option-btn.wrong {
+        border-color: #EF4444 !important; background: #3A1A1A !important; color: #FECACA !important;
+    }
+    [data-theme="dark"] .option-btn.wrong .letter { color: #F87171 !important; }
     [data-theme="dark"] .feedback-area.success {
-        background: #1A3A2E !important;
-        border-color: #10B981 !important;
-        color: #D1FAE5 !important;
+        background: #1A3A2E !important; border-color: #10B981 !important; color: #D1FAE5 !important;
     }
     [data-theme="dark"] .feedback-area.error {
-        background: #3A1A1A !important;
-        border-color: #EF4444 !important;
-        color: #FECACA !important;
+        background: #3A1A1A !important; border-color: #EF4444 !important; color: #FECACA !important;
     }
-    [data-theme="dark"] .feedback-explanation {
-        color: #B0B0C8 !important;
+    [data-theme="dark"] .feedback-explanation { color: #B0B0C8 !important; }
+
+    /* ============================================
+       MOBILE
+       ============================================ */
+    @media (max-width: 480px) {
+        .option-btn { font-size: 14px; padding: 10px 14px; }
+        .nuun-question-card { padding: 20px 16px; }
+        .nuun-quiz-topbar__end-label { display: none; }
+        .nuun-quiz-topbar__end { padding: 6px 10px; }
+        .nuun-quiz-topbar__meta { font-size: 13px; gap: 12px; }
     }
 </style>
 {% endblock %}
@@ -370,42 +175,43 @@
 {% block dashboard_content %}
 <div id="quiz-container" style="max-width: 680px; margin: 0 auto;">
 
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <span style="color: var(--text-secondary); font-size: 14px;">
-            {{ _('quiz.play.question_label') }} <span id="current-num">{{ current + 1 }}</span>/<span id="total-num">{{ total }}</span>
-        </span>
-        <span style="color: var(--primary); font-weight: 600; font-size: 14px;">
-            ⭐ <span id="score-display">{{ score }}</span> {{ _('quiz.play.points_label') }}
-        </span>
+    <!-- =========================
+         TOP BAR — End Quiz is here
+         ========================= -->
+    <div class="nuun-quiz-topbar">
+        <div class="nuun-quiz-topbar__meta">
+            <span class="nuun-quiz-topbar__counter">
+                {{ _('quiz.play.question_label') }}
+                <span id="current-num">{{ current + 1 }}</span>/<span id="total-num">{{ total }}</span>
+            </span>
+            <span class="nuun-quiz-topbar__score">
+                ⭐ <span id="score-display">{{ score }}</span> {{ _('quiz.play.points_label') }}
+            </span>
+        </div>
+        <button class="nuun-quiz-topbar__end" id="endQuizBtn" type="button" title="{{ _('quiz.end_quiz') }}">
+            <span class="nuun-quiz-topbar__end-icon" aria-hidden="true">✕</span>
+            <span class="nuun-quiz-topbar__end-label">{{ _('quiz.end_quiz_short') }}</span>
+        </button>
     </div>
 
-    <div style="width: 100%; height: 6px; background: var(--border); border-radius: 10px; margin-bottom: 24px; overflow: hidden;">
-        <div id="progress-bar" style="width: {{ ((current + 1) / total * 100)|round(1) }}%; height: 100%; background: var(--primary); transition: width 0.5s ease; border-radius: 10px;"></div>
+    <!-- Progress bar -->
+    <div class="nuun-quiz-progress">
+        <div class="nuun-quiz-progress__fill" id="progress-bar"
+             style="width: {{ ((current + 1) / total * 100)|round(1) }}%;"></div>
     </div>
 
-    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px 24px; box-shadow: var(--shadow-sm);">
+    <!-- Question card -->
+    <div class="nuun-question-card">
         <div id="question-text" style="font-size: 20px; font-weight: 600; color: var(--text); margin-bottom: 20px; line-height: 1.5;">
             {{ question.question_text }}
         </div>
 
         <div id="options-container" style="display: flex; flex-direction: column; gap: 10px;">
-            <button class="option-btn" data-value="A">
-                <span class="letter">A.</span>
-                <span>{{ question.options.A }}</span>
-            </button>
-            <button class="option-btn" data-value="B">
-                <span class="letter">B.</span>
-                <span>{{ question.options.B }}</span>
-            </button>
-            <button class="option-btn" data-value="C">
-                <span class="letter">C.</span>
-                <span>{{ question.options.C }}</span>
-            </button>
+            <button class="option-btn" data-value="A"><span class="letter">A.</span><span>{{ question.options.A }}</span></button>
+            <button class="option-btn" data-value="B"><span class="letter">B.</span><span>{{ question.options.B }}</span></button>
+            <button class="option-btn" data-value="C"><span class="letter">C.</span><span>{{ question.options.C }}</span></button>
             {% if question.options.D %}
-            <button class="option-btn" data-value="D">
-                <span class="letter">D.</span>
-                <span>{{ question.options.D }}</span>
-            </button>
+            <button class="option-btn" data-value="D"><span class="letter">D.</span><span>{{ question.options.D }}</span></button>
             {% endif %}
         </div>
 
@@ -414,402 +220,202 @@
                 <div class="feedback-title" id="feedback-title"></div>
                 <div class="feedback-explanation" id="feedback-explanation"></div>
             </div>
+        </div>
 
-            <div class="interaction-row" id="interactionRow">
-                <button class="interaction-btn" id="likeBtn" data-question-id="{{ question.id }}" title="{{ _('quiz.play.like_tooltip') }}">
-                    ♡
-                </button>
-
-                <button class="interaction-btn" id="saveBtn" data-question-id="{{ question.id }}" title="{{ _('quiz.play.save_tooltip') }}">
-                    ☐
-                </button>
-
-                <button class="interaction-btn" id="reportBtn" data-question-id="{{ question.id }}" title="{{ _('quiz.play.report_tooltip') }}">
-                    ⚑
-                </button>
-
-                <span class="action-divider"></span>
-
-                <button class="btn-next" id="nextBtn" style="display:none;">
-                    <span class="icon">⏭️</span> {{ _('quiz.play.next_question') }}
-                </button>
-
-                <div class="interaction-wrapper">
-                    <button class="help-icon" id="helpBtn" title="{{ _('quiz.play.help_tooltip') }}">❓</button>
-                    <div class="help-popup" id="helpPopup">
-                        <div class="item"><span class="icon">♡</span> {{ _('quiz.play.help_like') }}</div>
-                        <div class="item"><span class="icon">☐</span> {{ _('quiz.play.help_save') }}</div>
-                        <div class="item"><span class="icon">⚑</span> {{ _('quiz.play.help_report') }}</div>
-                        <div class="item"><span class="icon">⏭️</span> {{ _('quiz.play.help_next') }}</div>
-                        {% if normalize_tier(user_tier) in ['premium', 'pro'] %}
-                        <div class="note">{{ _('quiz.play.help_auto_advance_on') }}</div>
-                        {% else %}
-                        <div class="note">{{ _('quiz.play.help_auto_advance_locked') }}</div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <div id="autoSkipIndicator" class="auto-skip-indicator" style="display: none;">
-                <span class="spinner"></span> {{ _('quiz.play.moving_to_next') }}
-            </div>
+        {# Reaction bar — appears after answering #}
+        <div id="reaction-slot" style="display:none;">
+            {{ render_reactions(
+                question_id=question.id,
+                status_url=url_for('interactions.status'),
+                like_url=url_for('interactions.like'),
+                save_url=url_for('interactions.save'),
+                report_url=url_for('interactions.report'),
+                mode='regular',
+                save_locked=(normalize_tier(user_tier) == 'free'),
+                show_report=true
+            ) }}
         </div>
     </div>
-</div>
 
-<!-- Report Modal -->
-<div class="report-modal" id="reportModal">
-    <div class="modal-content">
-        <div class="modal-title">⚠️ {{ _('quiz.play.report_title') }}</div>
-        <div class="modal-sub">{{ _('quiz.play.report_subtitle') }}</div>
-        <form id="reportForm">
-            <input type="hidden" id="reportQuestionId" value="{{ question.id }}">
-            <div class="form-group">
-                <label for="reportReason">{{ _('quiz.play.report_reason') }} <span style="color: var(--primary);">*</span></label>
-                <select id="reportReason" required>
-                    <option value="">{{ _('quiz.play.report_select_reason') }}</option>
-                    <option value="incorrect">{{ _('quiz.play.report_reason_incorrect') }}</option>
-                    <option value="inappropriate">{{ _('quiz.play.report_reason_inappropriate') }}</option>
-                    <option value="spam">{{ _('quiz.play.report_reason_spam') }}</option>
-                    <option value="duplicate">{{ _('quiz.play.report_reason_duplicate') }}</option>
-                    <option value="other">{{ _('quiz.play.report_reason_other') }}</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="reportComment">{{ _('quiz.play.report_comment') }}</label>
-                <textarea id="reportComment" rows="3" placeholder="{{ _('quiz.play.report_comment_placeholder') }}"></textarea>
-            </div>
-            <div class="modal-actions">
-                <button type="button" class="btn btn-secondary" onclick="closeReportModal()">{{ _('common.cancel') }}</button>
-                <button type="submit" class="btn btn-primary">{{ _('quiz.play.report_submit') }}</button>
-            </div>
-        </form>
+    <!-- =============================
+         ADVANCE SLOT — Skip OR Next
+         Only one is visible at a time.
+         ============================= -->
+    <div class="nuun-advance-slot" id="advanceSlot">
+        <button class="nuun-advance-btn nuun-advance-btn--skip" id="skipBtn" type="button">
+            <span class="nuun-advance-btn__icon" aria-hidden="true">⏭️</span>
+            <span>{{ _('quiz.play.skip_question') }}</span>
+        </button>
+        <button class="nuun-advance-btn nuun-advance-btn--next" id="nextBtn" type="button" style="display:none;">
+            <span class="nuun-advance-btn__icon" aria-hidden="true">➡️</span>
+            <span>{{ _('quiz.play.next_question') }}</span>
+        </button>
     </div>
+
+    <div id="autoSkipIndicator" class="auto-skip-indicator" style="display: none;">
+        <span class="spinner"></span> {{ _('quiz.play.moving_to_next') }}
+    </div>
+
 </div>
 
 <script>
-const csrfToken = '{{ session.get("csrf_token", "") }}';
-const questionId = {{ question.id }};
+const csrfToken = window.csrfToken || '{{ session.get("csrf_token", "") }}';
 const totalQuestions = {{ total }};
 const userTier = '{{ normalize_tier(user_tier|default("free")) }}';
 const autoSkipEnabled = {{ user_settings.auto_skip_enabled|default(0)|int }};
 
-// i18n strings handed to JS
 const I18N = {
-    correct:        "{{ _('quiz.play.feedback_correct') }}",
-    wrong:          "{{ _('quiz.play.feedback_wrong') }}",
-    correct_was:    "{{ _('quiz.play.feedback_correct_was') }}",
-    loading:        "{{ _('quiz.play.next_loading') }}",
-    next_question:  "{{ _('quiz.play.next_question') }}",
-    error_advance:  "{{ _('quiz.play.error_advance') }}",
-    error_submit:   "{{ _('quiz.play.error_submit') }}",
-    error_network:  "{{ _('quiz.play.error_network') }}",
-    error_generic:  "{{ _('quiz.play.error_generic') }}",
-    report_ok:      "{{ _('quiz.play.report_submitted') }}",
-    report_reason:  "{{ _('quiz.play.report_pick_reason') }}"
+    correct:          "{{ _('quiz.play.feedback_correct') }}",
+    wrong:            "{{ _('quiz.play.feedback_wrong') }}",
+    correct_was:      "{{ _('quiz.play.feedback_correct_was') }}",
+    loading:          "{{ _('quiz.play.next_loading') }}",
+    error_advance:    "{{ _('quiz.play.error_advance') }}",
+    error_submit:     "{{ _('quiz.play.error_submit') }}",
+    error_network:    "{{ _('quiz.play.error_network') }}",
+    end_quiz_confirm: "{{ _('quiz.end_quiz_confirm') }}"
 };
 
-document.addEventListener('DOMContentLoaded', function() {
-    const optionsContainer = document.getElementById('options-container');
-    const feedbackArea = document.getElementById('feedback-area');
-    const feedbackTitle = document.getElementById('feedback-title');
-    const feedbackExplanation = document.getElementById('feedback-explanation');
-    const progressBar = document.getElementById('progress-bar');
-    const scoreDisplay = document.getElementById('score-display');
-    const currentNum = document.getElementById('current-num');
-    const totalNum = document.getElementById('total-num');
-    const likeBtn = document.getElementById('likeBtn');
-    const saveBtn = document.getElementById('saveBtn');
-    const reportBtn = document.getElementById('reportBtn');
-    const nextBtn = document.getElementById('nextBtn');
-    const helpBtn = document.getElementById('helpBtn');
-    const helpPopup = document.getElementById('helpPopup');
-    const autoSkipIndicator = document.getElementById('autoSkipIndicator');
-    const reportModal = document.getElementById('reportModal');
-    const reportForm = document.getElementById('reportForm');
-    const reportQuestionId = document.getElementById('reportQuestionId');
+document.addEventListener('DOMContentLoaded', function () {
+    const optionsContainer   = document.getElementById('options-container');
+    const feedbackArea       = document.getElementById('feedback-area');
+    const feedbackTitle      = document.getElementById('feedback-title');
+    const feedbackExplanation= document.getElementById('feedback-explanation');
+    const scoreDisplay       = document.getElementById('score-display');
+    const reactionSlot       = document.getElementById('reaction-slot');
+    const nextBtn            = document.getElementById('nextBtn');
+    const skipBtn            = document.getElementById('skipBtn');
+    const autoSkipIndicator  = document.getElementById('autoSkipIndicator');
+    const endQuizBtn         = document.getElementById('endQuizBtn');
 
     let score = {{ score }};
-    let current = parseInt(currentNum.textContent) - 1;
-    const total = parseInt(totalNum.textContent);
     let answered = false;
     let isSubmitting = false;
     let autoSkipTimer = null;
-    let interactionStatus = {};
 
-    function fetchInteractionStatus() {
-        fetch('/api/interaction/status?question_id=' + questionId)
-            .then(res => res.json())
-            .then(data => {
-                if (!data.error) {
-                    interactionStatus = data;
-                    updateButtons();
-                }
-            })
-            .catch(err => console.warn('Error fetching interaction status:', err));
-    }
+    // Initialize: Skip visible, Next hidden
+    skipBtn.style.display = 'inline-flex';
+    nextBtn.style.display = 'none';
 
-    function updateButtons() {
-        if (interactionStatus.liked) {
-            likeBtn.classList.add('active-like');
-            likeBtn.textContent = '♥';
-        } else {
-            likeBtn.classList.remove('active-like');
-            likeBtn.textContent = '♡';
-        }
-
-        if (interactionStatus.saved) {
-            saveBtn.classList.add('active-save');
-            saveBtn.textContent = '☑';
-        } else {
-            saveBtn.classList.remove('active-save');
-            saveBtn.textContent = '☐';
-        }
-
-        if (interactionStatus.reported) {
-            reportBtn.disabled = true;
-            reportBtn.classList.add('locked');
-            reportBtn.textContent = '⚠';
-        } else {
-            reportBtn.disabled = false;
-            reportBtn.classList.remove('locked');
-            reportBtn.textContent = '⚑';
-        }
-
-        if (userTier === 'free') {
-            saveBtn.classList.add('locked');
-            saveBtn.title = "{{ _('quiz.play.save_locked_tooltip') }}";
-        }
-    }
-
-    helpBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        helpPopup.classList.toggle('show');
-    });
-    document.addEventListener('click', function(e) {
-        if (!helpBtn.contains(e.target) && !helpPopup.contains(e.target)) {
-            helpPopup.classList.remove('show');
-        }
-    });
-
-    likeBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        if (isSubmitting || !answered) return;
-        const btn = this;
-        const qid = btn.dataset.questionId;
-
-        const wasLiked = btn.classList.contains('active-like');
-        if (wasLiked) {
-            btn.classList.remove('active-like');
-            btn.textContent = '♡';
-        } else {
-            btn.classList.add('active-like');
-            btn.textContent = '♥';
-        }
-
-        fetch('/api/interaction/like', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-            body: JSON.stringify({ question_id: qid })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.error) { showToast('Error: ' + data.error, 'error'); fetchInteractionStatus(); return; }
-            if (data.liked) {
-                btn.classList.add('active-like');
-                btn.textContent = '♥';
-            } else {
-                btn.classList.remove('active-like');
-                btn.textContent = '♡';
-            }
-        })
-        .catch(() => { showToast(I18N.error_network, 'error'); fetchInteractionStatus(); });
-    });
-
-    saveBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        if (this.classList.contains('locked')) {
-            if (userTier === 'free' && typeof window.openUpgradeSheet === 'function') {
-                window.openUpgradeSheet({ feature: 'save_question', requiredTier: 'premium' });
-            }
-            return;
-        }
-        if (isSubmitting || !answered) return;
-        const btn = this;
-        const qid = btn.dataset.questionId;
-
-        const wasSaved = btn.classList.contains('active-save');
-        if (wasSaved) {
-            btn.classList.remove('active-save');
-            btn.textContent = '☐';
-        } else {
-            btn.classList.add('active-save');
-            btn.textContent = '☑';
-        }
-
-        fetch('/api/interaction/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-            body: JSON.stringify({ question_id: qid })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.error) { showToast(data.error, 'error'); fetchInteractionStatus(); return; }
-            if (data.saved) {
-                btn.classList.add('active-save');
-                btn.textContent = '☑';
-            } else {
-                btn.classList.remove('active-save');
-                btn.textContent = '☐';
-            }
-        })
-        .catch(() => { showToast(I18N.error_network, 'error'); fetchInteractionStatus(); });
-    });
-
-    reportBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        if (this.disabled || !answered) return;
-        reportQuestionId.value = questionId;
-        document.getElementById('reportReason').value = '';
-        document.getElementById('reportComment').value = '';
-        reportModal.classList.add('show');
-    });
-
-    reportForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const reason = document.getElementById('reportReason').value;
-        const comment = document.getElementById('reportComment').value.trim();
-        if (!reason) { showToast(I18N.report_reason, 'warning'); return; }
-        const submitBtn = this.querySelector('button[type="submit"]');
-        submitBtn.disabled = true;
-        submitBtn.textContent = '...';
-
-        fetch('/api/interaction/report', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-            body: JSON.stringify({ question_id: questionId, reason: reason, comment: comment })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.error) { showToast('Error: ' + data.error, 'error'); return; }
-            showToast(I18N.report_ok, 'success');
-            reportModal.classList.remove('show');
-            reportBtn.disabled = true;
-            reportBtn.classList.add('locked');
-            reportBtn.textContent = '⚠';
-        })
-        .catch(() => showToast(I18N.error_network, 'error'))
-        .finally(() => { submitBtn.disabled = false; submitBtn.textContent = "{{ _('quiz.play.report_submit') }}"; });
-    });
-
-    function closeReportModal() {
-        reportModal.classList.remove('show');
-    }
-    window.closeReportModal = closeReportModal;
-    reportModal.addEventListener('click', function(e) { if (e.target === this) closeReportModal(); });
-
-    nextBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        if (isSubmitting) return;
-        if (!answered) return;
-
-        nextBtn.disabled = true;
-        nextBtn.innerHTML = '<span class="spinner" style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px;"></span> ' + I18N.loading;
-
-        fetch('/quiz/skip_rating', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-            body: JSON.stringify({})
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.complete) {
-                window.location.href = '{{ url_for("quiz.results") }}';
-            } else {
-                window.location.href = window.location.pathname + '?next=1';
-            }
-        })
-        .catch(() => {
-            showToast(I18N.error_advance, 'error');
-            nextBtn.disabled = false;
-            nextBtn.innerHTML = '<span class="icon">⏭️</span> ' + I18N.next_question;
-        });
-    });
-
-    document.querySelectorAll('.option-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
+    // ---------- Option click ----------
+    document.querySelectorAll('.option-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
             if (answered || isSubmitting) return;
             answered = true;
             isSubmitting = true;
             const answer = this.dataset.value;
             const allBtns = document.querySelectorAll('.option-btn');
-            allBtns.forEach(b => b.disabled = true);
+            allBtns.forEach(function (b) { b.disabled = true; });
 
             fetch('{{ url_for("quiz.submit_answer") }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
                 body: JSON.stringify({ answer: answer })
             })
-            .then(res => res.json())
-            .then(data => {
-                allBtns.forEach(b => {
-                    if (b.dataset.value === data.correct_answer) {
-                        b.classList.add('correct');
-                    }
-                    if (b.dataset.value === answer && !data.correct) {
-                        b.classList.add('wrong');
-                    }
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                allBtns.forEach(function (b) {
+                    if (b.dataset.value === data.correct_answer) b.classList.add('correct');
+                    if (b.dataset.value === answer && !data.correct) b.classList.add('wrong');
                 });
-
-                if (data.correct) {
-                    score++;
-                    scoreDisplay.textContent = score;
-                }
-
+                if (data.correct) { score++; scoreDisplay.textContent = score; }
                 feedbackArea.style.display = 'block';
                 feedbackTitle.textContent = data.correct ? I18N.correct : I18N.wrong;
                 feedbackTitle.style.color = data.correct ? '#10B981' : '#EF4444';
+                feedbackExplanation.textContent = data.explanation
+                    ? '💡 ' + data.explanation
+                    : I18N.correct_was + ' ' + data.correct_answer;
 
-                if (data.explanation) {
-                    feedbackExplanation.textContent = '💡 ' + data.explanation;
-                } else {
-                    feedbackExplanation.textContent = I18N.correct_was + ' ' + data.correct_answer;
-                }
+                // Show reactions
+                reactionSlot.style.display = 'block';
+                if (window.NuunReactions) window.NuunReactions.init(reactionSlot);
 
+                // Swap Skip → Next
+                skipBtn.style.display = 'none';
                 nextBtn.style.display = 'inline-flex';
-
-                fetchInteractionStatus();
 
                 if (autoSkipEnabled && (userTier === 'premium' || userTier === 'pro')) {
                     autoSkipIndicator.style.display = 'block';
-                    autoSkipTimer = setTimeout(function() {
+                    autoSkipTimer = setTimeout(function () {
                         autoSkipIndicator.style.display = 'none';
-                        if (!nextBtn.disabled) {
-                            nextBtn.click();
-                        }
+                        if (!nextBtn.disabled) nextBtn.click();
                     }, 3000);
                 }
-
                 isSubmitting = false;
             })
-            .catch(err => {
-                console.error('Error submitting answer:', err);
+            .catch(function () {
                 showToast(I18N.error_submit, 'error');
-                allBtns.forEach(b => b.disabled = false);
+                allBtns.forEach(function (b) { b.disabled = false; });
+                answered = false;
                 isSubmitting = false;
             });
         });
     });
 
-    function showToast(message, type) {
-        if (typeof window.showToast === 'function') {
-            window.showToast(message, type || 'info', 3000);
-        } else {
-            alert(message);
-        }
-    }
+    // ---------- Advance (Next and Skip both hit /skip_rating) ----------
+    function advance() {
+        if (isSubmitting) return;
+        isSubmitting = true;
+        nextBtn.disabled = true;
+        skipBtn.disabled = true;
+        const originalNext = nextBtn.innerHTML;
+        nextBtn.innerHTML = '<span class="spinner" style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px;"></span> ' + I18N.loading;
 
-    fetchInteractionStatus();
+        fetch('{{ url_for("quiz.skip_rating") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({})
+        })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            if (data.complete) {
+                window.location.href = '{{ url_for("quiz.results") }}';
+            } else {
+                window.location.reload();
+            }
+        })
+        .catch(function () {
+            showToast(I18N.error_advance, 'error');
+            nextBtn.disabled = false;
+            skipBtn.disabled = false;
+            nextBtn.innerHTML = originalNext;
+            isSubmitting = false;
+        });
+    }
+    nextBtn.addEventListener('click', advance);
+    skipBtn.addEventListener('click', advance);
+
+    // ---------- End quiz ----------
+    endQuizBtn.addEventListener('click', function () {
+        if (!confirm(I18N.end_quiz_confirm)) return;
+        endQuizBtn.disabled = true;
+        const originalHTML = endQuizBtn.innerHTML;
+        endQuizBtn.innerHTML = '<span class="nuun-quiz-topbar__end-icon">⋯</span>';
+        fetch('{{ url_for("quiz.end_quiz") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({})
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.success) {
+                window.location.href = data.redirect || '{{ url_for("quiz.index") }}';
+            } else {
+                alert(data.error || 'Error');
+                endQuizBtn.disabled = false;
+                endQuizBtn.innerHTML = originalHTML;
+            }
+        })
+        .catch(function () {
+            alert(I18N.error_network);
+            endQuizBtn.disabled = false;
+            endQuizBtn.innerHTML = originalHTML;
+        });
+    });
+
+    function showToast(msg, type) {
+        if (typeof window.showToast === 'function') window.showToast(msg, type || 'info', 3000);
+        else alert(msg);
+    }
 });
 </script>
 {% endblock %}

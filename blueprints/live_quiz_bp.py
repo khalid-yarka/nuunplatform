@@ -1,11 +1,9 @@
 # blueprints/live_quiz_bp.py
 # Complete file with:
 #   • Active-quiz guard on create (GET + POST paths)
-#   • New /abandon/<quiz_id> endpoint (soft-close or leave)
-#   • Preserved behaviour for every existing route
-#
-# The duplicate cleanup thread at the bottom of the original file
-# remains removed — cleanup lives inside live_quiz_state.py only.
+#   • /abandon/<quiz_id> endpoint (soft-close or leave)
+#   • Reaction unification: no HAA/MAY, single advance primitive,
+#     memory-backed like/save, write-through report, batch flush on finalize.
 
 import json
 import random
@@ -73,6 +71,7 @@ from services.tier_service import (
     can_create_private_live_quiz,
     has_feature,
     get_current_user_tier,
+    get_saved_content_limit,
 )
 from services.notification_service import send_notification
 
@@ -134,7 +133,6 @@ def get_questions_for_subject(subject_code, limit):
 
 
 def _enrich_active_quiz(active_quiz: dict, user_id: int) -> dict:
-    """Attach subject display + role to an active quiz dict."""
     if not active_quiz:
         return active_quiz
     active_quiz['is_creator'] = (active_quiz.get('creator_id') == user_id)
@@ -145,10 +143,6 @@ def _enrich_active_quiz(active_quiz: dict, user_id: int) -> dict:
 
 
 def _get_active_quiz_for_user(user_id: int):
-    """
-    Return the user's current unfinished quiz (dict) or None.
-    'Unfinished' = status in ('waiting', 'scheduled', 'active').
-    """
     active_id = get_user_active_quiz(user_id)
     if not active_id:
         return None
@@ -187,6 +181,20 @@ def finalize_live_quiz(quiz_id: int) -> dict:
                     'ranking': pdata['rank'],
                     'status': pdata['status'],
                 })
+
+            # ---- Flush accumulated reactions in one batch (likes + saves) ----
+            try:
+                from services.interaction_service import flush_quiz_reactions
+                flush_quiz_reactions(
+                    pdata['user_id'],
+                    pdata.get('likes') or [],
+                    pdata.get('saves') or [],
+                )
+            except Exception as e:
+                logger.error(
+                    f"flush_quiz_reactions failed for user {pdata['user_id']} "
+                    f"in quiz {quiz_id}: {e}"
+                )
 
             add_history_entry(
                 user_id=pdata['user_id'],
@@ -364,10 +372,6 @@ def lobby_join(quiz_id):
     })
 
 
-# ============================================
-# CREATE — WITH ACTIVE-QUIZ GUARD
-# ============================================
-
 @live_quiz_bp.route('/create', methods=['GET', 'POST'])
 def create():
     if 'user_id' not in session:
@@ -394,10 +398,8 @@ def create():
     default_max_participants = settings.get('live_quiz.default_max_participants', 50)
     default_privacy = settings.get('live_quiz.default_privacy', 1)
 
-    # ---- Active-quiz guard (runs for both GET and POST) ----
     active_quiz = _get_active_quiz_for_user(user_id)
 
-    # ------------- GET -------------
     if request.method == 'GET':
         ensure_csrf_token()
         return render_template(
@@ -409,12 +411,10 @@ def create():
             active_quiz=active_quiz,
         )
 
-    # ------------- POST -------------
     if not validate_csrf():
         flash('Invalid CSRF token. Please try again.', 'error')
         return redirect(url_for('live_quiz.create'))
 
-    # Hard guard: refuse to create while already in another quiz
     if active_quiz:
         role = 'creator' if active_quiz.get('is_creator') else 'participant'
         flash(
@@ -667,7 +667,6 @@ def create_with_available():
 
     user_id = session['user_id']
 
-    # Same guard as create()
     active_quiz = _get_active_quiz_for_user(user_id)
     if active_quiz:
         role = 'creator' if active_quiz.get('is_creator') else 'participant'
@@ -757,24 +756,8 @@ def create_with_available():
     return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
 
 
-# ============================================
-# ABANDON — Soft-close or leave the user's unfinished quiz
-# ============================================
-
 @live_quiz_bp.route('/abandon/<quiz_id>', methods=['POST'])
 def abandon_quiz(quiz_id):
-    """
-    Skip the user's unfinished quiz so they can create a new one.
-
-    Behaviour:
-        • If the user is the creator and the quiz is waiting/scheduled:
-          soft-close the whole quiz (status -> 'finished'), mark every
-          active participant as left.
-        • If the user is a participant (not creator):
-          mark only their participation as 'left'.
-        • If the quiz is 'active' (a game is in progress):
-          refuse — the user must wait for the game to end.
-    """
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
     if not validate_csrf():
@@ -795,7 +778,6 @@ def abandon_quiz(quiz_id):
 
     manager = get_state_manager()
 
-    # ---------- Creator: soft-close the whole quiz ----------
     if quiz['creator_id'] == user_id:
         try:
             update_live_quiz(quiz_id, {
@@ -803,13 +785,11 @@ def abandon_quiz(quiz_id):
                 'ended_at': get_somali_time_db(),
                 'scheduled_start': None,
             })
-            # Mark all active participants as left
             execute_with_retry(
                 "UPDATE live_quiz_participants SET status = 'left' "
                 "WHERE quiz_id = ? AND status != 'left'",
                 (quiz_id,), commit=True,
             )
-            # Remove from memory
             try:
                 manager.delete_quiz(quiz_id)
             except Exception:
@@ -826,7 +806,6 @@ def abandon_quiz(quiz_id):
             logger.error(f"abandon_quiz (creator) failed for {quiz_id}: {e}", exc_info=True)
             return jsonify({'error': 'Could not abandon the quiz.'}), 500
 
-    # ---------- Participant: just leave ----------
     success = db_leave_live_quiz(quiz_id, user_id)
     if not success:
         return jsonify({'error': 'Failed to leave the quiz.'}), 500
@@ -853,10 +832,6 @@ def abandon_quiz(quiz_id):
         'redirect': url_for('live_quiz.create'),
     })
 
-
-# ============================================
-# JOIN
-# ============================================
 
 @live_quiz_bp.route('/join', methods=['GET', 'POST'])
 def join():
@@ -939,10 +914,6 @@ def join():
 
     return render_template('dashboard/live_quiz/join.html')
 
-
-# ============================================
-# WAITING ROOM
-# ============================================
 
 @live_quiz_bp.route('/waiting-room/<quiz_id>')
 def waiting_room(quiz_id):
@@ -1249,7 +1220,7 @@ def get_question(quiz_id):
     current_index = p.current_question_index
 
     if str(qid) in p.answers:
-        answer_data = p.answers[qid]
+        answer_data = p.answers[str(qid)]
         return jsonify({
             'question': q_data,
             'index': current_index,
@@ -1260,9 +1231,6 @@ def get_question(quiz_id):
             'correct_answer': q_data['correct_answer'],
             'explanation': q_data.get('explanation', ''),
         })
-
-    if str(qid) in p.ratings:
-        return jsonify({'skipped': True})
 
     return jsonify({
         'question': q_data,
@@ -1354,23 +1322,20 @@ def skip_question():
     return jsonify({'success': True})
 
 
-@live_quiz_bp.route('/submit-rating', methods=['POST'])
-def submit_rating():
+@live_quiz_bp.route('/advance', methods=['POST'])
+def advance_question():
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
     if not validate_csrf():
         return jsonify({'error': 'CSRF token missing or invalid'}), 403
 
     user_id = session['user_id']
-    data = request.get_json()
+    data = request.get_json() or {}
     quiz_id = data.get('quiz_id')
     question_id = data.get('question_id')
-    rating = data.get('rating')
 
-    if not quiz_id or not question_id or not rating:
+    if not quiz_id or not question_id:
         return jsonify({'error': 'Missing required fields'}), 400
-    if rating not in ['HAA', 'MAY']:
-        return jsonify({'error': 'Invalid rating'}), 400
 
     manager = get_state_manager()
     if not manager.ensure_quiz_in_memory(quiz_id):
@@ -1380,7 +1345,7 @@ def submit_rating():
     if not quiz_state:
         return jsonify({'error': 'Quiz not active'}), 404
 
-    success, msg = quiz_state.submit_rating(user_id, question_id, rating)
+    success, msg = quiz_state.advance_question(user_id, question_id)
     if not success:
         return jsonify({'error': msg}), 400
 
@@ -1388,15 +1353,206 @@ def submit_rating():
         'quiz_id': quiz_id,
         'user_id': user_id,
         'question_id': question_id,
-        'event_type': 'RATING',
-        'payload': json.dumps({'rating': rating}),
+        'event_type': 'ADVANCE',
+        'payload': json.dumps({}),
     })
 
     p = quiz_state.get_participant(user_id)
     total = len(quiz_state.question_ids)
-    completed = p.current_question_index >= total if p else False
-
+    completed = (p.current_question_index >= total) if p else False
     return jsonify({'success': True, 'completed': completed})
+
+
+# ============================================
+# DEPRECATED SHIM — one release only
+# ============================================
+# Old live quiz pages still have HAA/MAY buttons that POST here.
+# This ignores the rating payload and just advances.
+
+@live_quiz_bp.route('/submit-rating', methods=['POST'])
+def submit_rating_shim():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    if not validate_csrf():
+        return jsonify({'error': 'CSRF token missing or invalid'}), 403
+
+    data = request.get_json() or {}
+    quiz_id = data.get('quiz_id')
+    question_id = data.get('question_id')
+
+    if not quiz_id or not question_id:
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    manager = get_state_manager()
+    if not manager.ensure_quiz_in_memory(quiz_id):
+        return jsonify({'error': 'Quiz not active'}), 404
+    quiz_state = manager.get_quiz(quiz_id)
+    if not quiz_state:
+        return jsonify({'error': 'Quiz not active'}), 404
+
+    success, msg = quiz_state.advance_question(session['user_id'], question_id)
+    if not success:
+        return jsonify({'error': msg}), 400
+
+    manager.enqueue_event({
+        'quiz_id': quiz_id,
+        'user_id': session['user_id'],
+        'question_id': question_id,
+        'event_type': 'ADVANCE',
+        'payload': json.dumps({}),
+    })
+
+    p = quiz_state.get_participant(session['user_id'])
+    total = len(quiz_state.question_ids)
+    completed = (p.current_question_index >= total) if p else False
+    return jsonify({'success': True, 'completed': completed})
+
+
+# ============================================
+# REACTIONS (live quiz — memory only, flushed at finalization)
+# ============================================
+
+@live_quiz_bp.route('/interaction/<quiz_id>/status', methods=['GET'])
+def interaction_status(quiz_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+
+    qid_raw = request.args.get('question_id')
+    try:
+        question_id = int(qid_raw)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid question_id'}), 400
+
+    manager = get_state_manager()
+    manager.ensure_quiz_in_memory(quiz_id)
+    quiz_state = manager.get_quiz(quiz_id)
+    if not quiz_state:
+        return jsonify({'liked': False, 'saved': False, 'reported': False})
+
+    return jsonify(quiz_state.get_reaction_status(session['user_id'], question_id))
+
+
+@live_quiz_bp.route('/interaction/<quiz_id>/like', methods=['POST'])
+def interaction_like(quiz_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    if not validate_csrf():
+        return jsonify({'error': 'CSRF token missing or invalid'}), 403
+
+    user_id = session['user_id']
+    data = request.get_json() or {}
+    try:
+        question_id = int(data.get('question_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid question_id'}), 400
+
+    manager = get_state_manager()
+    if not manager.ensure_quiz_in_memory(quiz_id):
+        return jsonify({'error': 'Quiz not active'}), 404
+    quiz_state = manager.get_quiz(quiz_id)
+    if not quiz_state:
+        return jsonify({'error': 'Quiz not active'}), 404
+
+    ok = quiz_state.toggle_like(user_id, question_id)
+    if not ok:
+        return jsonify({'error': 'Could not toggle like'}), 400
+
+    p = quiz_state.get_participant(user_id)
+    liked = (question_id in p.likes) if p else False
+    return jsonify({'liked': liked})
+
+
+@live_quiz_bp.route('/interaction/<quiz_id>/save', methods=['POST'])
+def interaction_save(quiz_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    if not validate_csrf():
+        return jsonify({'error': 'CSRF token missing or invalid'}), 403
+
+    user_id = session['user_id']
+    data = request.get_json() or {}
+    try:
+        question_id = int(data.get('question_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid question_id'}), 400
+
+    manager = get_state_manager()
+    if not manager.ensure_quiz_in_memory(quiz_id):
+        return jsonify({'error': 'Quiz not active'}), 404
+    quiz_state = manager.get_quiz(quiz_id)
+    if not quiz_state:
+        return jsonify({'error': 'Quiz not active'}), 404
+
+    # Quota check — only on adding, not removing
+    limit = get_saved_content_limit(user_id)
+    p = quiz_state.get_participant(user_id)
+    already_saved = (p is not None and question_id in p.saves)
+
+    if limit is not None and not already_saved:
+        try:
+            from services.interaction_service import count_user_saves
+            db_count = count_user_saves(user_id)
+        except Exception:
+            db_count = 0
+        session_count = len(p.saves) if p else 0
+        current = db_count + session_count
+        if current >= limit:
+            return jsonify({
+                'error': 'Save limit reached',
+                'limit': limit,
+                'current': current,
+            }), 429
+
+    ok = quiz_state.toggle_save(user_id, question_id)
+    if not ok:
+        return jsonify({'error': 'Could not toggle save'}), 400
+
+    p = quiz_state.get_participant(user_id)
+    saved = (question_id in p.saves) if p else False
+    return jsonify({'saved': saved})
+
+
+@live_quiz_bp.route('/interaction/<quiz_id>/report', methods=['POST'])
+def interaction_report(quiz_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    if not validate_csrf():
+        return jsonify({'error': 'CSRF token missing or invalid'}), 403
+
+    user_id = session['user_id']
+    data = request.get_json() or {}
+    try:
+        question_id = int(data.get('question_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid question_id'}), 400
+
+    reason = (data.get('reason') or '').strip()
+    comment = (data.get('comment') or '').strip()
+    if not reason:
+        return jsonify({'error': 'Reason is required'}), 400
+
+    manager = get_state_manager()
+    if not manager.ensure_quiz_in_memory(quiz_id):
+        return jsonify({'error': 'Quiz not active'}), 404
+    quiz_state = manager.get_quiz(quiz_id)
+    if not quiz_state:
+        return jsonify({'error': 'Quiz not active'}), 404
+
+    # Write-through to DB + Telegram (immediate, not batched)
+    try:
+        from services.interaction_service import submit_report
+        result = submit_report(user_id, question_id, reason, comment)
+    except Exception as e:
+        logger.error(f"live interaction_report failed: {e}", exc_info=True)
+        return jsonify({'error': 'Report could not be submitted'}), 500
+
+    if not result.get('success'):
+        return jsonify({'error': result.get('error', 'Report failed')}), 400
+
+    # Mirror into memory so status reads reflect it
+    quiz_state.add_report(user_id, question_id, reason, comment)
+
+    return jsonify({'success': True})
 
 
 @live_quiz_bp.route('/leaderboard/<quiz_id>')
@@ -1735,11 +1891,3 @@ def cache_stats():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-
-# ============================================
-# BACKGROUND CLEANUP — intentionally removed
-# ============================================
-# The duplicate cleanup thread that used to live here was removed.
-# The single cleanup loop in live_quiz_state.get_live_quiz_state_manager()
-# is authoritative; running two was a bug.
