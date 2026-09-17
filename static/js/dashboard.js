@@ -169,4 +169,38 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     })();
+
+    // ============================================
+    // FOOTER — Back to top
+    // ============================================
+    (function() {
+        const btn = document.getElementById('footerTopBtn');
+        if (!btn) return;
+
+        // Fade transition for the show/hide cycle
+        btn.style.transition =
+            'opacity 0.25s ease, visibility 0.25s ease, ' +
+            'background 0.2s ease, border-color 0.2s ease, transform 0.2s ease';
+
+        btn.addEventListener('click', function() {
+            try {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch (e) {
+                window.scrollTo(0, 0);
+            }
+        });
+
+        function syncVisibility() {
+            if (window.scrollY > 300) {
+                btn.style.opacity = '1';
+                btn.style.visibility = 'visible';
+            } else {
+                btn.style.opacity = '0';
+                btn.style.visibility = 'hidden';
+            }
+        }
+
+        window.addEventListener('scroll', syncVisibility, { passive: true });
+        syncVisibility();
+    })();
 });

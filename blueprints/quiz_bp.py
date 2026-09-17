@@ -532,7 +532,7 @@ def leaderboard():
         if rank_row:
             user_rank = rank_row['c'] + 1
 
-    level = get_feature_level("detailed_ranking_stats", session['user_id'])
+    level = get_feature_level("detailed_ranking_stats", user_id=session['user_id'])
 
     return render_template('dashboard/quiz/leaderboard.html',
                            leaders=leaders,

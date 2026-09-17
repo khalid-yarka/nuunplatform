@@ -182,7 +182,13 @@ class Config:
     TELEGRAM_ADMIN_IDS = os.getenv('TELEGRAM_ADMIN_IDS', '')
     TELEGRAM_SUPER_ADMIN_IDS = os.getenv('TELEGRAM_SUPER_ADMIN_IDS', '')
     BASE_URL = os.getenv('BASE_URL', 'https://yourdomain.com')
-
+    # ============================================
+    # SOCIAL LINKS (dashboard footer)
+    # ============================================
+    # WhatsApp uses SUPER_ADMIN_PHONE (already defined above).
+    # TikTok / YouTube are standalone URLs — override via .env if needed.
+    TIKTOK_URL = os.getenv('TIKTOK_URL', 'https://www.tiktok.com/@nuunplatform')
+    YOUTUBE_URL = os.getenv('YOUTUBE_URL', 'https://www.youtube.com/@nuunplatform')
     if not TELEGRAM_BOT_TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN environment variable must be set for Telegram bot functionality")
 

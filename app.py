@@ -877,11 +877,17 @@ def utility_processor():
             has_focus_access = ((_sl is None) or (_sl > 0)) or (_al > 0)
         except Exception:
             has_focus_access = False
-
+    
+    # ---- Footer social links ----
+    _sa_phone = (Config.SUPER_ADMIN_PHONE or '').replace('+', '').replace(' ', '').replace('-', '')
+    social_whatsapp = f"https://wa.me/{_sa_phone}" if _sa_phone else ''
+    social_tiktok   = Config.TIKTOK_URL or ''
+    social_youtube  = Config.YOUTUBE_URL or ''
+    
     from services.admin.capabilities import admin_can as _admin_can
     from services.admin.roles import is_any_admin as _is_any_admin
     from services.admin.roles import is_super_admin as _is_super_admin
-
+    
     return {
         'session': session,
         'is_admin': session.get('is_admin', False),
@@ -895,6 +901,9 @@ def utility_processor():
         'pending_upgrades_count': pending_upgrades_count,
         'super_admin_phone': Config.SUPER_ADMIN_PHONE,
         'has_focus_access': has_focus_access,
+        'social_whatsapp': social_whatsapp,
+        'social_tiktok': social_tiktok,
+        'social_youtube': social_youtube,
     }
 # At the end of app.py, or in _run_bot_db_init
 try:

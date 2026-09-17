@@ -36,7 +36,7 @@ def list_pdfs():
     user_id = session.get('user_id')
     if user_id:
         user_tier = get_user_tier(user_id)
-        search_level = get_feature_level("resource_search", user_id)
+        search_level = get_feature_level("resource_search", user_id=user_id)
         can_access_premium = can_access_premium_resources()
     else:
         user_tier = 'free'

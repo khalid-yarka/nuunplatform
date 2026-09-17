@@ -32,7 +32,7 @@ from db import (
 from services.tier_service import (
     get_current_user_tier,
     get_analytics_level,
-    get_feature_level,
+    get_insights_level,
     get_quiz_attempts_remaining,
     get_history_retention_days,
     get_history_max_entries,
@@ -52,8 +52,9 @@ def home():
     tier = get_current_user_tier()
 
     # ----- Feature levels -----
-    analytics_level = get_analytics_level(user_id)                          # basic stats
-    insights_level = get_feature_level(user_id, 'personal_learning_insights')
+    # ----- Feature levels -----
+    analytics_level = get_analytics_level(user_id)   # basic stats
+    insights_level = get_insights_level(user_id)     # personal_learning_insights
 
     student = get_student_by_id(user_id)
     if not student:

@@ -108,8 +108,20 @@ def has_feature(feature_code: str, user_id: Optional[int] = None) -> bool:
     return entitlement_service.check(user_id, feature_code)
 
 
-def get_feature_level(feature_code: str, user_id: Optional[int] = None) -> int:
-    """Numeric level for a level feature (0 if unavailable)."""
+def get_feature_level(
+    feature_code: str,
+    *,
+    user_id: Optional[int] = None,
+) -> int:
+    """
+    Numeric level for a level feature (0 if unavailable).
+
+    NOTE: `user_id` is keyword-only on purpose. Callers MUST write:
+        get_feature_level("basic_statistics", user_id=42)
+    or use one of the named wrappers (get_analytics_level,
+    get_insights_level, etc.). Passing the arguments positionally in
+    the wrong order was previously a silent bug — this makes it loud.
+    """
     if user_id is None:
         user_id = session.get('user_id')
     return entitlement_service.get_level(user_id, feature_code)
@@ -166,27 +178,39 @@ def get_saved_content_limit(user_id: Optional[int] = None) -> Optional[int]:
 
 
 def get_analytics_level(user_id: Optional[int] = None) -> int:
-    return get_feature_level("basic_statistics", user_id)
+    return get_feature_level("basic_statistics", user_id=user_id)
+
+
+def get_insights_level(user_id: Optional[int] = None) -> int:
+    """
+    Personal Learning Insights level.
+        0 → locked (free)
+        1 → basic insights (premium)
+        2 → full insights (pro)
+    Wrapper exists so callers never have to remember that
+    get_feature_level takes (feature_code, *, user_id) — not the other way.
+    """
+    return get_feature_level("personal_learning_insights", user_id=user_id)
 
 
 def get_answer_review_level(user_id: Optional[int] = None) -> int:
-    return get_feature_level("answer_review", user_id)
+    return get_feature_level("answer_review", user_id=user_id)
 
 
 def get_explanation_level(user_id: Optional[int] = None) -> int:
-    return get_feature_level("correct_answer_explanations", user_id)
+    return get_feature_level("correct_answer_explanations", user_id=user_id)
 
 
 def get_achievement_history_level(user_id: Optional[int] = None) -> int:
-    return get_feature_level("achievement_history", user_id)
+    return get_feature_level("achievement_history", user_id=user_id)
 
 
 def get_badge_showcase_level(user_id: Optional[int] = None) -> int:
-    return get_feature_level("badge_showcase", user_id)
+    return get_feature_level("badge_showcase", user_id=user_id)
 
 
 def get_resource_search_level(user_id: Optional[int] = None) -> int:
-    return get_feature_level("resource_search", user_id)
+    return get_feature_level("resource_search", user_id=user_id)
 
 
 # ============================================

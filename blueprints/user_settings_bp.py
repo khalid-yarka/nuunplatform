@@ -60,8 +60,8 @@ def index():
     student = get_student_by_id(user_id)
     settings = get_user_settings(user_id)
     tier = get_current_user_tier()
-    profile_level = get_feature_level("profile_customization", user_id)
-    notif_level = get_feature_level("notification_settings", user_id)
+    profile_level = get_feature_level("profile_customization", user_id=user_id)
+    notif_level = get_feature_level("notification_settings", user_id=user_id)
     can_create = can_create_live_quiz()
     user_subjects = get_user_subject_list(user_id)
     return render_template(
@@ -296,7 +296,7 @@ def update_notifications():
         'notify_weekly_summary',
     ]
 
-    notif_level = get_feature_level("notification_settings", user_id)
+    notif_level = get_feature_level("notification_settings", user_id=user_id)
     allowed_keys = base_keys.copy()
     if notif_level >= 2:
         allowed_keys.extend(expanded_keys)

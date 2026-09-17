@@ -473,30 +473,111 @@
             {% block dashboard_content %}{% endblock %}
         </div>
 
-        <!-- Footer -->
+        <!-- ============================================ -->
+        <!-- FOOTER — Advanced                            -->
+        <!-- ============================================ -->
         <footer class="app-footer">
-            <div class="footer-inner">
-                <div class="footer-brand">
-                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="footer-logo" />
-                    <span class="footer-brand-text">Nuun<span>Platform</span></span>
+            <div class="footer-container">
+        
+                <div class="footer-top">
+        
+                    <!-- ---------- Brand ---------- -->
+                    <div class="footer-col footer-col-brand">
+                        <a href="{{ url_for('dashboard.home') }}" class="footer-brand">
+                            <img src="{{ url_for('static', filename='images/logo.png') }}"
+                                 alt="NuunPlatform" class="footer-logo" />
+                            <span class="footer-brand-text">Nuun<span>Platform</span></span>
+                        </a>
+        
+                        <p class="footer-tagline">{{ _('footer.tagline') }}</p>
+        
+                        <div class="footer-social" role="group" aria-label="{{ _('footer.follow_us') }}">
+                            {% if social_whatsapp %}
+                            <a href="{{ social_whatsapp }}"
+                               target="_blank" rel="noopener noreferrer"
+                               class="footer-social-btn footer-social-whatsapp"
+                               aria-label="{{ _('footer.whatsapp') }}"
+                               title="{{ _('footer.whatsapp') }}">
+                                <i class="fab fa-whatsapp" aria-hidden="true"></i>
+                            </a>
+                            {% endif %}
+                            {% if social_tiktok %}
+                            <a href="{{ social_tiktok }}"
+                               target="_blank" rel="noopener noreferrer"
+                               class="footer-social-btn footer-social-tiktok"
+                               aria-label="{{ _('footer.tiktok') }}"
+                               title="{{ _('footer.tiktok') }}">
+                                <i class="fab fa-tiktok" aria-hidden="true"></i>
+                            </a>
+                            {% endif %}
+                            {% if social_youtube %}
+                            <a href="{{ social_youtube }}"
+                               target="_blank" rel="noopener noreferrer"
+                               class="footer-social-btn footer-social-youtube"
+                               aria-label="{{ _('footer.youtube') }}"
+                               title="{{ _('footer.youtube') }}">
+                                <i class="fab fa-youtube" aria-hidden="true"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+        
+                    <!-- ---------- Learn ---------- -->
+                    <nav class="footer-col" aria-label="{{ _('footer.learn') }}">
+                        <h4 class="footer-col-title">{{ _('footer.learn') }}</h4>
+                        <ul class="footer-links">
+                            <li><a href="{{ url_for('quiz.index') }}">{{ _('nav.quizzes') }}</a></li>
+                            <li><a href="{{ url_for('live_quiz.lobby') }}">{{ _('nav.live_quiz') }}</a></li>
+                            <li><a href="{{ url_for('pdfs.list_pdfs') }}">{{ _('nav.pdfs') }}</a></li>
+                            <li><a href="{{ url_for('focus.index') }}">{{ _('nav.focus') }}</a></li>
+                        </ul>
+                    </nav>
+        
+                    <!-- ---------- Community ---------- -->
+                    <nav class="footer-col" aria-label="{{ _('footer.community') }}">
+                        <h4 class="footer-col-title">{{ _('footer.community') }}</h4>
+                        <ul class="footer-links">
+                            <li><a href="{{ url_for('groups.list_groups') }}">{{ _('nav.groups') }}</a></li>
+                            <li><a href="{{ url_for('quiz.leaderboard') }}">{{ _('nav.leaderboard') }}</a></li>
+                            <li><a href="{{ url_for('history.index') }}">{{ _('nav.history') }}</a></li>
+                            <li><a href="{{ url_for('notifications.index') }}">{{ _('nav.notifications') }}</a></li>
+                        </ul>
+                    </nav>
+        
+                    <!-- ---------- Support ---------- -->
+                    <nav class="footer-col" aria-label="{{ _('footer.support') }}">
+                        <h4 class="footer-col-title">{{ _('footer.support') }}</h4>
+                        <ul class="footer-links">
+                            <li><a href="{{ url_for('auth.help') }}">{{ _('footer.help') }}</a></li>
+                            <li><a href="{{ url_for('docs') }}">{{ _('footer.docs') }}</a></li>
+                            {% if social_whatsapp %}
+                            <li>
+                                <a href="{{ social_whatsapp }}" target="_blank" rel="noopener noreferrer">
+                                    <i class="fab fa-whatsapp" aria-hidden="true" style="margin-right:4px;"></i>
+                                    {{ _('footer.contact') }}
+                                </a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
                 </div>
-                <div class="footer-links">
-                    <a href="{{ url_for('dashboard.home') }}">{{ _('nav.dashboard') }}</a>
-                    <a href="{{ url_for('quiz.index') }}">{{ _('nav.quizzes') }}</a>
-                    <a href="{{ url_for('live_quiz.lobby') }}">{{ _('nav.live_quiz') }}</a>
-                    <a href="{{ url_for('groups.list_groups') }}">{{ _('nav.groups') }}</a>
-                    <a href="{{ url_for('pdfs.list_pdfs') }}">{{ _('nav.pdfs') }}</a>
-                    <a href="{{ url_for('quiz.leaderboard') }}">{{ _('nav.leaderboard') }}</a>
+        
+                <!-- ---------- Bottom bar ---------- -->
+                <div class="footer-bottom">
+                    <div class="footer-copy">
+                        © 2026 NuunPlatform · {{ _('footer.made_with') }}
+                        <span class="heart" aria-hidden="true">❤️</span>
+                        {{ _('footer.for_students') }}
+                    </div>
+                    <button type="button"
+                            class="footer-top-btn"
+                            id="footerTopBtn"
+                            aria-label="{{ _('footer.back_to_top') }}">
+                        <i class="fas fa-arrow-up" aria-hidden="true"></i>
+                        <span>{{ _('footer.back_to_top') }}</span>
+                    </button>
                 </div>
-                <div class="footer-social">
-                    <a href="#" aria-label="WhatsApp"><i class="fab fa-whatsapp"></i></a>
-                    <a href="#" aria-label="Telegram"><i class="fab fa-telegram-plane"></i></a>
-                    <a href="#" aria-label="Facebook"><i class="fab fa-facebook"></i></a>
-                    <a href="#" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
-                </div>
-            </div>
-            <div class="footer-copy">
-                © 2026 NuunPlatform · {{ _('footer.made_with') }} <span class="heart">❤️</span> {{ _('footer.for_students') }}
+        
             </div>
         </footer>
     </main>
