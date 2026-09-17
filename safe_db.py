@@ -546,3 +546,28 @@ def prime_schema():
             _sync_table_schema(conn, t)
         except Exception:
             pass
+
+# ============================================================
+# BACKWARD-COMPAT ALIASES
+# ============================================================
+# The defensive rewrite renamed some internals. Downstream callers
+# (blueprints/admin/safety_bp.py in particular) still import the
+# old names. Keep them working with zero runtime cost.
+# ============================================================
+
+# Old name for the whitelist — was a set of tuple (name, columns) in
+# the v1 module, now just a set of names. Anything that imported it
+# only used membership checks, so a plain set works.
+MIRROR_TABLES = WHITELISTED_TABLES
+
+# The old module exposed these internal helpers. They no longer exist
+# under the same names; the defensive version handles both tasks
+# automatically on first write. Provide no-op stubs so imports succeed.
+def _copy_schema_from_main(*args, **kwargs):
+    """Legacy no-op. Schema sync now happens per-table on first write."""
+    return True
+
+
+def _ensure_init(*args, **kwargs):
+    """Legacy no-op. Initialisation is lazy in this version."""
+    return True

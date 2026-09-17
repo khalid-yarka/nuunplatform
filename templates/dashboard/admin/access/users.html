@@ -1,13 +1,18 @@
 {# ============================================================
    templates/dashboard/admin/access/users.html
    User directory with filters, sorting, and bulk actions.
+   Row click opens the user drawer.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
+
+{% block admin_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/user_drawer.css') }}?v=1" />
+{% endblock %}
 
 {% block admin_title_icon %}<i class="fas fa-users header-icon"></i>{% endblock %}
 {% block admin_title %}Users{% endblock %}
 {% block admin_subtitle %}
-    Browse, filter, and manage every registered user on the platform.
+    Browse, filter, and manage every registered user. Click any row for a quick view.
 {% endblock %}
 
 {% block admin_breadcrumb %}
@@ -167,20 +172,24 @@
                     <th class="hide-mobile" style="text-align:center;">Verified</th>
                     <th style="text-align: right;">Points</th>
                     <th class="hide-mobile">Joined</th>
-                    <th style="text-align: right;">Actions</th>
+                    <th style="width:52px;"></th>
                 </tr>
             </thead>
             <tbody>
                 {% for u in users %}
                     {% set tier = normalize_tier(u.tier or 'free') %}
-                    <tr>
+                    <tr class="ud-clickable"
+                        data-user-id="{{ u.id }}"
+                        role="button"
+                        tabindex="0"
+                        aria-label="View {{ u.first_name }} {{ u.last_name or '' }}">
                         {% if admin_can('users.bulk') %}
-                            <td class="cell-check">
+                            <td class="cell-check" data-no-drawer>
                                 <input type="checkbox" name="user_ids" value="{{ u.id }}" data-check-row>
                             </td>
                         {% endif %}
 
-                        <td>
+                        <td data-cell="name">
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <div style="width: 38px; height: 38px; border-radius: 50%;
                                             background: var(--primary-light);
@@ -193,9 +202,7 @@
                                 <div style="min-width: 0;">
                                     <div style="font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px;">
                                         {{ u.first_name }} {{ u.last_name or '' }}
-                                        {% if u.is_admin %}
-                                            <span style="color: #F59E0B; font-size: 12px;" title="Admin">⭐</span>
-                                        {% endif %}
+                                        <span class="admin-star" style="color: #F59E0B; font-size: 12px; {% if not u.is_admin %}display:none;{% endif %}" title="Admin">⭐</span>
                                     </div>
                                     <div style="font-size: 11px; color: var(--text-muted); margin-top: 1px;">
                                         {{ u.school or 'No school' }}
@@ -218,6 +225,7 @@
                             {% if u.phone_number %}
                                 <a href="https://wa.me/{{ u.phone_number|replace('+','')|replace(' ','') }}"
                                    target="_blank" rel="noopener"
+                                   data-no-drawer
                                    style="color: var(--text); text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
                                     <i class="fab fa-whatsapp" style="color: #25D366; font-size: 14px;"></i>
                                     {{ u.phone_number }}
@@ -227,13 +235,13 @@
                             {% endif %}
                         </td>
 
-                        <td>
+                        <td data-cell="tier">
                             <span class="admin-pill {{ tier }}">
                                 {{ tier }}
                             </span>
                         </td>
 
-                        <td class="hide-mobile" style="text-align: center;">
+                        <td class="hide-mobile" style="text-align: center;" data-cell="verified">
                             {% if u.is_verified %}
                                 <span class="admin-chip green" title="Verified">✅</span>
                             {% else %}
@@ -249,28 +257,10 @@
                             {{ u.created_at|somali_date }}
                         </td>
 
-                        <td class="cell-actions">
-                            {% if not u.is_verified %}
-                                <form method="POST"
-                                      action="{{ url_for('admin_users.verify_user', user_id=u.id) }}"
-                                      style="display:inline;"
-                                      onsubmit="return confirm('Verify {{ u.first_name }}?');">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                    <button type="submit" class="admin-btn success sm" title="Verify account">
-                                        <i class="fas fa-user-check"></i>
-                                    </button>
-                                </form>
-                            {% endif %}
-                            <a href="{{ url_for('admin_users.user_detail', user_id=u.id) }}"
-                               class="admin-btn primary sm" title="View">
-                                <i class="fas fa-eye"></i>
-                            </a>
-                            {% if admin_can('users.notify') %}
-                                <a href="{{ url_for('admin_users.user_detail', user_id=u.id) }}#notify"
-                                   class="admin-btn secondary sm" title="Notify">
-                                    <i class="fas fa-paper-plane"></i>
-                                </a>
-                            {% endif %}
+                        <td>
+                            <span class="ud-row-chevron" aria-hidden="true">
+                                <i class="fas fa-chevron-right"></i>
+                            </span>
                         </td>
                     </tr>
                 {% endfor %}
@@ -322,8 +312,27 @@
 </div>
 {% endif %}
 
+{# ─────── USER DRAWER ─────── #}
+<div class="ud-backdrop" id="udBackdrop" aria-hidden="true"></div>
+<aside class="ud-drawer" id="udDrawer"
+       role="dialog" aria-modal="true" aria-labelledby="udDrawerTitle">
+    <header class="ud-head">
+        <span class="ud-head__title" id="udDrawerTitle">User</span>
+        <button type="button" class="ud-head__close" aria-label="Close drawer">
+            <i class="fas fa-times"></i>
+        </button>
+    </header>
+    <div class="ud-body">
+        {# Skeleton is rendered by JS on open. #}
+    </div>
+    <footer class="ud-foot">
+        {# Filled by JS on render. #}
+    </footer>
+</aside>
+
 {% endblock %}
 
 {% block admin_js %}
 <script src="{{ url_for('static', filename='js/admin/access.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/user_drawer.js') }}?v=1"></script>
 {% endblock %}

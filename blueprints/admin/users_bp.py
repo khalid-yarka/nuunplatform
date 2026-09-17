@@ -37,6 +37,7 @@ from admin_users_db import (
 )
 from utils import validate_csrf
 from services.admin.guards import admin_can
+from services.admin.capabilities import admin_can as has_capability
 from services.admin.audit import write_audit
 from activity_logger import log_admin_action
 
@@ -725,3 +726,229 @@ def restore_deleted_user(deleted_id):
         flash(f'Error restoring user: {message}', 'error')
 
     return redirect(url_for('admin_users.deleted_users'))
+
+
+# ============================================================
+# JSON — DRAWER DATA
+# ============================================================
+# Powers the slide-in user drawer on /admin/users.
+# Read-only; returns a compact payload the frontend renders.
+# ============================================================
+
+@admin_users_bp.route('/users/<int:user_id>/json', methods=['GET'],
+                      endpoint='user_json')
+@admin_can('users.view')
+def user_json(user_id):
+    user = get_student_by_id(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    # ---- Stats ----
+    def _count(sql, params):
+        try:
+            row = execute_with_retry(sql, params).fetchone()
+            return int(list(row)[0] or 0) if row else 0
+        except Exception:
+            return 0
+
+    quiz_attempts = _count(
+        "SELECT COUNT(*) FROM quiz_attempts WHERE student_id = ?",
+        (user_id,),
+    )
+    live_attempts = _count(
+        "SELECT COUNT(*) FROM live_quiz_participants WHERE student_id = ?",
+        (user_id,),
+    )
+    saved_questions = _count(
+        "SELECT COUNT(*) FROM question_interactions "
+        "WHERE user_id = ? AND interaction_type = 'save'",
+        (user_id,),
+    )
+
+    # ---- Capabilities ----
+    # has_capability is the boolean resolver (NOT the decorator).
+    is_self = (user_id == session.get('user_id'))
+    can = {
+        'verify':       bool(has_capability('users.view'))        and not is_self,
+        'set_tier':     bool(has_capability('users.set_tier'))    and not is_self,
+        'notify':       bool(has_capability('users.notify')),
+        'force_logout': bool(has_capability('users.force_logout')) and not is_self,
+        'toggle_admin': bool(has_capability('users.toggle_admin')) and not is_self,
+    }
+
+    return jsonify({
+        'id': user_id,
+        'public_id': user.get('public_id') or '',
+        'first_name': user.get('first_name') or '',
+        'middle_name': user.get('middle_name') or '',
+        'last_name': user.get('last_name') or '',
+        'full_name': (f"{user.get('first_name') or ''} {user.get('last_name') or ''}").strip() or 'Unknown',
+        'phone': user.get('phone_number') or '',
+        'school': user.get('school') or '',
+        'city': user.get('city') or '',
+        'location': user.get('location') or '',
+        'grade': user.get('grade') or '',
+        'curriculum': user.get('curriculum') or '',
+        'tier': user.get('tier') or 'free',
+        'tier_expires_at': user.get('tier_expires_at'),
+        'is_verified': bool(user.get('is_verified')),
+        'is_admin': bool(user.get('is_admin')),
+        'total_points': int(user.get('total_points') or 0),
+        'created_at': user.get('created_at'),
+        'last_login_at': user.get('last_login_at'),
+        'stats': {
+            'quiz_attempts': quiz_attempts,
+            'live_quiz_attempts': live_attempts,
+            'saved_questions': saved_questions,
+        },
+        'can': can,
+        'detail_url': url_for('admin_users.user_detail', user_id=user_id),
+    })
+
+
+# ============================================================
+# JSON — DRAWER QUICK ACTIONS
+# ============================================================
+# Dispatches single-click actions from the drawer. Reuses the same
+# service calls and audit entries the existing form routes use —
+# nothing new is written except the JSON envelope.
+# ============================================================
+
+@admin_users_bp.route('/users/<int:user_id>/quick-action', methods=['POST'],
+                      endpoint='user_quick_action')
+def user_quick_action(user_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not logged in'}), 401
+
+    if not validate_csrf():
+        return jsonify({'success': False, 'error': 'CSRF token missing'}), 403
+
+    data = request.get_json(silent=True) or {}
+    action = (data.get('action') or '').strip()
+
+    user = get_student_by_id(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    is_self = (user_id == session['user_id'])
+
+    # ---------- VERIFY ----------
+    if action == 'verify':
+        if not has_capability('users.view'):
+            return jsonify({'success': False, 'error': 'Permission denied'}), 403
+        if is_self:
+            return jsonify({'success': False, 'error': 'You cannot verify your own account'}), 400
+        if not set_user_verified(user_id, True, session['user_id']):
+            return jsonify({'success': False, 'error': 'Failed to verify user'}), 500
+        write_audit(
+            action='user.verify', target_type='user', target_id=user_id,
+            before={'is_verified': 0}, after={'is_verified': 1}, severity='info',
+        )
+        try:
+            from db import create_notification
+            create_notification(
+                user_id=user_id, type='account',
+                title='✅ Account Verified',
+                body='Your account has been verified. You can now log in and start learning.',
+                link='/login', icon='✅',
+            )
+        except Exception:
+            pass
+        return jsonify({
+            'success': True, 'message': 'User verified',
+            'row_updates': {'verified': True},
+        })
+
+    # ---------- UNVERIFY ----------
+    if action == 'unverify':
+        if not has_capability('users.view'):
+            return jsonify({'success': False, 'error': 'Permission denied'}), 403
+        if is_self:
+            return jsonify({'success': False, 'error': 'You cannot unverify your own account'}), 400
+        if not set_user_verified(user_id, False, session['user_id']):
+            return jsonify({'success': False, 'error': 'Failed to unverify user'}), 500
+        write_audit(
+            action='user.unverify', target_type='user', target_id=user_id,
+            before={'is_verified': 1}, after={'is_verified': 0}, severity='warning',
+        )
+        return jsonify({
+            'success': True, 'message': 'User unverified',
+            'row_updates': {'verified': False},
+        })
+
+    # ---------- SET TIER ----------
+    if action == 'set_tier':
+        if not has_capability('users.set_tier'):
+            return jsonify({'success': False, 'error': 'Permission denied'}), 403
+        if is_self:
+            return jsonify({'success': False, 'error': 'You cannot change your own tier'}), 400
+        new_tier = (data.get('tier') or '').strip().lower()
+        if new_tier not in ('free', 'premium', 'pro'):
+            return jsonify({'success': False, 'error': 'Invalid tier'}), 400
+        if not set_user_tier_admin(user_id, new_tier, session['user_id']):
+            return jsonify({'success': False, 'error': 'Failed to update tier'}), 500
+        write_audit(
+            action='user.set_tier', target_type='user', target_id=user_id,
+            before={'tier': user.get('tier')}, after={'tier': new_tier},
+            severity='warning',
+        )
+        return jsonify({
+            'success': True,
+            'message': f'Tier updated to {new_tier.upper()}',
+            'row_updates': {'tier': new_tier},
+        })
+
+    # ---------- NOTIFY ----------
+    if action == 'notify':
+        if not has_capability('users.notify'):
+            return jsonify({'success': False, 'error': 'Permission denied'}), 403
+        title = (data.get('title') or '').strip()[:100]
+        body = (data.get('body') or '').strip()[:500]
+        if not title or not body:
+            return jsonify({'success': False, 'error': 'Title and message required'}), 400
+        from db import create_notification
+        create_notification(user_id, 'admin_direct', title, body, '/dashboard', '📬')
+        try:
+            log_admin_user_action(session['user_id'], user_id, 'notify', None, title[:200])
+        except Exception:
+            pass
+        write_audit(
+            action='user.notify', target_type='user', target_id=user_id,
+            before=None, after={'title': title}, severity='info',
+        )
+        return jsonify({'success': True, 'message': 'Notification sent'})
+
+    # ---------- FORCE LOGOUT ----------
+    if action == 'force_logout':
+        if not has_capability('users.force_logout'):
+            return jsonify({'success': False, 'error': 'Permission denied'}), 403
+        if is_self:
+            return jsonify({'success': False, 'error': 'You cannot force logout yourself'}), 400
+        if not force_user_logout(user_id, session['user_id']):
+            return jsonify({'success': False, 'error': 'Failed to force logout'}), 500
+        write_audit(
+            action='user.force_logout', target_type='user', target_id=user_id,
+            before=None, after=None, severity='warning',
+        )
+        return jsonify({'success': True, 'message': 'User will be logged out on their next request'})
+
+    # ---------- TOGGLE ADMIN ----------
+    if action == 'toggle_admin':
+        if not has_capability('users.toggle_admin'):
+            return jsonify({'success': False, 'error': 'Permission denied'}), 403
+        if is_self:
+            return jsonify({'success': False, 'error': 'You cannot change your own admin status'}), 400
+        new_state = toggle_user_admin_admin(user_id, session['user_id'])
+        if new_state is None:
+            return jsonify({'success': False, 'error': 'Failed to change admin status'}), 500
+        write_audit(
+            action='user.toggle_admin', target_type='user', target_id=user_id,
+            before=None, after={'is_admin': new_state}, severity='critical',
+        )
+        return jsonify({
+            'success': True,
+            'message': 'Admin privileges granted' if new_state else 'Admin privileges revoked',
+            'row_updates': {'is_admin': new_state},
+        })
+
+    return jsonify({'success': False, 'error': f'Unknown action: {action}'}), 400

@@ -144,8 +144,8 @@ def _backup_health():
 def dashboard():
     """
     Dual-mode admin landing page.
-    - Super admin (is_super_admin): command centre with pulse + alerts.
-    - Regular admin: workbench with pending items and own recent activity.
+    - Super admin: full control centre (revenue, alerts, charts).
+    - Regular admin: workbench (own actions, no revenue anywhere).
     """
     if 'user_id' not in session:
         return redirect(url_for('auth.login', next=request.url))
@@ -156,38 +156,67 @@ def dashboard():
 
     is_super = is_super_admin()
 
-    if is_super:
-        pulse = _build_pulse(include_revenue=True)
-        alerts = _build_alerts(pulse)
-        system = _build_system_block()
-        recent_actions = _build_recent_actions()
+    # ---- Pulse (revenue included only for super admin) ----
+    pulse = _build_pulse(include_revenue=is_super)
 
-        return render_template(
-            'dashboard/admin/overview.html',
-            pulse=pulse,
-            alerts=alerts,
-            system=system,
-            recent_actions=recent_actions,
-            pending={'total': 0, 'items': []},
-            recent_own_actions=[],
-            is_super_admin_view=True,
-        )
+    # ---- Deltas (week-over-week percentages) ----
+    deltas = _build_deltas(pulse)
+
+    # ---- Priority queue ----
+    priority = _build_priority(pulse)
+
+    # ---- System block ----
+    system = _build_system_block()
+
+    # ---- Sparklines ----
+    sparklines = _build_sparklines()
+
+    # ---- Chart data ----
+    chart_data = _build_chart_data()
+
+    # ---- Recent admin audit ----
+    recent_actions = _build_recent_actions() if is_super else []
+
+    # ---- Recent user activity feed ----
+    user_activity = _build_user_activity()
+
+    # ---- Greeting context ----
+    from utils import get_somali_time
+    hour = get_somali_time().hour
+    if hour < 12:
+        greeting_emoji = '🌅'
+        greeting_somali = 'Good morning'
+    elif hour < 17:
+        greeting_emoji = '☀️'
+        greeting_somali = 'Good afternoon'
     else:
-        # Regular admin — no revenue anywhere in the payload.
-        pulse = _build_pulse(include_revenue=False)
-        pending = _build_pending_work()
-        recent_own = _build_recent_own_actions()
+        greeting_emoji = '🌙'
+        greeting_somali = 'Good evening'
 
-        return render_template(
-            'dashboard/admin/overview.html',
-            pulse=pulse,
-            alerts=[],
-            system={},
-            recent_actions=[],
-            pending=pending,
-            recent_own_actions=recent_own,
-            is_super_admin_view=False,
-        )
+    greeting_title = greeting_somali + ', ' + (session.get('user_name') or 'Admin')
+
+    # ---- Command centre section persistence ----
+    open_sections = request.args.getlist('open') or ['content']
+
+    return render_template(
+        'dashboard/admin/overview.html',
+        is_super_admin_view=is_super,
+        pulse=pulse,
+        deltas=deltas,
+        priority=priority,
+        system=system,
+        sparklines=sparklines,
+        chart_data=chart_data,
+        recent_actions=recent_actions,
+        user_activity=user_activity,
+        greeting_emoji=greeting_emoji,
+        greeting_somali=greeting_somali,
+        greeting_title=greeting_title,
+        open_sections=open_sections,
+        alerts=[],           # legacy variable, no longer rendered
+        pending={'total': 0, 'items': []},  # legacy variable
+        recent_own_actions=[],  # legacy variable
+    )
 
 
 # ============================================================
@@ -293,6 +322,294 @@ def search():
 # ============================================================
 # PULSE / ALERTS / SYSTEM / ACTIVITY HELPERS
 # ============================================================
+def _build_deltas(pulse):
+    """Week-over-week percentage change for KPI tiles."""
+    deltas = {'users': 0, 'quizzes': 0, 'revenue': 0}
+
+    try:
+        # Users: this week vs previous week
+        this_week = _scalar(
+            "SELECT COUNT(*) FROM students "
+            "WHERE created_at >= datetime('now', '-7 days')"
+        )
+        prev_week = _scalar(
+            "SELECT COUNT(*) FROM students "
+            "WHERE created_at >= datetime('now', '-14 days') "
+            "AND created_at < datetime('now', '-7 days')"
+        )
+        if prev_week > 0:
+            deltas['users'] = round(100.0 * (this_week - prev_week) / prev_week, 1)
+        elif this_week > 0:
+            deltas['users'] = 100.0
+    except Exception:
+        pass
+
+    try:
+        # Quizzes: same pattern
+        this_week = _scalar(
+            "SELECT COUNT(*) FROM quiz_attempts "
+            "WHERE completed_at >= datetime('now', '-7 days')"
+        )
+        prev_week = _scalar(
+            "SELECT COUNT(*) FROM quiz_attempts "
+            "WHERE completed_at >= datetime('now', '-14 days') "
+            "AND completed_at < datetime('now', '-7 days')"
+        )
+        if prev_week > 0:
+            deltas['quizzes'] = round(100.0 * (this_week - prev_week) / prev_week, 1)
+        elif this_week > 0:
+            deltas['quizzes'] = 100.0
+    except Exception:
+        pass
+
+    try:
+        # Revenue: this month vs previous month
+        this_month = _scalar(
+            "SELECT COALESCE(SUM(final_price_cents), 0) FROM upgrade_requests "
+            "WHERE status = 'approved' "
+            "AND approved_at >= datetime('now', '-30 days')"
+        )
+        prev_month = _scalar(
+            "SELECT COALESCE(SUM(final_price_cents), 0) FROM upgrade_requests "
+            "WHERE status = 'approved' "
+            "AND approved_at >= datetime('now', '-60 days') "
+            "AND approved_at < datetime('now', '-30 days')"
+        )
+        if prev_month > 0:
+            deltas['revenue'] = round(100.0 * (this_month - prev_month) / prev_month, 1)
+        elif this_month > 0:
+            deltas['revenue'] = 100.0
+    except Exception:
+        pass
+
+    return deltas
+
+
+def _build_priority(pulse):
+    """
+    Priority queue — actions that need the current admin's attention.
+    Empty when there is no work; the greeting bar adapts accordingly.
+    """
+    items = []
+
+    # ---- Pending upgrades (super admin only) ----
+    if is_super_admin() and pulse.get('upgrades_pending', 0) > 0:
+        items.append({
+            'icon': '🚀',
+            'count': pulse['upgrades_pending'],
+            'label': 'Upgrade requests',
+            'description': 'Users waiting for tier approval.',
+            'cta': 'Review',
+            'link': url_for('upgrade.admin_list', status='pending'),
+            'tone': 'green',
+        })
+
+    # ---- PDF intake ----
+    try:
+        from services.admin.capabilities import admin_can as _admin_can
+        if _admin_can('pdfs.intake'):
+            from bot.db import count_pending_pdfs
+            n = count_pending_pdfs()
+            if n > 0:
+                items.append({
+                    'icon': '📥',
+                    'count': n,
+                    'label': 'PDFs to process',
+                    'description': 'Telegram uploads awaiting intake.',
+                    'cta': 'Process',
+                    'link': url_for('admin_content.pdfs', tab='intake'),
+                    'tone': 'blue',
+                })
+    except Exception:
+        pass
+
+    # ---- Unverified PDFs (review queue) ----
+    try:
+        from services.admin.capabilities import admin_can as _admin_can
+        if _admin_can('pdfs.intake'):
+            n = _scalar(
+                "SELECT COUNT(*) FROM unverified_pdfs WHERE confirmed = 0"
+            )
+            if n > 0:
+                items.append({
+                    'icon': '🔍',
+                    'count': n,
+                    'label': 'PDFs to verify',
+                    'description': 'Auto-published metadata awaiting review.',
+                    'cta': 'Verify',
+                    'link': url_for('admin_content.pdfs', tab='unverified'),
+                    'tone': 'purple',
+                })
+    except Exception:
+        pass
+
+    # ---- Staged PDFs to publish (super admin) ----
+    try:
+        if is_super_admin():
+            from bot.db import count_bot_pdfs
+            n = count_bot_pdfs(published_filter=False)
+            if n > 0:
+                items.append({
+                    'icon': '☁️',
+                    'count': n,
+                    'label': 'PDFs to publish',
+                    'description': 'Staged uploads ready for release.',
+                    'cta': 'Publish',
+                    'link': url_for('admin_content.pdfs', tab='staging'),
+                    'tone': 'amber',
+                })
+    except Exception:
+        pass
+
+    # ---- Pending reports ----
+    try:
+        if admin_can('reports.view'):
+            n = _scalar(
+                "SELECT COUNT(*) FROM question_interactions "
+                "WHERE interaction_type = 'report' AND report_status = 'pending'"
+            )
+            if n > 0:
+                items.append({
+                    'icon': '🚩',
+                    'count': n,
+                    'label': 'Reported questions',
+                    'description': 'Flagged by users, awaiting resolution.',
+                    'cta': 'Resolve',
+                    'link': url_for('admin_community.reports'),
+                    'tone': 'red',
+                })
+    except Exception:
+        pass
+
+    # ---- Errors (if above threshold) ----
+    if pulse.get('errors_open', 0) >= 3:
+        items.append({
+            'icon': '⚠️',
+            'count': pulse['errors_open'],
+            'label': 'Unresolved errors',
+            'description': 'Application errors awaiting triage.',
+            'cta': 'Triage',
+            'link': url_for('admin_errors.index', resolved='0'),
+            'tone': 'red',
+        })
+
+    total = sum(i['count'] for i in items)
+
+    if not items:
+        hint = ''
+    elif total <= 3:
+        hint = 'quick work — should take a few minutes'
+    elif total <= 20:
+        hint = 'a moderate queue, worth clearing today'
+    else:
+        hint = 'a substantial backlog — consider prioritising'
+
+    return {'total': total, 'items': items, 'hint': hint}
+
+
+def _build_sparklines():
+    """
+    Return 10-point sparkline arrays for each KPI tile.
+    Aggregates 30 days of data into 10 buckets of 3 days each.
+    """
+    def bucket_series(series):
+        if not series:
+            return [0] * 10
+        values = [s['value'] for s in series]
+        if len(values) <= 10:
+            # Pad front with zeros so the shape is consistent
+            return [0] * (10 - len(values)) + values
+        # Downsample to 10 buckets
+        bucket_size = len(values) / 10
+        out = []
+        for i in range(10):
+            start = int(i * bucket_size)
+            end = int((i + 1) * bucket_size)
+            chunk = values[start:end] or [0]
+            out.append(sum(chunk))
+        return out
+
+    sparklines = {
+        'signups': [], 'quizzes': [], 'revenue': [],
+        'upgrades': [], 'errors': [], 'backups': [],
+    }
+
+    try:
+        from platform_activity import (
+            get_signups_series, get_quizzes_series,
+        )
+        sparklines['signups'] = bucket_series(get_signups_series(days=30))
+        sparklines['quizzes'] = bucket_series(get_quizzes_series(days=30))
+    except Exception:
+        sparklines['signups'] = [0] * 10
+        sparklines['quizzes'] = [0] * 10
+
+    # Simple flat lines for the rest — real series would need more
+    # granular queries; a flat line is honest and cheap.
+    sparklines['revenue']  = [0] * 10
+    sparklines['upgrades'] = [0] * 10
+    sparklines['errors']   = [0] * 10
+    sparklines['backups']  = [0] * 10
+
+    return sparklines
+
+
+def _build_chart_data():
+    """Assemble chart data for Chart.js."""
+    labels = []
+    signups = []
+    quizzes = []
+
+    try:
+        from platform_activity import (
+            get_signups_series, get_quizzes_series,
+        )
+        signups_series = get_signups_series(days=30)
+        quizzes_series = get_quizzes_series(days=30)
+
+        # Build a union of all dates across both series
+        all_dates = sorted(set(
+            [s['date'] for s in signups_series] +
+            [s['date'] for s in quizzes_series]
+        ))
+
+        signups_map = {s['date']: s['value'] for s in signups_series}
+        quizzes_map = {s['date']: s['value'] for s in quizzes_series}
+
+        for d in all_dates:
+            # Label: short month-day
+            try:
+                from datetime import datetime
+                dt = datetime.strptime(d, '%Y-%m-%d')
+                labels.append(dt.strftime('%b %d'))
+            except Exception:
+                labels.append(d)
+            signups.append(signups_map.get(d, 0))
+            quizzes.append(quizzes_map.get(d, 0))
+    except Exception as e:
+        logger.debug(f"_build_chart_data series failed: {e}")
+
+    tiers = {'free': 0, 'premium': 0, 'pro': 0}
+    try:
+        from platform_activity import get_tier_distribution
+        tiers = get_tier_distribution()
+    except Exception:
+        pass
+
+    return {
+        'series': {'labels': labels, 'signups': signups, 'quizzes': quizzes},
+        'tiers': tiers,
+    }
+
+
+def _build_user_activity():
+    """Recent platform activity (signups, quizzes, upgrades, PDFs)."""
+    try:
+        from platform_activity import get_activity_feed
+        return get_activity_feed(limit=8, source='all')
+    except Exception as e:
+        logger.debug(f"_build_user_activity failed: {e}")
+        return []
 
 def _build_pulse(include_revenue=False):
     """
@@ -358,6 +675,8 @@ def _build_pulse(include_revenue=False):
         'disk_used_pct':    disk['used_pct'],
     })
 
+    # Upgrades approved this month (used by the KPI tile)
+    pulse['upgrades_approved_month'] = stats.get('upgrades_approved_month', 0)
     return pulse
 
 

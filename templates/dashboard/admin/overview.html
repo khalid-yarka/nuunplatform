@@ -1,36 +1,44 @@
 {# ============================================================
    templates/dashboard/admin/overview.html
-   Dual-mode admin home.
-     - Super admin → command centre (pulse + alerts + revenue)
-     - Regular admin → workbench (pending items, own activity)
+   Admin Control Centre.
 
-   NOTE: The standalone PDF intake panel is no longer linked from
-   here. PDF work flows through /admin/pdfs using the same admin
-   session.
+   Zones (top → bottom):
+     1. Greeting bar       — personal context + ⌘K search
+     2. Live ribbon        — system status chips
+     3. Priority queue     — only renders when there is work
+     4. KPI grid           — 6 tiles with sparklines + deltas
+     5. Trends             — 30-day chart + tier donut
+     6. Activity           — dual feed (admin + user)
+     7. Command centre     — collapsible domain sections
+                             (Content first, then Governance,
+                              Operations, Diagnostics,
+                              Communication, Revenue)
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
 {% block admin_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/overview.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/overview.css') }}?v=4" />
 {% endblock %}
 
-{% block admin_title_icon %}<i class="fas fa-th-large header-icon"></i>{% endblock %}
-{% block admin_title %}Overview{% endblock %}
+{% block admin_title_icon %}<i class="fas fa-satellite-dish header-icon"></i>{% endblock %}
+{% block admin_title %}{{ greeting_title }}{% endblock %}
 {% block admin_subtitle %}
     {% if is_super_admin_view %}
-        Command centre — every lever of the platform, one screen.
+        Every lever of the platform, one screen.
     {% else %}
-        Your workbench — what's waiting for you today.
+        Your workbench — what needs you today.
     {% endif %}
 {% endblock %}
 
 {% block admin_actions %}
     {% if admin_can('search.use') %}
-        <a href="{{ url_for('admin_system.search') }}" class="admin-btn secondary">
-            <i class="fas fa-search"></i> Search
-        </a>
+        <button type="button" class="cc-search-trigger" id="ccSearchTrigger">
+            <i class="fas fa-search"></i>
+            <span>Search</span>
+            <kbd>⌘K</kbd>
+        </button>
     {% endif %}
-    {% if admin_can('announcements.send') %}
+    {% if is_super_admin() and admin_can('announcements.send') %}
         <a href="{{ url_for('admin_system.announcement') }}" class="admin-btn secondary">
             <i class="fas fa-bullhorn"></i> Announce
         </a>
@@ -44,595 +52,446 @@
 
 {% block admin_content %}
 
-{# ════════════════════════════════════════════════════════════
-   SUPER ADMIN — COMMAND CENTRE
-   ════════════════════════════════════════════════════════════ #}
-{% if is_super_admin_view %}
-
-    {# ─────── 1. ALERTS ─────── #}
-    {% if alerts %}
-    <section class="admin-card" style="border-left: 4px solid #F59E0B;">
-        <div class="admin-card-head">
-            <h3><i class="fas fa-bell"></i> Needs your attention</h3>
-            <span class="hint">{{ alerts|length }} item{{ '' if alerts|length == 1 else 's' }}</span>
+{# ══════════════════════════════════════════════════════════════
+   1. GREETING BAR
+   ══════════════════════════════════════════════════════════════ #}
+<section class="cc-greeting">
+    <div class="cc-greeting__left">
+        <div class="cc-greeting__icon" aria-hidden="true">{{ greeting_emoji }}</div>
+        <div class="cc-greeting__text">
+            <div class="cc-greeting__welcome">
+                <span id="ccGreetingTime">{{ greeting_somali }}</span>,
+                <strong>{{ session.user_name or 'Admin' }}</strong>
+            </div>
+            <div class="cc-greeting__summary">
+                {% if priority.total > 0 %}
+                    You have
+                    {% for item in priority['items'] %}
+                        <a href="{{ item.link }}" class="cc-greeting__link">
+                            <strong>{{ item.count }}</strong> {{ item.label|lower }}</a>{% if not loop.last %},{% endif %}
+                    {% endfor %}
+                    — {{ priority.hint }}
+                {% else %}
+                    <span class="cc-greeting__allclear">
+                        ✨ Everything is quiet. Nothing requires your attention right now.
+                    </span>
+                {% endif %}
+            </div>
         </div>
-        <div class="admin-card-body" style="padding: 0;">
-            {% for alert in alerts %}
-            <a href="{{ alert.link }}" class="cc-alert-row">
-                <span class="cc-alert-icon">{{ alert.icon }}</span>
-                <div class="cc-alert-body">
-                    <div class="cc-alert-title">{{ alert.title }}</div>
-                    <div class="cc-alert-sub">{{ alert.subtitle }}</div>
+    </div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════
+   2. LIVE RIBBON
+   ══════════════════════════════════════════════════════════════ #}
+<section class="cc-ribbon" id="ccRibbon" aria-label="System status">
+    <div class="cc-ribbon__chip" data-ribbon="uptime">
+        <span class="cc-ribbon__dot ok"></span>
+        <span class="cc-ribbon__label">Uptime</span>
+        <span class="cc-ribbon__value">{{ system.uptime }}</span>
+    </div>
+    <div class="cc-ribbon__chip" data-ribbon="db">
+        <span class="cc-ribbon__dot {{ 'ok' if pulse.errors_open == 0 else 'warn' }}"></span>
+        <span class="cc-ribbon__label">Database</span>
+        <span class="cc-ribbon__value">{{ system.db_size }}</span>
+    </div>
+    <div class="cc-ribbon__chip" data-ribbon="cache">
+        <span class="cc-ribbon__dot ok"></span>
+        <span class="cc-ribbon__label">Cache</span>
+        <span class="cc-ribbon__value">{{ system.cache_size }}</span>
+    </div>
+    <div class="cc-ribbon__chip" data-ribbon="sessions">
+        <span class="cc-ribbon__dot ok"></span>
+        <span class="cc-ribbon__label">Active sessions</span>
+        <span class="cc-ribbon__value">{{ system.session_count }}</span>
+    </div>
+    <div class="cc-ribbon__chip" data-ribbon="disk">
+        <span class="cc-ribbon__dot {{ 'err' if pulse.disk_used_pct >= 90 else ('warn' if pulse.disk_used_pct >= 80 else 'ok') }}"></span>
+        <span class="cc-ribbon__label">Disk</span>
+        <span class="cc-ribbon__value">{{ pulse.disk_used_pct }}%</span>
+    </div>
+    <div class="cc-ribbon__chip" data-ribbon="errors">
+        <span class="cc-ribbon__dot {{ 'err' if pulse.errors_today > 0 else 'ok' }}"></span>
+        <span class="cc-ribbon__label">Errors today</span>
+        <span class="cc-ribbon__value">{{ pulse.errors_today }}</span>
+    </div>
+    <div class="cc-ribbon__spacer"></div>
+    <span class="cc-ribbon__refresh" id="ccRibbonRefresh" title="Live · refreshed automatically">
+        <span class="cc-ribbon__pulse"></span> live
+    </span>
+</section>
+
+{# ══════════════════════════════════════════════════════════════
+   3. PRIORITY QUEUE — only if there is work
+   ══════════════════════════════════════════════════════════════ #}
+{% if priority.total > 0 %}
+<section class="cc-priority" aria-label="Needs attention">
+    <header class="cc-priority__head">
+        <h2><i class="fas fa-bolt"></i> Needs attention</h2>
+        <span class="cc-priority__count">{{ priority.total }} item{{ '' if priority.total == 1 else 's' }}</span>
+    </header>
+    <div class="cc-priority__grid">
+        {% for item in priority['items'] %}
+            <a href="{{ item.link }}" class="cc-priority__card tone-{{ item.tone }}">
+                <div class="cc-priority__icon">{{ item.icon }}</div>
+                <div class="cc-priority__body">
+                    <div class="cc-priority__number">{{ item.count }}</div>
+                    <div class="cc-priority__title">{{ item.label }}</div>
+                    <div class="cc-priority__desc">{{ item.description }}</div>
                 </div>
-                <i class="fas fa-arrow-right cc-alert-arrow"></i>
+                <div class="cc-priority__cta">
+                    <span>{{ item.cta }}</span>
+                    <i class="fas fa-arrow-right"></i>
+                </div>
             </a>
-            {% endfor %}
-        </div>
-    </section>
-    {% endif %}
-
-    {# ─────── 2. PULSE ─────── #}
-    <section class="admin-stats">
-        <div class="admin-stat tone-blue">
-            <div class="stat-head">
-                <span class="stat-icon"><i class="fas fa-users"></i></span>
-                <span class="admin-chip green dot">{{ pulse.users_delta }}</span>
-            </div>
-            <span class="stat-value">{{ pulse.users_total }}</span>
-            <span class="stat-label">Users</span>
-            <span class="stat-sub">{{ pulse.users_new_today }} new today</span>
-        </div>
-
-        <div class="admin-stat tone-green">
-            <div class="stat-head">
-                <span class="stat-icon"><i class="fas fa-pencil-alt"></i></span>
-                <span class="admin-chip green dot">{{ pulse.quizzes_delta }}</span>
-            </div>
-            <span class="stat-value">{{ pulse.quizzes_today }}</span>
-            <span class="stat-label">Quizzes today</span>
-            <span class="stat-sub">{{ pulse.quizzes_week }} this week</span>
-        </div>
-
-        {# ─────── REVENUE — SUPER ADMIN ONLY ─────── #}
-        <div class="admin-stat tone-purple">
-            <div class="stat-head">
-                <span class="stat-icon"><i class="fas fa-rocket"></i></span>
-                <span class="admin-chip amber dot">{{ pulse.upgrades_pending }} pending</span>
-            </div>
-            <span class="stat-value">${{ '%.2f'|format(pulse.revenue_today or 0) }}</span>
-            <span class="stat-label">Revenue today</span>
-            <span class="stat-sub">${{ '%.2f'|format(pulse.revenue_month or 0) }} this month</span>
-        </div>
-
-        <div class="admin-stat tone-red">
-            <div class="stat-head">
-                <span class="stat-icon"><i class="fas fa-exclamation-triangle"></i></span>
-                {% if pulse.errors_today > 0 %}
-                    <span class="admin-chip red dot">{{ pulse.errors_today }} today</span>
-                {% else %}
-                    <span class="admin-chip green dot">clean</span>
-                {% endif %}
-            </div>
-            <span class="stat-value">{{ pulse.errors_open }}</span>
-            <span class="stat-label">Open errors</span>
-            <span class="stat-sub">{{ pulse.errors_today }} logged today</span>
-        </div>
-
-        <div class="admin-stat tone-amber">
-            <div class="stat-head">
-                <span class="stat-icon"><i class="fas fa-database"></i></span>
-                {% if pulse.backup_age_days is not none %}
-                    {% if pulse.backup_age_days <= 1 %}
-                        <span class="admin-chip green dot">fresh</span>
-                    {% elif pulse.backup_age_days <= 3 %}
-                        <span class="admin-chip amber dot">{{ pulse.backup_age_days }}d</span>
-                    {% else %}
-                        <span class="admin-chip red dot">{{ pulse.backup_age_days }}d</span>
-                    {% endif %}
-                {% else %}
-                    <span class="admin-chip red dot">none</span>
-                {% endif %}
-            </div>
-            <span class="stat-value">
-                {% if pulse.backup_age_days is not none %}{{ pulse.backup_age_days }}d{% else %}—{% endif %}
-            </span>
-            <span class="stat-label">Last backup</span>
-            <span class="stat-sub">{{ pulse.backup_count }} snapshots</span>
-        </div>
-
-        <div class="admin-stat tone-slate">
-            <div class="stat-head">
-                <span class="stat-icon"><i class="fas fa-hdd"></i></span>
-                {% if pulse.disk_free_mb < 500 %}
-                    <span class="admin-chip red dot">low</span>
-                {% else %}
-                    <span class="admin-chip green dot">ok</span>
-                {% endif %}
-            </div>
-            <span class="stat-value">{{ pulse.disk_free_gb }} GB</span>
-            <span class="stat-label">Disk free</span>
-            <span class="stat-sub">{{ pulse.disk_used_pct }}% used</span>
-        </div>
-    </section>
-
-    {# ─────── 3. COMMAND CENTRE ─────── #}
-    <section class="admin-card">
-        <div class="admin-card-head">
-            <h3><i class="fas fa-satellite-dish"></i> Command centre</h3>
-            <span class="hint">Every admin surface, one click away</span>
-        </div>
-        <div class="admin-card-body">
-
-            {# ─── GOVERNANCE ─── #}
-            {% if admin_can('admins.manage') or admin_can('audit.view') or admin_can('entitlements.read') %}
-            <div class="cc-section">
-                <div class="cc-section-label">
-                    <i class="fas fa-gavel" style="color: var(--primary);"></i> Governance
-                </div>
-                <div class="cc-grid">
-                    {% if admin_can('admins.manage') %}
-                    <a href="{{ url_for('admin_access.roster') }}" class="cc-tool">
-                        <span class="cc-icon tone-indigo"><i class="fas fa-user-shield"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Admins</div>
-                            <div class="cc-desc">Roster &amp; per-admin permissions</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    <a href="{{ url_for('admin_access.global_permissions') }}" class="cc-tool">
-                        <span class="cc-icon tone-indigo"><i class="fas fa-sliders-h"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Global Defaults</div>
-                            <div class="cc-desc">Baseline capabilities for every admin</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('audit.view') %}
-                    <a href="{{ url_for('admin_access.audit') }}" class="cc-tool">
-                        <span class="cc-icon tone-indigo"><i class="fas fa-history"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Audit Log</div>
-                            <div class="cc-desc">Every admin write action</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('entitlements.read') %}
-                    <a href="{{ url_for('admin_policy.entitlements') }}" class="cc-tool">
-                        <span class="cc-icon tone-indigo"><i class="fas fa-layer-group"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Entitlements</div>
-                            <div class="cc-desc">Tier feature policies</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
-
-            {# ─── OPERATIONS ─── #}
-            {% if is_super_admin() or admin_can('backups.view') or admin_can('errors.view') or admin_can('sessions.manage') %}
-            <div class="cc-section">
-                <div class="cc-section-label">
-                    <i class="fas fa-cogs" style="color: #3B82F6;"></i> Operations
-                </div>
-                <div class="cc-grid">
-                    {% if is_super_admin() %}
-                    <a href="{{ url_for('admin_system.maintenance') }}" class="cc-tool">
-                        <span class="cc-icon tone-amber"><i class="fas fa-tools"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Maintenance</div>
-                            <div class="cc-desc">Take the platform offline</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('backups.view') %}
-                    <a href="{{ url_for('admin_backup.dashboard') }}" class="cc-tool">
-                        <span class="cc-icon tone-green"><i class="fas fa-database"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Backups</div>
-                            <div class="cc-desc">Snapshots &amp; restore</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('errors.view') %}
-                    <a href="{{ url_for('admin_errors.index') }}" class="cc-tool">
-                        <span class="cc-icon tone-red"><i class="fas fa-bug"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Error Log</div>
-                            <div class="cc-desc">Application errors</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('sessions.manage') %}
-                    <a href="{{ url_for('admin_ops.sessions') }}" class="cc-tool">
-                        <span class="cc-icon tone-blue"><i class="fas fa-users-cog"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Sessions</div>
-                            <div class="cc-desc">Active logins &amp; force logout</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
-
-            {# ─── DIAGNOSTICS ─── #}
-            {% if admin_can('logs.view') or admin_can('system.info') or admin_can('system.config') or admin_can('cache.view') or admin_can('tasks.view') %}
-            <div class="cc-section">
-                <div class="cc-section-label">
-                    <i class="fas fa-stethoscope" style="color: #8B5CF6;"></i> Diagnostics
-                </div>
-                <div class="cc-grid">
-                    {% if admin_can('logs.view') %}
-                    <a href="{{ url_for('admin_ops.logs') }}" class="cc-tool">
-                        <span class="cc-icon tone-purple"><i class="fas fa-file-alt"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Logs</div>
-                            <div class="cc-desc">App, worker, error streams</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('cache.view') %}
-                    <a href="{{ url_for('admin_ops.cache') }}" class="cc-tool">
-                        <span class="cc-icon tone-purple"><i class="fas fa-bolt"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Cache</div>
-                            <div class="cc-desc">In-memory LRU stats</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('system.config') %}
-                    <a href="{{ url_for('admin_ops.config') }}" class="cc-tool">
-                        <span class="cc-icon tone-purple"><i class="fas fa-cog"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Config</div>
-                            <div class="cc-desc">Masked config values</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('system.info') %}
-                    <a href="{{ url_for('admin_ops.system_info') }}" class="cc-tool">
-                        <span class="cc-icon tone-purple"><i class="fas fa-server"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">System Info</div>
-                            <div class="cc-desc">Python, disk, DB, memory</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('tasks.view') %}
-                    <a href="{{ url_for('admin_ops.tasks') }}" class="cc-tool">
-                        <span class="cc-icon tone-purple"><i class="fas fa-clock"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Scheduled Tasks</div>
-                            <div class="cc-desc">Daily runner history</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
-
-            {# ─── COMMUNICATION ─── #}
-            {% if admin_can('announcements.send') or admin_can('platform.broadcast') or admin_can('search.use') %}
-            <div class="cc-section">
-                <div class="cc-section-label">
-                    <i class="fas fa-bullhorn" style="color: #F59E0B;"></i> Communication
-                </div>
-                <div class="cc-grid">
-                    {% if admin_can('announcements.send') %}
-                    <a href="{{ url_for('admin_system.announcement') }}" class="cc-tool">
-                        <span class="cc-icon tone-amber"><i class="fas fa-bullhorn"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Announce to Users</div>
-                            <div class="cc-desc">Broadcast to every user</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('platform.broadcast') %}
-                    <a href="{{ url_for('admin_system.broadcast_compose') }}" class="cc-tool">
-                        <span class="cc-icon tone-amber"><i class="fas fa-satellite-dish"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Broadcast to Admins</div>
-                            <div class="cc-desc">Notify the admin team</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('search.use') %}
-                    <a href="{{ url_for('admin_system.search') }}" class="cc-tool">
-                        <span class="cc-icon tone-amber"><i class="fas fa-search"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Global Search</div>
-                            <div class="cc-desc">Users, questions, PDFs, groups</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
-
-            {# ─── CONTENT ─── #}
-            {% if admin_can('users.view') or admin_can('questions.view') or admin_can('pdfs.view') or admin_can('groups.view') or admin_can('reports.view') %}
-            <div class="cc-section">
-                <div class="cc-section-label">
-                    <i class="fas fa-cubes" style="color: var(--primary);"></i> Content
-                </div>
-                <div class="cc-grid">
-                    {% if admin_can('users.view') %}
-                    <a href="{{ url_for('admin_users.list_users') }}" class="cc-tool">
-                        <span class="cc-icon tone-slate"><i class="fas fa-users"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Users</div>
-                            <div class="cc-desc">Directory &amp; profiles</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('questions.view') %}
-                    <a href="{{ url_for('admin_content.questions') }}" class="cc-tool">
-                        <span class="cc-icon tone-slate"><i class="fas fa-question-circle"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Questions</div>
-                            <div class="cc-desc">Question bank</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('pdfs.view') %}
-                    <a href="{{ url_for('admin_content.pdfs') }}" class="cc-tool">
-                        <span class="cc-icon tone-slate"><i class="fas fa-file-pdf"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">PDF Library</div>
-                            <div class="cc-desc">Published resources</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('groups.view') %}
-                    <a href="{{ url_for('admin_community.groups') }}" class="cc-tool">
-                        <span class="cc-icon tone-slate"><i class="fas fa-users-cog"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Groups</div>
-                            <div class="cc-desc">WhatsApp &amp; Telegram</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                    {% if admin_can('reports.view') %}
-                    <a href="{{ url_for('admin_community.reports') }}" class="cc-tool">
-                        <span class="cc-icon tone-slate"><i class="fas fa-flag"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Reports</div>
-                            <div class="cc-desc">Flagged questions</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
-
-            {# ─── REVENUE — SUPER ADMIN ONLY ─── #}
-            {% if is_super_admin() %}
-            <div class="cc-section" style="margin-bottom: 0;">
-                <div class="cc-section-label">
-                    <i class="fas fa-dollar-sign" style="color: #10B981;"></i>
-                    Revenue
-                    <span class="cc-badge-super">Super admin only</span>
-                </div>
-                <div class="cc-grid">
-                    <a href="{{ url_for('upgrade.admin_list') }}" class="cc-tool">
-                        <span class="cc-icon tone-green"><i class="fas fa-rocket"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Upgrade Requests</div>
-                            <div class="cc-desc">Approve / reject tier upgrades</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    <a href="{{ url_for('upgrade.admin_revenue') }}" class="cc-tool">
-                        <span class="cc-icon tone-green"><i class="fas fa-chart-line"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Revenue</div>
-                            <div class="cc-desc">Income dashboard</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                    <a href="{{ url_for('upgrade.admin_discounts') }}" class="cc-tool">
-                        <span class="cc-icon tone-green"><i class="fas fa-tags"></i></span>
-                        <div class="cc-body">
-                            <div class="cc-title">Discount Codes</div>
-                            <div class="cc-desc">Promo codes &amp; usage</div>
-                        </div>
-                        <i class="fas fa-chevron-right cc-arrow"></i>
-                    </a>
-                </div>
-            </div>
-            {% endif %}
-
-        </div>
-    </section>
-
-    {# ─────── 4. SYSTEM STATUS ─────── #}
-    <section class="admin-card">
-        <div class="admin-card-head">
-            <h3><i class="fas fa-heartbeat"></i> System status</h3>
-            <span class="hint"><span class="admin-chip green dot">live</span></span>
-        </div>
-        <div class="admin-card-body">
-            <div class="cc-system-strip">
-                <div class="cc-system-tile">
-                    <div class="cc-sys-label">Uptime</div>
-                    <div class="cc-sys-value">{{ system.uptime }}</div>
-                </div>
-                <div class="cc-system-tile">
-                    <div class="cc-sys-label">Cache</div>
-                    <div class="cc-sys-value">{{ system.cache_size }}</div>
-                </div>
-                <div class="cc-system-tile">
-                    <div class="cc-sys-label">Sessions</div>
-                    <div class="cc-sys-value">{{ system.session_count }}</div>
-                </div>
-                <div class="cc-system-tile">
-                    <div class="cc-sys-label">DB size</div>
-                    <div class="cc-sys-value">{{ system.db_size }}</div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    {# ─────── 5. RECENT ACTIVITY ─────── #}
-    {% if admin_can('activity.view') %}
-    <section class="admin-card">
-        <div class="admin-card-head">
-            <h3><i class="fas fa-stream"></i> Recent admin activity</h3>
-            <a href="{{ url_for('admin_activity.index') }}"
-               style="font-size: 12px; color: var(--primary); text-decoration: none; font-weight: 600;">
-                View all <i class="fas fa-arrow-right"></i>
-            </a>
-        </div>
-        <div class="admin-card-body" style="padding: 0;">
-            {% if recent_actions %}
-                {% for a in recent_actions %}
-                <div class="cc-activity-row">
-                    <span class="cc-act-icon">{{ a.icon }}</span>
-                    <div class="cc-act-body">
-                        <div class="cc-act-text">
-                            <strong>{{ a.actor_name }}</strong> {{ a.description|safe }}
-                        </div>
-                        <div class="cc-act-time">{{ a.time|somali_dt }}</div>
-                    </div>
-                </div>
-                {% endfor %}
-            {% else %}
-                <div style="text-align: center; padding: 32px 20px;
-                            color: var(--text-muted); font-size: 13px;">
-                    No recent admin activity.
-                </div>
-            {% endif %}
-        </div>
-    </section>
-    {% endif %}
-
-{# ════════════════════════════════════════════════════════════
-   REGULAR ADMIN — WORKBENCH (no revenue anywhere)
-   ════════════════════════════════════════════════════════════ #}
-{% else %}
-
-    {# Pending work #}
-    <section class="admin-card">
-        <div class="admin-card-head">
-            <h3><i class="fas fa-tasks"></i> Waiting for you</h3>
-            <span class="hint">Actions that need your attention</span>
-        </div>
-        <div class="admin-card-body" style="padding: 6px 0;">
-            {% if pending['total'] > 0 %}
-                {% for item in pending['items'] %}
-                <a href="{{ item.link }}"
-                   style="display:flex;align-items:center;gap:14px;padding:14px 20px;
-                          text-decoration:none;color:inherit;
-                          border-bottom:1px solid var(--border-light);">
-                    <span style="font-size:26px;flex-shrink:0;">{{ item.icon }}</span>
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-size:15px;font-weight:600;color:var(--text);">
-                            {{ item.label }}
-                        </div>
-                        <div style="font-size:13px;color:var(--text-secondary);margin-top:2px;">
-                            {{ item.description }}
-                        </div>
-                    </div>
-                    <span class="admin-chip primary">{{ item.count }}</span>
-                    <i class="fas fa-arrow-right" style="color:var(--text-muted);"></i>
-                </a>
-                {% endfor %}
-            {% else %}
-                <div style="text-align:center;padding:40px 20px;">
-                    <div style="font-size:42px;opacity:0.35;margin-bottom:8px;">✅</div>
-                    <div style="font-size:15px;font-weight:600;color:var(--text);">
-                        All caught up
-                    </div>
-                    <div style="font-size:13px;color:var(--text-secondary);margin-top:4px;">
-                        Nothing in your queue right now.
-                    </div>
-                </div>
-            {% endif %}
-        </div>
-    </section>
-
-    {# Quick actions — points to /admin/pdfs, not the standalone panel #}
-    <section class="admin-card">
-        <div class="admin-card-head">
-            <h3><i class="fas fa-bolt"></i> Quick actions</h3>
-        </div>
-        <div class="admin-card-body">
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-
-                {% if admin_can('reports.view') %}
-                <a href="{{ url_for('admin_community.reports') }}" class="admin-btn secondary lg"
-                   style="justify-content:flex-start;padding:16px 18px;">
-                    <i class="fas fa-flag" style="font-size:18px;"></i> View reports
-                </a>
-                {% endif %}
-
-                {% if admin_can('questions.create') %}
-                <a href="{{ url_for('admin_content.question_new') }}" class="admin-btn secondary lg"
-                   style="justify-content:flex-start;padding:16px 18px;">
-                    <i class="fas fa-plus" style="font-size:18px;"></i> New question
-                </a>
-                {% endif %}
-
-                {% if admin_can('pdfs.view') %}
-                <a href="{{ url_for('admin_content.pdfs') }}" class="admin-btn secondary lg"
-                   style="justify-content:flex-start;padding:16px 18px;">
-                    <i class="fas fa-file-pdf" style="font-size:18px;"></i> PDF library
-                </a>
-                {% endif %}
-
-                {% if admin_can('groups.create') %}
-                <a href="{{ url_for('admin_community.groups') }}" class="admin-btn secondary lg"
-                   style="justify-content:flex-start;padding:16px 18px;">
-                    <i class="fas fa-users" style="font-size:18px;"></i> Groups
-                </a>
-                {% endif %}
-
-            </div>
-        </div>
-    </section>
-
-    {# Recent own actions #}
-    {% if recent_own_actions %}
-    <section class="admin-card">
-        <div class="admin-card-head">
-            <h3><i class="fas fa-clock"></i> Your recent actions</h3>
-            <span class="hint">Last 10</span>
-        </div>
-        <div class="admin-card-body" style="padding: 0;">
-            {% for a in recent_own_actions %}
-            <div class="cc-activity-row">
-                <span class="cc-act-icon">{{ a.icon }}</span>
-                <div class="cc-act-body">
-                    <div class="cc-act-text">{{ a.description|safe }}</div>
-                    <div class="cc-act-time">{{ a.time|somali_dt }}</div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </section>
-    {% endif %}
-
+        {% endfor %}
+    </div>
+</section>
 {% endif %}
 
+{# ══════════════════════════════════════════════════════════════
+   4. KPI GRID — sparklines + deltas
+   ══════════════════════════════════════════════════════════════ #}
+<section class="cc-kpis" aria-label="Key metrics">
+    <div class="cc-kpi tone-blue">
+        <div class="cc-kpi__head">
+            <span class="cc-kpi__icon"><i class="fas fa-users"></i></span>
+            <span class="cc-kpi__delta {{ 'up' if deltas.users >= 0 else 'down' }}">
+                {{ '▲' if deltas.users >= 0 else '▼' }} {{ deltas.users|abs }}%
+            </span>
+        </div>
+        <div class="cc-kpi__value">{{ pulse.users_total }}</div>
+        <div class="cc-kpi__label">Total users</div>
+        <div class="cc-kpi__spark" data-spark="{{ sparklines.signups|tojson|forceescape }}"></div>
+        <div class="cc-kpi__sub">{{ pulse.users_new_today }} new today</div>
+    </div>
+
+    <div class="cc-kpi tone-green">
+        <div class="cc-kpi__head">
+            <span class="cc-kpi__icon"><i class="fas fa-pencil-alt"></i></span>
+            <span class="cc-kpi__delta {{ 'up' if deltas.quizzes >= 0 else 'down' }}">
+                {{ '▲' if deltas.quizzes >= 0 else '▼' }} {{ deltas.quizzes|abs }}%
+            </span>
+        </div>
+        <div class="cc-kpi__value">{{ pulse.quizzes_today }}</div>
+        <div class="cc-kpi__label">Quizzes today</div>
+        <div class="cc-kpi__spark" data-spark="{{ sparklines.quizzes|tojson|forceescape }}"></div>
+        <div class="cc-kpi__sub">{{ pulse.quizzes_week }} this week</div>
+    </div>
+
+    {% if is_super_admin_view %}
+    <div class="cc-kpi tone-purple">
+        <div class="cc-kpi__head">
+            <span class="cc-kpi__icon"><i class="fas fa-dollar-sign"></i></span>
+            <span class="cc-kpi__delta up">▲ {{ deltas.revenue|abs }}%</span>
+        </div>
+        <div class="cc-kpi__value">${{ '%.2f'|format(pulse.revenue_today or 0) }}</div>
+        <div class="cc-kpi__label">Revenue today</div>
+        <div class="cc-kpi__spark" data-spark="{{ sparklines.revenue|tojson|forceescape }}"></div>
+        <div class="cc-kpi__sub">${{ '%.2f'|format(pulse.revenue_month or 0) }} this month</div>
+    </div>
+    {% endif %}
+
+    <div class="cc-kpi tone-amber">
+        <div class="cc-kpi__head">
+            <span class="cc-kpi__icon"><i class="fas fa-rocket"></i></span>
+            <span class="cc-kpi__delta {{ 'warn' if pulse.upgrades_pending > 0 else 'up' }}">
+                {{ pulse.upgrades_pending }} pending
+            </span>
+        </div>
+        <div class="cc-kpi__value">{{ pulse.upgrades_approved_month }}</div>
+        <div class="cc-kpi__label">Upgrades this month</div>
+        <div class="cc-kpi__spark" data-spark="{{ sparklines.upgrades|tojson|forceescape }}"></div>
+        <div class="cc-kpi__sub">{{ pulse.upgrades_pending }} awaiting review</div>
+    </div>
+
+    <div class="cc-kpi tone-red">
+        <div class="cc-kpi__head">
+            <span class="cc-kpi__icon"><i class="fas fa-exclamation-triangle"></i></span>
+            <span class="cc-kpi__delta {{ 'down' if pulse.errors_today > 0 else 'up' }}">
+                {{ pulse.errors_today }} today
+            </span>
+        </div>
+        <div class="cc-kpi__value">{{ pulse.errors_open }}</div>
+        <div class="cc-kpi__label">Open errors</div>
+        <div class="cc-kpi__spark" data-spark="{{ sparklines.errors|tojson|forceescape }}"></div>
+        <div class="cc-kpi__sub">Total logged</div>
+    </div>
+
+    <div class="cc-kpi tone-slate">
+        <div class="cc-kpi__head">
+            <span class="cc-kpi__icon"><i class="fas fa-database"></i></span>
+            <span class="cc-kpi__delta {{ 'up' if pulse.backup_age_days is not none and pulse.backup_age_days <= 1 else 'warn' }}">
+                {% if pulse.backup_age_days is not none %}{{ pulse.backup_age_days }}d ago{% else %}none{% endif %}
+            </span>
+        </div>
+        <div class="cc-kpi__value">{{ pulse.backup_count }}</div>
+        <div class="cc-kpi__label">Backups</div>
+        <div class="cc-kpi__spark" data-spark="{{ sparklines.backups|tojson|forceescape }}"></div>
+        <div class="cc-kpi__sub">{{ pulse.disk_free_gb }} GB free</div>
+    </div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════
+   5. TRENDS — chart + donut
+   ══════════════════════════════════════════════════════════════ #}
+<section class="cc-trends">
+    <div class="cc-chart-card cc-chart-card--wide">
+        <header class="cc-chart-card__head">
+            <h3><i class="fas fa-chart-line"></i> Activity — last 30 days</h3>
+            <div class="cc-chart-card__legend">
+                <span class="cc-legend-dot cc-legend-dot--blue"></span> Signups
+                <span class="cc-legend-dot cc-legend-dot--green"></span> Quizzes
+            </div>
+        </header>
+        <div class="cc-chart-card__body">
+            <canvas id="ccTrendChart" height="240"></canvas>
+        </div>
+    </div>
+
+    <div class="cc-chart-card">
+        <header class="cc-chart-card__head">
+            <h3><i class="fas fa-chart-pie"></i> Tier distribution</h3>
+        </header>
+        <div class="cc-chart-card__body cc-chart-card__body--donut">
+            <canvas id="ccTierChart" height="220"></canvas>
+            <div class="cc-donut-legend" id="ccTierLegend"></div>
+        </div>
+    </div>
+</section>
+
+<script type="application/json" id="ccChartData">{{ chart_data|tojson|safe }}</script>
+
+{# ══════════════════════════════════════════════════════════════
+   6. ACTIVITY — dual feed
+   ══════════════════════════════════════════════════════════════ #}
+<section class="cc-feed-wrap">
+
+    {% if is_super_admin_view and recent_actions %}
+    <div class="cc-feed">
+        <header class="cc-feed__head">
+            <h3><i class="fas fa-user-shield"></i> Admin activity</h3>
+            {% if admin_can('audit.view') %}
+                <a href="{{ url_for('admin_access.audit') }}">View all <i class="fas fa-arrow-right"></i></a>
+            {% endif %}
+        </header>
+        <div class="cc-feed__list">
+            {% for a in recent_actions %}
+                <div class="cc-feed__item">
+                    <div class="cc-feed__avatar cc-feed__avatar--admin">{{ a.icon }}</div>
+                    <div class="cc-feed__body">
+                        <div class="cc-feed__text">
+                            <strong>{{ a.actor_name }}</strong> {{ a.description|safe }}
+                        </div>
+                        <div class="cc-feed__time">{{ a.time|somali_dt }}</div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="cc-feed">
+        <header class="cc-feed__head">
+            <h3><i class="fas fa-stream"></i> Platform activity</h3>
+        </header>
+        <div class="cc-feed__list">
+            {% if user_activity %}
+                {% for a in user_activity %}
+                    <div class="cc-feed__item">
+                        <div class="cc-feed__avatar cc-feed__avatar--{{ a.color }}">{{ a.icon }}</div>
+                        <div class="cc-feed__body">
+                            <div class="cc-feed__text">{{ a.title|safe }}</div>
+                            {% if a.subtitle %}<div class="cc-feed__sub">{{ a.subtitle }}</div>{% endif %}
+                            <div class="cc-feed__time">{{ a.timestamp|somali_dt }}</div>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="cc-feed__empty">
+                    <span class="cc-feed__empty-icon">🌱</span>
+                    <p>Platform activity will appear here as users interact.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+</section>
+
+{# ══════════════════════════════════════════════════════════════
+   7. COMMAND CENTRE — collapsible sections
+      Content is first — it is the most-used domain.
+   ══════════════════════════════════════════════════════════════ #}
+<section class="cc-cc">
+    <header class="cc-cc__head">
+        <h2><i class="fas fa-satellite-dish"></i> Command centre</h2>
+        <span class="cc-cc__hint">Every admin surface, one click away</span>
+    </header>
+
+    {% macro cc_section(key, label, icon, tone, tools) %}
+        {% if tools %}
+        <details class="cc-collapse" data-cc-key="{{ key }}" {% if key in open_sections %}open{% endif %}>
+            <summary class="cc-collapse__head">
+                <span class="cc-collapse__icon tone-{{ tone }}"><i class="{{ icon }}"></i></span>
+                <span class="cc-collapse__title">{{ label }}</span>
+                <span class="cc-collapse__count">{{ tools|length }}</span>
+                <i class="fas fa-chevron-down cc-collapse__chevron"></i>
+            </summary>
+            <div class="cc-collapse__body">
+                <div class="cc-grid">
+                    {% for t in tools %}
+                        <a href="{{ t.link }}" class="cc-tool">
+                            <span class="cc-icon tone-{{ t.tone }}"><i class="{{ t.icon }}"></i></span>
+                            <div class="cc-body">
+                                <div class="cc-title">{{ t.title }}</div>
+                                <div class="cc-desc">{{ t.desc }}</div>
+                            </div>
+                            <i class="fas fa-chevron-right cc-arrow"></i>
+                        </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </details>
+        {% endif %}
+    {% endmacro %}
+
+    {# ─── CONTENT — first ─── #}
+    {% set content = [] %}
+    {% if admin_can('users.view') %}
+        {% set _ = content.append({'title':'Users','desc':'Directory & profiles','icon':'fas fa-users','tone':'slate','link':url_for('admin_users.list_users')}) %}
+    {% endif %}
+    {% if admin_can('questions.view') %}
+        {% set _ = content.append({'title':'Questions','desc':'Question bank','icon':'fas fa-question-circle','tone':'slate','link':url_for('admin_content.questions')}) %}
+    {% endif %}
+    {% if admin_can('pdfs.view') %}
+        {% set _ = content.append({'title':'PDF library','desc':'Published resources','icon':'fas fa-file-pdf','tone':'slate','link':url_for('admin_content.pdfs')}) %}
+    {% endif %}
+    {% if admin_can('groups.view') %}
+        {% set _ = content.append({'title':'Groups','desc':'WhatsApp & Telegram','icon':'fas fa-users-cog','tone':'slate','link':url_for('admin_community.groups')}) %}
+    {% endif %}
+    {% if admin_can('reports.view') %}
+        {% set _ = content.append({'title':'Reports','desc':'Flagged questions','icon':'fas fa-flag','tone':'slate','link':url_for('admin_community.reports')}) %}
+    {% endif %}
+
+    {# ─── GOVERNANCE ─── #}
+    {% set governance = [] %}
+    {% if admin_can('admins.manage') %}
+        {% set _ = governance.append({'title':'Admins','desc':'Roster & permissions','icon':'fas fa-user-shield','tone':'indigo','link':url_for('admin_access.roster')}) %}
+        {% set _ = governance.append({'title':'Global defaults','desc':'Baseline capabilities','icon':'fas fa-sliders-h','tone':'indigo','link':url_for('admin_access.global_permissions')}) %}
+    {% endif %}
+    {% if admin_can('audit.view') %}
+        {% set _ = governance.append({'title':'Audit log','desc':'Every admin write','icon':'fas fa-history','tone':'indigo','link':url_for('admin_access.audit')}) %}
+    {% endif %}
+    {% if admin_can('entitlements.read') %}
+        {% set _ = governance.append({'title':'Entitlements','desc':'Tier feature policies','icon':'fas fa-layer-group','tone':'indigo','link':url_for('admin_policy.entitlements')}) %}
+    {% endif %}
+
+    {# ─── OPERATIONS ─── #}
+    {% set operations = [] %}
+    {% if is_super_admin() %}
+        {% set _ = operations.append({'title':'Maintenance','desc':'Take the platform offline','icon':'fas fa-tools','tone':'amber','link':url_for('admin_system.maintenance')}) %}
+    {% endif %}
+    {% if admin_can('backups.view') %}
+        {% set _ = operations.append({'title':'Backups','desc':'Snapshots & restore','icon':'fas fa-database','tone':'green','link':url_for('admin_backup.dashboard')}) %}
+    {% endif %}
+    {% if admin_can('errors.view') %}
+        {% set _ = operations.append({'title':'Error log','desc':'Application errors','icon':'fas fa-bug','tone':'red','link':url_for('admin_errors.index')}) %}
+    {% endif %}
+    {% if admin_can('sessions.manage') %}
+        {% set _ = operations.append({'title':'Sessions','desc':'Force logout users','icon':'fas fa-users-cog','tone':'blue','link':url_for('admin_ops.sessions')}) %}
+    {% endif %}
+
+    {# ─── DIAGNOSTICS ─── #}
+    {% set diagnostics = [] %}
+    {% if admin_can('logs.view') %}
+        {% set _ = diagnostics.append({'title':'Logs','desc':'App · worker · errors','icon':'fas fa-file-alt','tone':'purple','link':url_for('admin_ops.logs')}) %}
+    {% endif %}
+    {% if admin_can('cache.view') %}
+        {% set _ = diagnostics.append({'title':'Cache','desc':'In-memory LRU stats','icon':'fas fa-bolt','tone':'purple','link':url_for('admin_ops.cache')}) %}
+    {% endif %}
+    {% if admin_can('system.config') %}
+        {% set _ = diagnostics.append({'title':'Config','desc':'Masked configuration','icon':'fas fa-cog','tone':'purple','link':url_for('admin_ops.config')}) %}
+    {% endif %}
+    {% if admin_can('system.info') %}
+        {% set _ = diagnostics.append({'title':'System info','desc':'Python, disk, memory','icon':'fas fa-server','tone':'purple','link':url_for('admin_ops.system_info')}) %}
+    {% endif %}
+    {% if admin_can('tasks.view') %}
+        {% set _ = diagnostics.append({'title':'Scheduled tasks','desc':'Daily runner history','icon':'fas fa-clock','tone':'purple','link':url_for('admin_ops.tasks')}) %}
+    {% endif %}
+
+    {# ─── COMMUNICATION ─── #}
+    {% set communication = [] %}
+    {% if admin_can('announcements.send') %}
+        {% set _ = communication.append({'title':'Announce to users','desc':'Broadcast in-app','icon':'fas fa-bullhorn','tone':'amber','link':url_for('admin_system.announcement')}) %}
+    {% endif %}
+    {% if admin_can('platform.broadcast') %}
+        {% set _ = communication.append({'title':'Broadcast to admins','desc':'Notify the admin team','icon':'fas fa-satellite-dish','tone':'amber','link':url_for('admin_system.broadcast_compose')}) %}
+    {% endif %}
+    {% if admin_can('search.use') %}
+        {% set _ = communication.append({'title':'Global search','desc':'Users · questions · PDFs','icon':'fas fa-search','tone':'amber','link':url_for('admin_system.search')}) %}
+    {% endif %}
+
+    {# ─── RENDER — content is first ─── #}
+    {{ cc_section('content', 'Content', 'fas fa-cubes', 'slate', content) }}
+    {{ cc_section('governance', 'Governance', 'fas fa-gavel', 'indigo', governance) }}
+    {{ cc_section('operations', 'Operations', 'fas fa-cogs', 'green', operations) }}
+    {{ cc_section('diagnostics', 'Diagnostics', 'fas fa-stethoscope', 'purple', diagnostics) }}
+    {{ cc_section('communication', 'Communication', 'fas fa-bullhorn', 'amber', communication) }}
+
+    {% if is_super_admin() %}
+        {% set revenue = [
+            {'title':'Upgrade requests','desc':'Approve or reject','icon':'fas fa-rocket','tone':'green','link':url_for('upgrade.admin_list')},
+            {'title':'Revenue','desc':'Income dashboard','icon':'fas fa-chart-line','tone':'green','link':url_for('upgrade.admin_revenue')},
+            {'title':'Discount codes','desc':'Promo codes & usage','icon':'fas fa-tags','tone':'green','link':url_for('upgrade.admin_discounts')},
+        ] %}
+        <details class="cc-collapse cc-collapse--super" data-cc-key="revenue" {% if 'revenue' in open_sections %}open{% endif %}>
+            <summary class="cc-collapse__head">
+                <span class="cc-collapse__icon tone-green"><i class="fas fa-dollar-sign"></i></span>
+                <span class="cc-collapse__title">Revenue</span>
+                <span class="cc-badge-super">Super admin</span>
+                <span class="cc-collapse__count">{{ revenue|length }}</span>
+                <i class="fas fa-chevron-down cc-collapse__chevron"></i>
+            </summary>
+            <div class="cc-collapse__body">
+                <div class="cc-grid">
+                    {% for t in revenue %}
+                        <a href="{{ t.link }}" class="cc-tool">
+                            <span class="cc-icon tone-{{ t.tone }}"><i class="{{ t.icon }}"></i></span>
+                            <div class="cc-body">
+                                <div class="cc-title">{{ t.title }}</div>
+                                <div class="cc-desc">{{ t.desc }}</div>
+                            </div>
+                            <i class="fas fa-chevron-right cc-arrow"></i>
+                        </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </details>
+    {% endif %}
+</section>
+
+{# ══════════════════════════════════════════════════════════════
+   ⌘K SEARCH MODAL
+   ══════════════════════════════════════════════════════════════ #}
+<div class="cc-search-modal" id="ccSearchModal" role="dialog" aria-modal="true" aria-label="Global search">
+    <div class="cc-search-modal__backdrop" data-close="1"></div>
+    <div class="cc-search-modal__dialog">
+        <form method="GET" action="{{ url_for('admin_system.search') }}" class="cc-search-modal__form">
+            <i class="fas fa-search cc-search-modal__icon"></i>
+            <input type="text" name="q" id="ccSearchInput"
+                   placeholder="Search users, questions, PDFs, groups…"
+                   autocomplete="off" spellcheck="false" autofocus>
+            <kbd>ESC</kbd>
+        </form>
+        <div class="cc-search-modal__hints">
+            <span><strong>Tip:</strong> search by phone, public ID, question text, PDF code, or group name.</span>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/admin/overview.js') }}"></script>
 {% endblock %}
