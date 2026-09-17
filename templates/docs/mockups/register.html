@@ -1,0 +1,161 @@
+{% extends "docs/mockups/_base.html" %}
+{# Register wizard mockup — review step with all anchors visible. #}
+{% block mockup_content %}
+
+<style>
+.mockup-reg { display: flex; justify-content: center; padding: 20px 12px; }
+.mockup-reg__card {
+    width: 100%; max-width: 420px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 22px 20px;
+    box-shadow: 0 8px 28px rgba(255,49,56,0.08);
+}
+.mockup-reg__logo {
+    width: 40px; height: 40px; border-radius: 12px;
+    background: var(--primary); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 800; margin: 0 auto 10px;
+    box-shadow: 0 6px 16px rgba(255,49,56,0.24);
+}
+.mockup-reg__title { text-align: center; font-size: 19px; font-weight: 800; letter-spacing: -0.3px; }
+.mockup-reg__title span { color: var(--primary); }
+.mockup-reg__subtitle { text-align: center; font-size: 11.5px; color: var(--text-secondary); margin-top: 2px !important; }
+.mockup-reg__divider {
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--border), transparent);
+    margin: 14px 0;
+}
+.mockup-reg__wizard { display: flex; align-items: center; gap: 3px; margin-bottom: 14px; }
+.mockup-reg__wstep { display: flex; flex-direction: column; align-items: center; gap: 3px; flex-shrink: 0; }
+.mockup-reg__wdot {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: #10B981; color: #fff; font-size: 10px; font-weight: 700;
+}
+.mockup-reg__wlabel {
+    font-size: 8.5px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap;
+}
+.mockup-reg__wline {
+    flex: 1; height: 2px; background: #10B981; border-radius: 2px;
+    margin-bottom: 12px; min-width: 6px;
+}
+.mockup-reg__head { margin-bottom: 12px; }
+.mockup-reg__h { font-size: 14px; font-weight: 800; margin-bottom: 2px; }
+.mockup-reg__p { font-size: 11px; color: var(--text-secondary); line-height: 1.4; }
+.mockup-reg__section {
+    background: var(--surface-alt); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+}
+.mockup-reg__section-title {
+    font-size: 11px; font-weight: 800; color: var(--text);
+    margin-bottom: 6px; letter-spacing: 0.1px;
+}
+.mockup-reg__row {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 4px 0; font-size: 11.5px; border-bottom: 1px dashed var(--border-light);
+}
+.mockup-reg__row:last-child { border-bottom: none; }
+.mockup-reg__k { color: var(--text-secondary); flex-shrink: 0; }
+.mockup-reg__v { color: var(--text); font-weight: 600; text-align: right; min-width: 0; word-break: break-word; }
+.mockup-reg__v--masked { color: var(--text-muted); letter-spacing: 2px; }
+.mockup-reg__notice {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 8px 12px; margin: 8px 0 12px;
+    background: var(--primary-light); border-left: 3px solid var(--primary);
+    border-radius: 8px; font-size: 10.5px; color: var(--text-secondary); line-height: 1.5;
+}
+.mockup-reg__submit { width: 100%; padding: 11px; font-size: 13px; }
+</style>
+
+<div class="mockup-reg">
+    <div class="mockup-reg__card">
+        <div class="mockup-reg__logo">🅝</div>
+        <h2 class="mockup-reg__title">Create <span>Account</span></h2>
+        <p class="mockup-reg__subtitle">Join our learning platform</p>
+        <div class="mockup-reg__divider"></div>
+
+        <div class="mockup-reg__wizard">
+            {% for label in ['Account', 'Name', 'Location', 'School', 'Confirm'] %}
+            <div class="mockup-reg__wstep is-done">
+                <span class="mockup-reg__wdot">✓</span>
+                <span class="mockup-reg__wlabel">{{ label }}</span>
+            </div>
+            {% if not loop.last %}<div class="mockup-reg__wline is-done"></div>{% endif %}
+            {% endfor %}
+        </div>
+
+        <div class="mockup-reg__head">
+            <h3 class="mockup-reg__h">Review your details</h3>
+            <p class="mockup-reg__p">Make sure everything is correct before creating your account.</p>
+        </div>
+
+        <div class="mockup-reg__section">
+            <div class="mockup-reg__section-title">🔐 Account</div>
+            <div class="mockup-reg__row" data-docs-anchor="phone_field">
+                <span class="mockup-reg__k">Phone</span>
+                <span class="mockup-reg__v">+252 61 234 5678</span>
+            </div>
+            <div class="mockup-reg__row" data-docs-anchor="password_field">
+                <span class="mockup-reg__k">Password</span>
+                <span class="mockup-reg__v mockup-reg__v--masked">••••••••</span>
+            </div>
+        </div>
+
+        <div class="mockup-reg__section">
+            <div class="mockup-reg__section-title">👤 Name</div>
+            <div class="mockup-reg__row" data-docs-anchor="name_field">
+                <span class="mockup-reg__k">First name</span>
+                <span class="mockup-reg__v">Amina</span>
+            </div>
+            <div class="mockup-reg__row">
+                <span class="mockup-reg__k">Middle name</span>
+                <span class="mockup-reg__v">Hassan</span>
+            </div>
+            <div class="mockup-reg__row">
+                <span class="mockup-reg__k">Last name</span>
+                <span class="mockup-reg__v">Omar</span>
+            </div>
+        </div>
+
+        <div class="mockup-reg__section">
+            <div class="mockup-reg__section-title">📍 Location</div>
+            <div class="mockup-reg__row" data-docs-anchor="location_field">
+                <span class="mockup-reg__k">Location</span>
+                <span class="mockup-reg__v">🇸🇴 Somalia</span>
+            </div>
+            <div class="mockup-reg__row">
+                <span class="mockup-reg__k">Curriculum</span>
+                <span class="mockup-reg__v">General</span>
+            </div>
+            <div class="mockup-reg__row" data-docs-anchor="city_field">
+                <span class="mockup-reg__k">City</span>
+                <span class="mockup-reg__v">Mogadishu</span>
+            </div>
+        </div>
+
+        <div class="mockup-reg__section">
+            <div class="mockup-reg__section-title">🏫 Education</div>
+            <div class="mockup-reg__row" data-docs-anchor="school_field">
+                <span class="mockup-reg__k">School</span>
+                <span class="mockup-reg__v">Hodan Secondary School</span>
+            </div>
+            <div class="mockup-reg__row" data-docs-anchor="grade_field">
+                <span class="mockup-reg__k">Grade</span>
+                <span class="mockup-reg__v">Form 4</span>
+            </div>
+        </div>
+
+        <div class="mockup-reg__notice">
+            ℹ️ Fadlan Xogtada inay saxantahay iska hubi.
+        </div>
+
+        <div class="mockup-btn mockup-btn--primary mockup-reg__submit"
+             data-docs-anchor="submit_btn">
+            🚀 Create Account
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+{# ==== end of register.html ==== #}

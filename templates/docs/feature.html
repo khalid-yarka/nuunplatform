@@ -1,0 +1,85 @@
+{% extends "docs/layout.html" %}
+
+{% block title %}{{ _(feature.title) }} · {{ _('docs.title') }}{% endblock %}
+
+{% block docs_body %}
+
+<nav class="docs-breadcrumb" aria-label="Breadcrumb">
+    {% for c in breadcrumb %}
+        {% if c.url and not loop.last %}
+            <a href="{{ c.url }}">{{ _(c.label) }}</a>
+            <span class="docs-breadcrumb__sep">/</span>
+        {% else %}
+            <span class="docs-breadcrumb__current">{{ _(c.label) }}</span>
+        {% endif %}
+    {% endfor %}
+</nav>
+
+<header class="docs-feature-header">
+    <span class="docs-feature-header__icon" aria-hidden="true">{{ feature.icon }}</span>
+    <div class="docs-feature-header__text">
+        <h1 class="docs-feature-header__title">{{ _(feature.title) }}</h1>
+        <p class="docs-feature-header__tagline">{{ _(feature.tagline) }}</p>
+    </div>
+    <div class="docs-feature-header__badges">
+        <span class="docs-tier-badge docs-tier-badge--{{ feature.tier }}">
+            {{ _('tier.' ~ feature.tier) }}
+        </span>
+    </div>
+</header>
+
+<div class="docs-feature-layout">
+
+    <section class="docs-canvas" aria-label="{{ _('docs.canvas.label') }}">
+        <div class="docs-canvas__toolbar">
+            <span class="docs-canvas__label">
+                <span class="docs-canvas__label-dot" aria-hidden="true"></span>
+                {{ _('docs.canvas.label') }}
+            </span>
+            <button type="button"
+                    class="docs-canvas__zoom-btn"
+                    aria-pressed="false">
+                <i class="fas fa-search-plus" aria-hidden="true"></i>
+                <span data-zoom-label>{{ _('docs.cta.zoom_in') }}</span>
+            </button>
+        </div>
+
+        {% include 'docs/partials/_mockup.html' %}
+    </section>
+
+    {% include 'docs/partials/_step.html' %}
+
+</div>
+
+<div class="docs-feature-progress">
+    {% include 'docs/partials/_progress_bar.html' %}
+</div>
+
+{% if related %}
+<section class="docs-related">
+    <h3 class="docs-related__title">{{ _('docs.related.title') }}</h3>
+    <div class="docs-related__list">
+        {% for r in related %}
+            <a href="{{ url_for('docs.feature_start', feature_key=r.key) }}"
+               class="docs-chip">
+                <span aria-hidden="true">{{ r.icon }}</span>
+                <span>{{ _(r.title) }}</span>
+            </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .docs-feature-progress {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 14px 18px;
+        box-shadow: var(--shadow-sm);
+    }
+</style>
+{% endblock %}

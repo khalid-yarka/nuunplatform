@@ -1,0 +1,160 @@
+{% extends "docs/mockups/_chrome.html" %}
+
+{# ============================================================ #}
+{# Quiz setup page mockup.                                       #}
+{#                                                               #}
+{# Anchors exposed:                                               #}
+{#   setup_card, subject_select, count_options, start_btn         #}
+{# ============================================================ #}
+
+{% block chrome_title %}Start a Quiz{% endblock %}
+
+{% block chrome_content %}
+
+<div class="mk-qs" data-docs-anchor="setup_card">
+
+    <div class="mk-qs__head">
+        <div class="mk-qs__title">📝 Start a Quiz</div>
+        <div class="mk-qs__sub">Select a subject and number of questions.</div>
+    </div>
+
+    {# ---------------- Subject ---------------- #}
+    <div class="mk-qs__group">
+        <label class="mockup-label">📚 Subject <span class="req">*</span></label>
+        <div class="mk-qs__select" data-docs-anchor="subject_select">
+            <span class="mk-qs__select-icon">📐</span>
+            <span class="mk-qs__select-value">Mathematics</span>
+            <span class="mk-qs__select-arrow">▾</span>
+        </div>
+    </div>
+
+    {# ---------------- Question count ---------------- #}
+    <div class="mk-qs__group">
+        <label class="mockup-label">📊 Number of Questions</label>
+        <div class="mk-qs__counts" data-docs-anchor="count_options">
+            <div class="mk-qs__count mk-qs__count--selected">
+                <span>10</span>
+            </div>
+            <div class="mk-qs__count">
+                <span>20</span>
+                <span class="mk-qs__lock">🔒</span>
+            </div>
+            <div class="mk-qs__count">
+                <span>30</span>
+                <span class="mk-qs__lock">🔒</span>
+            </div>
+            <div class="mk-qs__count mk-qs__count--custom">
+                <span>Custom</span>
+                <span class="mk-qs__lock">🔒</span>
+            </div>
+        </div>
+    </div>
+
+    {# ---------------- Start ---------------- #}
+    <div class="mockup-btn mockup-btn--primary mk-qs__start" data-docs-anchor="start_btn">
+        🚀 Start Quiz
+    </div>
+
+    <div class="mk-qs__quota">📅 7 quiz attempts remaining today</div>
+
+</div>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .mk-qs {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 20px;
+        max-width: 380px;
+        margin: 0 auto;
+    }
+
+    .mk-qs__head {
+        text-align: center;
+        margin-bottom: 18px;
+    }
+    .mk-qs__title {
+        font-size: 15px;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.2px;
+    }
+    .mk-qs__sub {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-top: 3px;
+    }
+
+    .mk-qs__group { margin-bottom: 14px; }
+
+    .mk-qs__select {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        background: var(--surface-alt);
+        border: 1.5px solid var(--border);
+        border-radius: var(--radius-sm);
+    }
+    .mk-qs__select-icon { font-size: 15px; }
+    .mk-qs__select-value {
+        flex: 1;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+    }
+    .mk-qs__select-arrow {
+        color: var(--text-muted);
+        font-size: 11px;
+    }
+
+    .mk-qs__counts {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+    }
+    .mk-qs__count {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        padding: 10px 6px;
+        background: var(--surface);
+        border: 2px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text);
+        min-height: 52px;
+        position: relative;
+    }
+    .mk-qs__count--selected {
+        border-color: var(--primary);
+        background: var(--primary-light);
+        box-shadow: 0 0 0 3px rgba(255,49,56,0.1);
+    }
+    .mk-qs__count--custom { font-size: 11px; }
+    .mk-qs__lock {
+        font-size: 10px;
+        opacity: 0.6;
+    }
+
+    .mk-qs__start {
+        width: 100%;
+        padding: 12px;
+        font-size: 13px;
+        margin-top: 4px;
+    }
+
+    .mk-qs__quota {
+        text-align: center;
+        font-size: 10.5px;
+        color: var(--text-muted);
+        margin-top: 10px;
+    }
+</style>
+{% endblock %}

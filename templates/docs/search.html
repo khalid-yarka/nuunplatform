@@ -1,0 +1,95 @@
+{% extends "docs/layout.html" %}
+
+{% block title %}{{ _('docs.search.title') }} · {{ _('docs.title') }}{% endblock %}
+
+{% block docs_body %}
+
+<h1 class="docs-page-title">{{ _('docs.search.title') }}</h1>
+<p class="docs-page-sub">{{ _('docs.search.subtitle') }}</p>
+
+<form method="get" action="{{ url_for('docs.search') }}" class="docs-search">
+    <input type="search"
+           name="q"
+           value="{{ query }}"
+           class="docs-search__input"
+           placeholder="{{ _('docs.search.placeholder') }}"
+           autocomplete="off"
+           autofocus />
+    <button type="submit" class="docs-search__btn">
+        <i class="fas fa-search" aria-hidden="true"></i>
+        {{ _('docs.search.submit') }}
+    </button>
+</form>
+
+{% if not_found %}
+    <div class="docs-search__empty">
+        <span class="docs-search__empty-icon" aria-hidden="true">🔍</span>
+        <h3>{{ _('docs.search.not_found') }}</h3>
+        <p><code>{{ query }}</code></p>
+        {% if suggestions %}
+            <p style="margin-top:16px; font-size:13px; color:var(--text-muted);">
+                {{ _('docs.search.try_these') }}
+            </p>
+            <div class="docs-suggestions">
+                {% for s in suggestions %}
+                    <a href="{{ url_for('docs.feature_start', feature_key=s) }}"
+                       class="docs-chip">
+                        {{ s }}
+                    </a>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+{% elif query and not results %}
+    <div class="docs-search__empty">
+        <span class="docs-search__empty-icon" aria-hidden="true">🤔</span>
+        <h3>{{ _('docs.search.no_results') }}</h3>
+        <p>{{ _('docs.search.try_other') }}</p>
+    </div>
+
+{% elif results %}
+    <div class="docs-grid">
+        {% for r in results %}
+        <a href="{{ url_for('docs.feature_start', feature_key=r.feature_key) }}"
+           class="docs-feature-card">
+            <div class="docs-feature-card__top">
+                <span class="docs-feature-card__icon">{{ r.icon }}</span>
+            </div>
+            <h3 class="docs-feature-card__title">{{ _(r.title) }}</h3>
+            <p class="docs-feature-card__tagline">{{ _(r.tagline) }}</p>
+            <div class="docs-feature-card__footer">
+                <span class="docs-feature-card__cta">
+                    {{ _('docs.cta.start') }}
+                    <i class="fas fa-arrow-right" aria-hidden="true"></i>
+                </span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+
+{% else %}
+    <div class="docs-search__empty">
+        <span class="docs-search__empty-icon" aria-hidden="true">🔍</span>
+        <h3>{{ _('docs.search.prompt') }}</h3>
+    </div>
+{% endif %}
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .docs-page-title {
+        font-size: 26px;
+        font-weight: 800;
+        color: var(--text);
+        margin: 0 0 4px 0;
+        letter-spacing: -0.4px;
+    }
+    .docs-page-sub {
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin: 0 0 24px 0;
+    }
+</style>
+{% endblock %}

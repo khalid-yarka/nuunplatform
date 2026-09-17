@@ -1,0 +1,241 @@
+{% extends "docs/mockups/_chrome.html" %}
+
+{# ============================================================ #}
+{# Achievements page mockup.                                     #}
+{#                                                               #}
+{# Anchors exposed:                                               #}
+{#   achievements_header, achievements_grid, achievement_card,    #}
+{#   showcase_section                                             #}
+{# ============================================================ #}
+
+{% block chrome_title %}Achievements{% endblock %}
+
+{% block chrome_content %}
+
+{# ---------------- Header ---------------- #}
+<div class="mk-achv__head" data-docs-anchor="achievements_header">
+    <span class="mk-achv__head-icon">🏅</span>
+    <div>
+        <div class="mk-achv__title">Achievements</div>
+        <div class="mk-achv__sub">3 of 6 unlocked · keep going!</div>
+    </div>
+    <div class="mk-achv__progress">
+        <div class="mk-achv__progress-bar">
+            <div class="mk-achv__progress-fill" style="width: 50%;"></div>
+        </div>
+        <div class="mk-achv__progress-label">50% complete</div>
+    </div>
+</div>
+
+{# ---------------- Achievements grid ---------------- #}
+<div class="mk-achv__grid" data-docs-anchor="achievements_grid">
+
+    <div class="mk-achv__card mk-achv__card--earned" data-docs-anchor="achievement_card">
+        <span class="mk-achv__card-icon">🥇</span>
+        <div class="mk-achv__card-name">First Quiz</div>
+        <div class="mk-achv__card-desc">Complete your first quiz</div>
+        <span class="mk-achv__card-badge">✓ Earned</span>
+    </div>
+
+    <div class="mk-achv__card mk-achv__card--earned">
+        <span class="mk-achv__card-icon">🎯</span>
+        <div class="mk-achv__card-name">Quiz Master</div>
+        <div class="mk-achv__card-desc">Score 100% on a quiz</div>
+        <span class="mk-achv__card-badge">✓ Earned</span>
+    </div>
+
+    <div class="mk-achv__card mk-achv__card--earned">
+        <span class="mk-achv__card-icon">⚡</span>
+        <div class="mk-achv__card-name">Live Participant</div>
+        <div class="mk-achv__card-desc">Join a live quiz</div>
+        <span class="mk-achv__card-badge">✓ Earned</span>
+    </div>
+
+    <div class="mk-achv__card mk-achv__card--locked">
+        <span class="mk-achv__card-icon">📚</span>
+        <div class="mk-achv__card-name">Studious</div>
+        <div class="mk-achv__card-desc">Read 10 PDFs</div>
+        <span class="mk-achv__card-badge mk-achv__card-badge--locked">🔒 Locked</span>
+    </div>
+
+    <div class="mk-achv__card mk-achv__card--locked">
+        <span class="mk-achv__card-icon">🔥</span>
+        <div class="mk-achv__card-name">Streak Keeper</div>
+        <div class="mk-achv__card-desc">Practice 7 days in a row</div>
+        <span class="mk-achv__card-badge mk-achv__card-badge--locked">🔒 Locked</span>
+    </div>
+
+    <div class="mk-achv__card mk-achv__card--locked">
+        <span class="mk-achv__card-icon">👑</span>
+        <div class="mk-achv__card-name">Premium Learner</div>
+        <div class="mk-achv__card-desc">Reach Premium tier</div>
+        <span class="mk-achv__card-badge mk-achv__card-badge--locked">🔒 Locked</span>
+    </div>
+
+</div>
+
+{# ---------------- Showcase ---------------- #}
+<div class="mk-achv__showcase" data-docs-anchor="showcase_section">
+    <div class="mk-achv__showcase-title">✨ Your Showcase</div>
+    <div class="mk-achv__showcase-sub">Your best badges, displayed on your profile</div>
+    <div class="mk-achv__showcase-badges">
+        <span class="mk-achv__showcase-badge">🎯</span>
+        <span class="mk-achv__showcase-badge">🥇</span>
+        <span class="mk-achv__showcase-badge">⚡</span>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    /* -------- Header -------- */
+    .mk-achv__head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+        flex-wrap: wrap;
+    }
+    .mk-achv__head-icon {
+        font-size: 32px;
+        flex-shrink: 0;
+    }
+    .mk-achv__title {
+        font-size: 17px;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.3px;
+    }
+    .mk-achv__sub {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-top: 2px;
+    }
+    .mk-achv__progress {
+        flex: 1;
+        min-width: 140px;
+        margin-left: auto;
+    }
+    .mk-achv__progress-bar {
+        height: 6px;
+        background: var(--background);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .mk-achv__progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--primary), #B91C1C);
+        border-radius: 10px;
+    }
+    .mk-achv__progress-label {
+        font-size: 9.5px;
+        color: var(--text-muted);
+        margin-top: 3px;
+        text-align: right;
+        font-weight: 600;
+    }
+
+    /* -------- Grid -------- */
+    .mk-achv__grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-bottom: 14px;
+    }
+    .mk-achv__card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 10px;
+        text-align: center;
+        position: relative;
+    }
+    .mk-achv__card--earned {
+        border-color: #10B981;
+        background: linear-gradient(180deg, #ECFDF5 0%, var(--surface) 60%);
+    }
+    .mk-achv__card--locked {
+        opacity: 0.62;
+    }
+    [data-theme="dark"] .mk-achv__card--earned {
+        background: linear-gradient(180deg, #1A3A2E 0%, var(--surface) 60%);
+    }
+    .mk-achv__card-icon {
+        font-size: 26px;
+        display: block;
+        margin-bottom: 6px;
+        line-height: 1;
+    }
+    .mk-achv__card-name {
+        font-size: 11px;
+        font-weight: 800;
+        color: var(--text);
+        margin-bottom: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .mk-achv__card-desc {
+        font-size: 9.5px;
+        color: var(--text-secondary);
+        line-height: 1.4;
+        margin-bottom: 6px;
+        min-height: 26px;
+    }
+    .mk-achv__card-badge {
+        display: inline-block;
+        font-size: 8.5px;
+        font-weight: 800;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        padding: 2px 10px;
+        border-radius: 10px;
+        background: #10B981;
+        color: #ffffff;
+    }
+    .mk-achv__card-badge--locked {
+        background: var(--background);
+        color: var(--text-muted);
+    }
+
+    /* -------- Showcase -------- */
+    .mk-achv__showcase {
+        background: linear-gradient(135deg, var(--primary-light), rgba(255,49,56,0.04));
+        border: 1px solid rgba(255,49,56,0.22);
+        border-radius: 10px;
+        padding: 14px 16px;
+    }
+    .mk-achv__showcase-title {
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--text);
+    }
+    .mk-achv__showcase-sub {
+        font-size: 10px;
+        color: var(--text-secondary);
+        margin-top: 2px;
+        margin-bottom: 8px;
+    }
+    .mk-achv__showcase-badges {
+        display: flex;
+        gap: 8px;
+    }
+    .mk-achv__showcase-badge {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--surface);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        box-shadow: 0 3px 10px rgba(255,49,56,0.18);
+        border: 2px solid var(--primary);
+    }
+
+    @media (max-width: 640px) {
+        .mk-achv__grid { grid-template-columns: repeat(2, 1fr); }
+    }
+</style>
+{% endblock %}

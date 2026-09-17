@@ -1,0 +1,164 @@
+{% extends "docs/mockups/_chrome.html" %}
+
+{# ============================================================ #}
+{# Quiz results page mockup.                                     #}
+{#                                                               #}
+{# Anchors exposed:                                               #}
+{#   score_ring, result_message                                   #}
+{# ============================================================ #}
+
+{% block chrome_title %}Results{% endblock %}
+
+{% block chrome_content %}
+
+<div class="mk-qr">
+
+    <div class="mk-qr__celebration">🎉</div>
+
+    <div class="mk-qr__score">8/10</div>
+    <div class="mk-qr__pct">80% correct</div>
+
+    <div class="mk-qr__ring-wrap" data-docs-anchor="score_ring">
+        <div class="mk-qr__ring" style="--pct: 80;">
+            <div class="mk-qr__ring-inner">
+                <div class="mk-qr__ring-num">80%</div>
+                <div class="mk-qr__ring-lbl">Score</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mk-qr__msg" data-docs-anchor="result_message">
+        Excellent work! Keep it up! 🌟
+    </div>
+
+    <div class="mk-qr__reacts">
+        <div class="mk-qr__reacts-title">Your Reactions</div>
+        <div class="mk-qr__reacts-list">
+            <span>❤️ Liked questions: <strong>#4, #7</strong></span>
+            <span>📑 Saved questions: <strong>#2</strong></span>
+        </div>
+    </div>
+
+    <div class="mk-qr__actions">
+        <span class="mockup-btn mockup-btn--primary">🔄 Try Again</span>
+        <span class="mockup-btn mockup-btn--ghost">🏆 Leaderboard</span>
+        <span class="mockup-btn mockup-btn--ghost">🏠 Dashboard</span>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .mk-qr {
+        max-width: 340px;
+        margin: 0 auto;
+        text-align: center;
+        padding: 8px 0;
+    }
+
+    .mk-qr__celebration {
+        font-size: 52px;
+        line-height: 1;
+        margin-bottom: 6px;
+    }
+    .mk-qr__score {
+        font-size: 24px;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.4px;
+    }
+    .mk-qr__pct {
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin-top: 2px;
+    }
+
+    .mk-qr__ring-wrap {
+        display: flex;
+        justify-content: center;
+        margin: 16px 0;
+    }
+    .mk-qr__ring {
+        width: 110px;
+        height: 110px;
+        border-radius: 50%;
+        background: conic-gradient(
+            var(--primary) 0deg calc(var(--pct) * 3.6deg),
+            var(--border) calc(var(--pct) * 3.6deg) 360deg
+        );
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        box-shadow: 0 6px 20px rgba(255,49,56,0.15);
+    }
+    .mk-qr__ring-inner {
+        width: 82px;
+        height: 82px;
+        border-radius: 50%;
+        background: var(--surface);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    .mk-qr__ring-num {
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--primary);
+        line-height: 1;
+        letter-spacing: -0.6px;
+    }
+    .mk-qr__ring-lbl {
+        font-size: 9px;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        margin-top: 3px;
+    }
+
+    .mk-qr__msg {
+        font-size: 12.5px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+        margin-bottom: 16px;
+        padding: 0 10px;
+    }
+
+    .mk-qr__reacts {
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin-bottom: 14px;
+        text-align: left;
+    }
+    .mk-qr__reacts-title {
+        font-size: 11px;
+        font-weight: 800;
+        color: var(--text);
+        margin-bottom: 6px;
+    }
+    .mk-qr__reacts-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 11px;
+        color: var(--text-secondary);
+    }
+    .mk-qr__reacts-list strong { color: var(--primary); }
+
+    .mk-qr__actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    .mk-qr__actions .mockup-btn {
+        font-size: 10.5px;
+        padding: 7px 12px;
+    }
+</style>
+{% endblock %}

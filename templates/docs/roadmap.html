@@ -1,0 +1,60 @@
+{% extends "docs/layout.html" %}
+
+{% block title %}{{ _('docs.roadmap.title') }} · {{ _('docs.title') }}{% endblock %}
+
+{% block docs_body %}
+
+<h1 class="docs-page-title">{{ _('docs.roadmap.title') }}</h1>
+<p class="docs-page-sub">{{ _('docs.roadmap.subtitle') }}</p>
+
+<div class="docs-timeline">
+    {% for phase in phases %}
+    <div class="docs-phase" id="{{ phase.key }}">
+        <div class="docs-phase__node" aria-hidden="true">{{ phase.number }}</div>
+
+        <div class="docs-phase__head">
+            <h2 class="docs-phase__title">{{ _(phase.title) }}</h2>
+            <p class="docs-phase__summary">{{ _(phase.summary) }}</p>
+        </div>
+
+        <div class="docs-phase__chips">
+            {% for f in phase.features %}
+            <a href="{{ url_for('docs.feature_start', feature_key=f.key) }}"
+               class="docs-chip">
+                <span aria-hidden="true">{{ f.icon }}</span>
+                <span>{{ _(f.title) }}</span>
+                <span class="docs-chip__count">{{ f.step_count }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .docs-page-title {
+        font-size: 26px;
+        font-weight: 800;
+        color: var(--text);
+        margin: 0 0 4px 0;
+        letter-spacing: -0.4px;
+    }
+    .docs-page-sub {
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin: 0 0 24px 0;
+    }
+    .docs-chip__count {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--text-muted);
+        background: var(--background);
+        padding: 1px 6px;
+        border-radius: 8px;
+        margin-left: 2px;
+    }
+</style>
+{% endblock %}

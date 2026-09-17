@@ -1,0 +1,164 @@
+{% extends "docs/mockups/_chrome.html" %}
+
+{# ============================================================ #}
+{# Profile page mockup.                                          #}
+{#                                                               #}
+{# Anchors exposed:                                               #}
+{#   profile_card, avatar, public_id, details, total_points       #}
+{# ============================================================ #}
+
+{% block chrome_title %}Profile{% endblock %}
+
+{% block chrome_content %}
+
+<div class="mk-prof" data-docs-anchor="profile_card">
+
+    {# -------- Avatar + name -------- #}
+    <div class="mk-prof__top">
+        <div class="mk-prof__avatar" data-docs-anchor="avatar">AH</div>
+        <div class="mk-prof__name">Amina Hassan Omar</div>
+        <span class="mk-prof__id" data-docs-anchor="public_id">
+            #A4K7
+            <span class="mk-prof__id-copy">📋</span>
+        </span>
+    </div>
+
+    {# -------- Details list -------- #}
+    <div class="mk-prof__details" data-docs-anchor="details">
+        <div class="mk-prof__row">
+            <span class="mk-prof__k">📞 Phone</span>
+            <span class="mk-prof__v">+252 61 234 5678</span>
+        </div>
+        <div class="mk-prof__row">
+            <span class="mk-prof__k">📍 Location</span>
+            <span class="mk-prof__v">🇸🇴 Somalia</span>
+        </div>
+        <div class="mk-prof__row">
+            <span class="mk-prof__k">🌆 City</span>
+            <span class="mk-prof__v">Mogadishu</span>
+        </div>
+        <div class="mk-prof__row">
+            <span class="mk-prof__k">🏫 School</span>
+            <span class="mk-prof__v">Hodan Secondary School</span>
+        </div>
+        <div class="mk-prof__row">
+            <span class="mk-prof__k">📚 Grade</span>
+            <span class="mk-prof__v">Form 4</span>
+        </div>
+        <div class="mk-prof__row mk-prof__row--pts" data-docs-anchor="total_points">
+            <span class="mk-prof__k">🏆 Total Points</span>
+            <span class="mk-prof__v mk-prof__v--pts">128</span>
+        </div>
+    </div>
+
+    {# -------- Actions -------- #}
+    <div class="mk-prof__actions">
+        <span class="mockup-btn mockup-btn--ghost">← Back</span>
+        <span class="mockup-btn mockup-btn--primary">✎ Edit Profile</span>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .mk-prof {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 20px;
+        max-width: 380px;
+        margin: 0 auto;
+    }
+
+    .mk-prof__top {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 16px;
+    }
+    .mk-prof__avatar {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: var(--primary);
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        font-weight: 800;
+        border: 3px solid var(--primary-light);
+        box-shadow: 0 4px 14px rgba(255,49,56,0.24);
+    }
+    .mk-prof__name {
+        font-size: 15px;
+        font-weight: 800;
+        color: var(--text);
+        margin-top: 8px;
+        letter-spacing: -0.2px;
+    }
+    .mk-prof__id {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        color: var(--primary);
+        background: var(--primary-light);
+        padding: 3px 12px;
+        border-radius: 10px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        margin-top: 4px;
+    }
+    .mk-prof__id-copy {
+        font-size: 10px;
+        opacity: 0.7;
+    }
+
+    .mk-prof__details {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        margin-bottom: 16px;
+    }
+    .mk-prof__row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 14px;
+        border-bottom: 1px solid var(--border-light);
+        font-size: 11.5px;
+    }
+    .mk-prof__row:last-child { border-bottom: none; }
+    .mk-prof__row:nth-child(odd) { background: var(--background); }
+    .mk-prof__row--pts { background: var(--surface) !important; }
+    .mk-prof__k {
+        color: var(--text-secondary);
+        font-weight: 500;
+        flex-shrink: 0;
+    }
+    .mk-prof__v {
+        color: var(--text);
+        font-weight: 600;
+        text-align: right;
+        min-width: 0;
+        word-break: break-word;
+    }
+    .mk-prof__v--pts {
+        color: var(--primary);
+        font-size: 15px;
+        font-weight: 800;
+    }
+
+    .mk-prof__actions {
+        display: flex;
+        gap: 8px;
+    }
+    .mk-prof__actions .mockup-btn {
+        flex: 1;
+    }
+</style>
+{% endblock %}

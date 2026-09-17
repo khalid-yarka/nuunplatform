@@ -1,0 +1,284 @@
+{% extends "docs/mockups/_chrome.html" %}
+
+{# ============================================================ #}
+{# PDFs library mockup.                                          #}
+{#                                                               #}
+{# Anchors exposed:                                               #}
+{#   pdf_grid, pdf_card, search_input, subject_filter,            #}
+{#   read_btn, download_btn, preview_btn, telegram_btn            #}
+{# ============================================================ #}
+
+{% block chrome_title %}Study Materials{% endblock %}
+
+{% block chrome_content %}
+
+{# ---------------- Header ---------------- #}
+<div class="mk-pdf__head">
+    <div>
+        <div class="mk-pdf__title">📄 Study Materials</div>
+        <div class="mk-pdf__sub">Browse and view educational PDFs</div>
+    </div>
+    <span class="mk-pdf__quota">📥 18 downloads remaining today</span>
+</div>
+
+{# ---------------- Filters ---------------- #}
+<div class="mk-pdf__filters">
+    <div class="mk-pdf__search" data-docs-anchor="search_input">
+        <span class="mk-pdf__search-icon">🔍</span>
+        <span class="mk-pdf__search-ph">Search PDFs…</span>
+    </div>
+    <div class="mk-pdf__sel" data-docs-anchor="subject_filter">
+        All Subjects ▾
+    </div>
+    <div class="mk-pdf__sel">All Classes ▾</div>
+</div>
+
+{# ---------------- Grid ---------------- #}
+<div class="mk-pdf__grid" data-docs-anchor="pdf_grid">
+
+    <div class="mk-pdf__card" data-docs-anchor="pdf_card">
+        <div class="mk-pdf__card-top">
+            <span class="mk-pdf__card-icon">📕</span>
+            <div class="mk-pdf__card-info">
+                <div class="mk-pdf__card-title">Algebra — Chapter 3</div>
+                <div class="mk-pdf__card-tags">
+                    <span class="mk-pdf__tag">Mathematics</span>
+                    <span class="mk-pdf__tag">F4</span>
+                </div>
+            </div>
+        </div>
+        <div class="mk-pdf__card-desc">Linear equations, factoring, and quadratic basics.</div>
+        <div class="mk-pdf__card-views">👁 142 views</div>
+        <div class="mk-pdf__card-actions">
+            <span class="mk-pdf__abtn mk-pdf__abtn--ghost" data-docs-anchor="read_btn">🔒 Read</span>
+            <span class="mk-pdf__abtn mk-pdf__abtn--ghost" data-docs-anchor="download_btn">🔒 Download</span>
+            <span class="mk-pdf__abtn mk-pdf__abtn--info" data-docs-anchor="preview_btn">Preview</span>
+            <span class="mk-pdf__abtn mk-pdf__abtn--tg" data-docs-anchor="telegram_btn">✈️ Get</span>
+        </div>
+    </div>
+
+    <div class="mk-pdf__card mk-pdf__card--premium">
+        <span class="mk-pdf__prem-badge">💎 Premium</span>
+        <div class="mk-pdf__card-top">
+            <span class="mk-pdf__card-icon">📗</span>
+            <div class="mk-pdf__card-info">
+                <div class="mk-pdf__card-title">Forces and Motion</div>
+                <div class="mk-pdf__card-tags">
+                    <span class="mk-pdf__tag">Physics</span>
+                    <span class="mk-pdf__tag">F4</span>
+                </div>
+            </div>
+        </div>
+        <div class="mk-pdf__card-desc">Newton's laws, momentum, and energy transfer.</div>
+        <div class="mk-pdf__card-views">👁 98 views</div>
+        <div class="mk-pdf__card-actions">
+            <span class="mk-pdf__abtn mk-pdf__abtn--ghost">🔒 Read</span>
+            <span class="mk-pdf__abtn mk-pdf__abtn--ghost">🔒 Download</span>
+            <span class="mk-pdf__abtn mk-pdf__abtn--info">Preview</span>
+            <span class="mk-pdf__abtn mk-pdf__abtn--tg">✈️ Get</span>
+        </div>
+    </div>
+
+    <div class="mk-pdf__card">
+        <div class="mk-pdf__card-top">
+            <span class="mk-pdf__card-icon">📘</span>
+            <div class="mk-pdf__card-info">
+                <div class="mk-pdf__card-title">Cell Structure</div>
+                <div class="mk-pdf__card-tags">
+                    <span class="mk-pdf__tag">Biology</span>
+                    <span class="mk-pdf__tag">F3</span>
+                </div>
+            </div>
+        </div>
+        <div class="mk-pdf__card-desc">Organelles, membranes, and cell division.</div>
+        <div class="mk-pdf__card-views">👁 76 views</div>
+        <div class="mk-pdf__card-actions">
+            <span class="mk-pdf__abtn mk-pdf__abtn--ghost">🔒 Read</span>
+            <span class="mk-pdf__abtn mk-pdf__abtn--ghost">🔒 Download</span>
+            <span class="mk-pdf__abtn mk-pdf__abtn--info">Preview</span>
+            <span class="mk-pdf__abtn mk-pdf__abtn--tg">✈️ Get</span>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .mk-pdf__head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+    }
+    .mk-pdf__title {
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.3px;
+    }
+    .mk-pdf__sub {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-top: 3px;
+    }
+    .mk-pdf__quota {
+        font-size: 10.5px;
+        color: var(--text-secondary);
+        background: var(--background);
+        padding: 5px 12px;
+        border-radius: 14px;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    /* -------- Filters -------- */
+    .mk-pdf__filters {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 12px;
+    }
+    .mk-pdf__search {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 11px;
+        min-width: 0;
+    }
+    .mk-pdf__search-icon { color: var(--text-muted); }
+    .mk-pdf__search-ph { color: var(--text-muted); flex: 1; min-width: 0; }
+    .mk-pdf__sel {
+        padding: 7px 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 10.5px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+
+    /* -------- Grid -------- */
+    .mk-pdf__grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+    .mk-pdf__card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        position: relative;
+    }
+    .mk-pdf__card--premium {
+        border-color: rgba(255,49,56,0.35);
+    }
+    .mk-pdf__prem-badge {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        font-size: 8px;
+        font-weight: 800;
+        letter-spacing: 0.4px;
+        background: linear-gradient(135deg, var(--primary), #B91C1C);
+        color: #ffffff;
+        padding: 1px 7px;
+        border-radius: 8px;
+        text-transform: uppercase;
+    }
+
+    .mk-pdf__card-top {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+    }
+    .mk-pdf__card-icon {
+        font-size: 22px;
+        flex-shrink: 0;
+        line-height: 1;
+        margin-top: 1px;
+    }
+    .mk-pdf__card-info { flex: 1; min-width: 0; }
+    .mk-pdf__card-title {
+        font-size: 11.5px;
+        font-weight: 800;
+        color: var(--text);
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .mk-pdf__card-tags {
+        display: flex;
+        gap: 4px;
+        margin-top: 4px;
+        flex-wrap: wrap;
+    }
+    .mk-pdf__tag {
+        font-size: 8.5px;
+        font-weight: 700;
+        color: var(--text-secondary);
+        background: var(--background);
+        padding: 1px 7px;
+        border-radius: 6px;
+        letter-spacing: 0.2px;
+    }
+    .mk-pdf__card-desc {
+        font-size: 10px;
+        color: var(--text-secondary);
+        line-height: 1.4;
+        min-height: 28px;
+    }
+    .mk-pdf__card-views {
+        font-size: 9.5px;
+        color: var(--text-muted);
+    }
+
+    .mk-pdf__card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 4px;
+        padding-top: 8px;
+        border-top: 1px solid var(--border-light);
+    }
+    .mk-pdf__abtn {
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 9.5px;
+        font-weight: 700;
+        flex: 1 1 auto;
+        text-align: center;
+        white-space: nowrap;
+    }
+    .mk-pdf__abtn--ghost {
+        background: var(--background);
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+    }
+    .mk-pdf__abtn--info {
+        background: #EFF6FF;
+        color: #1E40AF;
+    }
+    .mk-pdf__abtn--tg {
+        background: #0088CC;
+        color: #ffffff;
+    }
+
+    @media (max-width: 640px) {
+        .mk-pdf__grid { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}

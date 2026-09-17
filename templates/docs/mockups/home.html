@@ -1,0 +1,244 @@
+{% extends "docs/mockups/_chrome.html" %}
+
+{# ============================================================ #}
+{# Dashboard home mockup.                                        #}
+{#                                                               #}
+{# Anchors exposed:                                               #}
+{#   home_hero, stats_grid, tier_strip                            #}
+{# Plus sidebar anchors from _chrome.html:                        #}
+{#   sidebar_quiz_link, sidebar_live_link, sidebar_focus_link,    #}
+{#   sidebar_pdfs_link, sidebar_groups_link                       #}
+{# ============================================================ #}
+
+{% block chrome_title %}Dashboard{% endblock %}
+
+{% block chrome_content %}
+
+{# ---------------- Hero ---------------- #}
+<div class="mk-hero" data-docs-anchor="home_hero">
+    <div class="mk-hero__row">
+        <div class="mk-hero__col">
+            <div class="mk-hero__greet">☀️ Good Morning, <strong>Amina</strong>!</div>
+            <div class="mk-hero__msg">You've earned 128 XP so far. Just 2 more to reach Level 14.</div>
+            <div class="mk-hero__xp-pill">🎯 Level 13 · 8/10 XP</div>
+        </div>
+        <div class="mk-hero__level">
+            <div>
+                <div class="mk-hero__level-label">Your Level</div>
+                <div class="mk-hero__level-num">13</div>
+            </div>
+            <div style="text-align:right;">
+                <div class="mk-hero__level-label">Total XP</div>
+                <div class="mk-hero__level-num mk-hero__level-num--gold">128</div>
+            </div>
+            <div class="mk-hero__bar"><div class="mk-hero__bar-fill"></div></div>
+        </div>
+    </div>
+</div>
+
+{# ---------------- Tier strip ---------------- #}
+<div class="mk-tier" data-docs-anchor="tier_strip">
+    <span class="mk-tier__icon">⬆️</span>
+    <div class="mk-tier__text">
+        You're on <strong>Free</strong>. Unlock analytics, live quiz hosting, and 3× more attempts.
+    </div>
+    <span class="mk-tier__btn">⬆ Upgrade to Premium</span>
+</div>
+
+{# ---------------- Stats grid ---------------- #}
+<div class="mk-stats" data-docs-anchor="stats_grid">
+    <div class="mk-stat mk-stat--green">
+        <div class="mk-stat__top"><span class="mk-stat__num">72%</span><span class="mk-stat__ico">📊</span></div>
+        <div class="mk-stat__lbl">Mastery Score</div>
+        <div class="mk-stat__sub">48 correct answers</div>
+    </div>
+    <div class="mk-stat mk-stat--blue">
+        <div class="mk-stat__top"><span class="mk-stat__num">12</span><span class="mk-stat__ico">📚</span></div>
+        <div class="mk-stat__lbl">Quizzes Taken</div>
+        <div class="mk-stat__sub">6 subjects</div>
+    </div>
+    <div class="mk-stat mk-stat--amber">
+        <div class="mk-stat__top"><span class="mk-stat__num">5</span><span class="mk-stat__ico">🔥</span></div>
+        <div class="mk-stat__lbl">Day Streak</div>
+        <div class="mk-stat__sub">Keep it going!</div>
+    </div>
+    <div class="mk-stat mk-stat--purple">
+        <div class="mk-stat__top"><span class="mk-stat__num">13</span><span class="mk-stat__ico">🏆</span></div>
+        <div class="mk-stat__lbl">Current Level</div>
+        <div class="mk-stat__sub">128 XP total</div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    /* ---------- Hero ---------- */
+    .mk-hero {
+        background:
+            radial-gradient(700px 200px at 100% -50%, rgba(255,255,255,0.18), transparent 60%),
+            linear-gradient(135deg, var(--primary) 0%, #B91C1C 100%);
+        border-radius: 12px;
+        padding: 16px 18px;
+        margin-bottom: 12px;
+        color: #ffffff;
+        box-shadow: 0 8px 22px rgba(255,49,56,0.22);
+    }
+    .mk-hero__row {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        flex-wrap: wrap;
+        align-items: flex-end;
+    }
+    .mk-hero__col { min-width: 0; flex: 1; }
+    .mk-hero__greet {
+        font-size: 16px;
+        font-weight: 800;
+        letter-spacing: -0.3px;
+        line-height: 1.2;
+    }
+    .mk-hero__greet strong { color: #FCD34D; }
+    .mk-hero__msg {
+        font-size: 11px;
+        opacity: 0.92;
+        margin-top: 4px;
+        max-width: 360px;
+        line-height: 1.5;
+    }
+    .mk-hero__xp-pill {
+        display: inline-block;
+        margin-top: 10px;
+        font-size: 10px;
+        background: rgba(255,255,255,0.18);
+        border: 1px solid rgba(255,255,255,0.28);
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-weight: 600;
+    }
+    .mk-hero__level {
+        background: rgba(0,0,0,0.22);
+        border: 1px solid rgba(255,255,255,0.18);
+        border-radius: 10px;
+        padding: 10px 12px;
+        min-width: 150px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px 12px;
+    }
+    .mk-hero__level-label {
+        font-size: 8px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: 700;
+        opacity: 0.78;
+    }
+    .mk-hero__level-num {
+        font-size: 22px;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.8px;
+    }
+    .mk-hero__level-num--gold { color: #FCD34D; }
+    .mk-hero__bar {
+        grid-column: 1 / -1;
+        height: 6px;
+        background: rgba(0,0,0,0.28);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .mk-hero__bar-fill {
+        height: 100%;
+        width: 80%;
+        background: linear-gradient(90deg, #FCD34D, #F59E0B);
+        border-radius: 10px;
+    }
+
+    /* ---------- Tier strip ---------- */
+    .mk-tier {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--primary);
+        border-radius: 10px;
+        padding: 10px 14px;
+        margin-bottom: 12px;
+    }
+    .mk-tier__icon { font-size: 15px; flex-shrink: 0; }
+    .mk-tier__text {
+        flex: 1;
+        font-size: 11.5px;
+        color: var(--text);
+        line-height: 1.5;
+        min-width: 0;
+    }
+    .mk-tier__text strong { color: var(--primary); }
+    .mk-tier__btn {
+        background: var(--primary);
+        color: #ffffff;
+        padding: 5px 14px;
+        border-radius: 16px;
+        font-size: 10px;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    /* ---------- Stats grid ---------- */
+    .mk-stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+    }
+    .mk-stat {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 12px;
+        position: relative;
+        overflow: hidden;
+    }
+    .mk-stat::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        background: var(--primary);
+    }
+    .mk-stat--green::before { background: #10B981; }
+    .mk-stat--blue::before  { background: #3B82F6; }
+    .mk-stat--amber::before { background: #F59E0B; }
+    .mk-stat--purple::before { background: #8B5CF6; }
+    .mk-stat__top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+    .mk-stat__num {
+        font-size: 18px;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.4px;
+        line-height: 1.1;
+    }
+    .mk-stat__ico { font-size: 14px; opacity: 0.7; }
+    .mk-stat__lbl {
+        font-size: 9px;
+        font-weight: 700;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-top: 2px;
+    }
+    .mk-stat__sub {
+        font-size: 9.5px;
+        color: var(--text-muted);
+        margin-top: 1px;
+    }
+
+    @media (max-width: 640px) {
+        .mk-stats { grid-template-columns: repeat(2, 1fr); }
+    }
+</style>
+{% endblock %}

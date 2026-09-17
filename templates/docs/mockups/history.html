@@ -1,0 +1,398 @@
+{% extends "docs/mockups/_chrome.html" %}
+
+{# ============================================================ #}
+{# History page mockup.                                          #}
+{#                                                               #}
+{# Anchors exposed:                                               #}
+{#   tier_panel, stats_row, filter_bar, timeline, load_more,      #}
+{#   export_btn                                                   #}
+{# ============================================================ #}
+
+{% block chrome_title %}My History{% endblock %}
+
+{% block chrome_content %}
+
+{# ---------------- Header ---------------- #}
+<div class="mk-hist__head">
+    <div>
+        <div class="mk-hist__title">
+            📊 My History
+            <span class="mk-hist__tier">🔑 Premium</span>
+        </div>
+        <div class="mk-hist__sub">Every quiz, live quiz, save, and achievement — all in one place.</div>
+    </div>
+    <span class="mk-hist__export" data-docs-anchor="export_btn">
+        ⬇ Export CSV
+    </span>
+</div>
+
+{# ---------------- Tier panel ---------------- #}
+<div class="mk-hist__panel" data-docs-anchor="tier_panel">
+    <div class="mk-hist__panel-head">
+        <span class="mk-hist__panel-title">🗂 Your History Plan</span>
+        <span class="mk-hist__panel-badge">🔑 Premium</span>
+    </div>
+    <div class="mk-hist__quota-row">
+        <span class="mk-hist__quota-label">Entries stored</span>
+        <span class="mk-hist__quota-value">142 / 500</span>
+    </div>
+    <div class="mk-hist__quota-bar">
+        <div class="mk-hist__quota-fill" style="width: 28%;"></div>
+    </div>
+    <div class="mk-hist__quota-hint">Retention: 180 days · Entries capped at 500</div>
+</div>
+
+{# ---------------- Stats row ---------------- #}
+<div class="mk-hist__stats" data-docs-anchor="stats_row">
+    <div class="mk-hist__stat">
+        <div class="mk-hist__stat-lbl">📊 Total</div>
+        <div class="mk-hist__stat-num mk-hist__stat-num--blue">142</div>
+    </div>
+    <div class="mk-hist__stat">
+        <div class="mk-hist__stat-lbl">📝 Quizzes</div>
+        <div class="mk-hist__stat-num mk-hist__stat-num--green">36</div>
+    </div>
+    <div class="mk-hist__stat">
+        <div class="mk-hist__stat-lbl">🏆 Achievements</div>
+        <div class="mk-hist__stat-num mk-hist__stat-num--purple">3</div>
+    </div>
+    <div class="mk-hist__stat">
+        <div class="mk-hist__stat-lbl">🔖 Saves</div>
+        <div class="mk-hist__stat-num mk-hist__stat-num--amber">18</div>
+    </div>
+    <div class="mk-hist__stat">
+        <div class="mk-hist__stat-lbl">📄 PDFs</div>
+        <div class="mk-hist__stat-num mk-hist__stat-num--red">24</div>
+    </div>
+    <div class="mk-hist__stat">
+        <div class="mk-hist__stat-lbl">📈 Avg Score</div>
+        <div class="mk-hist__stat-num mk-hist__stat-num--primary">74%</div>
+    </div>
+</div>
+
+{# ---------------- Filter bar ---------------- #}
+<div class="mk-hist__filters" data-docs-anchor="filter_bar">
+    <div class="mk-hist__search">
+        <span class="mk-hist__search-icon">🔍</span>
+        <span class="mk-hist__search-ph">Search your history…</span>
+    </div>
+    <div class="mk-hist__sel">All Types ▾</div>
+    <div class="mk-hist__sel">From date ▾</div>
+    <div class="mk-hist__sel">To date ▾</div>
+</div>
+
+{# ---------------- Timeline ---------------- #}
+<div class="mk-hist__timeline" data-docs-anchor="timeline">
+
+    <div class="mk-hist__day">
+        <span class="mk-hist__day-dot"></span>
+        <span class="mk-hist__day-lbl">Today</span>
+        <span class="mk-hist__day-cnt">3 entries</span>
+    </div>
+
+    <div class="mk-hist__entry mk-hist__entry--quiz">
+        <span class="mk-hist__entry-icon">📝</span>
+        <div class="mk-hist__entry-body">
+            <div class="mk-hist__entry-title">Completed a <strong>Mathematics</strong> quiz</div>
+            <div class="mk-hist__entry-meta">
+                <span>🎯 8/10 correct</span>
+                <span class="mk-hist__badge mk-hist__badge--good">80%</span>
+            </div>
+        </div>
+        <span class="mk-hist__entry-time">2h ago</span>
+    </div>
+
+    <div class="mk-hist__entry mk-hist__entry--achv">
+        <span class="mk-hist__entry-icon">🏆</span>
+        <div class="mk-hist__entry-body">
+            <div class="mk-hist__entry-title">Unlocked <strong>Quiz Master</strong></div>
+            <div class="mk-hist__entry-meta"><span>Badge earned</span></div>
+        </div>
+        <span class="mk-hist__entry-time">5h ago</span>
+    </div>
+
+    <div class="mk-hist__entry mk-hist__entry--live">
+        <span class="mk-hist__entry-icon">⚡</span>
+        <div class="mk-hist__entry-body">
+            <div class="mk-hist__entry-title">Played a <strong>Physics</strong> live quiz</div>
+            <div class="mk-hist__entry-meta"><span>Rank #2 of 12</span></div>
+        </div>
+        <span class="mk-hist__entry-time">1d ago</span>
+    </div>
+
+</div>
+
+<div class="mk-hist__load-more" data-docs-anchor="load_more">
+    ⬇ Load More
+</div>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .mk-hist__head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+    }
+    .mk-hist__title {
+        font-size: 17px;
+        font-weight: 800;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        letter-spacing: -0.3px;
+    }
+    .mk-hist__tier {
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        background: var(--primary-light);
+        color: var(--primary);
+        padding: 2px 8px;
+        border-radius: 10px;
+        letter-spacing: 0.5px;
+    }
+    .mk-hist__sub {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-top: 3px;
+    }
+    .mk-hist__export {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 14px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--text-secondary);
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    /* -------- Tier panel -------- */
+    .mk-hist__panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin-bottom: 12px;
+    }
+    .mk-hist__panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    .mk-hist__panel-title {
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--text);
+    }
+    .mk-hist__panel-badge {
+        font-size: 9px;
+        font-weight: 700;
+        background: var(--primary-light);
+        color: var(--primary);
+        padding: 2px 8px;
+        border-radius: 10px;
+        letter-spacing: 0.5px;
+    }
+    .mk-hist__quota-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        margin-bottom: 5px;
+    }
+    .mk-hist__quota-label { color: var(--text-secondary); }
+    .mk-hist__quota-value { color: var(--text); font-weight: 700; }
+    .mk-hist__quota-bar {
+        height: 6px;
+        background: var(--background);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .mk-hist__quota-fill {
+        height: 100%;
+        background: #10B981;
+        border-radius: 10px;
+    }
+    .mk-hist__quota-hint {
+        font-size: 9.5px;
+        color: var(--text-muted);
+        margin-top: 5px;
+    }
+
+    /* -------- Stats row -------- */
+    .mk-hist__stats {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 6px;
+        margin-bottom: 12px;
+    }
+    .mk-hist__stat {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 8px 6px;
+        text-align: center;
+    }
+    .mk-hist__stat-lbl {
+        font-size: 8px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: var(--text-secondary);
+        margin-bottom: 3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .mk-hist__stat-num {
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.4px;
+    }
+    .mk-hist__stat-num--blue    { color: #3B82F6; }
+    .mk-hist__stat-num--green   { color: #10B981; }
+    .mk-hist__stat-num--purple  { color: #8B5CF6; }
+    .mk-hist__stat-num--amber   { color: #F59E0B; }
+    .mk-hist__stat-num--red     { color: #EF4444; }
+    .mk-hist__stat-num--primary { color: var(--primary); }
+
+    /* -------- Filter bar -------- */
+    .mk-hist__filters {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 12px;
+    }
+    .mk-hist__search {
+        flex: 2;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        font-size: 11px;
+        min-width: 0;
+    }
+    .mk-hist__search-icon { color: var(--text-muted); }
+    .mk-hist__search-ph { color: var(--text-muted); flex: 1; min-width: 0; }
+    .mk-hist__sel {
+        flex: 1;
+        padding: 7px 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--text-secondary);
+        font-size: 10.5px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* -------- Timeline -------- */
+    .mk-hist__timeline { display: flex; flex-direction: column; gap: 5px; }
+    .mk-hist__day {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid var(--border-light);
+        margin-bottom: 4px;
+    }
+    .mk-hist__day-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--primary);
+        box-shadow: 0 0 0 3px var(--primary-light);
+    }
+    .mk-hist__day-lbl { font-size: 10px; font-weight: 700; color: var(--text); }
+    .mk-hist__day-cnt {
+        font-size: 9px;
+        color: var(--text-muted);
+        background: var(--background);
+        padding: 1px 7px;
+        border-radius: 8px;
+    }
+    .mk-hist__entry {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        background: var(--surface);
+        border: 1px solid var(--border-light);
+        border-radius: 8px;
+        padding: 8px 12px;
+        position: relative;
+        overflow: hidden;
+    }
+    .mk-hist__entry::before {
+        content: '';
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 3px;
+    }
+    .mk-hist__entry--quiz::before  { background: #10B981; }
+    .mk-hist__entry--achv::before  { background: #F59E0B; }
+    .mk-hist__entry--live::before  { background: #8B5CF6; }
+    .mk-hist__entry-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+    .mk-hist__entry-body { flex: 1; min-width: 0; }
+    .mk-hist__entry-title {
+        font-size: 11.5px;
+        color: var(--text);
+        line-height: 1.4;
+    }
+    .mk-hist__entry-title strong { color: var(--primary); }
+    .mk-hist__entry-meta {
+        display: flex;
+        gap: 8px;
+        margin-top: 2px;
+        font-size: 10px;
+        color: var(--text-secondary);
+    }
+    .mk-hist__badge {
+        padding: 1px 6px;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 9.5px;
+    }
+    .mk-hist__badge--good { background: #ECFDF5; color: #065F46; }
+    .mk-hist__entry-time {
+        font-size: 9.5px;
+        color: var(--text-muted);
+        white-space: nowrap;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+
+    /* -------- Load more -------- */
+    .mk-hist__load-more {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 6px;
+        margin-top: 12px;
+        padding: 9px 22px;
+        border: 1px dashed var(--border);
+        border-radius: 20px;
+        background: var(--surface);
+        color: var(--text-secondary);
+        font-size: 11px;
+        font-weight: 700;
+        width: fit-content;
+        margin-left: auto;
+        margin-right: auto;
+    }
+</style>
+{% endblock %}

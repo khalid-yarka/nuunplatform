@@ -1,0 +1,352 @@
+{% extends "docs/mockups/_chrome.html" %}
+
+{# ============================================================ #}
+{# Waiting room mockup.                                          #}
+{#                                                               #}
+{# Anchors exposed:                                               #}
+{#   quiz_info, join_code, copy_btn, share_btn,                   #}
+{#   participants_list, ready_btn, leave_btn,                     #}
+{#   start_btn, delete_btn                                        #}
+{# ============================================================ #}
+
+{% block chrome_title %}Waiting Room{% endblock %}
+
+{% block chrome_content %}
+
+<div class="mk-lw">
+
+    {# ---------------- Header ---------------- #}
+    <div class="mk-lw__head" data-docs-anchor="quiz_info">
+        <div>
+            <div class="mk-lw__title">🎯 Friday Challenge</div>
+            <div class="mk-lw__meta">
+                <span>📚 Mathematics</span>
+                <span>❓ 10 questions</span>
+                <span>⏱️ 30s each</span>
+                <span class="mk-lw__privacy mk-lw__privacy--public">🌐 Public</span>
+            </div>
+        </div>
+        <div class="mk-lw__count">
+            👥 <strong>3</strong>/50
+        </div>
+    </div>
+
+    {# ---------------- Join code + share ---------------- #}
+    <div class="mk-lw__code-block">
+        <div class="mk-lw__code-row">
+            <span class="mk-lw__code-label">📌 Share this code</span>
+            <div class="mk-lw__code-display" data-docs-anchor="join_code">
+                <span class="mk-lw__code">A3B9-X7K2</span>
+                <span class="mk-lw__copy" data-docs-anchor="copy_btn">📋 Copy</span>
+            </div>
+        </div>
+        <div class="mk-lw__share-row">
+            <span class="mk-lw__share mk-lw__share--wa" data-docs-anchor="share_btn">
+                💬 WhatsApp
+            </span>
+            <span class="mk-lw__share mk-lw__share--tg">✈️ Telegram</span>
+        </div>
+    </div>
+
+    {# ---------------- Participants ---------------- #}
+    <div class="mk-lw__part-section">
+        <div class="mk-lw__part-head">
+            <span class="mk-lw__part-title">👥 Participants</span>
+            <span class="mk-lw__part-count">3 joined</span>
+        </div>
+
+        <div class="mk-lw__part-list" data-docs-anchor="participants_list">
+
+            <div class="mk-lw__part mk-lw__part--ready">
+                <span class="mk-lw__dot mk-lw__dot--on"></span>
+                <span class="mk-lw__pname">
+                    Amina H.
+                    <span class="mk-lw__pbadge mk-lw__pbadge--you">You</span>
+                </span>
+                <span class="mk-lw__pid">#A4K7</span>
+                <span class="mk-lw__hand">✋</span>
+            </div>
+
+            <div class="mk-lw__part mk-lw__part--ready">
+                <span class="mk-lw__dot mk-lw__dot--on"></span>
+                <span class="mk-lw__pname">
+                    Yusuf M.
+                    <span class="mk-lw__pbadge mk-lw__pbadge--creator">Creator</span>
+                </span>
+                <span class="mk-lw__pid">#B2N9</span>
+                <span class="mk-lw__hand">✋</span>
+            </div>
+
+            <div class="mk-lw__part">
+                <span class="mk-lw__dot mk-lw__dot--on"></span>
+                <span class="mk-lw__pname">Sagal A.</span>
+                <span class="mk-lw__pid">#C8P1</span>
+            </div>
+
+        </div>
+    </div>
+
+    {# ---------------- Actions ---------------- #}
+    <div class="mk-lw__actions">
+        <div class="mk-lw__status">
+            ✅ Ready to start! <strong>2</strong> participants ready.
+        </div>
+
+        <div class="mk-lw__row">
+            <span class="mk-lw__toggle" data-docs-anchor="ready_btn">✋ Ready</span>
+            <span class="mk-lw__leave" data-docs-anchor="leave_btn">🚪 Leave</span>
+        </div>
+
+        <div class="mk-lw__row mk-lw__row--host">
+            <span class="mk-lw__start" data-docs-anchor="start_btn">▶️ Start Quiz</span>
+            <span class="mk-lw__delete" data-docs-anchor="delete_btn">🗑 Delete</span>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .mk-lw {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px;
+        max-width: 420px;
+        margin: 0 auto;
+    }
+
+    /* -------- Header -------- */
+    .mk-lw__head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
+        margin-bottom: 14px;
+        flex-wrap: wrap;
+    }
+    .mk-lw__title {
+        font-size: 15px;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.3px;
+    }
+    .mk-lw__meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 4px;
+        font-size: 10px;
+        color: var(--text-secondary);
+    }
+    .mk-lw__privacy {
+        font-weight: 700;
+        padding: 1px 8px;
+        border-radius: 8px;
+    }
+    .mk-lw__privacy--public { background: #D1FAE5; color: #065F46; }
+    .mk-lw__count {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text);
+        background: var(--background);
+        padding: 4px 12px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        white-space: nowrap;
+    }
+
+    /* -------- Join code -------- */
+    .mk-lw__code-block {
+        background: var(--background);
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-bottom: 14px;
+    }
+    .mk-lw__code-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .mk-lw__code-label {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+    .mk-lw__code-display {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+    }
+    .mk-lw__code {
+        font-size: 15px;
+        font-weight: 800;
+        font-family: monospace;
+        letter-spacing: 2px;
+        color: var(--primary);
+        background: var(--surface);
+        padding: 3px 10px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+    }
+    .mk-lw__copy {
+        font-size: 10.5px;
+        color: var(--text-secondary);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-weight: 600;
+    }
+    .mk-lw__share-row {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+        flex-wrap: wrap;
+    }
+    .mk-lw__share {
+        padding: 4px 12px;
+        border-radius: 6px;
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #ffffff;
+    }
+    .mk-lw__share--wa { background: #25D366; }
+    .mk-lw__share--tg { background: #0088CC; }
+
+    /* -------- Participants -------- */
+    .mk-lw__part-section { margin-bottom: 14px; }
+    .mk-lw__part-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    .mk-lw__part-title {
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--text);
+    }
+    .mk-lw__part-count {
+        font-size: 10px;
+        color: var(--text-secondary);
+    }
+    .mk-lw__part-list {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    .mk-lw__part {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        background: var(--background);
+        border: 1px solid var(--border-light);
+        border-radius: 8px;
+        font-size: 11.5px;
+    }
+    .mk-lw__part--ready {
+        border-left: 3px solid var(--primary);
+        background: var(--primary-light);
+    }
+    .mk-lw__dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .mk-lw__dot--on { background: #10B981; }
+    .mk-lw__pname {
+        flex: 1;
+        min-width: 0;
+        font-weight: 600;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+    .mk-lw__pbadge {
+        font-size: 8.5px;
+        font-weight: 800;
+        padding: 1px 7px;
+        border-radius: 6px;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+    }
+    .mk-lw__pbadge--creator { background: var(--primary); color: #ffffff; }
+    .mk-lw__pbadge--you     { background: #3B82F6; color: #ffffff; }
+    .mk-lw__pid {
+        font-size: 9.5px;
+        color: var(--text-muted);
+        font-family: monospace;
+        flex-shrink: 0;
+    }
+    .mk-lw__hand {
+        font-size: 14px;
+        flex-shrink: 0;
+    }
+
+    /* -------- Actions -------- */
+    .mk-lw__actions {
+        border-top: 1px solid var(--border-light);
+        padding-top: 12px;
+    }
+    .mk-lw__status {
+        font-size: 11px;
+        color: var(--text-secondary);
+        text-align: center;
+        margin-bottom: 10px;
+        line-height: 1.5;
+    }
+    .mk-lw__status strong { color: var(--primary); }
+    .mk-lw__row {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+    .mk-lw__row:last-child { margin-bottom: 0; }
+    .mk-lw__toggle,
+    .mk-lw__leave,
+    .mk-lw__start,
+    .mk-lw__delete {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        padding: 9px 12px;
+        border-radius: var(--radius-sm);
+        font-size: 11px;
+        font-weight: 700;
+    }
+    .mk-lw__toggle {
+        background: var(--primary);
+        color: #ffffff;
+        box-shadow: 0 4px 10px rgba(255,49,56,0.24);
+    }
+    .mk-lw__leave {
+        background: transparent;
+        border: 1px solid #EF4444;
+        color: #EF4444;
+    }
+    .mk-lw__row--host { margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--border-light); }
+    .mk-lw__start {
+        background: #10B981;
+        color: #ffffff;
+        box-shadow: 0 4px 10px rgba(16,185,129,0.24);
+    }
+    .mk-lw__delete {
+        background: transparent;
+        border: 1px solid #EF4444;
+        color: #EF4444;
+    }
+</style>
+{% endblock %}

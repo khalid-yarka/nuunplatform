@@ -1,0 +1,60 @@
+{# ============================================================ #}
+{# Docs sidebar nav tree.                                        #}
+{# Expects: `sidebar` — sections from routes.py:_build_sidebar() #}
+{# ============================================================ #}
+
+<div class="docs-sidebar__inner">
+
+    <a href="{{ url_for('docs.home') }}"
+       class="docs-sidebar__home {% if request.endpoint == 'docs.home' %}is-active{% endif %}"
+       title="{{ _('docs.sidebar.home') }}">
+        <span class="docs-sidebar__home-icon" aria-hidden="true"><i class="fas fa-home"></i></span>
+        <span class="docs-sidebar__label">{{ _('docs.sidebar.home') }}</span>
+    </a>
+
+    {% for section in sidebar %}
+    <div class="docs-sidebar__section">
+
+        <div class="docs-sidebar__section-head">
+            <span class="docs-sidebar__section-num">{{ section.number }}</span>
+            <span class="docs-sidebar__section-title">{{ _(section.title) }}</span>
+        </div>
+
+        <ul class="docs-sidebar__list">
+            {% for f in section.features %}
+            <li class="docs-sidebar__item
+                       {% if f.active %}is-active{% endif %}
+                       {% if not f.accessible %}is-locked{% endif %}">
+                <a href="{{ url_for('docs.feature_start', feature_key=f.key) }}"
+                   class="docs-sidebar__link"
+                   title="{{ _(f.title) }} ({{ f.seen }}/{{ f.step_count }})">
+
+                    <span class="docs-sidebar__icon" aria-hidden="true">{{ f.icon }}</span>
+                    <span class="docs-sidebar__label">{{ _(f.title) }}</span>
+
+                    {% if not f.accessible %}
+                        <span class="docs-sidebar__lock" title="{{ _('docs.tier.locked') }}">
+                            <i class="fas fa-lock"></i>
+                        </span>
+                    {% elif f.complete %}
+                        <span class="docs-sidebar__check" title="{{ _('docs.progress.complete') }}">
+                            <i class="fas fa-check"></i>
+                        </span>
+                    {% else %}
+                        <span class="docs-sidebar__count">{{ f.seen }}/{{ f.step_count }}</span>
+                    {% endif %}
+
+                    <span class="docs-sidebar__dot
+                                 {% if f.complete %}is-done{% elif f.seen > 0 %}is-progress{% endif %}"
+                          aria-hidden="true"></span>
+
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+
+    </div>
+    {% endfor %}
+
+</div>
+{# ==== end of _sidebar.html ==== #}

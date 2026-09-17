@@ -1,0 +1,87 @@
+{# ============================================================ #}
+{# The step panel — title, action, tip, and prev/next controls.   #}
+{#                                                               #}
+{# Expects in scope:                                              #}
+{#   step         — Step dataclass                                #}
+{#   feature      — Feature dataclass                             #}
+{#   prev_url     — str | None                                    #}
+{#   next_url     — str | None                                    #}
+{#   is_last_step — bool (only meaningful in feature mode)        #}
+{#   tour         — optional dict (position/total/prev_url/...)   #}
+{#                                                               #}
+{# `tour` presence toggles the tour-mode presentation.            #}
+{# ============================================================ #}
+
+<aside class="docs-step" id="docsStep">
+
+    {% if tour %}
+    <div class="docs-step__ribbon">
+        <span class="docs-step__ribbon-icon">▶</span>
+        {{ _('docs.tour.ribbon', n=tour.position, total=tour.total) }}
+    </div>
+    {% endif %}
+
+    <div class="docs-step__head">
+        <span class="docs-step__num">{{ step.number }}</span>
+        <div class="docs-step__head-text">
+            <h3 class="docs-step__title">{{ _(step.title) }}</h3>
+            {% if not tour %}
+            <span class="docs-step__subtitle">
+                {{ feature.icon }} {{ _(feature.title) }}
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <p class="docs-step__action">{{ _(step.action) }}</p>
+
+    {% if step.tip %}
+    <div class="docs-step__tip">
+        <span class="docs-step__tip-icon" aria-hidden="true">💡</span>
+        <span class="docs-step__tip-text">{{ _(step.tip) }}</span>
+    </div>
+    {% endif %}
+
+    {% if step.try_url %}
+    <a href="{{ step.try_url }}"
+       target="_blank" rel="noopener noreferrer"
+       class="docs-step__try">
+        <i class="fas fa-external-link-alt"></i>
+        {{ _('docs.cta.try_it') }}
+    </a>
+    {% endif %}
+
+    <div class="docs-step__actions">
+        {% if prev_url %}
+            <a href="{{ prev_url }}" class="docs-step__nav docs-step__nav--prev">
+                <i class="fas fa-arrow-left"></i>
+                <span>{{ _('docs.cta.prev') }}</span>
+            </a>
+        {% else %}
+            <span class="docs-step__nav docs-step__nav--prev is-disabled">
+                <i class="fas fa-arrow-left"></i>
+                <span>{{ _('docs.cta.prev') }}</span>
+            </span>
+        {% endif %}
+
+        {% if next_url %}
+            <a href="{{ next_url }}" class="docs-step__nav docs-step__nav--next">
+                <span>{{ _('docs.cta.next') }}</span>
+                <i class="fas fa-arrow-right"></i>
+            </a>
+        {% elif tour and tour.position == tour.total %}
+            <a href="{{ url_for('docs.home') }}"
+               class="docs-step__nav docs-step__nav--next docs-step__nav--finish">
+                <span>{{ _('docs.tour.completed') }}</span>
+                <i class="fas fa-check"></i>
+            </a>
+        {% elif is_last_step %}
+            <a href="{{ url_for('docs.roadmap') }}"
+               class="docs-step__nav docs-step__nav--next docs-step__nav--finish">
+                <span>{{ _('docs.cta.finish') }}</span>
+                <i class="fas fa-check"></i>
+            </a>
+        {% endif %}
+    </div>
+
+</aside>

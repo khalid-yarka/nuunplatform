@@ -1,0 +1,33 @@
+{# ============================================================ #}
+{# Thin progress bar.                                             #}
+{#                                                               #}
+{# Expects: `progress` — { seen, total, percent, complete }       #}
+{# Optional: `label` — override the default text (i18n key)       #}
+{# ============================================================ #}
+
+{% set _pct = progress.percent if progress else 0 %}
+{% set _seen = progress.seen if progress else 0 %}
+{% set _total = progress.total if progress else 0 %}
+
+<div class="docs-progress" role="progressbar"
+     aria-valuenow="{{ _seen }}" aria-valuemin="0" aria-valuemax="{{ _total }}">
+
+    <div class="docs-progress__track">
+        <div class="docs-progress__fill" style="width: {{ _pct }}%;"></div>
+    </div>
+
+    <div class="docs-progress__meta">
+        {% if progress and progress.complete %}
+            <span class="docs-progress__done">
+                <i class="fas fa-check-circle"></i>
+                {{ _('docs.progress.complete') }}
+            </span>
+        {% else %}
+            <span class="docs-progress__text">
+                {{ _('docs.progress.step_of', n=_seen, total=_total) }}
+            </span>
+            <span class="docs-progress__pct">{{ _pct }}%</span>
+        {% endif %}
+    </div>
+
+</div>

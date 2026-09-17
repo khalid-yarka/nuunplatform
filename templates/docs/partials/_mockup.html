@@ -1,0 +1,49 @@
+{# ============================================================ #}
+{# Mockup wrapper.                                                #}
+{#                                                               #}
+{# Expects:                                                       #}
+{#   step              — Step dataclass (has .hotspots)           #}
+{#   step.mockup       — string id (for the fallback message)     #}
+{#   mockup_template   — resolved template path, or None          #}
+{#                                                               #}
+{# The [data-docs-anchor="..."] attributes live inside the        #}
+{# mockup template; the overlay div is where rings get drawn.     #}
+{# ============================================================ #}
+
+<div class="docs-mockup" data-hotspots="{{ step.hotspots|join(',') }}">
+    <div class="docs-mockup__viewport">
+        <div class="docs-mockup__inner">
+            <div class="docs-mockup__canvas">
+                {% if mockup_template %}
+                    {% include mockup_template %}
+                {% else %}
+                    <div class="docs-mockup__missing">
+                        <div style="font-size:44px; opacity:0.4; margin-bottom:8px;">🧩</div>
+                        <div style="font-weight:700; color: var(--text);">
+                            Mockup not found
+                        </div>
+                        <div style="font-size:12px; color: var(--text-muted); margin-top:4px;">
+                            <code>{{ step.mockup }}</code>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="docs-mockup__overlay" aria-hidden="true"></div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .docs-mockup__missing {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 60px 20px;
+        text-align: center;
+        border: 2px dashed var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--background);
+        min-height: 260px;
+    }
+</style>

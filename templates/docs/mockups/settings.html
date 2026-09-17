@@ -1,0 +1,181 @@
+{% extends "docs/mockups/_chrome.html" %}
+
+{# ============================================================ #}
+{# Settings landing page mockup.                                 #}
+{#                                                               #}
+{# Anchors exposed:                                               #}
+{#   settings_grid, appearance_card, quiz_card,                   #}
+{#   notifications_card, privacy_card, tier_card                  #}
+{# ============================================================ #}
+
+{% block chrome_title %}Settings{% endblock %}
+
+{% block chrome_content %}
+
+{# ---------------- Header ---------------- #}
+<div class="mk-set__head">
+    <div class="mk-set__title">Customize Your Experience</div>
+    <div class="mk-set__sub">Choose a category below to adjust your preferences.</div>
+</div>
+
+{# ---------------- Settings grid ---------------- #}
+<div class="mk-set__grid" data-docs-anchor="settings_grid">
+
+    <div class="mk-set__card" data-docs-anchor="appearance_card">
+        <span class="mk-set__icon">🎨</span>
+        <div class="mk-set__info">
+            <div class="mk-set__name">Appearance</div>
+            <div class="mk-set__desc">Theme, colours, and layout</div>
+        </div>
+        <span class="mk-set__arrow">›</span>
+    </div>
+
+    <div class="mk-set__card" data-docs-anchor="quiz_card">
+        <span class="mk-set__icon">✏️</span>
+        <div class="mk-set__info">
+            <div class="mk-set__name">Quiz</div>
+            <div class="mk-set__desc">Defaults and behaviour</div>
+        </div>
+        <span class="mk-set__arrow">›</span>
+    </div>
+
+    <div class="mk-set__card" data-docs-anchor="notifications_card">
+        <span class="mk-set__icon">🔔</span>
+        <div class="mk-set__info">
+            <div class="mk-set__name">Notifications</div>
+            <div class="mk-set__desc">What and how you're notified</div>
+        </div>
+        <span class="mk-set__arrow">›</span>
+    </div>
+
+    <div class="mk-set__card" data-docs-anchor="privacy_card">
+        <span class="mk-set__icon">🔒</span>
+        <div class="mk-set__info">
+            <div class="mk-set__name">Privacy</div>
+            <div class="mk-set__desc">Visibility and data sharing</div>
+        </div>
+        <span class="mk-set__arrow">›</span>
+    </div>
+
+    <div class="mk-set__card">
+        <span class="mk-set__icon">⚡</span>
+        <div class="mk-set__info">
+            <div class="mk-set__name">Live Quiz</div>
+            <div class="mk-set__desc">Defaults for hosting</div>
+        </div>
+        <span class="mk-set__arrow">›</span>
+    </div>
+
+    <div class="mk-set__card">
+        <span class="mk-set__icon">🛡️</span>
+        <div class="mk-set__info">
+            <div class="mk-set__name">Security</div>
+            <div class="mk-set__desc">Password and account safety</div>
+        </div>
+        <span class="mk-set__arrow">›</span>
+    </div>
+
+    <div class="mk-set__card mk-set__card--tier" data-docs-anchor="tier_card">
+        <span class="mk-set__icon">👑</span>
+        <div class="mk-set__info">
+            <div class="mk-set__name">Plan & Features</div>
+            <div class="mk-set__desc">Your current tier and benefits</div>
+        </div>
+        <span class="mk-set__arrow">›</span>
+    </div>
+
+    <div class="mk-set__card">
+        <span class="mk-set__icon">🗄️</span>
+        <div class="mk-set__info">
+            <div class="mk-set__name">Data</div>
+            <div class="mk-set__desc">History, export, and deletion</div>
+        </div>
+        <span class="mk-set__arrow">›</span>
+    </div>
+
+    <div class="mk-set__card">
+        <span class="mk-set__icon">♿</span>
+        <div class="mk-set__info">
+            <div class="mk-set__name">Accessibility</div>
+            <div class="mk-set__desc">Motion, contrast, readability</div>
+        </div>
+        <span class="mk-set__arrow">›</span>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .mk-set__head {
+        margin-bottom: 14px;
+    }
+    .mk-set__title {
+        font-size: 17px;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.3px;
+    }
+    .mk-set__sub {
+        font-size: 11.5px;
+        color: var(--text-secondary);
+        margin-top: 3px;
+    }
+
+    /* -------- Grid of cards -------- */
+    .mk-set__grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+    .mk-set__card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 11px 12px;
+        box-shadow: var(--shadow-sm);
+        position: relative;
+    }
+    .mk-set__icon {
+        font-size: 20px;
+        flex-shrink: 0;
+        line-height: 1;
+    }
+    .mk-set__info { flex: 1; min-width: 0; }
+    .mk-set__name {
+        font-size: 11.5px;
+        font-weight: 800;
+        color: var(--text);
+        line-height: 1.2;
+    }
+    .mk-set__desc {
+        font-size: 9.5px;
+        color: var(--text-secondary);
+        margin-top: 2px;
+        line-height: 1.4;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .mk-set__arrow {
+        font-size: 18px;
+        color: var(--text-muted);
+        flex-shrink: 0;
+        line-height: 1;
+    }
+    .mk-set__card--tier {
+        border-color: var(--primary);
+        background: linear-gradient(135deg, var(--primary-light), var(--surface) 65%);
+    }
+    .mk-set__card--tier .mk-set__arrow { color: var(--primary); }
+
+    @media (max-width: 640px) {
+        .mk-set__grid { grid-template-columns: repeat(2, 1fr); }
+        .mk-set__desc { display: none; }
+    }
+</style>
+{% endblock %}

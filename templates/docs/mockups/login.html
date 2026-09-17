@@ -1,0 +1,140 @@
+{% extends "docs/mockups/_base.html" %}
+
+{# ============================================================ #}
+{# Login page mockup.                                            #}
+{#                                                               #}
+{# Anchors exposed:                                               #}
+{#   register_link, phone_field, password_field, submit_btn       #}
+{# ============================================================ #}
+
+{% block mockup_content %}
+
+<div class="mockup-auth">
+
+    <div class="mockup-auth__card">
+
+        <div class="mockup-auth__logo">🅝</div>
+
+        <h2 class="mockup-auth__title">Welcome <span>Back</span></h2>
+        <p class="mockup-auth__subtitle">Login to your account</p>
+
+        <div class="mockup-auth__divider"></div>
+
+        <div class="mockup-auth__group">
+            <label class="mockup-label">📞 Phone Number <span class="req">*</span></label>
+            <div class="mockup-input" data-docs-anchor="phone_field">
+                <span class="mockup-input__prefix">+252</span>
+                <span class="mockup-input__placeholder">90 7XX XXXX</span>
+            </div>
+        </div>
+
+        <div class="mockup-auth__group">
+            <label class="mockup-label">🔒 Password <span class="req">*</span></label>
+            <div class="mockup-input" data-docs-anchor="password_field">
+                <span class="mockup-input__icon">🔒</span>
+                <span class="mockup-input__placeholder">Enter your password</span>
+                <span class="mockup-input__icon" style="opacity:0.5;">👁</span>
+            </div>
+        </div>
+
+        <div class="mockup-auth__forgot">Forgot Password?</div>
+
+        <div class="mockup-btn mockup-btn--primary mockup-auth__submit"
+             data-docs-anchor="submit_btn">
+            🔒 Login
+        </div>
+
+        <div class="mockup-auth__footer">
+            Don't have an account?
+            <span class="mockup-auth__link" data-docs-anchor="register_link">Create Account</span>
+        </div>
+
+    </div>
+
+</div>
+
+<style>
+    .mockup-auth {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 16px;
+        min-height: 340px;
+    }
+
+    .mockup-auth__card {
+        width: 100%;
+        max-width: 340px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px 22px;
+        box-shadow: 0 8px 28px rgba(255, 49, 56, 0.08);
+    }
+
+    .mockup-auth__logo {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        background: var(--primary);
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        font-weight: 800;
+        margin: 0 auto 12px;
+        box-shadow: 0 6px 18px rgba(255, 49, 56, 0.25);
+    }
+
+    .mockup-auth__title {
+        text-align: center;
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.3px;
+    }
+    .mockup-auth__title span { color: var(--primary); }
+
+    .mockup-auth__subtitle {
+        text-align: center;
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-top: 2px !important;
+    }
+
+    .mockup-auth__divider {
+        height: 1px;
+        background: linear-gradient(to right, transparent, var(--border), transparent);
+        margin: 16px 0;
+    }
+
+    .mockup-auth__group { margin-bottom: 12px; }
+
+    .mockup-auth__forgot {
+        text-align: right;
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin: -4px 0 12px;
+    }
+
+    .mockup-auth__submit {
+        width: 100%;
+        padding: 12px;
+        font-size: 13px;
+        margin-bottom: 16px;
+    }
+
+    .mockup-auth__footer {
+        text-align: center;
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+    .mockup-auth__link {
+        color: var(--primary);
+        font-weight: 700;
+        text-decoration: underline;
+    }
+</style>
+
+{% endblock %}

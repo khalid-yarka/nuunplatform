@@ -1,0 +1,241 @@
+{% extends "docs/mockups/_chrome.html" %}
+
+{# ============================================================ #}
+{# Leaderboard page mockup.                                      #}
+{#                                                               #}
+{# Anchors exposed:                                               #}
+{#   user_rank, podium, table, you_row                            #}
+{# ============================================================ #}
+
+{% block chrome_title %}Leaderboard{% endblock %}
+
+{% block chrome_content %}
+
+{# ---------------- Header ---------------- #}
+<div class="mk-lb__head">
+    <div class="mk-lb__title">🏆 Leaderboard</div>
+    <div class="mk-lb__sub">Top performers on the platform</div>
+</div>
+
+{# ---------------- User rank pill ---------------- #}
+<div class="mk-lb__rank-wrap">
+    <div class="mk-lb__rank" data-docs-anchor="user_rank">
+        Your Rank: <span class="mk-lb__rank-num">#2</span>
+    </div>
+</div>
+
+{# ---------------- Podium ---------------- #}
+<div class="mk-lb__podium" data-docs-anchor="podium">
+    <div class="mk-lb__pod mk-lb__pod--second">
+        <span class="mk-lb__medal">🥈</span>
+        <div class="mk-lb__pod-name">Amina H.</div>
+        <div class="mk-lb__pod-pts">128</div>
+    </div>
+    <div class="mk-lb__pod mk-lb__pod--first">
+        <span class="mk-lb__medal">🥇</span>
+        <div class="mk-lb__pod-name">Yusuf M.</div>
+        <div class="mk-lb__pod-pts">342</div>
+    </div>
+    <div class="mk-lb__pod mk-lb__pod--third">
+        <span class="mk-lb__medal">🥉</span>
+        <div class="mk-lb__pod-name">Sagal A.</div>
+        <div class="mk-lb__pod-pts">121</div>
+    </div>
+</div>
+
+{# ---------------- Table ---------------- #}
+<div class="mk-lb__table" data-docs-anchor="table">
+    <div class="mk-lb__table-head">
+        <span class="mk-lb__th mk-lb__th--rank">#</span>
+        <span class="mk-lb__th mk-lb__th--name">Student</span>
+        <span class="mk-lb__th mk-lb__th--id">ID</span>
+        <span class="mk-lb__th mk-lb__th--pts">Points</span>
+    </div>
+    <div class="mk-lb__tr">
+        <span class="mk-lb__td mk-lb__td--rank"><span class="mk-lb__medal-sm">🥇</span></span>
+        <span class="mk-lb__td mk-lb__td--name">Yusuf M.</span>
+        <span class="mk-lb__td mk-lb__td--id">#B2N9</span>
+        <span class="mk-lb__td mk-lb__td--pts">342</span>
+    </div>
+    <div class="mk-lb__tr mk-lb__tr--you" data-docs-anchor="you_row">
+        <span class="mk-lb__td mk-lb__td--rank"><span class="mk-lb__medal-sm">🥈</span></span>
+        <span class="mk-lb__td mk-lb__td--name">
+            Amina H.
+            <span class="mk-lb__you-tag">You</span>
+        </span>
+        <span class="mk-lb__td mk-lb__td--id">#A4K7</span>
+        <span class="mk-lb__td mk-lb__td--pts">128</span>
+    </div>
+    <div class="mk-lb__tr">
+        <span class="mk-lb__td mk-lb__td--rank"><span class="mk-lb__medal-sm">🥉</span></span>
+        <span class="mk-lb__td mk-lb__td--name">Sagal A.</span>
+        <span class="mk-lb__td mk-lb__td--id">#C8P1</span>
+        <span class="mk-lb__td mk-lb__td--pts">121</span>
+    </div>
+    <div class="mk-lb__tr">
+        <span class="mk-lb__td mk-lb__td--rank">4</span>
+        <span class="mk-lb__td mk-lb__td--name">Mohamed K.</span>
+        <span class="mk-lb__td mk-lb__td--id">#D5R3</span>
+        <span class="mk-lb__td mk-lb__td--pts">98</span>
+    </div>
+    <div class="mk-lb__tr">
+        <span class="mk-lb__td mk-lb__td--rank">5</span>
+        <span class="mk-lb__td mk-lb__td--name">Hodan W.</span>
+        <span class="mk-lb__td mk-lb__td--id">#E1T8</span>
+        <span class="mk-lb__td mk-lb__td--pts">87</span>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .mk-lb__head {
+        text-align: center;
+        margin-bottom: 12px;
+    }
+    .mk-lb__title {
+        font-size: 18px;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.3px;
+    }
+    .mk-lb__sub {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-top: 2px;
+    }
+
+    .mk-lb__rank-wrap {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 14px;
+    }
+    .mk-lb__rank {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 6px;
+        background: var(--primary);
+        color: #ffffff;
+        padding: 6px 20px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 700;
+        box-shadow: 0 4px 12px rgba(255,49,56,0.24);
+    }
+    .mk-lb__rank-num {
+        font-size: 18px;
+        font-weight: 800;
+        color: #FCD34D;
+    }
+
+    /* -------- Podium -------- */
+    .mk-lb__podium {
+        display: flex;
+        justify-content: center;
+        align-items: flex-end;
+        gap: 8px;
+        margin-bottom: 18px;
+        padding: 12px 0;
+    }
+    .mk-lb__pod {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 8px;
+        text-align: center;
+        min-width: 84px;
+        flex: 1;
+        max-width: 120px;
+        box-shadow: var(--shadow-sm);
+    }
+    .mk-lb__pod--first {
+        padding-top: 14px;
+        border-color: #F59E0B;
+        background: linear-gradient(180deg, #FFFBEB 0%, var(--surface) 65%);
+        order: 2;
+    }
+    .mk-lb__pod--second {
+        border-color: #9CA3AF;
+        background: linear-gradient(180deg, #F9FAFB 0%, var(--surface) 65%);
+        order: 1;
+    }
+    .mk-lb__pod--third {
+        border-color: #D97706;
+        background: linear-gradient(180deg, #FFFBEB 0%, var(--surface) 65%);
+        order: 3;
+    }
+    [data-theme="dark"] .mk-lb__pod--first  { background: linear-gradient(180deg, #3A2E1A 0%, var(--surface) 65%); }
+    [data-theme="dark"] .mk-lb__pod--second { background: linear-gradient(180deg, #2A2A3A 0%, var(--surface) 65%); }
+    [data-theme="dark"] .mk-lb__pod--third  { background: linear-gradient(180deg, #3A2A1A 0%, var(--surface) 65%); }
+    .mk-lb__medal { font-size: 24px; display: block; margin-bottom: 3px; }
+    .mk-lb__pod-name {
+        font-size: 10.5px;
+        font-weight: 700;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .mk-lb__pod-pts {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--primary);
+        margin-top: 2px;
+    }
+
+    /* -------- Table -------- */
+    .mk-lb__table {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .mk-lb__table-head,
+    .mk-lb__tr {
+        display: grid;
+        grid-template-columns: 38px 1fr 60px 60px;
+        gap: 8px;
+        padding: 8px 12px;
+        align-items: center;
+        font-size: 11px;
+    }
+    .mk-lb__table-head {
+        background: var(--background);
+        border-bottom: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 9px;
+        letter-spacing: 0.5px;
+    }
+    .mk-lb__tr {
+        border-bottom: 1px solid var(--border-light);
+        color: var(--text);
+    }
+    .mk-lb__tr:last-child { border-bottom: none; }
+    .mk-lb__tr--you {
+        background: var(--primary-light);
+        border-left: 3px solid var(--primary);
+        font-weight: 600;
+    }
+    .mk-lb__th--rank, .mk-lb__td--rank { text-align: center; }
+    .mk-lb__th--pts,  .mk-lb__td--pts  { text-align: right; }
+    .mk-lb__th--id,   .mk-lb__td--id   { text-align: center; font-family: monospace; font-size: 10px; color: var(--text-muted); }
+    .mk-lb__td--name { font-weight: 500; }
+    .mk-lb__tr--you .mk-lb__td--name { font-weight: 700; }
+    .mk-lb__td--pts { font-weight: 800; color: var(--primary); font-size: 12px; }
+    .mk-lb__medal-sm { font-size: 14px; }
+    .mk-lb__you-tag {
+        display: inline-block;
+        margin-left: 6px;
+        font-size: 9px;
+        font-weight: 700;
+        background: var(--primary);
+        color: #ffffff;
+        padding: 1px 8px;
+        border-radius: 8px;
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}

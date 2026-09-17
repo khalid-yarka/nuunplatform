@@ -1,0 +1,323 @@
+{% extends "docs/mockups/_chrome.html" %}
+
+{# ============================================================ #}
+{# Study groups mockup.                                          #}
+{#                                                               #}
+{# Anchors exposed:                                               #}
+{#   curriculum_tabs, featured_section, filter_bar,               #}
+{#   group_card, join_btn                                         #}
+{# ============================================================ #}
+
+{% block chrome_title %}Study Groups{% endblock %}
+
+{% block chrome_content %}
+
+{# ---------------- Header ---------------- #}
+<div class="mk-gr__head">
+    <div class="mk-gr__title">👥 Study Groups</div>
+    <div class="mk-gr__sub">Join communities tailored to your curriculum. <strong>3</strong> active groups available.</div>
+</div>
+
+{# ---------------- Curriculum tabs ---------------- #}
+<div class="mk-gr__tabs" data-docs-anchor="curriculum_tabs">
+    <span class="mk-gr__tab mk-gr__tab--active">
+        🇸🇴 Somalia <span class="mk-gr__tab-count">3</span>
+    </span>
+    <span class="mk-gr__tab">
+        🇸🇱 Puntland <span class="mk-gr__tab-count">0</span>
+    </span>
+    <span class="mk-gr__tab">
+        🇮🇷 Somaliland <span class="mk-gr__tab-count">0</span>
+    </span>
+</div>
+
+{# ---------------- Featured ---------------- #}
+<div class="mk-gr__featured" data-docs-anchor="featured_section">
+    <div class="mk-gr__featured-title">
+        ⭐ Featured Groups
+        <span class="mk-gr__featured-badge">Recommended</span>
+    </div>
+    <div class="mk-gr__featured-grid">
+        <div class="mk-gr__fcard">
+            <div class="mk-gr__ficon">📚</div>
+            <div class="mk-gr__fname">Mogadishu Math Warriors</div>
+            <div class="mk-gr__fmeta">WhatsApp · 234 clicks</div>
+        </div>
+        <div class="mk-gr__fcard">
+            <div class="mk-gr__ficon">🔬</div>
+            <div class="mk-gr__fname">Form 4 Science Squad</div>
+            <div class="mk-gr__fmeta">Telegram · 189 clicks</div>
+        </div>
+        <div class="mk-gr__fcard">
+            <div class="mk-gr__ficon">⚛️</div>
+            <div class="mk-gr__fname">Physics Club</div>
+            <div class="mk-gr__fmeta">WhatsApp · 112 clicks</div>
+        </div>
+    </div>
+</div>
+
+{# ---------------- Filter bar ---------------- #}
+<div class="mk-gr__filters" data-docs-anchor="filter_bar">
+    <div class="mk-gr__sel">All Platforms ▾</div>
+    <div class="mk-gr__sel">All Categories ▾</div>
+</div>
+
+{# ---------------- Group cards ---------------- #}
+<div class="mk-gr__list">
+
+    <div class="mk-gr__card" data-docs-anchor="group_card">
+        <span class="mk-gr__icon">📚</span>
+        <div class="mk-gr__body">
+            <div class="mk-gr__name">
+                Mogadishu Math Warriors
+                <span class="mk-gr__tag mk-gr__tag--feat">⭐</span>
+            </div>
+            <div class="mk-gr__meta">
+                <span><span class="mk-gr__plat mk-gr__plat--wa">💬</span> WhatsApp</span>
+                <span>📂 Mathematics</span>
+                <span>👥 234 joins</span>
+            </div>
+            <div class="mk-gr__desc">Daily practice problems and weekly group challenges for Form 4 students.</div>
+        </div>
+        <span class="mk-gr__join" data-docs-anchor="join_btn">Join →</span>
+    </div>
+
+    <div class="mk-gr__card">
+        <span class="mk-gr__icon">🔬</span>
+        <div class="mk-gr__body">
+            <div class="mk-gr__name">Form 4 Science Squad</div>
+            <div class="mk-gr__meta">
+                <span><span class="mk-gr__plat mk-gr__plat--tg">✈️</span> Telegram</span>
+                <span>📂 Science</span>
+                <span>👥 189 joins</span>
+            </div>
+            <div class="mk-gr__desc">Physics, chemistry and biology discussion + exam prep.</div>
+        </div>
+        <span class="mk-gr__join">Join →</span>
+    </div>
+
+    <div class="mk-gr__card mk-gr__card--locked">
+        <span class="mk-gr__icon">⚛️</span>
+        <div class="mk-gr__body">
+            <div class="mk-gr__name">
+                Puntland Physics Club
+                <span class="mk-gr__tag mk-gr__tag--locked">🔒</span>
+            </div>
+            <div class="mk-gr__meta">
+                <span><span class="mk-gr__plat mk-gr__plat--wa">💬</span> WhatsApp</span>
+                <span>📂 Physics</span>
+                <span>👥 112 joins</span>
+            </div>
+            <div class="mk-gr__desc">Curriculum specific — PL students only.</div>
+        </div>
+        <span class="mk-gr__join mk-gr__join--locked">🔒 Unavailable</span>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .mk-gr__head { margin-bottom: 12px; }
+    .mk-gr__title {
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.3px;
+    }
+    .mk-gr__sub {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-top: 3px;
+    }
+    .mk-gr__sub strong { color: var(--primary); }
+
+    /* -------- Curriculum tabs -------- */
+    .mk-gr__tabs {
+        display: flex;
+        gap: 4px;
+        border-bottom: 2px solid var(--border);
+        margin-bottom: 14px;
+        padding-bottom: 2px;
+    }
+    .mk-gr__tab {
+        padding: 5px 14px;
+        border-radius: 8px 8px 0 0;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text-secondary);
+        background: transparent;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        position: relative;
+    }
+    .mk-gr__tab--active {
+        color: var(--primary);
+        background: var(--primary-light);
+    }
+    .mk-gr__tab--active::after {
+        content: '';
+        position: absolute;
+        left: 0; right: 0;
+        bottom: -3px;
+        height: 2px;
+        background: var(--primary);
+    }
+    .mk-gr__tab-count {
+        font-size: 8.5px;
+        font-weight: 700;
+        background: var(--background);
+        color: var(--text-muted);
+        padding: 1px 6px;
+        border-radius: 6px;
+    }
+    .mk-gr__tab--active .mk-gr__tab-count {
+        background: var(--primary-light);
+        color: var(--primary);
+    }
+
+    /* -------- Featured -------- */
+    .mk-gr__featured { margin-bottom: 14px; }
+    .mk-gr__featured-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11.5px;
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 8px;
+    }
+    .mk-gr__featured-badge {
+        font-size: 8px;
+        font-weight: 800;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        background: linear-gradient(135deg, var(--primary), #B91C1C);
+        color: #ffffff;
+        padding: 2px 8px;
+        border-radius: 8px;
+    }
+    .mk-gr__featured-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+    .mk-gr__fcard {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 8px;
+        text-align: center;
+    }
+    .mk-gr__ficon {
+        font-size: 22px;
+        margin-bottom: 4px;
+        line-height: 1;
+    }
+    .mk-gr__fname {
+        font-size: 10.5px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.3;
+        margin-bottom: 3px;
+    }
+    .mk-gr__fmeta {
+        font-size: 9px;
+        color: var(--text-muted);
+    }
+
+    /* -------- Filters -------- */
+    .mk-gr__filters {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 12px;
+    }
+    .mk-gr__sel {
+        padding: 7px 14px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 10.5px;
+        color: var(--text-secondary);
+        font-weight: 500;
+    }
+
+    /* -------- Group cards -------- */
+    .mk-gr__list { display: flex; flex-direction: column; gap: 7px; }
+    .mk-gr__card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 14px;
+    }
+    .mk-gr__card--locked { opacity: 0.72; }
+    .mk-gr__icon {
+        font-size: 26px;
+        width: 36px;
+        text-align: center;
+        flex-shrink: 0;
+        line-height: 1;
+    }
+    .mk-gr__body { flex: 1; min-width: 0; }
+    .mk-gr__name {
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    .mk-gr__tag {
+        font-size: 9px;
+        padding: 0 4px;
+    }
+    .mk-gr__tag--feat { color: #F59E0B; }
+    .mk-gr__tag--locked { color: #F59E0B; }
+    .mk-gr__meta {
+        display: flex;
+        gap: 10px;
+        margin-top: 3px;
+        font-size: 10px;
+        color: var(--text-secondary);
+        flex-wrap: wrap;
+    }
+    .mk-gr__plat { font-size: 11px; }
+    .mk-gr__plat--wa { color: #25D366; }
+    .mk-gr__plat--tg { color: #0088CC; }
+    .mk-gr__desc {
+        font-size: 10px;
+        color: var(--text-secondary);
+        margin-top: 4px;
+        line-height: 1.4;
+    }
+    .mk-gr__join {
+        padding: 7px 16px;
+        background: var(--primary);
+        color: #ffffff;
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: 700;
+        flex-shrink: 0;
+        white-space: nowrap;
+        box-shadow: 0 3px 10px rgba(255,49,56,0.22);
+    }
+    .mk-gr__join--locked {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text-muted);
+        box-shadow: none;
+    }
+
+    @media (max-width: 640px) {
+        .mk-gr__featured-grid { grid-template-columns: 1fr 1fr; }
+        .mk-gr__card { flex-direction: column; align-items: stretch; }
+        .mk-gr__join { text-align: center; }
+    }
+</style>
+{% endblock %}

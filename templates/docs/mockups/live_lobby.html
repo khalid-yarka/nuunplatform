@@ -1,0 +1,334 @@
+{% extends "docs/mockups/_chrome.html" %}
+
+{# ============================================================ #}
+{# Live quiz lobby mockup.                                       #}
+{#                                                               #}
+{# Anchors exposed:                                               #}
+{#   stats_row, quiz_card, search_input, status_filter,           #}
+{#   create_btn                                                   #}
+{# ============================================================ #}
+
+{% block chrome_title %}Live Quiz Lobby{% endblock %}
+
+{% block chrome_content %}
+
+{# ---------------- Header ---------------- #}
+<div class="mk-ll__head">
+    <div>
+        <div class="mk-ll__title">🎯 Live Quiz Lobby</div>
+        <div class="mk-ll__sub">Find open quizzes, join games, or view results</div>
+    </div>
+    <div class="mk-ll__actions">
+        <span class="mk-ll__create" data-docs-anchor="create_btn">
+            ➕ Create Quiz
+        </span>
+        <span class="mk-ll__join">
+            🔑 Join with Code
+        </span>
+    </div>
+</div>
+
+{# ---------------- Stats row ---------------- #}
+<div class="mk-ll__stats" data-docs-anchor="stats_row">
+    <div class="mk-ll__stat">
+        <div class="mk-ll__stat-num mk-ll__stat-num--sched">2</div>
+        <div class="mk-ll__stat-lbl">⏳ Scheduled</div>
+    </div>
+    <div class="mk-ll__stat">
+        <div class="mk-ll__stat-num mk-ll__stat-num--open">4</div>
+        <div class="mk-ll__stat-lbl">🟢 Open</div>
+    </div>
+    <div class="mk-ll__stat">
+        <div class="mk-ll__stat-num mk-ll__stat-num--active">1</div>
+        <div class="mk-ll__stat-lbl">🟡 Active</div>
+    </div>
+    <div class="mk-ll__stat">
+        <div class="mk-ll__stat-num mk-ll__stat-num--fin">6</div>
+        <div class="mk-ll__stat-lbl">🔵 Finished</div>
+    </div>
+    <div class="mk-ll__stat">
+        <div class="mk-ll__stat-num">13</div>
+        <div class="mk-ll__stat-lbl">📊 Total</div>
+    </div>
+    <div class="mk-ll__stat">
+        <div class="mk-ll__stat-num">47</div>
+        <div class="mk-ll__stat-lbl">👥 Participants</div>
+    </div>
+</div>
+
+{# ---------------- Filters ---------------- #}
+<div class="mk-ll__filters">
+    <div class="mk-ll__search" data-docs-anchor="search_input">
+        <span class="mk-ll__search-icon">🔍</span>
+        <span class="mk-ll__search-ph">Search by title or creator…</span>
+    </div>
+    <div class="mk-ll__sel" data-docs-anchor="status_filter">
+        All Status ▾
+    </div>
+    <div class="mk-ll__sel">All Subjects ▾</div>
+</div>
+
+{# ---------------- Quiz cards ---------------- #}
+<div class="mk-ll__list">
+
+    <div class="mk-ll__card" data-docs-anchor="quiz_card">
+        <span class="mk-ll__card-status mk-ll__card-status--waiting"></span>
+        <div class="mk-ll__card-body">
+            <div class="mk-ll__card-title">
+                🎯 Friday Challenge
+                <span class="mk-ll__badge mk-ll__badge--open">OPEN</span>
+            </div>
+            <div class="mk-ll__card-meta">
+                <span>📚 Mathematics</span>
+                <span>❓ 10 questions</span>
+                <span>⏱️ 30s each</span>
+                <span>👤 By Yusuf M.</span>
+            </div>
+        </div>
+        <div class="mk-ll__card-actions">
+            <span class="mk-ll__count">👥 <strong>5</strong>/50</span>
+            <span class="mk-ll__btn mk-ll__btn--success">Join</span>
+        </div>
+    </div>
+
+    <div class="mk-ll__card">
+        <span class="mk-ll__card-status mk-ll__card-status--active"></span>
+        <div class="mk-ll__card-body">
+            <div class="mk-ll__card-title">
+                ⚡ Physics Sprint
+                <span class="mk-ll__badge mk-ll__badge--active">ACTIVE</span>
+                <span class="mk-ll__badge mk-ll__badge--you">You</span>
+            </div>
+            <div class="mk-ll__card-meta">
+                <span>📚 Physics</span>
+                <span>❓ 15 questions</span>
+                <span>⏱️ 45s each</span>
+            </div>
+        </div>
+        <div class="mk-ll__card-actions">
+            <span class="mk-ll__count">👥 <strong>8</strong>/50</span>
+            <span class="mk-ll__btn mk-ll__btn--primary">Continue</span>
+        </div>
+    </div>
+
+    <div class="mk-ll__card">
+        <span class="mk-ll__card-status mk-ll__card-status--finished"></span>
+        <div class="mk-ll__card-body">
+            <div class="mk-ll__card-title">
+                🧬 Biology Blitz
+                <span class="mk-ll__badge mk-ll__badge--fin">FINISHED</span>
+            </div>
+            <div class="mk-ll__card-meta">
+                <span>📚 Biology</span>
+                <span>❓ 10 questions</span>
+                <span>📅 2h ago</span>
+            </div>
+        </div>
+        <div class="mk-ll__card-actions">
+            <span class="mk-ll__count">👥 <strong>12</strong>/50</span>
+            <span class="mk-ll__btn mk-ll__btn--secondary">Results</span>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .mk-ll__head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+    }
+    .mk-ll__title {
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.3px;
+    }
+    .mk-ll__sub {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-top: 3px;
+    }
+    .mk-ll__actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    .mk-ll__create {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 7px 14px;
+        background: var(--primary);
+        color: #ffffff;
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: 700;
+        box-shadow: 0 4px 12px rgba(255,49,56,0.22);
+    }
+    .mk-ll__join {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 7px 14px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    /* -------- Stats -------- */
+    .mk-ll__stats {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 6px;
+        margin-bottom: 12px;
+    }
+    .mk-ll__stat {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 4px;
+        text-align: center;
+    }
+    .mk-ll__stat-num {
+        font-size: 15px;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.4px;
+        line-height: 1.1;
+    }
+    .mk-ll__stat-num--sched  { color: #8B5CF6; }
+    .mk-ll__stat-num--open   { color: #10B981; }
+    .mk-ll__stat-num--active { color: #F59E0B; }
+    .mk-ll__stat-num--fin    { color: #3B82F6; }
+    .mk-ll__stat-lbl {
+        font-size: 8px;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* -------- Filters -------- */
+    .mk-ll__filters {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 12px;
+    }
+    .mk-ll__search {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 11px;
+        min-width: 0;
+    }
+    .mk-ll__search-icon { color: var(--text-muted); }
+    .mk-ll__search-ph { color: var(--text-muted); flex: 1; min-width: 0; }
+    .mk-ll__sel {
+        padding: 7px 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 10.5px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+
+    /* -------- Quiz cards -------- */
+    .mk-ll__list { display: flex; flex-direction: column; gap: 7px; }
+    .mk-ll__card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 14px;
+        position: relative;
+        overflow: hidden;
+    }
+    .mk-ll__card-status {
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 3px;
+    }
+    .mk-ll__card-status--waiting  { background: #10B981; }
+    .mk-ll__card-status--active   { background: #F59E0B; }
+    .mk-ll__card-status--finished { background: #3B82F6; }
+    .mk-ll__card-body {
+        flex: 1;
+        min-width: 0;
+        padding-left: 6px;
+    }
+    .mk-ll__card-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    .mk-ll__badge {
+        font-size: 8px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+        padding: 1px 7px;
+        border-radius: 8px;
+        text-transform: uppercase;
+    }
+    .mk-ll__badge--open   { background: #D1FAE5; color: #065F46; }
+    .mk-ll__badge--active { background: #FEF3C7; color: #92400E; }
+    .mk-ll__badge--fin    { background: #DBEAFE; color: #1E40AF; }
+    .mk-ll__badge--you    { background: #3B82F6; color: #ffffff; }
+    .mk-ll__card-meta {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 3px;
+        font-size: 10px;
+        color: var(--text-secondary);
+    }
+    .mk-ll__card-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+    .mk-ll__count {
+        font-size: 10px;
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+    .mk-ll__count strong { color: var(--text); }
+    .mk-ll__btn {
+        padding: 5px 12px;
+        border-radius: 6px;
+        font-size: 10px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+    .mk-ll__btn--success   { background: #10B981; color: #ffffff; }
+    .mk-ll__btn--primary   { background: var(--primary); color: #ffffff; }
+    .mk-ll__btn--secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary); }
+</style>
+{% endblock %}

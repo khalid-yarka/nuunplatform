@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="{{ current_language() if current_language is defined else 'en' }}">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}{{ _('docs.title') }}{% endblock %}</title>
+
+    <script>
+        (function() {
+            try {
+                var serverTheme = "{{ settings.get('appearance.theme', '') if settings is defined else '' }}";
+                var theme = serverTheme || localStorage.getItem('preferred-theme') || 'system';
+                var resolved = (theme === 'system')
+                    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                    : theme;
+                document.documentElement.setAttribute('data-theme', resolved);
+
+                var serverAccent = "{{ settings.get('appearance.accent', '') if settings is defined else '' }}";
+                var accent = serverAccent || localStorage.getItem('preferred-accent') || 'red';
+                var ACCENTS = {
+                    red:    { hex: '#FF3138', hover: '#E62B32', light: '#FFEBE8', light_dark: '#3A1A20' },
+                    blue:   { hex: '#3B82F6', hover: '#2563EB', light: '#E8F0FE', light_dark: '#1A2A4A' },
+                    green:  { hex: '#10B981', hover: '#059669', light: '#D1FAE5', light_dark: '#1A3A2E' },
+                    purple: { hex: '#8B5CF6', hover: '#7C3AED', light: '#EDE9FE', light_dark: '#2A1A4A' },
+                    orange: { hex: '#F59E0B', hover: '#D97706', light: '#FEF3C7', light_dark: '#3A2E1A' }
+                };
+                var a = ACCENTS[accent] || ACCENTS.red;
+                var isDark = resolved === 'dark';
+                var root = document.documentElement;
+                root.style.setProperty('--primary', a.hex);
+                root.style.setProperty('--primary-hover', a.hover);
+                root.style.setProperty('--primary-light', isDark ? a.light_dark : a.light);
+
+                var serverFont = "{{ settings.get('appearance.font_size', '') if settings is defined else '' }}";
+                var fontSize = serverFont || localStorage.getItem('preferred-font-size') || 'medium';
+                var sizes = { small: '14px', medium: '16px', large: '18px' };
+                root.style.setProperty('--base-font-size', sizes[fontSize] || '16px');
+
+                var serverReduced = "{{ settings.get('appearance.reduced_motion', '') if settings is defined else '' }}";
+                var reduced = serverReduced === 'True' || serverReduced === 'true'
+                           || localStorage.getItem('preferred-reduced-motion') === '1';
+                if (reduced) root.classList.add('reduced-motion');
+
+                if (localStorage.getItem('nuun.docs.sidebar-collapsed') === '1') {
+                    root.classList.add('docs-sidebar-collapsed');
+                }
+            } catch (e) { /* silent */ }
+        })();
+    </script>
+
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}" />
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/docs-system.css') }}" />
+
+    {% block docs_head %}{% endblock %}
+</head>
+<body class="docs-body">
+
+<header class="docs-header">
+    <div class="docs-header__inner">
+
+        <a href="{{ url_for('docs.home') }}" class="docs-header__brand">
+            <img src="{{ url_for('static', filename='images/logo.png') }}"
+                 alt="NuunPlatform" class="docs-header__logo" />
+            <span class="docs-header__brand-text">Nuun<span>Platform</span></span>
+            <span class="docs-header__badge">{{ _('docs.badge') }}</span>
+        </a>
+
+        <nav class="docs-header__nav">
+            <a href="{{ url_for('docs.roadmap') }}"
+               class="docs-header__link {% if request.endpoint == 'docs.roadmap' %}active{% endif %}">
+                <i class="fas fa-map"></i> {{ _('docs.nav.roadmap') }}
+            </a>
+            <a href="{{ url_for('docs.tour_start') }}"
+               class="docs-header__link {% if request.endpoint and request.endpoint.startswith('docs.tour') %}active{% endif %}">
+                <i class="fas fa-play"></i> {{ _('docs.nav.tour') }}
+            </a>
+        </nav>
+
+        <div class="docs-header__actions">
+            {% if session.get('user_id') %}
+                <a href="{{ url_for('dashboard.home') }}" class="docs-header__btn docs-header__btn--primary">
+                    <i class="fas fa-arrow-left"></i>
+                    <span class="docs-header__btn-label">{{ _('docs.back_to_dashboard') }}</span>
+                </a>
+            {% else %}
+                <a href="{{ url_for('auth.login') }}" class="docs-header__btn docs-header__btn--ghost">
+                    {{ _('docs.login') }}
+                </a>
+                <a href="{{ url_for('auth.register') }}" class="docs-header__btn docs-header__btn--primary">
+                    {{ _('docs.register') }}
+                </a>
+            {% endif %}
+        </div>
+
+    </div>
+</header>
+
+<div class="docs-shell">
+
+    <aside class="docs-sidebar" id="docsSidebar">
+
+        <div class="docs-sidebar__topbar">
+            <span class="docs-sidebar__topbar-label">{{ _('docs.badge') }}</span>
+            <button type="button"
+                    class="docs-sidebar__collapse"
+                    id="docsSidebarCollapse"
+                    aria-label="{{ _('docs.sidebar.toggle') }}"
+                    aria-expanded="true"
+                    title="{{ _('docs.sidebar.toggle') }}">
+                <i class="fas fa-angles-left" aria-hidden="true"></i>
+            </button>
+        </div>
+
+        {% include 'docs/partials/_sidebar.html' %}
+    </aside>
+
+    <main class="docs-main" id="docsMain">
+        {% block docs_body %}{% endblock %}
+    </main>
+
+</div>
+
+<button type="button"
+        class="docs-sidebar-toggle"
+        id="docsSidebarToggle"
+        aria-label="{{ _('docs.sidebar.toggle') }}">
+    <i class="fas fa-bars"></i>
+</button>
+<div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+<footer class="docs-footer">
+    <div class="docs-footer__inner">
+        <span>© 2026 NuunPlatform</span>
+        <span class="docs-footer__sep">·</span>
+        <a href="{{ url_for('auth.help') }}">{{ _('docs.footer.help') }}</a>
+        <span class="docs-footer__sep">·</span>
+        <a href="{{ url_for('docs.roadmap') }}">{{ _('docs.footer.roadmap') }}</a>
+    </div>
+</footer>
+
+<script>
+    window.__docs_csrf = "{{ csrf_token if csrf_token is defined else '' }}";
+    window.__docs_lang = "{{ current_language() if current_language is defined else 'en' }}";
+
+    (function () {
+        var toggle  = document.getElementById('docsSidebarToggle');
+        var overlay = document.getElementById('docsSidebarOverlay');
+        var sidebar = document.getElementById('docsSidebar');
+        if (!toggle || !sidebar) return;
+
+        function openSidebar() {
+            sidebar.classList.add('is-open');
+            if (overlay) overlay.classList.add('is-visible');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeSidebar() {
+            sidebar.classList.remove('is-open');
+            if (overlay) overlay.classList.remove('is-visible');
+            document.body.style.overflow = '';
+        }
+
+        toggle.addEventListener('click', function () {
+            if (sidebar.classList.contains('is-open')) closeSidebar();
+            else openSidebar();
+        });
+        if (overlay) overlay.addEventListener('click', closeSidebar);
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && sidebar.classList.contains('is-open')) {
+                closeSidebar();
+            }
+        });
+    })();
+</script>
+
+<script src="{{ url_for('static', filename='js/docs-router.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/docs-hotspot.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/docs-progress.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/docs-sidebar.js') }}" defer></script>
+
+{% block docs_js %}{% endblock %}
+</body>
+</html>
+{# ==== end of layout.html ==== #}

@@ -1,0 +1,351 @@
+{% extends "docs/mockups/_chrome.html" %}
+
+{# ============================================================ #}
+{# Live quiz play mockup.                                        #}
+{#                                                               #}
+{# Anchors exposed:                                               #}
+{#   quiz_header, total_timer, timer_display,                     #}
+{#   question_card, option_a, option_b, option_c,                 #}
+{#   leaderboard_mini, participant_progress                       #}
+{# ============================================================ #}
+
+{% block chrome_title %}Live Quiz{% endblock %}
+
+{% block chrome_content %}
+
+<div class="mk-lp">
+
+    {# ---------------- Quiz header ---------------- #}
+    <div class="mk-lp__head" data-docs-anchor="quiz_header">
+        <div class="mk-lp__head-text">
+            <div class="mk-lp__head-title">🎯 Friday Challenge</div>
+            <div class="mk-lp__head-meta">
+                <span>📚 Mathematics</span>
+                <span>❓ <strong>3</strong>/10</span>
+            </div>
+        </div>
+        <div class="mk-lp__timer" data-docs-anchor="timer_display">
+            <div class="mk-lp__timer-num">24</div>
+            <div class="mk-lp__timer-lbl">seconds</div>
+        </div>
+    </div>
+
+    {# ---------------- Total timer ---------------- #}
+    <div class="mk-lp__total" data-docs-anchor="total_timer">
+        <span class="mk-lp__total-lbl">⏱️ Quiz ends in</span>
+        <div class="mk-lp__total-bar">
+            <div class="mk-lp__total-fill" style="width: 68%;"></div>
+        </div>
+        <span class="mk-lp__total-time">05:42</span>
+    </div>
+
+    {# ---------------- Leaderboard mini ---------------- #}
+    <div class="mk-lp__lb" data-docs-anchor="leaderboard_mini">
+        <div class="mk-lp__lb-head">
+            <span class="mk-lp__lb-title">🏆 Live Leaderboard</span>
+            <span class="mk-lp__lb-rank">Your Rank: <strong>#2</strong></span>
+        </div>
+        <div class="mk-lp__lb-item">
+            <span class="mk-lp__lb-medal">🥇</span>
+            <span class="mk-lp__lb-name">Yusuf M.</span>
+            <span class="mk-lp__lb-score">8 pts</span>
+        </div>
+        <div class="mk-lp__lb-item mk-lp__lb-item--you">
+            <span class="mk-lp__lb-medal">🥈</span>
+            <span class="mk-lp__lb-name">Amina H. <span class="mk-lp__lb-you">(You)</span></span>
+            <span class="mk-lp__lb-score">6 pts</span>
+        </div>
+        <div class="mk-lp__lb-item">
+            <span class="mk-lp__lb-medal">🥉</span>
+            <span class="mk-lp__lb-name">Sagal A.</span>
+            <span class="mk-lp__lb-score">4 pts</span>
+        </div>
+    </div>
+
+    {# ---------------- Question ---------------- #}
+    <div class="mk-lp__q" data-docs-anchor="question_card">
+        <div class="mk-lp__q-text">Which planet is known as the Red Planet?</div>
+
+        <div class="mk-lp__opts">
+            <div class="mk-lp__opt" data-docs-anchor="option_a">
+                <span class="mk-lp__opt-letter">A.</span>
+                <span class="mk-lp__opt-text">Venus</span>
+            </div>
+            <div class="mk-lp__opt mk-lp__opt--correct" data-docs-anchor="option_b">
+                <span class="mk-lp__opt-letter">B.</span>
+                <span class="mk-lp__opt-text">Mars</span>
+                <span class="mk-lp__opt-check">✓</span>
+            </div>
+            <div class="mk-lp__opt" data-docs-anchor="option_c">
+                <span class="mk-lp__opt-letter">C.</span>
+                <span class="mk-lp__opt-text">Jupiter</span>
+            </div>
+        </div>
+    </div>
+
+    {# ---------------- Participant progress ---------------- #}
+    <div class="mk-lp__pp" data-docs-anchor="participant_progress">
+        <div class="mk-lp__pp-title">👥 Participant Progress</div>
+
+        <div class="mk-lp__pp-item">
+            <span class="mk-lp__pp-name">Yusuf M.</span>
+            <div class="mk-lp__pp-bar"><div class="mk-lp__pp-fill" style="width: 40%;"></div></div>
+            <span class="mk-lp__pp-status mk-lp__pp-status--playing">⏳ Playing</span>
+        </div>
+        <div class="mk-lp__pp-item">
+            <span class="mk-lp__pp-name">Amina H.</span>
+            <div class="mk-lp__pp-bar"><div class="mk-lp__pp-fill" style="width: 30%;"></div></div>
+            <span class="mk-lp__pp-status mk-lp__pp-status--playing">⏳ Playing</span>
+        </div>
+        <div class="mk-lp__pp-item">
+            <span class="mk-lp__pp-name">Sagal A.</span>
+            <div class="mk-lp__pp-bar"><div class="mk-lp__pp-fill" style="width: 20%;"></div></div>
+            <span class="mk-lp__pp-status mk-lp__pp-status--playing">⏳ Playing</span>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .mk-lp { max-width: 440px; margin: 0 auto; }
+
+    /* -------- Quiz header -------- */
+    .mk-lp__head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin-bottom: 8px;
+    }
+    .mk-lp__head-text { min-width: 0; flex: 1; }
+    .mk-lp__head-title {
+        font-size: 12.5px;
+        font-weight: 800;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .mk-lp__head-meta {
+        display: flex;
+        gap: 10px;
+        margin-top: 3px;
+        font-size: 10px;
+        color: var(--text-secondary);
+    }
+    .mk-lp__head-meta strong { color: var(--text); }
+    .mk-lp__timer { text-align: right; flex-shrink: 0; }
+    .mk-lp__timer-num {
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--text);
+        line-height: 1;
+        font-family: monospace;
+    }
+    .mk-lp__timer-lbl {
+        font-size: 8px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 2px;
+    }
+
+    /* -------- Total timer -------- */
+    .mk-lp__total {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 14px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin-bottom: 8px;
+    }
+    .mk-lp__total-lbl {
+        font-size: 10px;
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+    .mk-lp__total-bar {
+        flex: 1;
+        height: 5px;
+        background: var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .mk-lp__total-fill {
+        height: 100%;
+        background: var(--primary);
+        border-radius: 10px;
+    }
+    .mk-lp__total-time {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text);
+        font-family: monospace;
+        min-width: 42px;
+        text-align: right;
+    }
+
+    /* -------- Leaderboard mini -------- */
+    .mk-lp__lb {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 14px;
+        margin-bottom: 8px;
+    }
+    .mk-lp__lb-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+    }
+    .mk-lp__lb-title {
+        font-size: 10px;
+        font-weight: 800;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+    .mk-lp__lb-rank {
+        font-size: 9.5px;
+        color: var(--primary);
+        background: var(--primary-light);
+        padding: 2px 9px;
+        border-radius: 10px;
+        font-weight: 700;
+    }
+    .mk-lp__lb-rank strong { color: var(--primary); }
+    .mk-lp__lb-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 3px 0;
+        font-size: 11px;
+    }
+    .mk-lp__lb-item--you {
+        background: var(--primary-light);
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-weight: 700;
+    }
+    .mk-lp__lb-medal { font-size: 13px; flex-shrink: 0; }
+    .mk-lp__lb-name {
+        flex: 1;
+        min-width: 0;
+        color: var(--text);
+    }
+    .mk-lp__lb-you { color: var(--primary); font-weight: 700; }
+    .mk-lp__lb-score {
+        font-weight: 800;
+        color: var(--primary);
+        font-size: 11px;
+    }
+
+    /* -------- Question card -------- */
+    .mk-lp__q {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin-bottom: 10px;
+    }
+    .mk-lp__q-text {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.4;
+        margin-bottom: 10px;
+    }
+    .mk-lp__opts { display: flex; flex-direction: column; gap: 6px; }
+    .mk-lp__opt {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        background: var(--surface);
+        border: 2px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 11.5px;
+        color: var(--text);
+    }
+    .mk-lp__opt--correct {
+        border-color: #10B981;
+        background: #ECFDF5;
+    }
+    [data-theme="dark"] .mk-lp__opt--correct {
+        background: #1A3A2E;
+        color: #D1FAE5;
+    }
+    .mk-lp__opt-letter {
+        font-weight: 700;
+        color: var(--text-secondary);
+        min-width: 18px;
+    }
+    .mk-lp__opt--correct .mk-lp__opt-letter { color: #10B981; }
+    .mk-lp__opt-text { flex: 1; }
+    .mk-lp__opt-check { color: #10B981; font-weight: 800; }
+
+    /* -------- Participant progress -------*/
+    .mk-lp__pp {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 14px;
+    }
+    .mk-lp__pp-title {
+        font-size: 10px;
+        font-weight: 800;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 8px;
+    }
+    .mk-lp__pp-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 3px 0;
+        font-size: 10.5px;
+    }
+    .mk-lp__pp-name {
+        width: 70px;
+        flex-shrink: 0;
+        color: var(--text);
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .mk-lp__pp-bar {
+        flex: 1;
+        height: 5px;
+        background: var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        min-width: 40px;
+    }
+    .mk-lp__pp-fill {
+        height: 100%;
+        background: var(--primary);
+        border-radius: 10px;
+    }
+    .mk-lp__pp-status {
+        font-size: 9px;
+        font-weight: 700;
+        padding: 1px 8px;
+        border-radius: 8px;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    .mk-lp__pp-status--playing { background: #EFF6FF; color: #1E40AF; }
+</style>
+{% endblock %}

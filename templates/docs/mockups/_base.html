@@ -1,0 +1,124 @@
+{# ============================================================ #}
+{# Base wrapper for every docs mockup.                            #}
+{#                                                               #}
+{# Provides:                                                      #}
+{#   - .mockup-root outer wrapper                                 #}
+{#   - docs_head block (child mockups put their <style> here)     #}
+{#   - scoped typography reset                                    #}
+{#   - pointer-events disabled on the whole subtree               #}
+{# ============================================================ #}
+
+<div class="mockup-root">
+    {% block docs_head %}{% endblock %}
+    {% block mockup_content %}{% endblock %}
+</div>
+
+<style>
+    /* ---------- Reset within the mockup only ---------- */
+
+    .mockup-root,
+    .mockup-root *,
+    .mockup-root *::before,
+    .mockup-root *::after {
+        box-sizing: border-box;
+    }
+
+    .mockup-root {
+        font-family: inherit;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--text);
+        background: var(--background);
+        border-radius: var(--radius-sm);
+        min-height: 340px;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .mockup-root h1,
+    .mockup-root h2,
+    .mockup-root h3,
+    .mockup-root h4 {
+        margin: 0;
+        color: var(--text);
+        line-height: 1.25;
+        font-weight: 700;
+    }
+
+    .mockup-root p { margin: 0; }
+    .mockup-root ul { margin: 0; padding: 0; list-style: none; }
+
+    /* ---------- Disable all interaction inside the canvas ---------- */
+
+    .docs-mockup__canvas,
+    .docs-mockup__canvas * {
+        pointer-events: none !important;
+        user-select: none !important;
+    }
+
+    /* ---------- Shared mockup atoms ---------- */
+
+    .mockup-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 16px;
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        font-weight: 700;
+        border: none;
+        cursor: default;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .mockup-btn--primary {
+        background: var(--primary);
+        color: #ffffff;
+        box-shadow: 0 4px 12px rgba(255, 49, 56, 0.24);
+    }
+    .mockup-btn--ghost {
+        background: var(--surface);
+        color: var(--text);
+        border: 1px solid var(--border);
+    }
+
+    .mockup-input {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        background: var(--surface-alt);
+        border: 1.5px solid transparent;
+        border-radius: var(--radius-sm);
+        color: var(--text-secondary);
+        font-size: 13px;
+    }
+    .mockup-input__icon {
+        color: var(--primary);
+        opacity: 0.7;
+        width: 16px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+    .mockup-input__prefix {
+        color: var(--text);
+        font-weight: 600;
+    }
+    .mockup-input__value { color: var(--text); flex: 1; min-width: 0; }
+    .mockup-input__placeholder { color: var(--text-muted); flex: 1; min-width: 0; }
+    .mockup-input--focused {
+        background: var(--surface);
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.12);
+    }
+
+    .mockup-label {
+        display: block;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 6px;
+    }
+    .mockup-label .req { color: var(--primary); margin-left: 2px; }
+</style>

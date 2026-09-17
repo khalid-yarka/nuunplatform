@@ -1,0 +1,234 @@
+{% extends "docs/mockups/_base.html" %}
+{# Dashboard chrome mockup — sidebar + topbar + content slot. #}
+{% block mockup_content %}
+{% set has_sidebar_hotspot = (
+    step is defined and step.hotspots and (
+        'sidebar_quiz_link' in step.hotspots or
+        'sidebar_live_link' in step.hotspots or
+        'sidebar_focus_link' in step.hotspots or
+        'sidebar_pdfs_link' in step.hotspots or
+        'sidebar_groups_link' in step.hotspots
+    )
+) %}
+
+<style>
+.chrome-shell {
+    display: flex;
+    background: var(--background);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    min-height: 420px;
+    position: relative;
+}
+.chrome-sidebar {
+    width: 176px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 12px 8px;
+    font-size: 11px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.chrome-brand {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px 10px;
+    border-bottom: 1px solid var(--border-light);
+}
+.chrome-brand__logo {
+    width: 22px; height: 22px; border-radius: 6px;
+    background: var(--primary); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 12px; flex-shrink: 0;
+}
+.chrome-brand__text { font-size: 12px; font-weight: 700; letter-spacing: -0.2px; color: var(--text); }
+.chrome-brand__text span { color: var(--primary); }
+.chrome-user {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: 8px; background: var(--primary-light);
+}
+.chrome-user__avatar {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--primary); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 11px; flex-shrink: 0;
+}
+.chrome-user__name { font-size: 11px; font-weight: 700; color: var(--text); line-height: 1.2; }
+.chrome-user__id { font-size: 9px; color: var(--primary); font-weight: 700; letter-spacing: 0.4px; }
+.chrome-section { display: flex; flex-direction: column; gap: 1px; }
+.chrome-section__label {
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.7px; color: var(--text-muted); padding: 4px 8px 2px;
+}
+.chrome-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px; border-radius: 6px;
+    color: var(--text-secondary); font-size: 11px; font-weight: 500;
+}
+.chrome-item--active { background: var(--primary); color: #fff; }
+.chrome-item__icon { font-size: 12px; width: 16px; text-align: center; flex-shrink: 0; }
+.chrome-item__text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chrome-item__badge {
+    font-size: 9px; background: var(--primary-light); color: var(--primary);
+    padding: 1px 5px; border-radius: 6px; font-weight: 700; flex-shrink: 0;
+}
+.chrome-item--active .chrome-item__badge { background: rgba(255,255,255,0.25); color: #fff; }
+.chrome-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.chrome-topbar {
+    height: 40px; background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px; padding: 0 12px; flex-shrink: 0;
+}
+.chrome-topbar__menu { color: var(--text-secondary); font-size: 14px; }
+.chrome-topbar__title {
+    font-size: 12px; font-weight: 700; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.chrome-topbar__spacer { flex: 1; }
+.chrome-topbar__icon { color: var(--text-secondary); font-size: 13px; position: relative; flex-shrink: 0; }
+.chrome-topbar__dot {
+    position: absolute; top: -3px; right: -3px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--primary); border: 1.5px solid var(--surface);
+}
+.chrome-topbar__avatar {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--primary); color: #fff; font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.chrome-content { flex: 1; padding: 12px; overflow: hidden; min-height: 0; }
+
+/* Backdrop — hidden by default, shown on mobile when drawer is open */
+.chrome-backdrop {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 4;
+    pointer-events: none;
+}
+
+/* Mobile: sidebar becomes a fixed drawer over the content */
+@media (max-width: 700px) {
+    .chrome-shell {
+        min-height: 380px;
+    }
+    .chrome-sidebar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        z-index: 5;
+        transform: translateX(-100%);
+        box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18);
+        transition: none;
+        overflow-y: auto;
+    }
+    .chrome-shell[data-drawer-open="true"] .chrome-sidebar {
+        transform: translateX(0);
+    }
+    .chrome-shell[data-drawer-open="true"] .chrome-backdrop {
+        display: block;
+    }
+    .chrome-main {
+        width: 100%;
+        flex: 0 0 100%;
+    }
+}
+</style>
+
+<div class="chrome-shell" data-drawer-open="{{ 'true' if has_sidebar_hotspot else 'false' }}">
+    <div class="chrome-backdrop" aria-hidden="true"></div>
+
+    <aside class="chrome-sidebar">
+        <div class="chrome-brand">
+            <span class="chrome-brand__logo">🅝</span>
+            <span class="chrome-brand__text">Nuun<span>Platform</span></span>
+        </div>
+
+        <div class="chrome-user">
+            <span class="chrome-user__avatar">A</span>
+            <div class="chrome-user__meta">
+                <div class="chrome-user__name">Amina H.</div>
+                <div class="chrome-user__id">#A4K7</div>
+            </div>
+        </div>
+
+        <div class="chrome-section">
+            <div class="chrome-section__label">Main</div>
+            <div class="chrome-item chrome-item--active">
+                <span class="chrome-item__icon">🏠</span>
+                <span class="chrome-item__text">Dashboard</span>
+            </div>
+        </div>
+
+        <div class="chrome-section">
+            <div class="chrome-section__label">Learning</div>
+            <div class="chrome-item" data-docs-anchor="sidebar_quiz_link">
+                <span class="chrome-item__icon">✏️</span>
+                <span class="chrome-item__text">Quizzes</span>
+            </div>
+            <div class="chrome-item" data-docs-anchor="sidebar_live_link">
+                <span class="chrome-item__icon">⚡</span>
+                <span class="chrome-item__text">Live Quiz</span>
+            </div>
+            <div class="chrome-item" data-docs-anchor="sidebar_focus_link">
+                <span class="chrome-item__icon">🎯</span>
+                <span class="chrome-item__text">Focus</span>
+            </div>
+            <div class="chrome-item" data-docs-anchor="sidebar_pdfs_link">
+                <span class="chrome-item__icon">📄</span>
+                <span class="chrome-item__text">PDFs</span>
+            </div>
+            <div class="chrome-item" data-docs-anchor="sidebar_groups_link">
+                <span class="chrome-item__icon">👥</span>
+                <span class="chrome-item__text">Groups</span>
+            </div>
+        </div>
+
+        <div class="chrome-section">
+            <div class="chrome-section__label">Community</div>
+            <div class="chrome-item">
+                <span class="chrome-item__icon">🏆</span>
+                <span class="chrome-item__text">Leaderboard</span>
+            </div>
+            <div class="chrome-item">
+                <span class="chrome-item__icon">📊</span>
+                <span class="chrome-item__text">History</span>
+            </div>
+        </div>
+
+        <div class="chrome-section">
+            <div class="chrome-section__label">Account</div>
+            <div class="chrome-item">
+                <span class="chrome-item__icon">👤</span>
+                <span class="chrome-item__text">Profile</span>
+            </div>
+            <div class="chrome-item">
+                <span class="chrome-item__icon">⚙️</span>
+                <span class="chrome-item__text">Settings</span>
+            </div>
+        </div>
+    </aside>
+
+    <div class="chrome-main">
+        <div class="chrome-topbar">
+            <span class="chrome-topbar__menu">☰</span>
+            <span class="chrome-topbar__title">{% block chrome_title %}Dashboard{% endblock %}</span>
+            <span class="chrome-topbar__spacer"></span>
+            <span class="chrome-topbar__icon">🌗</span>
+            <span class="chrome-topbar__icon">🔔<span class="chrome-topbar__dot"></span></span>
+            <span class="chrome-topbar__avatar">A</span>
+        </div>
+        <div class="chrome-content">
+            {% block chrome_content %}{% endblock %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+{# ==== end of _chrome.html ==== #}

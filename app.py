@@ -60,6 +60,8 @@ DEFER_HEAVY_IMPORTS = os.environ.get('DEFER_HEAVY_IMPORTS', '1') == '1'
 # ============================================
 # BLUEPRINT IMPORTS
 # ============================================
+from docs import docs_bp
+
 from blueprints.auth_bp import auth_bp
 from blueprints.dashboard_bp import dashboard_bp
 from blueprints.groups_bp import groups_bp
@@ -610,6 +612,7 @@ app.register_blueprint(settings_bp)
 app.register_blueprint(profile_bp)
 app.register_blueprint(interactions_bp)
 app.register_blueprint(history_bp)
+app.register_blueprint(docs_bp)
 
 register_admin_blueprints(app)
 
@@ -752,9 +755,6 @@ def health_check():
     }), status_code
 
 
-@app.route('/docs')
-def docs():
-    return render_template('docs.html')
 
 
 @app.route('/')

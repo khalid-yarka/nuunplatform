@@ -1,0 +1,60 @@
+{# ============================================================ #}
+{# A single feature card for the home grid.                       #}
+{#                                                               #}
+{# Expects: `f` — { key, icon, title, tagline, tier,              #}
+{#   step_count, accessible, seen, complete, percent }            #}
+{# ============================================================ #}
+
+<a href="{{ url_for('docs.feature_start', feature_key=f.key) }}"
+   class="docs-feature-card
+          {% if not f.accessible %}is-locked{% endif %}
+          {% if f.complete %}is-complete{% endif %}">
+
+    <div class="docs-feature-card__top">
+        <span class="docs-feature-card__icon">{{ f.icon }}</span>
+
+        {% if not f.accessible %}
+            <span class="docs-feature-card__lock" title="{{ _('docs.tier.locked') }}">
+                <i class="fas fa-lock"></i>
+            </span>
+        {% elif f.complete %}
+            <span class="docs-feature-card__badge docs-feature-card__badge--done">
+                <i class="fas fa-check"></i>
+            </span>
+        {% else %}
+            <span class="docs-feature-card__badge docs-feature-card__badge--tier">
+                {{ _('tier.' ~ f.tier) }}
+            </span>
+        {% endif %}
+    </div>
+
+    <h3 class="docs-feature-card__title">{{ _(f.title) }}</h3>
+    <p class="docs-feature-card__tagline">{{ _(f.tagline) }}</p>
+
+    <div class="docs-feature-card__dots" aria-hidden="true">
+        {% for i in range(f.step_count) %}
+            {% if i < f.seen %}
+                <span class="docs-dot is-filled"></span>
+            {% else %}
+                <span class="docs-dot"></span>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <div class="docs-feature-card__footer">
+        <span class="docs-feature-card__count">
+            {{ f.seen }}/{{ f.step_count }} {{ _('docs.steps') }}
+        </span>
+        <span class="docs-feature-card__cta">
+            {% if f.seen > 0 and not f.complete %}
+                {{ _('docs.cta.resume') }}
+            {% elif f.complete %}
+                {{ _('docs.cta.review') }}
+            {% else %}
+                {{ _('docs.cta.start') }}
+            {% endif %}
+            <i class="fas fa-arrow-right"></i>
+        </span>
+    </div>
+
+</a>

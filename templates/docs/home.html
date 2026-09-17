@@ -1,0 +1,187 @@
+{% extends "docs/layout.html" %}
+
+{% block title %}{{ _('docs.title') }}{% endblock %}
+
+{% block docs_body %}
+
+<!-- ============================================================
+     HERO
+     ============================================================ -->
+<section class="docs-hero">
+    <div class="docs-hero__inner">
+        <h1 class="docs-hero__title">{{ _('docs.hero.title') }}</h1>
+        <p class="docs-hero__subtitle">{{ _('docs.hero.subtitle') }}</p>
+        <div class="docs-hero__cta">
+            <a href="{{ url_for('docs.tour_start') }}"
+               class="docs-hero__btn docs-hero__btn--primary">
+                <i class="fas fa-play"></i>
+                {{ _('docs.hero.start_tour') }}
+            </a>
+            <a href="#all-features"
+               class="docs-hero__btn docs-hero__btn--ghost">
+                <i class="fas fa-th-large"></i>
+                {{ _('docs.hero.browse') }}
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     OVERALL PROGRESS
+     ============================================================ -->
+<section class="docs-overview">
+    <div class="docs-overview__stats">
+        <div class="docs-overview__stat">
+            <div class="docs-overview__num">{{ overall.seen }}</div>
+            <div class="docs-overview__lbl">{{ _('docs.overview.steps_seen') }}</div>
+        </div>
+        <div class="docs-overview__stat">
+            <div class="docs-overview__num">{{ features|length }}</div>
+            <div class="docs-overview__lbl">{{ _('docs.overview.features') }}</div>
+        </div>
+        <div class="docs-overview__stat">
+            <div class="docs-overview__num">{{ overall.percent }}%</div>
+            <div class="docs-overview__lbl">{{ _('docs.overview.overall') }}</div>
+        </div>
+    </div>
+    <div class="docs-overview__bar">
+        {% with progress = overall %}
+            {% include 'docs/partials/_progress_bar.html' %}
+        {% endwith %}
+    </div>
+</section>
+
+<!-- ============================================================
+     ROADMAP TEASER
+     ============================================================ -->
+<section class="docs-block">
+    <h2 class="docs-section-title">
+        <i class="fas fa-map"></i>
+        {{ _('docs.home.roadmap_title') }}
+    </h2>
+    <p class="docs-section-sub">{{ _('docs.home.roadmap_sub') }}</p>
+
+    <div class="docs-roadmap-teaser">
+        {% for phase in phases %}
+        <a href="{{ url_for('docs.roadmap') }}#{{ phase.key }}"
+           class="docs-roadmap-teaser__card">
+            <span class="docs-roadmap-teaser__num">{{ phase.number }}</span>
+            <div class="docs-roadmap-teaser__body">
+                <div class="docs-roadmap-teaser__title">{{ _(phase.title) }}</div>
+                <div class="docs-roadmap-teaser__summary">{{ _(phase.summary) }}</div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+
+<!-- ============================================================
+     ALL FEATURES
+     ============================================================ -->
+<section class="docs-block" id="all-features">
+    <h2 class="docs-section-title">
+        <i class="fas fa-th-large"></i>
+        {{ _('docs.home.all_features') }}
+    </h2>
+    <p class="docs-section-sub">{{ _('docs.home.all_features_sub') }}</p>
+
+    <div class="docs-grid">
+        {% for f in features %}
+            {% include 'docs/partials/_feature_card.html' %}
+        {% endfor %}
+    </div>
+</section>
+
+{% endblock %}
+
+{% block docs_head %}
+<style>
+    .docs-block { margin-top: 32px; }
+
+    .docs-overview {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-sm);
+        padding: 18px 22px;
+        margin-top: 20px;
+    }
+    .docs-overview__stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin-bottom: 14px;
+        text-align: center;
+    }
+    .docs-overview__num {
+        font-size: 24px;
+        font-weight: 800;
+        color: var(--primary);
+        line-height: 1.1;
+        letter-spacing: -0.4px;
+    }
+    .docs-overview__lbl {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        margin-top: 2px;
+    }
+
+    .docs-roadmap-teaser {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+    }
+    .docs-roadmap-teaser__card {
+        display: flex;
+        gap: 14px;
+        padding: 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        text-decoration: none;
+        color: var(--text);
+        box-shadow: var(--shadow-sm);
+        transition: all 0.2s ease;
+    }
+    .docs-roadmap-teaser__card:hover {
+        transform: translateY(-2px);
+        border-color: var(--primary);
+        box-shadow: var(--shadow-md);
+        text-decoration: none;
+        color: var(--text);
+    }
+    .docs-roadmap-teaser__num {
+        flex-shrink: 0;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: var(--primary);
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 15px;
+        box-shadow: 0 4px 12px rgba(255, 49, 56, 0.24);
+    }
+    .docs-roadmap-teaser__body { min-width: 0; }
+    .docs-roadmap-teaser__title {
+        font-size: 14px;
+        font-weight: 700;
+        margin-bottom: 4px;
+        color: var(--text);
+    }
+    .docs-roadmap-teaser__summary {
+        font-size: 12px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+    }
+
+    @media (max-width: 800px) {
+        .docs-roadmap-teaser { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
