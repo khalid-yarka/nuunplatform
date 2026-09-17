@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, session, flash, redirect,
 from db import (
     get_user_notifications, get_unread_count, 
     mark_notification_read, mark_all_notifications_read,
-    is_admin, create_notification_for_all_users
+    is_admin,
 )
 from functools import wraps
 
@@ -118,28 +118,67 @@ def api_mark_all_read():
 # ============================================
 
 @notifications_bp.route('/admin/announcement', methods=['GET', 'POST'])
-@admin_required  # FIXED: Added admin decorator
+@admin_required
 def admin_announcement():
-    """Admin page to send announcements"""
+    """
+    Legacy path for admin announcements.
+
+    Kept for backward compatibility (existing bookmarks, template
+    links, and the admin dashboard shortcut). The canonical route is
+    /admin/announcement (admin_system.announcement), which uses the
+    same underlying broadcast_announcement() helper.
+
+    Both paths support the "Also deliver as push notification" checkbox.
+    """
     if request.method == 'POST':
-        title = request.form.get('title', '').strip()
-        body = request.form.get('body', '').strip()
-        link = request.form.get('link', '').strip()
-        
+        title = request.form.get('title', '').strip()[:100]
+        body = request.form.get('body', '').strip()[:500]
+        link = request.form.get('link', '').strip()[:200]
+        also_push = request.form.get('also_push') == '1'
+
         if not title or not body:
             flash('Title and body are required.', 'error')
             return render_template('dashboard/admin/announcement.html')
-        
-        # Send to all users
-        create_notification_for_all_users(
-            type='admin',
-            title=title,
-            body=body,
-            link=link or '/dashboard',
-            icon='📢'
-        )
-        
-        flash('Announcement sent to all users!', 'success')
-        return redirect(url_for('admin.dashboard'))
-    
+
+        try:
+            from services.notification_service import broadcast_announcement
+            result = broadcast_announcement(
+                title=title,
+                body=body,
+                link=link or '/dashboard',
+                icon='📢',
+                also_push=also_push,
+            )
+        except Exception as e:
+            flash(f'Could not send the announcement: {e}', 'error')
+            return render_template('dashboard/admin/announcement.html')
+
+        inapp = result.get('in_app', 0)
+        push = result.get('push', {})
+
+        if not also_push:
+            flash(f'Announcement sent to {inapp} user(s) (in-app only).', 'success')
+        elif push.get('skipped') in ('push_disabled', 'push_unavailable'):
+            flash(
+                f'Announcement sent to {inapp} user(s). '
+                f'Push is not configured on the server.',
+                'warning',
+            )
+        elif push.get('skipped') == 'no_recipients':
+            flash(
+                f'Announcement sent to {inapp} user(s). '
+                f'No users have push enabled for announcements.',
+                'success',
+            )
+        else:
+            msg = (
+                f'Announcement sent to {inapp} user(s). '
+                f'Push delivered to {push.get("recipients", 0)} device(s).'
+            )
+            if push.get('capped'):
+                msg += ' (capped at 500 recipients)'
+            flash(msg, 'success')
+
+        return redirect(url_for('admin_system.dashboard'))
+
     return render_template('dashboard/admin/announcement.html')

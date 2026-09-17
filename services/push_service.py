@@ -19,6 +19,7 @@ Contract:
 
 import json
 import logging
+import time
 from typing import Dict, List, Optional
 
 from config import Config
@@ -45,8 +46,6 @@ except ImportError:
 # ---------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------
-# The encrypted payload must stay under 4 KB. We cap the plaintext at
-# 3500 bytes to leave headroom for the AES-GCM envelope + JWT header.
 _MAX_PAYLOAD_BYTES = 3500
 _MAX_BODY_CHARS = 200
 _MAX_ENDPOINT_CHARS = 2048
@@ -70,18 +69,8 @@ def is_available() -> bool:
 # ---------------------------------------------------------------------
 # Subscription CRUD
 # ---------------------------------------------------------------------
-def save_subscription(
-    user_id: int,
-    endpoint: str,
-    p256dh: str,
-    auth: str,
-) -> bool:
-    """
-    Insert or update a push subscription for the given user.
-
-    Idempotent: re-subscribing with the same endpoint (which happens
-    after a browser reload) just updates the keys and the timestamp.
-    """
+def save_subscription(user_id: int, endpoint: str, p256dh: str, auth: str) -> bool:
+    """Insert or update a push subscription for the given user. Idempotent."""
     if not (user_id and endpoint and p256dh and auth):
         return False
 
@@ -168,14 +157,7 @@ def count_subscriptions(user_id: int) -> int:
 # ---------------------------------------------------------------------
 # Delivery
 # ---------------------------------------------------------------------
-def _build_payload(
-    title: str,
-    body: str,
-    url: Optional[str],
-    icon: Optional[str],
-    tag: Optional[str],
-    data: Optional[Dict],
-) -> str:
+def _build_payload(title, body, url, icon, tag, data) -> str:
     """Build a payload JSON string, hard-capped at _MAX_PAYLOAD_BYTES."""
     if body and len(body) > _MAX_BODY_CHARS:
         body = body[: _MAX_BODY_CHARS - 1] + '\u2026'
@@ -191,11 +173,9 @@ def _build_payload(
     }
 
     raw = json.dumps(payload, ensure_ascii=False)
-
     if len(raw.encode('utf-8')) > _MAX_PAYLOAD_BYTES:
         payload['body'] = payload['body'][:80]
         raw = json.dumps(payload, ensure_ascii=False)
-
     return raw
 
 
@@ -243,12 +223,9 @@ def deliver(
                 timeout=10,
             )
             result['sent'] += 1
-
         except WebPushException as exc:
             status = getattr(exc.response, 'status_code', None)
-
             if status in (404, 410):
-                # Endpoint revoked or expired — prune and move on.
                 _delete_by_endpoint(endpoint)
                 result['pruned'] += 1
                 logger.info(
@@ -261,7 +238,6 @@ def deliver(
                     "Push delivery failed (status=%s) for user %s",
                     status, user_id,
                 )
-
         except Exception:
             result['failed'] += 1
             logger.exception(
@@ -269,3 +245,52 @@ def deliver(
             )
 
     return result
+
+
+def deliver_batch(
+    user_ids: List[int],
+    title: str,
+    body: str,
+    url: Optional[str] = None,
+    icon: Optional[str] = None,
+    tag: Optional[str] = None,
+    data: Optional[Dict] = None,
+) -> Dict[str, int]:
+    """
+    Send a push to every active subscription for each user in user_ids.
+
+    Returns aggregate counts:
+        sent           — total deliveries accepted by the push services
+        failed         — total deliveries that errored
+        pruned         — total dead subscriptions removed
+        users_reached  — users with at least one successful delivery
+        users_skipped  — users with no active subscriptions
+
+    Never raises. If push isn't configured, all counts are zero.
+    """
+    totals = {
+        'sent':          0,
+        'failed':        0,
+        'pruned':        0,
+        'users_reached': 0,
+        'users_skipped': 0,
+    }
+
+    if not is_available():
+        return totals
+
+    for uid in user_ids:
+        try:
+            r = deliver(uid, title, body, url=url, icon=icon, tag=tag, data=data)
+            totals['sent']   += r['sent']
+            totals['failed'] += r['failed']
+            totals['pruned'] += r['pruned']
+            if r['sent'] > 0:
+                totals['users_reached'] += 1
+            else:
+                totals['users_skipped'] += 1
+        except Exception:
+            logger.exception("deliver_batch error for user %s", uid)
+            totals['failed'] += 1
+
+    return totals

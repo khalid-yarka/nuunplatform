@@ -41,7 +41,13 @@ DEFAULT_SETTINGS = {
     "notifications.live_quiz_reminder": 1,
     "notifications.weekly_summary": 0,
     "notifications.weekly_summary": 0,
-    "notifications.push_enabled": 0,
+    "notifications.push_enabled": 1,
+    # Per-type push preferences (only consulted when push_enabled = 1)
+    "notifications.push_live_quiz_start":  1,
+    "notifications.push_live_quiz_result": 1,
+    "notifications.push_participant_joined": 1,
+    "notifications.push_admin_announcement": 1,
+    "notifications.push_quiz_complete":    0,
     
     # ----- Privacy -----  
     "privacy.show_on_leaderboard": 1,

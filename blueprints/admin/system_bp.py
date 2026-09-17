@@ -32,7 +32,6 @@ from config import Config
 from db import (
     execute_with_retry,
     get_student_by_id,
-    create_notification_for_all_users,
 )
 from utils import validate_csrf
 from services.admin.guards import admin_can
@@ -1052,36 +1051,80 @@ def announcement_send():
     body = (request.form.get('body') or '').strip()[:500]
     link = (request.form.get('link') or '/dashboard').strip()[:200]
     icon = (request.form.get('icon') or '📢').strip()[:4]
+    also_push = request.form.get('also_push') == '1'
 
     if not title or not body:
         flash('Title and message are required.', 'error')
         return redirect(url_for('admin_system.announcement'))
 
-    sent = 0
     try:
-        from services.notification_service import send_notification_to_all
-        sent = send_notification_to_all(
-            notification_type='admin_announcement',
+        from services.notification_service import broadcast_announcement
+        result = broadcast_announcement(
             title=title,
             body=body,
             link=link,
             icon=icon or '📢',
-            force=False,
+            also_push=also_push,
         )
     except Exception as e:
         logger.error(f"announcement_send failed: {e}", exc_info=True)
         flash('Could not send the announcement.', 'error')
         return redirect(url_for('admin_system.announcement'))
 
+    inapp = result.get('in_app', 0)
+    push = result.get('push', {})
+
     write_audit(
         action='announcement.send',
         target_type='platform',
         before=None,
-        after={'title': title, 'recipients': sent},
+        after={
+            'title': title,
+            'recipients': inapp,
+            'push_sent': push.get('sent', 0),
+            'push_recipients': push.get('recipients', 0),
+            'also_push': also_push,
+        },
         severity='info',
     )
 
-    flash(f'Announcement sent to {sent} user(s).', 'success')
+    if not also_push:
+        flash(f'Announcement sent to {inapp} user(s) (in-app only).', 'success')
+    elif push.get('skipped') == 'push_disabled':
+        flash(
+            f'Announcement sent to {inapp} user(s). '
+            f'Push is not configured on the server.',
+            'warning',
+        )
+    elif push.get('skipped') == 'push_unavailable':
+        flash(
+            f'Announcement sent to {inapp} user(s). '
+            f'Push service is unavailable.',
+            'warning',
+        )
+    elif push.get('skipped') == 'no_recipients':
+        flash(
+            f'Announcement sent to {inapp} user(s). '
+            f'No users have push enabled for announcements.',
+            'success',
+        )
+    elif push.get('skipped') == 'delivery_error':
+        flash(
+            f'Announcement sent to {inapp} user(s). '
+            f'Push delivery failed — check logs.',
+            'warning',
+        )
+    else:
+        msg = (
+            f'Announcement sent to {inapp} user(s). '
+            f'Push delivered to {push.get("recipients", 0)} device(s).'
+        )
+        if push.get('capped'):
+            msg += ' (capped at 500 recipients)'
+        if push.get('pruned'):
+            msg += f' Pruned {push["pruned"]} dead subscription(s).'
+        flash(msg, 'success')
+
     return redirect(url_for('admin_system.dashboard'))
 
 

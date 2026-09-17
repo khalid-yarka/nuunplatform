@@ -224,6 +224,166 @@
 </section>
 
 <section id="notifications" class="settings-section">
+
+    <!-- ═══════════ Push Notifications (Web Push) ═══════════ -->
+    <div class="settings-card push-card" id="push-card">
+        <div class="card-header">
+            <h3>
+                <i class="fas fa-bell"></i>
+                {{ _('settings.notifications.push.title') }}
+            </h3>
+            <p>{{ _('settings.notifications.push.desc') }}</p>
+        </div>
+
+        <!-- Loading state -->
+        <div class="push-state" id="push-state-loading">
+            <div class="push-spinner" aria-hidden="true"></div>
+            <span class="push-loading-text">{{ _('common.loading') }}</span>
+        </div>
+
+        <!-- Unsupported browser -->
+        <div class="push-state" id="push-state-unsupported" hidden>
+            <div class="push-alert push-alert-info">
+                <i class="fas fa-info-circle"></i>
+                <div>
+                    <strong>{{ _('settings.notifications.push.unsupported.title') }}</strong>
+                    <p>{{ _('settings.notifications.push.unsupported.desc') }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- iOS Safari, not installed -->
+        <div class="push-state" id="push-state-ios" hidden>
+            <div class="push-alert push-alert-info">
+                <i class="fas fa-mobile-alt"></i>
+                <div>
+                    <strong>{{ _('settings.notifications.push.ios.title') }}</strong>
+                    <p>{{ _('settings.notifications.push.ios.desc') }}</p>
+                    <ol class="push-ios-steps">
+                        <li>{{ _('settings.notifications.push.ios.step1') }}</li>
+                        <li>{{ _('settings.notifications.push.ios.step2') }}</li>
+                        <li>{{ _('settings.notifications.push.ios.step3') }}</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <!-- Permission denied at browser level -->
+        <div class="push-state" id="push-state-denied" hidden>
+            <div class="push-alert push-alert-warning">
+                <i class="fas fa-lock"></i>
+                <div>
+                    <strong>{{ _('settings.notifications.push.denied.title') }}</strong>
+                    <p>{{ _('settings.notifications.push.denied.desc') }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Server push not configured -->
+        <div class="push-state" id="push-state-disabled" hidden>
+            <div class="push-alert push-alert-info">
+                <i class="fas fa-info-circle"></i>
+                <div>
+                    <strong>{{ _('settings.notifications.push.disabled.title') }}</strong>
+                    <p>{{ _('settings.notifications.push.disabled.desc') }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active — user can toggle -->
+        <div class="push-state" id="push-state-active" hidden>
+            <div class="toggle-item">
+                <label class="toggle-label">
+                    <span class="toggle-text">
+                        {{ _('settings.notifications.push.master') }}
+                    </span>
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="push-toggle">
+                        <span class="slider"></span>
+                    </span>
+                </label>
+                <p class="toggle-desc" id="push-toggle-desc">
+                    {{ _('settings.notifications.push.master.desc') }}
+                </p>
+            </div>
+
+            <div class="push-actions" id="push-actions" hidden>
+                <button type="button" class="btn btn-secondary btn-sm" id="push-test-btn">
+                    <i class="fas fa-paper-plane"></i>
+                    {{ _('settings.notifications.push.test') }}
+                </button>
+                <span class="push-device-pill" id="push-device-label"></span>
+                <span class="push-device-count" id="push-device-count"></span>
+            </div>
+
+            <div class="push-types" id="push-types" hidden>
+                <h4 class="push-types-title">
+                    {{ _('settings.notifications.push.types.title') }}
+                </h4>
+                <p class="push-types-desc">
+                    {{ _('settings.notifications.push.types.desc') }}
+                </p>
+
+                <div class="toggle-group">
+                    <div class="toggle-item">
+                        <label class="toggle-label">
+                            <span class="toggle-text">{{ _('settings.notifications.push.types.live_start') }}</span>
+                            <span class="toggle-switch">
+                                <input type="checkbox" id="push-type-live-start">
+                                <span class="slider"></span>
+                            </span>
+                        </label>
+                    </div>
+                    <div class="toggle-item">
+                        <label class="toggle-label">
+                            <span class="toggle-text">{{ _('settings.notifications.push.types.live_result') }}</span>
+                            <span class="toggle-switch">
+                                <input type="checkbox" id="push-type-live-result">
+                                <span class="slider"></span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="toggle-group">
+                    <div class="toggle-item">
+                        <label class="toggle-label">
+                            <span class="toggle-text">{{ _('settings.notifications.push.types.participant') }}</span>
+                            <span class="toggle-switch">
+                                <input type="checkbox" id="push-type-participant">
+                                <span class="slider"></span>
+                            </span>
+                        </label>
+                    </div>
+                    <div class="toggle-item">
+                        <label class="toggle-label">
+                            <span class="toggle-text">{{ _('settings.notifications.push.types.announcement') }}</span>
+                            <span class="toggle-switch">
+                                <input type="checkbox" id="push-type-announcement">
+                                <span class="slider"></span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="toggle-group">
+                    <div class="toggle-item">
+                        <label class="toggle-label">
+                            <span class="toggle-text">{{ _('settings.notifications.push.types.quiz_complete') }}</span>
+                            <span class="toggle-switch">
+                                <input type="checkbox" id="push-type-quiz-complete">
+                                <span class="slider"></span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="push-result" id="push-result" hidden></div>
+        </div>
+    </div>
+
+    <!-- ═══════════ existing Notification Preferences card ═══════════ -->
     <div class="settings-card">
         <div class="card-header">
             <h3><i class="fas fa-bell"></i> Notification Preferences</h3>
@@ -677,7 +837,6 @@
         line-height: 1.6;
     }
 
-    /* Small inline "Saved ✓" note that appears next to the Save button */
     .settings-saved-note {
         display: inline-block;
         padding: 2px 10px;
@@ -692,7 +851,120 @@
         background: #1A3A2E;
         color: #34D399;
     }
+
+    /* ═══════════════════════════════════════════════════════
+       Push Notifications card
+       ═══════════════════════════════════════════════════════ */
+    .push-card .push-state { margin-top: 4px; }
+    .push-card .push-state[hidden] { display: none; }
+
+    .push-spinner {
+        display: inline-block;
+        width: 18px;
+        height: 18px;
+        border: 2px solid var(--border);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: push-spin 0.7s linear infinite;
+        vertical-align: middle;
+        margin-right: 10px;
+    }
+    @keyframes push-spin { to { transform: rotate(360deg); } }
+    .push-loading-text { color: var(--text-muted); font-size: 14px; }
+
+    .push-alert {
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+        padding: 14px 18px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface-alt);
+        font-size: 14px;
+        line-height: 1.55;
+    }
+    .push-alert > i { font-size: 20px; margin-top: 1px; flex-shrink: 0; }
+    .push-alert strong { display: block; color: var(--text); font-weight: 600; margin-bottom: 4px; }
+    .push-alert p { margin: 0; color: var(--text-secondary); }
+    .push-alert-info > i { color: #3B82F6; }
+    .push-alert-warning { background: #FFFBEB; border-color: #FDE68A; }
+    .push-alert-warning > i { color: #D97706; }
+    [data-theme="dark"] .push-alert-warning { background: #3A2E15; border-color: #6B5320; }
+    [data-theme="dark"] .push-alert-warning > i { color: #FBBF24; }
+
+    .push-ios-steps {
+        margin: 10px 0 0 0;
+        padding-left: 20px;
+        color: var(--text-secondary);
+        font-size: 13px;
+    }
+    .push-ios-steps li { margin-bottom: 4px; }
+
+    .push-actions {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+    }
+    .push-actions[hidden] { display: none; }
+
+    .push-device-pill,
+    .push-device-count {
+        display: inline-flex;
+        align-items: center;
+        font-size: 12px;
+        color: var(--text-muted);
+        padding: 3px 10px;
+        border-radius: 20px;
+        background: var(--surface-alt);
+        border: 1px solid var(--border);
+        font-weight: 500;
+    }
+    .push-device-pill:empty,
+    .push-device-count:empty { display: none; }
+
+    .push-result {
+        margin-top: 12px;
+        padding: 10px 14px;
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        font-weight: 500;
+        border: 1px solid transparent;
+    }
+    .push-result.ok { background: #ECFDF5; color: #065F46; border-color: #A7F3D0; }
+    .push-result.err { background: #FEF2F2; color: #991B1B; border-color: #FCA5A5; }
+    [data-theme="dark"] .push-result.ok { background: #1A3A2E; color: #34D399; border-color: #065F46; }
+    [data-theme="dark"] .push-result.err { background: #3A1A1A; color: #FCA5A5; border-color: #7F1D1D; }
+
+    /* ─── Per-type push toggles ─── */
+    .push-types {
+        margin-top: 18px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+    }
+    .push-types[hidden] { display: none; }
+    .push-types-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        margin: 0 0 4px 0;
+    }
+    .push-types-desc {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin: 0 0 12px 0;
+    }
+    .push-types .toggle-group { margin-bottom: 8px; }
+
+    @media (max-width: 480px) {
+        .push-actions { flex-direction: column; align-items: stretch; }
+        .push-device-pill, .push-device-count { justify-content: center; }
+    }
 </style>
+
 <script src="{{ url_for('static', filename='js/push-client.js') }}"></script>
 <script>
 (function () {
@@ -701,25 +973,16 @@
     // ================================================================
     // FIELD ↔ SETTING MAPPING
     // ================================================================
-    // Maps each form control ID to the settings key it persists to.
-    // The server returns a flat { dotKey: value } dict from /settings/api.
-    // We use this map to re-render the form after a successful save.
-    // ================================================================
     var FIELD_TO_SETTING = {
-        // Appearance
         'font_size':                   'appearance.font_size',
         'language':                    'appearance.language',
         'compact_mode':                'appearance.compact_mode',
         'reduced_motion':              'appearance.reduced_motion',
-
-        // Quiz
         'default_question_count':      'quiz.default_question_count',
         'default_difficulty':          'quiz.default_difficulty',
         'default_subject':             'quiz.default_subject',
         'show_correct_immediately':    'quiz.show_correct_immediately',
         'auto_skip_enabled':           'quiz.auto_skip_enabled',
-
-        // Notifications
         'notify_quiz_complete':        'notifications.quiz_complete',
         'notify_new_pdf':              'notifications.new_pdf',
         'notify_live_quiz_start':      'notifications.live_quiz_start',
@@ -730,15 +993,10 @@
         'notify_achievement_unlock':   'notifications.achievement_unlock',
         'notify_live_quiz_reminder':   'notifications.live_quiz_reminder',
         'notify_weekly_summary':       'notifications.weekly_summary',
-
-        // Privacy
         'show_on_leaderboard':         'privacy.show_on_leaderboard',
         'show_public_id':              'privacy.show_public_id',
-
-        // Live quiz
         'default_time_per_question':   'live_quiz.default_time_per_question',
         'default_max_participants':    'live_quiz.default_max_participants'
-        // default_privacy handled separately (radio group)
     };
 
     function isTruthy(v) {
@@ -750,31 +1008,15 @@
         return false;
     }
 
-    function isFalsy(v) {
-        if (v === false || v === 0 || v === null || v === undefined) return true;
-        if (typeof v === 'string') {
-            var s = v.trim().toLowerCase();
-            if (s === '' || s === '0' || s === 'false' || s === 'no' || s === 'off') return true;
-        }
-        return false;
-    }
-
-    // ================================================================
-    // APPLY SETTINGS TO FORM
-    // ================================================================
     window.applySettingsToForm = function (settings) {
         if (!settings || typeof settings !== 'object') return;
 
-        // ---- Simple field mapping ----
         Object.keys(FIELD_TO_SETTING).forEach(function (fieldId) {
             var key = FIELD_TO_SETTING[fieldId];
             if (!(key in settings)) return;
-
             var el = document.getElementById(fieldId);
             if (!el) return;
-
             var val = settings[key];
-
             if (el.type === 'checkbox') {
                 el.checked = isTruthy(val);
             } else if (el.tagName === 'SELECT') {
@@ -784,7 +1026,6 @@
             }
         });
 
-        // ---- Radio group: default_privacy (live_quiz.default_privacy) ----
         if ('live_quiz.default_privacy' in settings) {
             var want = String(settings['live_quiz.default_privacy']);
             document.querySelectorAll('input[name="default_privacy"]').forEach(function (r) {
@@ -792,7 +1033,6 @@
             });
         }
 
-        // ---- Theme visual selector (not a form control, uses data-theme) ----
         if ('appearance.theme' in settings) {
             var theme = settings['appearance.theme'];
             document.querySelectorAll('.theme-option').forEach(function (o) {
@@ -800,7 +1040,6 @@
             });
         }
 
-        // ---- Accent visual selector (uses data-accent) ----
         if ('appearance.accent' in settings) {
             var accent = settings['appearance.accent'];
             document.querySelectorAll('.accent-option').forEach(function (o) {
@@ -809,21 +1048,16 @@
         }
     };
 
-    // ================================================================
-    // SHOW INLINE "SAVED" NOTE
-    // ================================================================
     function showSavedNote(form) {
         if (!form) return;
         var note = form.querySelector('[data-saved-note]');
         if (!note) return;
-
         var now = new Date();
         var hh = String(now.getHours()).padStart(2, '0');
         var mm = String(now.getMinutes()).padStart(2, '0');
         note.textContent = '✓ Saved ' + hh + ':' + mm;
         note.style.display = 'inline-block';
         note.style.opacity = '1';
-
         clearTimeout(note._hideTimer);
         note._hideTimer = setTimeout(function () {
             note.style.opacity = '0';
@@ -831,9 +1065,6 @@
         }, 3200);
     }
 
-    // ================================================================
-    // UNSAVED CHANGES TRACKING
-    // ================================================================
     var unsavedChanges = false;
     var indicator = document.getElementById('unsavedIndicator');
     var saveNowBtn = document.getElementById('unsavedSaveNow');
@@ -845,17 +1076,14 @@
         unsavedChanges = true;
         if (form) lastActiveForm = form;
     }
-
     function hideUnsavedIndicator() {
         if (indicator) indicator.classList.remove('show');
         unsavedChanges = false;
     }
-
     function attachTracking(form) {
         if (!form) return;
         form.addEventListener('input', function () { showUnsavedIndicator(form); });
         form.addEventListener('change', function () { showUnsavedIndicator(form); });
-        form.addEventListener('submit', function () { /* cleared on success */ });
     }
 
     if (saveNowBtn) {
@@ -867,26 +1095,15 @@
             }
         });
     }
-
     if (discardBtn) {
         discardBtn.addEventListener('click', function () {
-            if (confirm('Discard all unsaved changes?')) {
-                location.reload();
-            }
+            if (confirm('Discard all unsaved changes?')) location.reload();
         });
     }
-
     window.addEventListener('beforeunload', function (e) {
-        if (unsavedChanges) {
-            e.preventDefault();
-            e.returnValue = '';
-            return '';
-        }
+        if (unsavedChanges) { e.preventDefault(); e.returnValue = ''; return ''; }
     });
 
-    // ================================================================
-    // SETTINGS PATCH HELPER
-    // ================================================================
     function getCsrfToken() {
         var meta = document.querySelector('meta[name="csrf-token"]');
         if (meta) return meta.content;
@@ -919,32 +1136,21 @@
         })
         .then(function (result) {
             if (result && result.success) {
-                // ---- Apply returned settings back to the form (fixes the "no refresh" bug) ----
                 if (result.settings) {
-                    // Global theme/accent/font live-apply
                     if (typeof NuunSettings !== 'undefined') {
                         NuunSettings.settings = result.settings;
                         NuunSettings.applyAll();
                     }
-                    // Re-sync all form fields and visual selectors
                     window.applySettingsToForm(result.settings);
                 }
-
-                // Clear the unsaved indicator for this form
                 hideUnsavedIndicator();
-
-                // Show the inline "Saved" note on the submitted form
                 showSavedNote(form);
-
-                // Toast for good measure
                 if (typeof window.showToast === 'function') {
                     window.showToast(result.message || successMsg || '✅ Saved!', 'success');
                 }
             } else {
                 var msg = (result && result.error) || 'Unknown error';
-                if (result && result.errors) {
-                    msg = Object.values(result.errors).join(' ');
-                }
+                if (result && result.errors) msg = Object.values(result.errors).join(' ');
                 if (typeof window.showToast === 'function') {
                     window.showToast('❌ ' + msg, 'error');
                 }
@@ -957,9 +1163,7 @@
         });
     }
 
-    // ================================================================
-    // FORM HANDLERS
-    // ================================================================
+    // ─── Form handlers ───────────────────────────────────────
     var appearanceForm = document.getElementById('appearance-form');
     if (appearanceForm) {
         attachTracking(appearanceForm);
@@ -972,7 +1176,6 @@
             var fontSize = document.getElementById('font_size')?.value || 'medium';
             var compactMode = document.getElementById('compact_mode')?.checked || false;
             var language = document.getElementById('language')?.value || 'en';
-
             var payload = {
                 'appearance.theme': theme,
                 'appearance.accent': accent,
@@ -980,7 +1183,6 @@
                 'appearance.compact_mode': compactMode,
                 'appearance.language': language
             };
-
             submitForm(appearanceForm, '/settings/api', payload, 'Appearance updated!');
         });
     }
@@ -1054,7 +1256,6 @@
         });
     }
 
-    // ---- Password form (separate endpoint, no form re-sync needed) ----
     var passwordForm = document.getElementById('password-form');
     if (passwordForm) {
         passwordForm.addEventListener('submit', function (e) {
@@ -1071,7 +1272,6 @@
                 return;
             }
             if (!confirm('Change your password? You will be logged out.')) return;
-
             fetch('/settings/api/password', {
                 method: 'POST',
                 headers: {
@@ -1095,24 +1295,19 @@
         });
     }
 
-    // ================================================================
-    // VISUAL SELECTORS (theme / accent / compact / reduced motion)
-    // ================================================================
+    // ─── Visual selectors ────────────────────────────────────
     document.querySelectorAll('.theme-option').forEach(function (opt) {
         opt.addEventListener('click', function () {
             document.querySelectorAll('.theme-option').forEach(function (o) { o.classList.remove('active'); });
             this.classList.add('active');
-            var theme = this.dataset.theme;
-            if (typeof NuunSettings !== 'undefined') NuunSettings.applyTheme(theme);
+            if (typeof NuunSettings !== 'undefined') NuunSettings.applyTheme(this.dataset.theme);
         });
     });
-
     document.querySelectorAll('.accent-option:not(.locked)').forEach(function (btn) {
         btn.addEventListener('click', function () {
             document.querySelectorAll('.accent-option').forEach(function (b) { b.classList.remove('active'); });
             this.classList.add('active');
-            var accent = this.dataset.accent;
-            if (typeof NuunSettings !== 'undefined') NuunSettings.applyAccent(accent);
+            if (typeof NuunSettings !== 'undefined') NuunSettings.applyAccent(this.dataset.accent);
         });
     });
 
@@ -1122,7 +1317,6 @@
             if (typeof NuunSettings !== 'undefined') NuunSettings.applyCompactMode(this.checked);
         });
     }
-
     var motionToggle = document.getElementById('reduced_motion');
     if (motionToggle) {
         motionToggle.addEventListener('change', function () {
@@ -1130,10 +1324,9 @@
         });
     }
 
-    // ---- Password strength + match ----
+    // ─── Password strength + match ───────────────────────────
     var newPwInput = document.getElementById('new_password');
     var confirmPwInput = document.getElementById('confirm_password');
-
     if (newPwInput) {
         newPwInput.addEventListener('input', function () {
             var val = this.value;
@@ -1148,10 +1341,7 @@
             checkPasswordMatch();
         });
     }
-    if (confirmPwInput) {
-        confirmPwInput.addEventListener('input', checkPasswordMatch);
-    }
-
+    if (confirmPwInput) confirmPwInput.addEventListener('input', checkPasswordMatch);
     function checkPasswordMatch() {
         var a = document.getElementById('new_password');
         var b = document.getElementById('confirm_password');
@@ -1167,7 +1357,7 @@
         }
     }
 
-    // ---- Upgrade buttons ----
+    // ─── Upgrade buttons ─────────────────────────────────────
     document.querySelectorAll('.upgrade-btn').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
             e.stopPropagation();
@@ -1179,7 +1369,7 @@
         });
     });
 
-    // ---- Locked toggles ----
+    // ─── Locked toggles ──────────────────────────────────────
     document.querySelectorAll('.toggle-item.locked input[type="checkbox"]').forEach(function (cb) {
         cb.disabled = true;
         cb.closest('.toggle-item').addEventListener('click', function (e) {
@@ -1190,7 +1380,7 @@
         });
     });
 
-    // ---- Data buttons ----
+    // ─── Data buttons ────────────────────────────────────────
     var exportBtn = document.getElementById('exportDataBtn');
     if (exportBtn) {
         exportBtn.addEventListener('click', function () {
@@ -1206,9 +1396,7 @@
         });
     }
 
-    // ================================================================
-    // LOGOUT MODAL
-    // ================================================================
+    // ─── Logout modal ────────────────────────────────────────
     var openLogoutBtn = document.getElementById('openLogoutModalBtn');
     if (openLogoutBtn) {
         openLogoutBtn.addEventListener('click', function () {
@@ -1216,28 +1404,23 @@
             document.body.style.overflow = 'hidden';
         });
     }
-
     window.closeLogoutModal = function () {
         document.getElementById('logoutModal').classList.remove('active');
         document.body.style.overflow = '';
     };
-
     var logoutModal = document.getElementById('logoutModal');
     if (logoutModal) {
         logoutModal.addEventListener('click', function (e) {
             if (e.target === this) window.closeLogoutModal();
         });
     }
-
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && logoutModal && logoutModal.classList.contains('active')) {
             window.closeLogoutModal();
         }
     });
 
-    // ================================================================
-    // NAVIGATION (landing ↔ sections)
-    // ================================================================
+    // ─── Navigation ──────────────────────────────────────────
     var landing = document.getElementById('landing');
     var sections = document.querySelectorAll('.settings-section');
     var navItems = document.querySelectorAll('.settings-nav-item');
@@ -1287,7 +1470,6 @@
             }
         });
     }
-
     document.querySelectorAll('.settings-category-card').forEach(function (card) {
         card.addEventListener('click', function (e) {
             e.preventDefault();
@@ -1295,7 +1477,6 @@
             if (section) showSection(section);
         });
     });
-
     navItems.forEach(function (item) {
         item.addEventListener('click', function (e) {
             var section = this.dataset.section;
@@ -1304,7 +1485,6 @@
             else if (section) showSection(section);
         });
     });
-
     var initialHash = window.location.hash.replace('#', '');
     if (initialHash && document.getElementById(initialHash)) {
         showSection(initialHash);
@@ -1312,15 +1492,224 @@
         showLanding();
     }
 
-    // ================================================================
-    // FEATURE CARD POPUP
-    // ================================================================
+    // ─── Feature card popup ──────────────────────────────────
     window.toggleFeatureInfo = function (card) {
         document.querySelectorAll('.feature-card').forEach(function (c) {
             if (c !== card) c.classList.remove('active');
         });
         card.classList.toggle('active');
     };
+
+    // ================================================================
+    // PUSH NOTIFICATIONS
+    // ================================================================
+    (function () {
+        if (!window.NuunPush) return;
+
+        var loading   = document.getElementById('push-state-loading');
+        var unsup     = document.getElementById('push-state-unsupported');
+        var ios       = document.getElementById('push-state-ios');
+        var denied    = document.getElementById('push-state-denied');
+        var disabled  = document.getElementById('push-state-disabled');
+        var active    = document.getElementById('push-state-active');
+        var toggle    = document.getElementById('push-toggle');
+        var actions   = document.getElementById('push-actions');
+        var testBtn   = document.getElementById('push-test-btn');
+        var countEl   = document.getElementById('push-device-count');
+        var deviceEl  = document.getElementById('push-device-label');
+        var resultEl  = document.getElementById('push-result');
+        var typesWrap = document.getElementById('push-types');
+
+        var typeLiveStart    = document.getElementById('push-type-live-start');
+        var typeLiveResult   = document.getElementById('push-type-live-result');
+        var typeParticipant  = document.getElementById('push-type-participant');
+        var typeAnnouncement = document.getElementById('push-type-announcement');
+        var typeQuizComplete = document.getElementById('push-type-quiz-complete');
+
+        var TYPE_MAP = [
+            { el: typeLiveStart,    key: 'notifications.push_live_quiz_start' },
+            { el: typeLiveResult,   key: 'notifications.push_live_quiz_result' },
+            { el: typeParticipant,  key: 'notifications.push_participant_joined' },
+            { el: typeAnnouncement, key: 'notifications.push_admin_announcement' },
+            { el: typeQuizComplete, key: 'notifications.push_quiz_complete' }
+        ];
+
+        var ALL_STATES = [loading, unsup, ios, denied, disabled, active];
+
+        function show(el) {
+            ALL_STATES.forEach(function (n) { if (n) n.hidden = true; });
+            if (el) el.hidden = false;
+        }
+
+        function showResult(msg, ok) {
+            if (!resultEl) return;
+            resultEl.hidden = false;
+            resultEl.textContent = msg;
+            resultEl.className = 'push-result ' + (ok ? 'ok' : 'err');
+            clearTimeout(resultEl._hideTimer);
+            resultEl._hideTimer = setTimeout(function () {
+                resultEl.hidden = true;
+            }, 6000);
+        }
+
+        function deviceLabel() {
+            var ua = navigator.userAgent || '';
+            if (/iPhone/.test(ua))    return 'iPhone';
+            if (/iPad/.test(ua))      return 'iPad';
+            if (/iPod/.test(ua))      return 'iPod';
+            if (/Android/.test(ua))   return 'Android';
+            if (/Macintosh/.test(ua)) return 'Mac';
+            if (/Windows/.test(ua))   return 'Windows';
+            if (/Linux/.test(ua))     return 'Linux';
+            return '';
+        }
+
+        function renderCount(n) {
+            if (!countEl) return;
+            countEl.textContent = (n > 0)
+                ? (n + ' ' + (n === 1 ? 'device' : 'devices') + ' connected')
+                : '';
+        }
+
+        function loadTypePrefs() {
+            return fetch('/settings/api', { credentials: 'same-origin' })
+                .then(function (r) { return r.ok ? r.json() : {}; })
+                .catch(function () { return {}; })
+                .then(function (s) {
+                    TYPE_MAP.forEach(function (t) {
+                        if (!t.el) return;
+                        t.el.checked = !!s[t.key];
+                    });
+                });
+        }
+
+        function saveTypePrefs() {
+            var payload = {};
+            TYPE_MAP.forEach(function (t) {
+                if (t.el) payload[t.key] = t.el.checked ? 1 : 0;
+            });
+            var token = window.NuunPush.csrfToken ? window.NuunPush.csrfToken() : '';
+            if (!token) {
+                var m = document.querySelector('meta[name="csrf-token"]');
+                if (m) token = m.content;
+                if (!token) {
+                    var i = document.querySelector('input[name="csrf_token"]');
+                    if (i) token = i.value;
+                }
+            }
+            return fetch('/settings/api', {
+                method: 'PATCH',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': token
+                },
+                body: JSON.stringify(payload)
+            }).then(function (r) {
+                if (!r.ok) {
+                    return r.text().then(function (txt) {
+                        throw new Error('HTTP ' + r.status + ' — ' + txt);
+                    });
+                }
+                return r.json();
+            });
+        }
+
+        function refresh() {
+            show(loading);
+            return window.NuunPush.getStatus().then(function (s) {
+                if (!s.supported)              { show(unsup); return; }
+                if (!s.configured)             { show(disabled); return; }
+                if (s.iosNeedsInstall)         { show(ios); return; }
+                if (s.permission === 'denied') { show(denied); return; }
+
+                show(active);
+                toggle.checked = !!s.subscribed;
+                actions.hidden = !s.subscribed;
+                if (typesWrap) typesWrap.hidden = !s.subscribed;
+                if (s.subscribed) loadTypePrefs();
+                renderCount(s.serverCount);
+                if (deviceEl) {
+                    var label = deviceLabel();
+                    deviceEl.textContent = label ? ('This ' + label) : '';
+                }
+            }).catch(function () {
+                show(unsup);
+            });
+        }
+
+        // ─── Master toggle ───────────────────────────────────
+        if (toggle) {
+            toggle.addEventListener('change', function () {
+                var wantOn = toggle.checked;
+                toggle.disabled = true;
+                var promise = wantOn
+                    ? window.NuunPush.subscribe()
+                    : window.NuunPush.unsubscribe();
+
+                promise.then(function (r) {
+                    if (wantOn && !r.success) {
+                        toggle.checked = false;
+                        var msg = 'Could not enable notifications.';
+                        if (r.reason === 'denied')              msg = 'Permission denied in the browser.';
+                        else if (r.reason === 'ios-needs-install') msg = 'Add to Home Screen first.';
+                        else if (r.reason === 'no-csrf-token')  msg = 'Page token missing — refresh and try again.';
+                        else if (r.reason === 'server-rejected') msg = 'Server rejected the subscription: ' + (r.detail || '');
+                        else if (r.reason === 'subscribe-failed') msg = 'Browser refused to subscribe: ' + (r.detail || '');
+                        showResult(msg, false);
+                    } else if (!wantOn) {
+                        showResult('Notifications disabled on this device.', true);
+                    } else {
+                        showResult('Notifications enabled on this device.', true);
+                    }
+                }).catch(function (e) {
+                    toggle.checked = !wantOn;
+                    showResult('Something went wrong: ' + e, false);
+                }).then(function () {
+                    toggle.disabled = false;
+                    return refresh();
+                });
+            });
+        }
+
+        // ─── Test button ─────────────────────────────────────
+        if (testBtn) {
+            testBtn.addEventListener('click', function () {
+                testBtn.disabled = true;
+                window.NuunPush.sendTest().then(function (r) {
+                    if (r.ok) {
+                        showResult('Test sent. Check your device.', true);
+                    } else {
+                        var msg = (r.data && r.data.error) || 'Test failed.';
+                        showResult(msg, false);
+                    }
+                }).catch(function () {
+                    showResult('Network error.', false);
+                }).then(function () {
+                    testBtn.disabled = false;
+                });
+            });
+        }
+
+        // ─── Per-type toggles ────────────────────────────────
+        TYPE_MAP.forEach(function (t) {
+            if (!t.el) return;
+            t.el.addEventListener('change', function () {
+                t.el.disabled = true;
+                saveTypePrefs().then(function () {
+                    // silent success
+                }).catch(function (e) {
+                    t.el.checked = !t.el.checked;
+                    showResult('Could not save preference: ' + e.message, false);
+                }).then(function () {
+                    t.el.disabled = false;
+                });
+            });
+        });
+
+        // ─── Kick off ────────────────────────────────────────
+        refresh();
+    })();
 })();
 </script>
 {% endblock %}

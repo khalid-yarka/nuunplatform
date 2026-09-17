@@ -26,7 +26,10 @@
     // ---------------------------------------------------------------
     function csrfToken() {
         var m = document.querySelector('meta[name="csrf-token"]');
-        return m ? m.content : '';
+        if (m) return m.content;
+        var input = document.querySelector('input[name="csrf_token"]');
+        if (input) return input.value;
+        return '';
     }
 
     function urlB64ToUint8Array(base64) {

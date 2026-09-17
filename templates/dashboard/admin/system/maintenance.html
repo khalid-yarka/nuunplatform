@@ -1,180 +1,181 @@
-{# ============================================================
-   templates/dashboard/admin/system/maintenance.html
-   Platform maintenance mode toggle. Super-admin only.
-   ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
-{% block admin_title_icon %}<i class="fas fa-tools header-icon"></i>{% endblock %}
-{% block admin_title %}Maintenance Mode{% endblock %}
-{% block admin_subtitle %}
-    When enabled, non-admin visitors see a maintenance page instead of the platform.
-{% endblock %}
-
-{% block admin_breadcrumb %}
-    <span class="sep">/</span>
-    <span class="current">Maintenance</span>
-{% endblock %}
+{% block admin_title_icon %}<i class="fas fa-bullhorn"></i>{% endblock %}
+{% block admin_title %}Send Announcement{% endblock %}
+{% block admin_subtitle %}Broadcast a message to every user on the platform.{% endblock %}
 
 {% block admin_content %}
 
-<div class="sys-page">
+<div class="admin-page">
 
-    {# ─────── CURRENT STATE ─────── #}
-    {% if maintenance.enabled %}
-        <div class="sys-state danger">
-            <span class="state-icon">🚧</span>
-            <div class="state-body">
-                <div class="state-title">Maintenance mode is ON</div>
-                <div class="state-sub">
-                    All non-admin visitors are currently seeing the maintenance page.
-                    {% if maintenance.since %}
-                        Enabled since {{ maintenance.since[:16] }}.
-                    {% endif %}
+    <div class="admin-card">
+        <div class="admin-card__header">
+            <h2>Compose</h2>
+            <p class="admin-card__subtitle">
+                Title and message are required. The link field is optional and
+                controls where users land when they tap the notification.
+            </p>
+        </div>
+
+        <form method="POST" action="{{ url_for('admin_system.announcement_send') }}" class="admin-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="title">Title <span class="required">*</span></label>
+                    <input type="text" id="title" name="title" maxlength="100"
+                           placeholder="e.g. New physics chapter is live"
+                           required autocomplete="off">
+                    <p class="form-hint">Max 100 characters.</p>
                 </div>
             </div>
-        </div>
-    {% else %}
-        <div class="sys-state success">
-            <span class="state-icon">✅</span>
-            <div class="state-body">
-                <div class="state-title">Platform is live</div>
-                <div class="state-sub">
-                    All users have normal access. Enable maintenance only during deploy windows.
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="body">Message <span class="required">*</span></label>
+                    <textarea id="body" name="body" rows="5" maxlength="500"
+                              placeholder="Tell users what changed and why it matters…"
+                              required></textarea>
+                    <p class="form-hint">Max 500 characters.</p>
                 </div>
             </div>
-        </div>
-    {% endif %}
 
-    {# ─────── TOGGLE ─────── #}
-    <form method="POST" id="maintenanceForm"
-          action="{{ url_for('admin_system.maintenance_save') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="form-row two-col">
+                <div class="form-group">
+                    <label for="link">Link (optional)</label>
+                    <input type="text" id="link" name="link" maxlength="200"
+                           placeholder="/pdfs or /quiz or https://…"
+                           value="/dashboard">
+                    <p class="form-hint">Where users go when they tap the notification.</p>
+                </div>
 
-        <section class="admin-card">
-            <div class="admin-card-head">
-                <h3><i class="fas fa-toggle-on"></i> Toggle</h3>
+                <div class="form-group">
+                    <label for="icon">Icon (emoji)</label>
+                    <input type="text" id="icon" name="icon" maxlength="4"
+                           placeholder="📢" value="📢">
+                    <p class="form-hint">A single emoji. Defaults to 📢.</p>
+                </div>
             </div>
-            <div class="admin-card-body">
 
-                <div class="admin-form-group">
-                    <label class="sys-toggle-row">
-                        <input type="checkbox" name="enabled" value="1"
-                               id="maintenanceToggle"
-                               {% if maintenance.enabled %}checked{% endif %}>
-                        <div class="toggle-body">
-                            <div class="toggle-title">Enable maintenance mode</div>
-                            <div class="toggle-sub">Non-admins see a placeholder. Admins bypass.</div>
-                        </div>
+            <div class="form-row toggle-group">
+                <div class="toggle-item">
+                    <label class="toggle-label">
+                        <span class="toggle-text">Also deliver as push notification</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" name="also_push" id="also_push" value="1">
+                            <span class="slider"></span>
+                        </span>
                     </label>
+                    <p class="toggle-desc">
+                        Delivers a lock-screen notification to users who have enabled push
+                        in their settings. Users who disabled the "Platform announcements"
+                        push type will not receive it.
+                    </p>
                 </div>
-
-                <div class="admin-form-group">
-                    <label>Title shown to users</label>
-                    <input type="text" name="title" class="admin-input"
-                           value="{{ maintenance.title or "We'll be back soon" }}"
-                           placeholder="We'll be back soon"
-                           maxlength="80">
-                    <div class="hint">Large headline on the maintenance page.</div>
-                </div>
-
-                <div class="admin-form-group">
-                    <label>Message shown to users</label>
-                    <textarea name="message" class="admin-textarea" rows="3"
-                              placeholder="We're performing scheduled maintenance. Please check back shortly."
-                              maxlength="400">{{ maintenance.message or '' }}</textarea>
-                    <div class="hint">Explain why the platform is unavailable.</div>
-                </div>
-
-                <div class="admin-form-group" style="margin-bottom:0;">
-                    <label>Expected return (optional)</label>
-                    <input type="text" name="eta" class="admin-input"
-                           value="{{ maintenance.eta or '' }}"
-                           placeholder="e.g. In about 30 minutes"
-                           maxlength="60">
-                </div>
-
             </div>
-        </section>
 
-        <div class="sys-banner warn" style="margin-top:16px;">
-            <i class="fas fa-exclamation-triangle"></i>
-            <div>
-                <strong>Only super admin can toggle this.</strong>
-                Regular admins keep normal access during maintenance — they can still work.
+            <div class="form-actions">
+                <a href="{{ url_for('admin_system.dashboard') }}" class="btn btn-secondary">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-paper-plane"></i> Send Announcement
+                </button>
             </div>
-        </div>
+        </form>
+    </div>
 
-        <div class="sys-actions">
-            <button type="submit" class="admin-btn primary lg">
-                <i class="fas fa-save"></i> Save maintenance state
-            </button>
+    <div class="admin-card admin-card--muted">
+        <div class="admin-card__header">
+            <h2><i class="fas fa-info-circle"></i> How delivery works</h2>
         </div>
-    </form>
+        <ul class="admin-help-list">
+            <li>
+                <strong>In-app notification</strong> — always sent to every active user.
+                Appears in the bell menu and on the notifications page.
+            </li>
+            <li>
+                <strong>Web Push</strong> — only sent if the checkbox above is ticked
+                AND the user has push enabled on at least one device
+                AND they have the "Platform announcements" push type on.
+            </li>
+            <li>
+                <strong>Rate cap</strong> — a single broadcast is capped at 500 push
+                recipients to stay within the web worker's CPU budget.
+                Larger audiences will get in-app notifications but only the first
+                500 eligible users receive push.
+            </li>
+            <li>
+                <strong>Chunked delivery</strong> — push is sent in batches of 50
+                with a 1-second pause between batches. A full 500-recipient
+                broadcast takes roughly 20 seconds.
+            </li>
+        </ul>
+    </div>
 
 </div>
 
-{% endblock %}
+<style>
+.admin-page { max-width: 860px; margin: 0 auto; padding: 8px 0 40px; }
+.admin-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 24px;
+    margin-bottom: 20px;
+}
+.admin-card--muted { background: var(--surface-alt); }
+.admin-card__header { margin-bottom: 20px; }
+.admin-card__header h2 {
+    font-size: 18px; font-weight: 600;
+    color: var(--text); margin: 0 0 6px;
+}
+.admin-card__subtitle {
+    font-size: 13px; color: var(--text-muted); margin: 0; line-height: 1.55;
+}
+.admin-form .form-row { margin-bottom: 18px; }
+.admin-form .form-row.two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+@media (max-width: 640px) {
+    .admin-form .form-row.two-col { grid-template-columns: 1fr; }
+}
+.admin-form .form-group label {
+    display: block; font-size: 13px; font-weight: 600;
+    color: var(--text); margin-bottom: 6px;
+}
+.admin-form .form-group .required { color: #DC2626; }
+.admin-form input[type="text"],
+.admin-form textarea {
+    width: 100%; padding: 10px 12px; font-size: 14px;
+    color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-family: inherit; transition: var(--transition);
+}
+.admin-form input[type="text"]:focus,
+.admin-form textarea:focus {
+    outline: none; border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.15);
+}
+.admin-form textarea { resize: vertical; min-height: 100px; }
+.admin-form .form-hint {
+    font-size: 12px; color: var(--text-muted); margin: 6px 0 0;
+}
+.admin-form .form-actions {
+    display: flex; gap: 12px; justify-content: flex-end;
+    padding-top: 16px; border-top: 1px solid var(--border);
+}
+.admin-help-list {
+    list-style: none; padding: 0; margin: 0;
+    font-size: 14px; line-height: 1.65; color: var(--text-secondary);
+}
+.admin-help-list li {
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.admin-help-list li:last-child { border-bottom: none; }
+.admin-help-list strong { color: var(--text); }
+</style>
 
-{% block admin_js %}
-<script>
-(function () {
-    'use strict';
-    var form = document.getElementById('maintenanceForm');
-    var toggle = document.getElementById('maintenanceToggle');
-
-    form.addEventListener('submit', function (e) {
-        e.preventDefault();
-
-        var willEnable = toggle.checked;
-        var verb = willEnable ? 'Enable' : 'Disable';
-        var msg = willEnable
-            ? 'Non-admin visitors will see the maintenance page until you turn it off. Continue?'
-            : 'Visitors will regain access immediately. Continue?';
-
-        if (typeof AdminCore !== 'undefined') {
-            AdminCore.confirm({
-                title: verb + ' maintenance mode?',
-                message: msg,
-                confirm: verb,
-                danger: willEnable
-            }).then(function (ok) {
-                if (ok) submit();
-            });
-        } else {
-            if (window.confirm(msg)) submit();
-        }
-    });
-
-    function submit() {
-        var fd = new FormData(form);
-        if (!toggle.checked) fd.delete('enabled');
-
-        fetch('{{ url_for("admin_system.maintenance_save") }}', {
-            method: 'POST',
-            body: fd,
-            headers: {
-                'X-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')||{}).content || ''
-            }
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-            if (data.success) {
-                if (typeof AdminCore !== 'undefined') {
-                    AdminCore.toast(data.message || 'Saved.', 'success');
-                }
-                setTimeout(function () { window.location.reload(); }, 800);
-            } else {
-                if (typeof AdminCore !== 'undefined') {
-                    AdminCore.toast(data.error || 'Save failed.', 'error');
-                } else {
-                    alert(data.error || 'Save failed.');
-                }
-            }
-        })
-        .catch(function () {
-            if (typeof AdminCore !== 'undefined') AdminCore.toast('Network error.', 'error');
-        });
-    }
-})();
-</script>
 {% endblock %}
