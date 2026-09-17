@@ -224,7 +224,19 @@
 </section>
 
 <section id="notifications" class="settings-section">
-
+<div class="notif-intro">
+    <div class="notif-intro__icon">🔔</div>
+    <div class="notif-intro__text">
+        <strong>Two kinds of notifications</strong>
+        <p>
+            <b>Device push</b> — alerts on your phone, even when the app is closed.
+            Turn this on with the toggle in the first card below.
+            <br>
+            <b>In-app</b> — the bell icon inside NuunPlatform.
+            Controlled by the toggles in the last card.
+        </p>
+    </div>
+</div>
     <!-- ═══════════ Push Notifications (Web Push) ═══════════ -->
     <div class="settings-card push-card" id="push-card">
         <div class="card-header">
@@ -292,20 +304,21 @@
 
         <!-- Active — user can toggle -->
         <div class="push-state" id="push-state-active" hidden>
-            <div class="toggle-item">
-                <label class="toggle-label">
-                    <span class="toggle-text">
-                        {{ _('settings.notifications.push.master') }}
-                    </span>
-                    <span class="toggle-switch">
-                        <input type="checkbox" id="push-toggle">
-                        <span class="slider"></span>
-                    </span>
-                </label>
-                <p class="toggle-desc" id="push-toggle-desc">
-                    {{ _('settings.notifications.push.master.desc') }}
-                </p>
-            </div>
+              <div class="toggle-item push-master">
+                  <label class="toggle-label">
+                      <span class="toggle-text">
+                          <i class="fas fa-mobile-alt" style="margin-right:6px; color: var(--primary);"></i>
+                          {{ _('settings.notifications.push.master') }}
+                      </span>
+                      <span class="toggle-switch push-master__switch">
+                          <input type="checkbox" id="push-toggle">
+                          <span class="slider"></span>
+                      </span>
+                  </label>
+                  <p class="toggle-desc" id="push-toggle-desc">
+                      {{ _('settings.notifications.push.master.desc') }}
+                  </p>
+              </div>
 
             <div class="push-actions" id="push-actions" hidden>
                 <button type="button" class="btn btn-secondary btn-sm" id="push-test-btn">
@@ -383,11 +396,15 @@
         </div>
     </div>
 
-    <!-- ═══════════ existing Notification Preferences card ═══════════ -->
+    <!-- ═══════════ In-app notification preferences ═══════════ -->
     <div class="settings-card">
         <div class="card-header">
-            <h3><i class="fas fa-bell"></i> Notification Preferences</h3>
-            <p>Choose which notifications you want to receive.</p>
+            <h3><i class="fas fa-inbox"></i> In-app notifications</h3>
+            <p>
+                These control the <b>bell icon inside NuunPlatform only</b>.
+                They do not send anything to your phone.
+                For device alerts, use the toggle in the card above.
+            </p>
         </div>
         <form id="notif-form" class="settings-form">
             <div class="form-row toggle-group">
@@ -963,6 +980,53 @@
         .push-actions { flex-direction: column; align-items: stretch; }
         .push-device-pill, .push-device-count { justify-content: center; }
     }
+
+  .notif-intro {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg,
+          rgba(59, 130, 246, 0.08),
+          rgba(139, 92, 246, 0.08));
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      line-height: 1.6;
+  }
+  .notif-intro__icon { font-size: 28px; line-height: 1; flex-shrink: 0; margin-top: 2px; }
+  .notif-intro__text { flex: 1; min-width: 0; }
+  .notif-intro__text strong {
+      display: block; font-size: 15px; font-weight: 600;
+      color: var(--text); margin-bottom: 6px;
+  }
+  .notif-intro__text p { margin: 0; color: var(--text-secondary); }
+  .notif-intro__text b { color: var(--text); font-weight: 600; }
+  [data-theme="dark"] .notif-intro {
+      background: linear-gradient(135deg,
+          rgba(59, 130, 246, 0.12),
+          rgba(139, 92, 246, 0.12));
+      border-color: rgba(59, 130, 246, 0.3);
+  }
+  @media (max-width: 540px) {
+      .notif-intro { flex-direction: column; gap: 10px; }
+      .notif-intro__icon { font-size: 24px; }
+  }
+  
+  .push-master {
+      padding: 14px 16px;
+      background: var(--surface-alt);
+      border-radius: var(--radius-sm);
+      border-left: 3px solid var(--primary);
+  }
+  .push-master .toggle-text {
+      font-size: 15px; font-weight: 600; color: var(--text);
+  }
+  .push-master__switch .slider {
+      transform: scale(1.15);
+      transform-origin: center right;
+  }
 </style>
 
 <script src="{{ url_for('static', filename='js/push-client.js') }}"></script>

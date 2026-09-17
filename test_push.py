@@ -642,4 +642,395 @@ def cmd_broadcast_announcement(title, body):
     print(f"    push sent          = {p['sent']}")
     print(f"    push failed        = {p['failed']}")
     print(f"    push pruned        = {p['pruned']}")
-    print(f"    capped             = {p['capp
+    print(f"    capped             = {p['capped']}")
+    print(f"    skipped            = {p['skipped']}")
+    print(f"    elapsed            = {elapsed:.2f}s")
+    print()
+    return 0
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PRUNE DEAD SUBSCRIPTIONS
+# ═══════════════════════════════════════════════════════════════════
+def cmd_prune(dry_run=False):
+    header("Prune dead subscriptions")
+
+    conn = db_conn()
+    try:
+        rows = conn.execute(
+            "SELECT id, user_id, endpoint FROM push_subscriptions"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        warn("No subscriptions to check.")
+        return 0
+
+    print(f"  Testing {len(rows)} endpoint(s)…\n")
+
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        fail("pywebpush not installed")
+        return 1
+
+    from config import Config
+
+    dead_ids = []
+    for r in rows:
+        sub = conn.execute(
+            "SELECT p256dh, auth FROM push_subscriptions WHERE id = ?",
+            (r['id'],)
+        ).fetchone()
+        try:
+            # Send a payload that some services will reject silently;
+            # we just want to know if the endpoint is alive.
+            webpush(
+                subscription_info={
+                    'endpoint': r['endpoint'],
+                    'keys': {'p256dh': sub['p256dh'], 'auth': sub['auth']},
+                },
+                data='{"title":"_prune_probe"}',
+                vapid_private_key=Config.VAPID_PRIVATE_KEY,
+                vapid_claims={'sub': Config.VAPID_SUBJECT},
+                timeout=8,
+            )
+            print(f"  {green('live')}   id={r['id']} uid={r['user_id']}")
+        except WebPushException as exc:
+            status = getattr(exc.response, 'status_code', None)
+            if status in (404, 410):
+                print(f"  {red('dead')}   id={r['id']} uid={r['user_id']} (HTTP {status})")
+                dead_ids.append(r['id'])
+            else:
+                print(f"  {yellow('?')}      id={r['id']} uid={r['user_id']} (HTTP {status})")
+        except Exception as e:
+            print(f"  {yellow('?')}      id={r['id']} uid={r['user_id']} ({e})")
+
+    print()
+    if not dead_ids:
+        ok("No dead subscriptions found.")
+        return 0
+
+    if dry_run:
+        warn(f"DRY-RUN — would delete {len(dead_ids)} subscription(s).")
+        return 0
+
+    answer = input(f"  Delete {len(dead_ids)} dead subscription(s)? [y/N] ").strip().lower()
+    if answer not in ('y', 'yes'):
+        warn("Cancelled.")
+        return 0
+
+    conn = db_conn()
+    try:
+        for sid in dead_ids:
+            conn.execute("DELETE FROM push_subscriptions WHERE id = ?", (sid,))
+        conn.commit()
+        ok(f"Deleted {len(dead_ids)} subscription(s).")
+    finally:
+        conn.close()
+
+    print()
+    return 0
+
+
+# ═══════════════════════════════════════════════════════════════════
+# USER DETAIL
+# ═══════════════════════════════════════════════════════════════════
+def cmd_user_detail(identifier):
+    header(f"User detail: {identifier}")
+
+    if isinstance(identifier, int):
+        user = find_user(user_id=identifier)
+    elif re.fullmatch(r'\d{4,9}', str(identifier)):
+        user = find_user(phone=str(identifier))
+    else:
+        user = find_user(public_id=str(identifier))
+
+    if not user:
+        fail(f"No user found: {identifier}")
+        return 1
+
+    print(f"  {bold('Identity')}")
+    print(f"    id           {user['id']}")
+    print(f"    public_id    @{user.get('public_id')}")
+    print(f"    name         {user.get('first_name')} {user.get('last_name')}")
+    print(f"    phone        {user.get('phone_number')}")
+    print(f"    tier         {user.get('tier')}")
+    print()
+
+    conn = db_conn()
+    try:
+        subs = conn.execute(
+            "SELECT id, endpoint, created_at FROM push_subscriptions WHERE user_id = ?",
+            (user['id'],)
+        ).fetchall()
+
+        print(f"  {bold('Subscriptions')}")
+        if not subs:
+            warn("None")
+        else:
+            for s in subs:
+                host = s['endpoint'].split('/')[2] if '://' in s['endpoint'] else 'unknown'
+                print(f"    id={s['id']}  {host}")
+                print(f"        {dim(s['created_at'])}")
+        print()
+
+        # Settings
+        us = conn.execute(
+            "SELECT settings FROM user_settings WHERE user_id = ?",
+            (user['id'],)
+        ).fetchone()
+
+        print(f"  {bold('Push settings')}")
+        if us and us['settings']:
+            try:
+                s = json.loads(us['settings'])
+                for k in (
+                    'notifications.push_enabled',
+                    'notifications.push_live_quiz_start',
+                    'notifications.push_live_quiz_result',
+                    'notifications.push_participant_joined',
+                    'notifications.push_admin_announcement',
+                    'notifications.push_quiz_complete',
+                ):
+                    v = s.get(k, '(missing)')
+                    print(f"    {k:<45} {v}")
+            except Exception as e:
+                warn(f"Could not parse settings JSON: {e}")
+        else:
+            warn("No user_settings row")
+    finally:
+        conn.close()
+
+    print()
+    return 0
+
+
+# ═══════════════════════════════════════════════════════════════════
+# INTERACTIVE MENU
+# ═══════════════════════════════════════════════════════════════════
+MENU = """
+  {b}1){/b}  Send test push to a user
+  {b}2){/b}  Send test push to ALL subscriptions
+  {b}3){/b}  Send custom message
+  {b}4){/b}  Simulate a real event (live_quiz_start, etc.)
+  {b}5){/b}  Broadcast announcement (admin path)
+  {b}6){/b}  Show user detail + settings
+  {b}7){/b}  List all subscriptions
+  {b}8){/b}  Run full diagnostic
+  {b}9){/b}  Prune dead subscriptions
+  {b}0){/b}  Exit
+""".replace('{b}', '\033[1m').replace('{/b}', '\033[0m')
+
+
+def _prompt(msg):
+    try:
+        return input(msg).strip()
+    except (KeyboardInterrupt, EOFError):
+        print()
+        return None
+
+
+def interactive_menu():
+    header("NuunPlatform — Push Test Tool")
+
+    while True:
+        print(MENU)
+        choice = _prompt("  Choice: ")
+        if choice is None:
+            break
+
+        if choice == '0':
+            print()
+            info("Bye.")
+            return 0
+
+        elif choice == '1':
+            ident = _prompt("  User (id, public_id, or phone): ")
+            if ident:
+                try:
+                    ident_i = int(ident)
+                    cmd_send_to_user(ident_i)
+                except ValueError:
+                    cmd_send_to_user(ident)
+
+        elif choice == '2':
+            cmd_send_to_all()
+
+        elif choice == '3':
+            ident = _prompt("  User (id, public_id, or phone): ")
+            if not ident:
+                continue
+            title = _prompt("  Title: ") or 'NuunPlatform'
+            body  = _prompt("  Body: ")  or 'Test from CLI'
+            url   = _prompt("  URL [/settings/#notifications]: ") or '/settings/#notifications'
+            try:
+                ident_i = int(ident)
+                cmd_custom(ident_i, title, body, url)
+            except ValueError:
+                cmd_custom(ident, title, body, url)
+
+        elif choice == '4':
+            event = _prompt(
+                "  Event (live_quiz_start / live_quiz_result / participant_joined / "
+                "admin_announcement / quiz_complete): "
+            )
+            if not event:
+                continue
+            ident = _prompt("  User: ")
+            if not ident:
+                continue
+            try:
+                ident_i = int(ident)
+                cmd_simulate(event, ident_i)
+            except ValueError:
+                cmd_simulate(event, ident)
+
+        elif choice == '5':
+            title = _prompt("  Title: ") or 'Announcement'
+            body  = _prompt("  Body: ")  or 'Test broadcast from CLI'
+            cmd_broadcast_announcement(title, body)
+
+        elif choice == '6':
+            ident = _prompt("  User: ")
+            if not ident:
+                continue
+            try:
+                ident_i = int(ident)
+                cmd_user_detail(ident_i)
+            except ValueError:
+                cmd_user_detail(ident)
+
+        elif choice == '7':
+            cmd_list_subscriptions()
+
+        elif choice == '8':
+            cmd_diagnose()
+
+        elif choice == '9':
+            cmd_prune()
+
+        else:
+            warn("Unknown choice.")
+
+        print()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ARGUMENT PARSING
+# ═══════════════════════════════════════════════════════════════════
+def main():
+    parser = argparse.ArgumentParser(
+        description='NuunPlatform push test tool.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent("""
+            Examples:
+              python3 test_push.py                          # interactive menu
+              python3 test_push.py --diagnose               # full system check
+              python3 test_push.py --list                   # all subscriptions
+              python3 test_push.py --public-id A4K7         # test one user
+              python3 test_push.py --phone 612345678
+              python3 test_push.py --user-id 42
+              python3 test_push.py --all                    # every subscriber
+              python3 test_push.py --custom --public-id A4K7 \\
+                  --title "Hi" --body "Testing"
+              python3 test_push.py --simulate live_quiz_start --user-id 42
+              python3 test_push.py --announce --title "Hi" --body "Msg"
+              python3 test_push.py --prune --dry-run
+        """),
+    )
+
+    # Target selection
+    parser.add_argument('--user-id', type=int)
+    parser.add_argument('--public-id', type=str)
+    parser.add_argument('--phone', type=str)
+    parser.add_argument('--all', action='store_true')
+
+    # Actions
+    parser.add_argument('--diagnose', action='store_true')
+    parser.add_argument('--list', action='store_true')
+    parser.add_argument('--prune', action='store_true')
+    parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--detail', action='store_true')
+
+    # Custom message
+    parser.add_argument('--custom', action='store_true')
+    parser.add_argument('--title', type=str, default='NuunPlatform')
+    parser.add_argument('--body',  type=str, default='Test from CLI')
+    parser.add_argument('--url',   type=str, default='/settings/#notifications')
+
+    # Simulate real event
+    parser.add_argument('--simulate', type=str,
+        choices=['live_quiz_start', 'live_quiz_result', 'participant_joined',
+                 'admin_announcement', 'quiz_complete'])
+
+    # Broadcast
+    parser.add_argument('--announce', action='store_true')
+
+    args = parser.parse_args()
+
+    # No args → interactive
+    if len(sys.argv) == 1:
+        return interactive_menu()
+
+    # Determine target identifier
+    target = None
+    if args.user_id is not None:
+        target = args.user_id
+    elif args.public_id:
+        target = args.public_id
+    elif args.phone:
+        target = args.phone
+
+    # Dispatch
+    if args.diagnose:
+        return cmd_diagnose() or 0
+
+    if args.list:
+        return cmd_list_subscriptions() or 0
+
+    if args.prune:
+        return cmd_prune(dry_run=args.dry_run) or 0
+
+    if args.detail:
+        if not target:
+            fail("--detail requires --user-id, --public-id, or --phone")
+            return 1
+        return cmd_user_detail(target) or 0
+
+    if args.simulate:
+        if not target:
+            fail("--simulate requires a user selector")
+            return 1
+        return cmd_simulate(args.simulate, target) or 0
+
+    if args.announce:
+        return cmd_broadcast_announcement(args.title, args.body) or 0
+
+    if args.custom:
+        return cmd_custom(target, args.title, args.body, args.url) or 0
+
+    if args.all:
+        return cmd_send_to_all(title=args.title, body=args.body, confirm=True) or 0
+
+    if target is not None:
+        return cmd_send_to_user(target) or 0
+
+    # Unknown combination → menu
+    return interactive_menu()
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        print()
+        print(dim("  Interrupted."))
+        sys.exit(130)
+    except Exception as e:
+        print()
+        fail(f"Unhandled error: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
