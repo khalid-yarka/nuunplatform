@@ -825,6 +825,21 @@ def backup_status():
         logger.error(f"Backup status error: {e}")
         return jsonify({'error': str(e)}), 500
 
+# ============================================
+# DOCS HELP URL CONTEXT
+# ============================================
+@app.context_processor
+def _docs_help_url_context():
+    """
+    Exposes `docs_help_url` to every template.
+    Used by the navbar "?" icon to deep-link contextually.
+    Falls back to /docs/ if anything fails.
+    """
+    try:
+        from docs.help_urls import help_url_for_request
+        return {'docs_help_url': help_url_for_request(request)}
+    except Exception:
+        return {'docs_help_url': '/docs/'}
 
 # ============================================
 # CONTEXT PROCESSOR

@@ -405,6 +405,13 @@
 
         <!-- ---------- Footer ---------- -->
         <div class="sidebar-footer">
+            <a href="{{ url_for('docs.home') }}"
+               class="nav-item"
+               data-title="{{ _('nav.guide') }}"
+               title="{{ _('nav.guide') }}">
+                <span class="nav-icon"><i class="fas fa-book"></i></span>
+                <span class="nav-text">{{ _('nav.guide') }}</span>
+            </a>
             <button type="button"
                     class="nav-item logout"
                     id="sidebarLogoutBtn"
@@ -457,7 +464,15 @@
                         </div>
                     </div>
                 </div>
-
+                
+                <a href="{{ docs_help_url or url_for('docs.home') }}"
+                   class="theme-toggle"
+                   id="helpToggle"
+                   aria-label="{{ _('navbar.help') }}"
+                   title="{{ _('navbar.help') }}">
+                    <i class="fas fa-circle-question"></i>
+                </a>
+                
                 <span class="nav-divider"></span>
                 <a href="{{ url_for('dashboard.profile') }}" class="user-menu">
                     <div class="avatar avatar-sm avatar-primary">

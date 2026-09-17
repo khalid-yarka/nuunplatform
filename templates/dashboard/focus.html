@@ -149,6 +149,12 @@
                     <a href="{{ url_for('quiz.index') }}" class="btn btn-primary">
                         <i class="fas fa-rocket"></i> Take a quiz
                     </a>
+                    <div style="margin-top:12px;">
+                        <a href="{{ url_for('docs.feature_start', feature_key='focus') }}"
+                           style="font-size:12.5px; color: var(--text-secondary); text-decoration:none;">
+                            📖 {{ _('focus.suggestions.docs_link') }}
+                        </a>
+                    </div>
                 </div>
             {% endif %}
         </section>

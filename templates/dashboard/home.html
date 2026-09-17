@@ -666,6 +666,133 @@
     {% endif %}
 {% endif %}
 
+{# ============================================
+   GUIDED TOUR BANNER (new users only)
+   ============================================ #}
+{% if show_tour_banner %}
+<div class="dh-tour-banner" id="dhTourBanner">
+    <span class="dh-tour-banner__icon" aria-hidden="true">🎓</span>
+    <div class="dh-tour-banner__text">
+        <strong>{{ _('home.tour.title') }}</strong>
+        <span>{{ _('home.tour.subtitle') }}</span>
+    </div>
+    <a href="{{ url_for('docs.tour_start') }}" class="dh-tour-banner__cta">
+        {{ _('home.tour.cta') }}
+        <i class="fas fa-arrow-right" aria-hidden="true"></i>
+    </a>
+    <button type="button"
+            class="dh-tour-banner__close"
+            onclick="dismissTourBanner()"
+            aria-label="{{ _('common.close') }}">✕</button>
+</div>
+
+<style>
+    .dh-tour-banner {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 20px;
+        background:
+            radial-gradient(600px 200px at 100% -50%, rgba(255,255,255,0.18), transparent 60%),
+            linear-gradient(135deg, var(--primary) 0%, #B91C1C 100%);
+        color: #ffffff;
+        border-radius: var(--radius);
+        margin-bottom: 20px;
+        box-shadow: 0 8px 26px rgba(255, 49, 56, 0.28);
+        flex-wrap: wrap;
+    }
+    .dh-tour-banner__icon {
+        font-size: 30px;
+        flex-shrink: 0;
+        line-height: 1;
+    }
+    .dh-tour-banner__text {
+        flex: 1;
+        min-width: 180px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    .dh-tour-banner__text strong {
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: -0.2px;
+    }
+    .dh-tour-banner__text span {
+        font-size: 13px;
+        opacity: 0.92;
+        line-height: 1.5;
+    }
+    .dh-tour-banner__cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 9px 18px;
+        background: #ffffff;
+        color: var(--primary);
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 13px;
+        text-decoration: none;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    .dh-tour-banner__cta:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.22);
+        text-decoration: none;
+        color: var(--primary);
+    }
+    .dh-tour-banner__cta i { font-size: 11px; }
+    .dh-tour-banner__close {
+        background: rgba(255,255,255,0.18);
+        border: 1px solid rgba(255,255,255,0.32);
+        color: #ffffff;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        font-size: 13px;
+        cursor: pointer;
+        font-family: inherit;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s ease;
+    }
+    .dh-tour-banner__close:hover {
+        background: rgba(255,255,255,0.3);
+    }
+    @media (max-width: 640px) {
+        .dh-tour-banner { padding: 14px; gap: 12px; }
+        .dh-tour-banner__icon { font-size: 24px; }
+        .dh-tour-banner__text strong { font-size: 14px; }
+        .dh-tour-banner__text span { font-size: 12px; }
+        .dh-tour-banner__cta { padding: 7px 14px; font-size: 12px; }
+    }
+</style>
+
+<script>
+    function dismissTourBanner() {
+        var b = document.getElementById('dhTourBanner');
+        if (b) b.style.display = 'none';
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        var token = meta ? meta.content : '';
+        try {
+            fetch('/home/dismiss-tour', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': token
+                },
+                body: '{}'
+            }).catch(function () { /* silent */ });
+        } catch (e) { /* silent */ }
+    }
+</script>
+{% endif %}
+
 <!-- HERO -->
 <div class="dh-hero">
     <div class="dh-hero-inner">
@@ -1017,6 +1144,12 @@
                     <h4>{{ _('home.activity.empty_title') }}</h4>
                     <p>{{ _('home.activity.empty_desc') }}</p>
                     <a href="{{ url_for('quiz.index') }}">{{ _('home.activity.start_quiz') }}</a>
+                    <div style="margin-top:10px;">
+                        <a href="{{ url_for('docs.feature_start', feature_key='first-look') }}"
+                           style="font-size:12px; color: var(--text-secondary); text-decoration:none;">
+                            📖 {{ _('home.activity.docs_link') }}
+                        </a>
+                    </div>
                 </div>
             {% endif %}
         </div>

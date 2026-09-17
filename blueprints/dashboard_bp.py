@@ -175,9 +175,16 @@ def home():
     elif tier == 'premium':
         next_tier = 'pro'
         upgrade_hint = 'Get unlimited access, premium PDFs, and full live quiz hosting.'
+    # ---- Tour banner for brand-new users ----
+    _show_tour_banner = (
+        not session.get('docs_tour_dismissed', False)
+        and (total_points or 0) == 0
+        and (quiz_count or 0) == 0
+    )
 
     return render_template(
         'dashboard/home.html',
+        show_tour_banner=_show_tour_banner,
         student=student,
         greeting=greeting,
         greeting_icon=greeting_icon,
@@ -357,3 +364,11 @@ def _build_insights(subject_performance, success_rate, quiz_count,
                 pass
 
     return insights[:6]
+
+@dashboard_bp.route('/home/dismiss-tour', methods=['POST'])
+def dismiss_tour():
+    """Mark the guided-tour banner as dismissed for this session."""
+    from flask import jsonify
+    session['docs_tour_dismissed'] = True
+    session.modified = True
+    return jsonify({'success': True})

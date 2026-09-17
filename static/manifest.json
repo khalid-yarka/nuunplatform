@@ -1,23 +1,41 @@
 {
   "name": "NuunPlatform",
   "short_name": "Nuun",
-  "description": "Learn, quiz, and grow with NuunPlatform.",
-  "start_url": "/home?source=pwa",
-  "scope": "/",
+  "description": "Free Somali secondary school quizzes, live competitions, and study materials.",
+  "start_url": "/",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#FFF8F6",
   "theme_color": "#FF3138",
-  "lang": "so",
-  "dir": "ltr",
+  "orientation": "portrait",
   "icons": [
-    { "src": "/static/images/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/static/images/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/images/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/images/icon-512.png", "sizes": "512x512", "type": "image/png" },
     { "src": "/static/images/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Take a Quiz", "url": "/quiz", "icons": [{ "src": "/static/images/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Live Quiz",   "url": "/live-quiz/lobby", "icons": [{ "src": "/static/images/icon-192.png", "sizes": "192x192" }] },
-    { "name": "History",     "url": "/history", "icons": [{ "src": "/static/images/icon-192.png", "sizes": "192x192" }] }
+    {
+      "name": "Take a Quiz",
+      "short_name": "Quiz",
+      "url": "/quiz/",
+      "icons": [{ "src": "/static/images/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Live Quiz",
+      "short_name": "Live",
+      "url": "/live-quiz/lobby",
+      "icons": [{ "src": "/static/images/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My History",
+      "short_name": "History",
+      "url": "/history",
+      "icons": [{ "src": "/static/images/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "User Guide",
+      "short_name": "Guide",
+      "url": "/docs/",
+      "icons": [{ "src": "/static/images/icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }
