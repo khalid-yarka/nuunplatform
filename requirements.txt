@@ -1,6 +1,23 @@
-Flask==3.0.0
-python-dotenv==1.0.0
-gunicorn==21.2.0
-redis>=4.5.0
-pyTelegramBotAPI==4.18.0
-requests==2.31.0
+# ─── Web framework ───
+Flask>=3.0,<4.0
+Werkzeug>=3.0,<4.0
+python-dotenv>=1.0
+
+# ─── Telegram bot ───
+pyTelegramBotAPI>=4.14
+
+# ─── HTTP ───
+requests>=2.31
+
+# ─── Redis (optional — used by cache + redis_state) ───
+redis>=5.0
+
+# ─── Serialization (optional) ───
+msgpack>=1.0
+
+# ─── Sessions (filesystem backend) ───
+Flask-Session>=0.6
+
+# ─── Pinned or optional — add if you actually import them:
+# Pillow           # only if image processing is added
+# gunicorn         # for production WSGI
