@@ -73,7 +73,16 @@ class Config:
     SESSION_COOKIE_HTTPONLY = _env_bool('SESSION_COOKIE_HTTPONLY', 'true')
     SESSION_COOKIE_SAMESITE = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
     ADMIN_SESSION_TIMEOUT = int(os.getenv('ADMIN_SESSION_TIMEOUT', '1800'))
-
+    
+    # ============================================
+    # WEB PUSH (VAPID)
+    # ============================================
+    # Optional. When VAPID keys are missing, every push code path is a
+    # safe no-op; the in-app notification center is unaffected.
+    VAPID_PUBLIC_KEY  = os.getenv('VAPID_PUBLIC_KEY', '')
+    VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
+    VAPID_SUBJECT     = os.getenv('VAPID_SUBJECT', 'mailto:admin@yourdomain.com')
+    PUSH_ENABLED      = bool(VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY)
     # ============================================
     # PATHS
     # ============================================
@@ -267,3 +276,4 @@ print(f"   Log Dir: {Config.LOG_DIR}")
 print(f"   Upload Dir: {Config.UPLOAD_FOLDER}")
 print(f"   Bot Database: {Config.BOT_DATABASE_PATH}")
 print(f"   Super admin phone: {'configured' if Config.SUPER_ADMIN_PHONE else 'NOT configured'}")
+print(f"   Web Push: {'enabled' if Config.PUSH_ENABLED else 'disabled (VAPID keys not set)'}")

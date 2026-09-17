@@ -35,6 +35,7 @@ REQUIRED_TABLES = [
     'user_achievements',
     'question_interactions',
     'unverified_pdfs',
+    
 ]
 
 REQUIRED_COLUMNS = {
@@ -294,7 +295,29 @@ def ensure_question_interactions_table(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_question_interactions_report_status ON question_interactions(report_status)")
     conn.commit()
 
-
+def ensure_push_tables(conn: sqlite3.Connection) -> None:
+    """Create the push_subscriptions table and indexes if missing."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL,
+            endpoint    TEXT    NOT NULL,
+            p256dh      TEXT    NOT NULL,
+            auth        TEXT    NOT NULL,
+            created_at  TEXT    DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(user_id, endpoint),
+            FOREIGN KEY (user_id) REFERENCES students(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_push_subs_user "
+        "ON push_subscriptions(user_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_push_subs_endpoint "
+        "ON push_subscriptions(endpoint)"
+    )
+    conn.commit()
 # ============================================
 # SCHEMA CREATION (Fresh Install)
 # ============================================

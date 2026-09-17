@@ -1004,5 +1004,21 @@
   "help.docs.desc": "Baadh astaam kasta tallaabo-tallaabo.",
   "help.docs.cta": "Fur Hagaha",
   "focus.suggestions.docs_link": "Baro sida Diiradda u shaqeyso",
-  "home.activity.docs_link": "Baro sida waxqabadka loo raad raaco"
+  "home.activity.docs_link": "Baro sida waxqabadka loo raad raaco",
+  "settings.notifications.push.title": "Ogeysiisyada Tooska ah",
+  "settings.notifications.push.desc": "Hel ogeysiis qalabkan xitaa marka NuunPlatform xidhan tahay.",
+  "settings.notifications.push.master": "Fur ogeysiisyada qalabkan",
+  "settings.notifications.push.master.desc": "Ogeysiisyada waxay ka soo muuqdaan sanduuqa ogeysiiska qalabkaaga, taabashadooduna waxay barta ka furtaa meesha saxda ah.",
+  "settings.notifications.push.test": "Dir tijaabo",
+  "settings.notifications.push.disabled.title": "Ogeysiisyada tooska ah laguma habayn server-ka",
+  "settings.notifications.push.disabled.desc": "Maamule ayaa u baahan inuu dejiyo furayaasha VAPID ka hor inta aan la diri karin ogeysiisyada. Wax kasta oo kale ee boggan weli way shaqeeyaan.",
+  "settings.notifications.push.unsupported.title": "Browser-kan ma taageero ogeysiisyada tooska ah",
+  "settings.notifications.push.unsupported.desc": "Isku day Chrome, Firefox, Edge, ama Safari ugu dambeeyay. iPhone-ka waxaad u baahan tahay iOS 16.4 ama ka dambeeya.",
+  "settings.notifications.push.ios.title": "Marka hore ku dar NuunPlatform Boggaaga Hore",
+  "settings.notifications.push.ios.desc": "iPhone iyo iPad waxay uun ogeysiisyada tooska ah u diraan websaytyada lagu daray Bogga Hore.",
+  "settings.notifications.push.ios.step1": "Taabo badhanka Wadaag ee hoosta Safari.",
+  "settings.notifications.push.ios.step2": "Hoos u dhaadhac oo taabo \"Ku dar Bogga Hore\".",
+  "settings.notifications.push.ios.step3": "Ka fur NuunPlatform astaanta cusub ee Bogga Hore kadibna ku soo noqo halkan.",
+  "settings.notifications.push.denied.title": "Ogeysiisyada waa laga xiray browser-kaaga",
+  "settings.notifications.push.denied.desc": "Hore ayaad u diiday ogolaanshaha. Si aad dib ugu furto, fur dejinta browser-kaaga ee NuunPlatform oo ogolow ogeysiisyada, kadib boggan dib u cusboonaysii."
 }

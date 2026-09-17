@@ -21,3 +21,7 @@ Flask-Session>=0.6
 # ─── Pinned or optional — add if you actually import them:
 # Pillow           # only if image processing is added
 # gunicorn         # for production WSGI
+
+# ─── Web Push ───
+pywebpush>=2.0.3
+cryptography>=42

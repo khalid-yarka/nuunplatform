@@ -1004,5 +1004,21 @@
   "help.docs.desc": "Browse every feature step-by-step.",
   "help.docs.cta": "Open Guide",
   "focus.suggestions.docs_link": "Learn how Focus works",
-  "home.activity.docs_link": "Learn how activity is tracked"
+  "home.activity.docs_link": "Learn how activity is tracked",
+  "settings.notifications.push.title": "Push Notifications",
+  "settings.notifications.push.desc": "Get alerts on this device even when NuunPlatform is closed.",
+  "settings.notifications.push.master": "Enable notifications on this device",
+  "settings.notifications.push.master.desc": "Alerts appear in your device's notification tray, and tapping one opens the app at the right place.",
+  "settings.notifications.push.test": "Send test",
+  "settings.notifications.push.disabled.title": "Push is not configured on the server",
+  "settings.notifications.push.disabled.desc": "An administrator needs to set VAPID keys before notifications can be delivered. Everything else on this page still works.",
+  "settings.notifications.push.unsupported.title": "This browser does not support push notifications",
+  "settings.notifications.push.unsupported.desc": "Try the latest Chrome, Firefox, Edge, or Safari. On iPhone, you'll need iOS 16.4 or later.",
+  "settings.notifications.push.ios.title": "Add NuunPlatform to your Home Screen first",
+  "settings.notifications.push.ios.desc": "iPhone and iPad only deliver push notifications to websites that have been added to the Home Screen.",
+  "settings.notifications.push.ios.step1": "Tap the Share button at the bottom of Safari.",
+  "settings.notifications.push.ios.step2": "Scroll down and tap \"Add to Home Screen\".",
+  "settings.notifications.push.ios.step3": "Open NuunPlatform from the new Home Screen icon and come back here.",
+  "settings.notifications.push.denied.title": "Notifications are blocked in your browser",
+  "settings.notifications.push.denied.desc": "You previously denied permission. To re-enable, open your browser's site settings for NuunPlatform and allow notifications, then reload this page."
 }

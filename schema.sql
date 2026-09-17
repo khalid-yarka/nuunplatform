@@ -871,3 +871,25 @@ CREATE INDEX IF NOT EXISTS idx_unverified_pdfs_confirmed
     ON unverified_pdfs(confirmed);
 CREATE INDEX IF NOT EXISTS idx_unverified_pdfs_published
     ON unverified_pdfs(published_at DESC);
+
+-- ============================================
+-- PUSH SUBSCRIPTIONS (Web Push)
+-- ============================================
+-- One row per user per browser/device. A user with three browsers has
+-- three rows. `endpoint` is the URL the push service gave the browser
+-- and is the unique delivery target. Rows are deleted when the push
+-- service reports the endpoint is gone (HTTP 410 / 404).
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,
+    endpoint    TEXT    NOT NULL,
+    p256dh      TEXT    NOT NULL,
+    auth        TEXT    NOT NULL,
+    created_at  TEXT    DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(user_id, endpoint),
+    FOREIGN KEY (user_id) REFERENCES students(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_subs_user     ON push_subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_push_subs_endpoint ON push_subscriptions(endpoint);

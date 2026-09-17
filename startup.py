@@ -83,6 +83,7 @@ def initialize_database_startup_fast() -> Tuple[bool, List[str]]:
     try:
         conn = _get_connection(timeout=5)
         ensure_question_interactions_table(conn)
+        ensure_push_tables(conn)
         tables_ok, missing = verify_tables_exist(conn)
         conn.close()
         if not tables_ok:

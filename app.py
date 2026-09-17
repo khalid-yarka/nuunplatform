@@ -69,6 +69,7 @@ from blueprints.pdfs_bp import pdfs_bp
 from blueprints.quiz_bp import quiz_bp
 from blueprints.live_quiz_bp import live_quiz_bp
 from blueprints.notifications_bp import notifications_bp
+from blueprints.push_bp import push_bp
 from blueprints.saved_content_bp import saved_content_bp
 from blueprints.achievements_bp import achievements_bp
 from blueprints.focus_bp import focus_bp
@@ -612,6 +613,7 @@ app.register_blueprint(settings_bp)
 app.register_blueprint(profile_bp)
 app.register_blueprint(interactions_bp)
 app.register_blueprint(history_bp)
+app.register_blueprint(push_bp)
 app.register_blueprint(docs_bp)
 
 register_admin_blueprints(app)
@@ -919,6 +921,7 @@ def utility_processor():
         'social_whatsapp': social_whatsapp,
         'social_tiktok': social_tiktok,
         'social_youtube': social_youtube,
+        'push_enabled': Config.PUSH_ENABLED,
     }
 # At the end of app.py, or in _run_bot_db_init
 try:
