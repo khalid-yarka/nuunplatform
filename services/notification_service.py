@@ -1,19 +1,22 @@
 # services/notification_service.py
 """
-Notification service that respects user preferences.
+Notification service.
 
 Four channels exist for a notification:
-    1. In-app         — always written to the notifications table
+    1. In-app         — always written to the notifications table (source of truth)
     2. Web Push       — best-effort, gated on user's master toggle
-    3. Browser API    — live-quiz tab only (unchanged, not handled here)
+    3. Browser API    — live-quiz tab only (not handled here)
     4. Telegram       — not part of push v1
 
-Push is only fanned out for a small allowlist of types. See
-PUSH_ELIGIBLE_TYPES below.
+Push is only fanned out for a small allowlist of types — see
+PUSH_ELIGIBLE_TYPES. Other types remain in-app only.
+
+Everything in the push path is wrapped so it can never break the
+existing notification flow. If push fails, the in-app row is still
+written and the caller still returns True.
 """
 
 import logging
-from typing import Optional
 
 from db import (
     create_notification,
@@ -24,10 +27,17 @@ from services.settings_service import SettingsService
 logger = logging.getLogger(__name__)
 
 
-# Notification types worth interrupting the user for.
+# ---------------------------------------------------------------------
+# Notification types worth pushing to the device.
+#
+# These match the notification_type strings that the app passes to
+# send_notification() — the same strings that appear as suffix keys
+# in user_settings.DEFAULT_SETTINGS (notifications.live_quiz_start,
+# notifications.live_quiz_result, notifications.participant_joined).
+# ---------------------------------------------------------------------
 PUSH_ELIGIBLE_TYPES = frozenset({
-    'live_quiz_started',
-    'live_quiz_results',
+    'live_quiz_start',
+    'live_quiz_result',
     'participant_joined',
 })
 
@@ -54,15 +64,19 @@ def _fanout_push(
 ) -> None:
     """
     Deliver a push to every device the user has enabled.
-    Best-effort: never raises, never blocks the caller.
+
+    Best-effort: never raises, never blocks the caller. If push isn't
+    configured, or the user hasn't opted in, this is a no-op.
     """
     if notification_type not in PUSH_ELIGIBLE_TYPES:
         return
 
     try:
         from services import push_service
+
         if not push_service.is_available():
             return
+
         if not _user_wants_push(user_id):
             return
 
@@ -75,6 +89,7 @@ def _fanout_push(
             tag=f'nuun-{notification_type}',
             data={'type': notification_type},
         )
+
     except Exception:
         logger.exception(
             "Push fan-out failed for user %s (type=%s)",
@@ -95,8 +110,13 @@ def send_notification(
     force: bool = False,
 ) -> bool:
     """
-    Send a notification to a single user if they have enabled it
-    (or if forced). Returns True if the in-app row was written.
+    Send a notification to a single user.
+
+    Respects the user's per-type preference unless `force=True`.
+    Returns True if the in-app row was written.
+
+    If the type is push-eligible, also fans out to Web Push for every
+    device the user has enabled.
     """
     if not force:
         if not SettingsService.get_notification_preference(user_id, notification_type):
@@ -108,9 +128,6 @@ def send_notification(
 
     ok = create_notification(user_id, notification_type, title, body, link, icon)
 
-    # Fire-and-forget push fan-out. Runs whether or not the notification
-    # was forced — forced just means "ignore the per-type preference",
-    # the user still needs the master push toggle ON for us to deliver.
     if ok:
         _fanout_push(user_id, notification_type, title, body, link, icon)
 
@@ -126,23 +143,24 @@ def send_notification_to_all(
     force: bool = False,
 ) -> int:
     """
-    Send a notification to all users. Returns the number of in-app rows
-    written. Push is fanned out to users who have enabled it.
+    Send a notification to all users.
+
+    Returns the number of in-app rows written.
+
+    Push is NOT fanned out for broadcasts in v1 — a batching path with
+    CPU budgeting is needed for large audiences. Broadcasts stay in-app.
     """
     if force:
-        count = db_create_all(notification_type, title, body, link, icon)
-        # Broadcasts skip push for v1 — a separate batching path is
-        # needed for large audiences on free-tier PythonAnywhere.
-        return count
+        return db_create_all(notification_type, title, body, link, icon)
 
     from db import execute_with_retry
     cursor = execute_with_retry("SELECT id FROM students")
     users = cursor.fetchall()
+
     sent = 0
     for row in users:
         user_id = row['id']
         if SettingsService.get_notification_preference(user_id, notification_type):
             create_notification(user_id, notification_type, title, body, link, icon)
-            _fanout_push(user_id, notification_type, title, body, link, icon)
             sent += 1
     return sent
