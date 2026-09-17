@@ -52,7 +52,6 @@ self.addEventListener('fetch', e => {
 // ═══════════════════════════════════════════════════════════════════
 
 self.addEventListener('push', function (event) {
-  // Default fallback if the payload is missing or malformed.
   var data = {
     title: 'NuunPlatform',
     body: 'You have a new notification.',
@@ -95,7 +94,6 @@ self.addEventListener('notificationclick', function (event) {
     clients
       .matchAll({ type: 'window', includeUncontrolled: true })
       .then(function (list) {
-        // Focus an existing tab on our origin and navigate it.
         for (var i = 0; i < list.length; i++) {
           var c = list[i];
           if (c.url.indexOf(self.location.origin) === 0) {
@@ -104,7 +102,6 @@ self.addEventListener('notificationclick', function (event) {
             return;
           }
         }
-        // Otherwise open a new window.
         if (clients.openWindow) return clients.openWindow(target);
       })
   );

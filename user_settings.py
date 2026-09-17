@@ -40,9 +40,10 @@ DEFAULT_SETTINGS = {
     "notifications.achievement_unlock": 1,
     "notifications.live_quiz_reminder": 1,
     "notifications.weekly_summary": 0,
+    "notifications.weekly_summary": 0,
     "notifications.push_enabled": 0,
-
-    # ----- Privacy -----
+    
+    # ----- Privacy -----  
     "privacy.show_on_leaderboard": 1,
     "privacy.show_public_id": 1,
 

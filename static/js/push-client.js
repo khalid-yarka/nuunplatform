@@ -21,8 +21,9 @@
 
     var VAPID_CACHE = null;
 
-    // -- helpers ------------------------------------------------------
-
+    // ---------------------------------------------------------------
+    // helpers
+    // ---------------------------------------------------------------
     function csrfToken() {
         var m = document.querySelector('meta[name="csrf-token"]');
         return m ? m.content : '';
@@ -59,8 +60,9 @@
         }
     }
 
-    // -- service worker / subscription --------------------------------
-
+    // ---------------------------------------------------------------
+    // service worker / subscription
+    // ---------------------------------------------------------------
     function getRegistration() {
         if (!supported()) return Promise.resolve(null);
         return navigator.serviceWorker.ready.catch(function () { return null; });
@@ -88,8 +90,9 @@
         });
     }
 
-    // -- public actions -----------------------------------------------
-
+    // ---------------------------------------------------------------
+    // public actions
+    // ---------------------------------------------------------------
     function requestPermission() {
         if (!supported()) return Promise.resolve('unsupported');
         return Notification.requestPermission();
@@ -162,8 +165,6 @@
 
             var endpoint = sub.endpoint;
 
-            // Best-effort server removal first. If it fails we still
-            // unsubscribe locally — the row gets pruned on the next 410.
             return fetch('/push/unsubscribe', {
                 method: 'POST',
                 credentials: 'same-origin',
@@ -232,8 +233,9 @@
         });
     }
 
-    // -- export -------------------------------------------------------
-
+    // ---------------------------------------------------------------
+    // export
+    // ---------------------------------------------------------------
     window.NuunPush = {
         supported:         supported,
         isIOS:             isIOS,
