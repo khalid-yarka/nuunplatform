@@ -354,17 +354,20 @@ def lobby_join(quiz_id):
         return jsonify({'error': 'Quiz state not available'}), 500
 
     creator_id = quiz.get('creator_id')
-    if creator_id:
+    if creator_id and creator_id != user_id:
         user = get_student_by_id(user_id)
         user_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
-        send_notification(
-            user_id=creator_id,
-            notification_type='participant_joined',
-            title='👋 New Participant!',
-            body=f'{user_name} joined your quiz "{quiz.get("title", "Live Quiz")}"',
-            link=f'/live-quiz/waiting-room/{quiz_id}',
-            icon='👤',
-        )
+        try:
+            send_notification(
+                user_id=creator_id,
+                notification_type='participant_joined',
+                title='👋 New Participant!',
+                body=f'{user_name} joined your quiz "{quiz.get("title", "Live Quiz")}"',
+                link=f'/live-quiz/waiting-room/{quiz_id}',
+                icon='👤',
+            )
+        except Exception as e:
+            logger.warning(f"participant_joined notification failed: {e}")
 
     return jsonify({
         'success': True,
@@ -894,7 +897,7 @@ def join():
             return render_template('dashboard/live_quiz/join.html')
 
         add_live_quiz_participant(quiz['id'], user_id)
-
+        
         manager = get_state_manager()
         manager.ensure_quiz_in_memory(quiz['id'])
         quiz_state = manager.get_quiz(quiz['id'])
@@ -908,7 +911,24 @@ def join():
                 'event_type': 'JOIN',
                 'payload': json.dumps({'name': name}),
             })
-
+        
+        # Notify the host that a new participant joined.
+        creator_id = quiz.get('creator_id')
+        if creator_id and creator_id != user_id:
+            user = get_student_by_id(user_id)
+            user_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
+            try:
+                send_notification(
+                    user_id=creator_id,
+                    notification_type='participant_joined',
+                    title='👋 New Participant!',
+                    body=f'{user_name} joined your quiz "{quiz.get("title", "Live Quiz")}"',
+                    link=f'/live-quiz/waiting-room/{quiz["id"]}',
+                    icon='👤',
+                )
+            except Exception as e:
+                logger.warning(f"participant_joined notification failed: {e}")
+        
         flash('You have joined the quiz!', 'success')
         return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
 

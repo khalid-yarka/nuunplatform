@@ -64,10 +64,23 @@
                     </div>
                 </div>
 
-                <div class="admin-form-group" style="margin-bottom:0;">
+                <div class="admin-form-group">
                     <label>Icon (emoji)</label>
                     <input type="text" name="icon" class="admin-input sys-emoji-input"
                            maxlength="4" value="📢">
+                </div>
+                
+                <div class="admin-form-group" style="margin-bottom:0;">
+                    <label class="admin-push-toggle">
+                        <input type="checkbox" name="also_push" value="1">
+                        <span class="admin-push-toggle__track">
+                            <span class="admin-push-toggle__knob"></span>
+                        </span>
+                        <span class="admin-push-toggle__text">
+                            <strong>Also deliver as push notification</strong>
+                            <span>Reaches the user's lock screen. Only sent to users who enabled notifications and allowed platform announcements.</span>
+                        </span>
+                    </label>
                 </div>
 
             </div>
@@ -100,7 +113,66 @@
     </form>
 
 </div>
-
+<style>
+.admin-push-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 16px;
+    background: var(--surface-alt, rgba(0,0,0,0.03));
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 10px;
+    cursor: pointer;
+    user-select: none;
+}
+.admin-push-toggle input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+.admin-push-toggle__track {
+    position: relative;
+    flex-shrink: 0;
+    width: 46px;
+    height: 26px;
+    background: #d1d5db;
+    border-radius: 26px;
+    transition: background 0.2s;
+    margin-top: 2px;
+}
+.admin-push-toggle__knob {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.admin-push-toggle input:checked + .admin-push-toggle__track {
+    background: linear-gradient(135deg, #10b981, #059669);
+}
+.admin-push-toggle input:checked + .admin-push-toggle__track .admin-push-toggle__knob {
+    transform: translateX(20px);
+}
+.admin-push-toggle__text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.admin-push-toggle__text strong {
+    font-size: 14px;
+    color: var(--text, #111);
+}
+.admin-push-toggle__text span {
+    color: var(--text-muted, #6b7280);
+    font-size: 12px;
+}
+</style>
 {% endblock %}
 
 {% block admin_js %}

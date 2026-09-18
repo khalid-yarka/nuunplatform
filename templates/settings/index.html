@@ -224,303 +224,238 @@
 </section>
 
 <section id="notifications" class="settings-section">
-<div class="notif-intro">
-    <div class="notif-intro__icon">🔔</div>
-    <div class="notif-intro__text">
-        <strong>Two kinds of notifications</strong>
-        <p>
-            <b>Device push</b> — alerts on your phone, even when the app is closed.
-            Turn this on with the toggle in the first card below.
-            <br>
-            <b>In-app</b> — the bell icon inside NuunPlatform.
-            Controlled by the toggles in the last card.
-        </p>
-    </div>
-</div>
-    <!-- ═══════════ Push Notifications (Web Push) ═══════════ -->
-    <div class="settings-card push-card" id="push-card">
-        <div class="card-header">
-            <h3>
-                <i class="fas fa-bell"></i>
-                {{ _('settings.notifications.push.title') }}
-            </h3>
-            <p>{{ _('settings.notifications.push.desc') }}</p>
+
+    <!-- ═══════════ HERO CARD — Device Push Notifications ═══════════ -->
+    <div class="notif-hero" id="push-card">
+        <div class="notif-hero__header">
+            <div class="notif-hero__badge">
+                <i class="fas fa-mobile-alt"></i>
+            </div>
+            <div class="notif-hero__intro">
+                <h3>Device notifications</h3>
+                <p>Get alerts on this phone or tablet — even when NuunPlatform is closed.</p>
+            </div>
         </div>
 
-        <!-- Loading state -->
-        <div class="push-state" id="push-state-loading">
-            <div class="push-spinner" aria-hidden="true"></div>
-            <span class="push-loading-text">{{ _('common.loading') }}</span>
+        <div class="notif-state" id="push-state-loading">
+            <div class="notif-spinner-row">
+                <span class="notif-spinner"></span>
+                <span>Checking this device…</span>
+            </div>
         </div>
 
-        <!-- Unsupported browser -->
-        <div class="push-state" id="push-state-unsupported" hidden>
-            <div class="push-alert push-alert-info">
+        <div class="notif-state" id="push-state-unsupported" hidden>
+            <div class="notif-note notif-note--info">
                 <i class="fas fa-info-circle"></i>
                 <div>
-                    <strong>{{ _('settings.notifications.push.unsupported.title') }}</strong>
-                    <p>{{ _('settings.notifications.push.unsupported.desc') }}</p>
+                    <strong>Not supported in this browser</strong>
+                    <p>Try the latest Chrome, Firefox, Edge, or Safari. On iPhone and iPad, notifications only work when the app is added to your Home Screen.</p>
                 </div>
             </div>
         </div>
 
-        <!-- iOS Safari, not installed -->
-        <div class="push-state" id="push-state-ios" hidden>
-            <div class="push-alert push-alert-info">
+        <div class="notif-state" id="push-state-ios" hidden>
+            <div class="notif-note notif-note--info">
                 <i class="fas fa-mobile-alt"></i>
                 <div>
-                    <strong>{{ _('settings.notifications.push.ios.title') }}</strong>
-                    <p>{{ _('settings.notifications.push.ios.desc') }}</p>
-                    <ol class="push-ios-steps">
-                        <li>{{ _('settings.notifications.push.ios.step1') }}</li>
-                        <li>{{ _('settings.notifications.push.ios.step2') }}</li>
-                        <li>{{ _('settings.notifications.push.ios.step3') }}</li>
+                    <strong>One more step on iPhone &amp; iPad</strong>
+                    <p>Apple only allows notifications for websites installed to the Home Screen.</p>
+                    <ol class="notif-steps">
+                        <li>Tap the <b>Share</b> button in Safari</li>
+                        <li>Scroll down → <b>Add to Home Screen</b></li>
+                        <li>Open NuunPlatform from the new Home Screen icon</li>
+                        <li>Come back to this page and turn the switch on</li>
                     </ol>
                 </div>
             </div>
         </div>
 
-        <!-- Permission denied at browser level -->
-        <div class="push-state" id="push-state-denied" hidden>
-            <div class="push-alert push-alert-warning">
+        <div class="notif-state" id="push-state-denied" hidden>
+            <div class="notif-note notif-note--warn">
                 <i class="fas fa-lock"></i>
                 <div>
-                    <strong>{{ _('settings.notifications.push.denied.title') }}</strong>
-                    <p>{{ _('settings.notifications.push.denied.desc') }}</p>
+                    <strong>Blocked in this browser</strong>
+                    <p>You previously denied permission. To turn notifications back on:</p>
+                    <ol class="notif-steps">
+                        <li>Open your browser's site settings for NuunPlatform</li>
+                        <li>Set <b>Notifications</b> to <b>Allow</b></li>
+                        <li>Reload this page</li>
+                    </ol>
                 </div>
             </div>
         </div>
 
-        <!-- Server push not configured -->
-        <div class="push-state" id="push-state-disabled" hidden>
-            <div class="push-alert push-alert-info">
-                <i class="fas fa-info-circle"></i>
+        <div class="notif-state" id="push-state-disabled" hidden>
+            <div class="notif-note notif-note--warn">
+                <i class="fas fa-server"></i>
                 <div>
-                    <strong>{{ _('settings.notifications.push.disabled.title') }}</strong>
-                    <p>{{ _('settings.notifications.push.disabled.desc') }}</p>
+                    <strong>Not yet configured on the server</strong>
+                    <p>An administrator needs to finish setting up push notifications. Everything else on this page still works.</p>
                 </div>
             </div>
         </div>
 
-        <!-- Active — user can toggle -->
-        <div class="push-state" id="push-state-active" hidden>
-              <div class="toggle-item push-master">
-                  <label class="toggle-label">
-                      <span class="toggle-text">
-                          <i class="fas fa-mobile-alt" style="margin-right:6px; color: var(--primary);"></i>
-                          {{ _('settings.notifications.push.master') }}
-                      </span>
-                      <span class="toggle-switch push-master__switch">
-                          <input type="checkbox" id="push-toggle">
-                          <span class="slider"></span>
-                      </span>
-                  </label>
-                  <p class="toggle-desc" id="push-toggle-desc">
-                      {{ _('settings.notifications.push.master.desc') }}
-                  </p>
-              </div>
+        <div class="notif-state" id="push-state-active" hidden>
 
-            <div class="push-actions" id="push-actions" hidden>
-                <button type="button" class="btn btn-secondary btn-sm" id="push-test-btn">
+            <div class="notif-master">
+                <div class="notif-master__icon" id="push-master-icon">
+                    <i class="fas fa-bell-slash"></i>
+                </div>
+                <div class="notif-master__text">
+                    <div class="notif-master__title">Notifications on this device</div>
+                    <div class="notif-master__status" id="push-master-status">Off</div>
+                </div>
+                <label class="notif-master__switch">
+                    <input type="checkbox" id="push-toggle">
+                    <span class="notif-master__slider"></span>
+                </label>
+            </div>
+
+            <div class="notif-details" id="push-actions" hidden>
+                <button type="button" class="notif-test-btn" id="push-test-btn">
                     <i class="fas fa-paper-plane"></i>
-                    {{ _('settings.notifications.push.test') }}
+                    Send test notification
                 </button>
-                <span class="push-device-pill" id="push-device-label"></span>
-                <span class="push-device-count" id="push-device-count"></span>
+                <span class="notif-device-pill" id="push-device-label"></span>
+                <span class="notif-device-pill" id="push-device-count"></span>
             </div>
 
-            <div class="push-types" id="push-types" hidden>
-                <h4 class="push-types-title">
-                    {{ _('settings.notifications.push.types.title') }}
-                </h4>
-                <p class="push-types-desc">
-                    {{ _('settings.notifications.push.types.desc') }}
-                </p>
-
-                <div class="toggle-group">
-                    <div class="toggle-item">
-                        <label class="toggle-label">
-                            <span class="toggle-text">{{ _('settings.notifications.push.types.live_start') }}</span>
-                            <span class="toggle-switch">
-                                <input type="checkbox" id="push-type-live-start">
-                                <span class="slider"></span>
-                            </span>
-                        </label>
-                    </div>
-                    <div class="toggle-item">
-                        <label class="toggle-label">
-                            <span class="toggle-text">{{ _('settings.notifications.push.types.live_result') }}</span>
-                            <span class="toggle-switch">
-                                <input type="checkbox" id="push-type-live-result">
-                                <span class="slider"></span>
-                            </span>
-                        </label>
+            <div class="notif-types" id="push-types" hidden>
+                <div class="notif-types__header">
+                    <i class="fas fa-sliders-h"></i>
+                    <div>
+                        <strong>Which alerts to receive</strong>
+                        <span>Turn off anything that would be noise for you.</span>
                     </div>
                 </div>
 
-                <div class="toggle-group">
-                    <div class="toggle-item">
-                        <label class="toggle-label">
-                            <span class="toggle-text">{{ _('settings.notifications.push.types.participant') }}</span>
-                            <span class="toggle-switch">
-                                <input type="checkbox" id="push-type-participant">
-                                <span class="slider"></span>
-                            </span>
-                        </label>
-                    </div>
-                    <div class="toggle-item">
-                        <label class="toggle-label">
-                            <span class="toggle-text">{{ _('settings.notifications.push.types.announcement') }}</span>
-                            <span class="toggle-switch">
-                                <input type="checkbox" id="push-type-announcement">
-                                <span class="slider"></span>
-                            </span>
-                        </label>
-                    </div>
-                </div>
+                <div class="notif-types__list">
+                    <label class="notif-type-row">
+                        <span class="notif-type-row__text">
+                            <span class="notif-type-row__title">Live quiz is starting</span>
+                            <span class="notif-type-row__desc">A quiz you joined is about to begin.</span>
+                        </span>
+                        <span class="notif-type-row__switch">
+                            <input type="checkbox" id="push-type-live-start">
+                            <span class="notif-type-row__slider"></span>
+                        </span>
+                    </label>
 
-                <div class="toggle-group">
-                    <div class="toggle-item">
-                        <label class="toggle-label">
-                            <span class="toggle-text">{{ _('settings.notifications.push.types.quiz_complete') }}</span>
-                            <span class="toggle-switch">
-                                <input type="checkbox" id="push-type-quiz-complete">
-                                <span class="slider"></span>
-                            </span>
-                        </label>
-                    </div>
+                    <label class="notif-type-row">
+                        <span class="notif-type-row__text">
+                            <span class="notif-type-row__title">Live quiz finished</span>
+                            <span class="notif-type-row__desc">Your results and ranking are ready.</span>
+                        </span>
+                        <span class="notif-type-row__switch">
+                            <input type="checkbox" id="push-type-live-result">
+                            <span class="notif-type-row__slider"></span>
+                        </span>
+                    </label>
+
+                    <label class="notif-type-row">
+                        <span class="notif-type-row__text">
+                            <span class="notif-type-row__title">Someone joined your quiz</span>
+                            <span class="notif-type-row__desc">Only when you're hosting a live quiz.</span>
+                        </span>
+                        <span class="notif-type-row__switch">
+                            <input type="checkbox" id="push-type-participant">
+                            <span class="notif-type-row__slider"></span>
+                        </span>
+                    </label>
+
+                    <label class="notif-type-row">
+                        <span class="notif-type-row__text">
+                            <span class="notif-type-row__title">Platform announcements</span>
+                            <span class="notif-type-row__desc">Important news from the NuunPlatform team.</span>
+                        </span>
+                        <span class="notif-type-row__switch">
+                            <input type="checkbox" id="push-type-announcement">
+                            <span class="notif-type-row__slider"></span>
+                        </span>
+                    </label>
+
+                    <label class="notif-type-row">
+                        <span class="notif-type-row__text">
+                            <span class="notif-type-row__title">Quiz results saved</span>
+                            <span class="notif-type-row__desc">After every quiz you complete. Usually noisy — leave off.</span>
+                        </span>
+                        <span class="notif-type-row__switch">
+                            <input type="checkbox" id="push-type-quiz-complete">
+                            <span class="notif-type-row__slider"></span>
+                        </span>
+                    </label>
                 </div>
             </div>
 
-            <div class="push-result" id="push-result" hidden></div>
+            <div class="notif-result" id="push-result" hidden></div>
         </div>
     </div>
 
-    <!-- ═══════════ In-app notification preferences ═══════════ -->
-    <div class="settings-card">
-        <div class="card-header">
-            <h3><i class="fas fa-inbox"></i> In-app notifications</h3>
-            <p>
-                These control the <b>bell icon inside NuunPlatform only</b>.
-                They do not send anything to your phone.
-                For device alerts, use the toggle in the card above.
-            </p>
+    <!-- ═══════════ SECONDARY CARD — In-app notifications ═══════════ -->
+    <div class="notif-secondary">
+        <div class="notif-secondary__header">
+            <div class="notif-secondary__badge">
+                <i class="fas fa-inbox"></i>
+            </div>
+            <div class="notif-secondary__intro">
+                <h3>In-app notifications</h3>
+                <p>These appear in the <b>bell icon inside NuunPlatform only</b>. They do not reach your phone.</p>
+            </div>
         </div>
+
         <form id="notif-form" class="settings-form">
-            <div class="form-row toggle-group">
-                <div class="toggle-item">
-                    <label class="toggle-label">
-                        <span class="toggle-text">Quiz Complete</span>
-                        <span class="toggle-switch">
-                            <input type="checkbox" id="notify_quiz_complete" {% if settings['notifications.quiz_complete'] %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </span>
-                    </label>
-                </div>
-                <div class="toggle-item">
-                    <label class="toggle-label">
-                        <span class="toggle-text">New PDF Uploaded</span>
-                        <span class="toggle-switch">
-                            <input type="checkbox" id="notify_new_pdf" {% if settings['notifications.new_pdf'] %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </span>
-                    </label>
-                </div>
+            <div class="notif-secondary__grid">
+                <label class="notif-check">
+                    <input type="checkbox" id="notify_quiz_complete" {% if settings['notifications.quiz_complete'] %}checked{% endif %}>
+                    <span class="notif-check__label">Quiz Complete</span>
+                </label>
+                <label class="notif-check">
+                    <input type="checkbox" id="notify_new_pdf" {% if settings['notifications.new_pdf'] %}checked{% endif %}>
+                    <span class="notif-check__label">New PDF Uploaded</span>
+                </label>
+                <label class="notif-check">
+                    <input type="checkbox" id="notify_live_quiz_start" {% if settings['notifications.live_quiz_start'] %}checked{% endif %}>
+                    <span class="notif-check__label">Live Quiz Starts</span>
+                </label>
+                <label class="notif-check">
+                    <input type="checkbox" id="notify_live_quiz_result" {% if settings['notifications.live_quiz_result'] %}checked{% endif %}>
+                    <span class="notif-check__label">Live Quiz Results</span>
+                </label>
+                <label class="notif-check">
+                    <input type="checkbox" id="notify_participant_joined" {% if settings['notifications.participant_joined'] %}checked{% endif %}>
+                    <span class="notif-check__label">Participant Joined</span>
+                </label>
+                <label class="notif-check">
+                    <input type="checkbox" id="notify_admin_announcement" {% if settings['notifications.admin_announcement'] %}checked{% endif %}>
+                    <span class="notif-check__label">Admin Announcements</span>
+                </label>
+                <label class="notif-check">
+                    <input type="checkbox" id="notify_achievement_unlock" {% if settings['notifications.achievement_unlock'] %}checked{% endif %}>
+                    <span class="notif-check__label">Achievement Unlock</span>
+                </label>
+                <label class="notif-check">
+                    <input type="checkbox" id="notify_live_quiz_reminder" {% if settings['notifications.live_quiz_reminder'] %}checked{% endif %}>
+                    <span class="notif-check__label">Live Quiz Reminder</span>
+                </label>
+                <label class="notif-check">
+                    <input type="checkbox" id="notify_daily_digest" {% if settings['notifications.daily_digest'] %}checked{% endif %}>
+                    <span class="notif-check__label">Daily Digest</span>
+                </label>
+                <label class="notif-check">
+                    <input type="checkbox" id="notify_weekly_summary" {% if settings['notifications.weekly_summary'] %}checked{% endif %}>
+                    <span class="notif-check__label">Weekly Summary</span>
+                </label>
             </div>
-            <div class="form-row toggle-group">
-                <div class="toggle-item">
-                    <label class="toggle-label">
-                        <span class="toggle-text">Live Quiz Starts</span>
-                        <span class="toggle-switch">
-                            <input type="checkbox" id="notify_live_quiz_start" {% if settings['notifications.live_quiz_start'] %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </span>
-                    </label>
-                </div>
-                <div class="toggle-item">
-                    <label class="toggle-label">
-                        <span class="toggle-text">Live Quiz Results</span>
-                        <span class="toggle-switch">
-                            <input type="checkbox" id="notify_live_quiz_result" {% if settings['notifications.live_quiz_result'] %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </span>
-                    </label>
-                </div>
-            </div>
-            <div class="form-row toggle-group">
-                <div class="toggle-item">
-                    <label class="toggle-label">
-                        <span class="toggle-text">Participant Joined Your Quiz</span>
-                        <span class="toggle-switch">
-                            <input type="checkbox" id="notify_participant_joined" {% if settings['notifications.participant_joined'] %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </span>
-                    </label>
-                </div>
-                <div class="toggle-item">
-                    <label class="toggle-label">
-                        <span class="toggle-text">Admin Announcements</span>
-                        <span class="toggle-switch">
-                            <input type="checkbox" id="notify_admin_announcement" {% if settings['notifications.admin_announcement'] %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </span>
-                    </label>
-                </div>
-            </div>
-            <div class="form-row toggle-group tier-locked" data-tier="premium">
-                <div class="toggle-item">
-                    <label class="toggle-label">
-                        <span class="toggle-text">Daily Digest</span>
-                        <span class="toggle-switch">
-                            <input type="checkbox" id="notify_daily_digest" {% if settings['notifications.daily_digest'] %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </span>
-                    </label>
-                    <p class="toggle-desc">Receive a daily summary of platform activity.</p>
-                </div>
-                <div class="toggle-item">
-                    <label class="toggle-label">
-                        <span class="toggle-text">Achievement Unlock</span>
-                        <span class="toggle-switch">
-                            <input type="checkbox" id="notify_achievement_unlock" {% if settings['notifications.achievement_unlock'] %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </span>
-                    </label>
-                    <p class="toggle-desc">Get notified when you earn a new badge.</p>
-                </div>
-            </div>
-            <div class="form-row toggle-group tier-locked" data-tier="premium">
-                <div class="toggle-item">
-                    <label class="toggle-label">
-                        <span class="toggle-text">Live Quiz Reminder</span>
-                        <span class="toggle-switch">
-                            <input type="checkbox" id="notify_live_quiz_reminder" {% if settings['notifications.live_quiz_reminder'] %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </span>
-                    </label>
-                    <p class="toggle-desc">5-minute reminder before a scheduled live quiz.</p>
-                </div>
-            </div>
-            <div class="form-row toggle-group tier-locked" data-tier="pro">
-                <div class="toggle-item">
-                    <label class="toggle-label">
-                        <span class="toggle-text">Weekly Summary</span>
-                        <span class="toggle-switch">
-                            <input type="checkbox" id="notify_weekly_summary" {% if settings['notifications.weekly_summary'] %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </span>
-                    </label>
-                    <p class="toggle-desc">Get a weekly wrap-up of your progress.</p>
-                </div>
-            </div>
+
             <div class="form-row">
                 <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i> Save Notification Settings
+                    <i class="fas fa-save"></i> Save preferences
                     <span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span>
                 </button>
             </div>
         </form>
     </div>
+
 </section>
 
 <section id="privacy" class="settings-section">
@@ -870,163 +805,496 @@
     }
 
     /* ═══════════════════════════════════════════════════════
-       Push Notifications card
+       NOTIFICATIONS SECTION
        ═══════════════════════════════════════════════════════ */
-    .push-card .push-state { margin-top: 4px; }
-    .push-card .push-state[hidden] { display: none; }
 
-    .push-spinner {
+    .notif-hero {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-top: 3px solid var(--primary);
+        border-radius: var(--radius-md);
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    .notif-hero__header {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+        margin-bottom: 20px;
+    }
+    .notif-hero__badge {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, var(--primary), var(--primary-hover, var(--primary)));
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        flex-shrink: 0;
+        box-shadow: 0 4px 12px rgba(255, 49, 56, 0.2);
+    }
+    .notif-hero__intro { flex: 1; min-width: 0; }
+    .notif-hero__intro h3 {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text);
+        margin: 0 0 4px;
+    }
+    .notif-hero__intro p {
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin: 0;
+        line-height: 1.5;
+    }
+
+    .notif-state { margin-top: 4px; }
+    .notif-state[hidden] { display: none; }
+
+    .notif-spinner-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 0;
+        color: var(--text-muted);
+        font-size: 14px;
+    }
+    .notif-spinner {
         display: inline-block;
         width: 18px;
         height: 18px;
         border: 2px solid var(--border);
         border-top-color: var(--primary);
         border-radius: 50%;
-        animation: push-spin 0.7s linear infinite;
-        vertical-align: middle;
-        margin-right: 10px;
+        animation: notif-spin 0.7s linear infinite;
     }
-    @keyframes push-spin { to { transform: rotate(360deg); } }
-    .push-loading-text { color: var(--text-muted); font-size: 14px; }
+    @keyframes notif-spin { to { transform: rotate(360deg); } }
 
-    .push-alert {
+    .notif-note {
         display: flex;
         gap: 14px;
         align-items: flex-start;
-        padding: 14px 18px;
+        padding: 16px 18px;
         border-radius: var(--radius-sm);
         border: 1px solid var(--border);
         background: var(--surface-alt);
         font-size: 14px;
         line-height: 1.55;
     }
-    .push-alert > i { font-size: 20px; margin-top: 1px; flex-shrink: 0; }
-    .push-alert strong { display: block; color: var(--text); font-weight: 600; margin-bottom: 4px; }
-    .push-alert p { margin: 0; color: var(--text-secondary); }
-    .push-alert-info > i { color: #3B82F6; }
-    .push-alert-warning { background: #FFFBEB; border-color: #FDE68A; }
-    .push-alert-warning > i { color: #D97706; }
-    [data-theme="dark"] .push-alert-warning { background: #3A2E15; border-color: #6B5320; }
-    [data-theme="dark"] .push-alert-warning > i { color: #FBBF24; }
+    .notif-note > i {
+        font-size: 20px;
+        margin-top: 1px;
+        flex-shrink: 0;
+    }
+    .notif-note strong {
+        display: block;
+        color: var(--text);
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+    .notif-note p {
+        margin: 0;
+        color: var(--text-secondary);
+    }
+    .notif-note--info > i { color: #3B82F6; }
+    .notif-note--warn {
+        background: #FFFBEB;
+        border-color: #FDE68A;
+    }
+    .notif-note--warn > i { color: #D97706; }
+    [data-theme="dark"] .notif-note--warn {
+        background: #3A2E15;
+        border-color: #6B5320;
+    }
+    [data-theme="dark"] .notif-note--warn > i { color: #FBBF24; }
 
-    .push-ios-steps {
-        margin: 10px 0 0 0;
-        padding-left: 20px;
+    .notif-steps {
+        margin: 12px 0 0 0;
+        padding-left: 22px;
         color: var(--text-secondary);
         font-size: 13px;
     }
-    .push-ios-steps li { margin-bottom: 4px; }
+    .notif-steps li { margin-bottom: 6px; }
+    .notif-steps b { color: var(--text); }
 
-    .push-actions {
+    .notif-master {
         display: flex;
         align-items: center;
-        flex-wrap: wrap;
+        gap: 16px;
+        padding: 20px;
+        background: var(--surface-alt);
+        border-radius: var(--radius-md);
+        transition: var(--transition);
+    }
+    .notif-master__icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        color: var(--text-muted);
+        flex-shrink: 0;
+        transition: var(--transition);
+    }
+    .notif-master--on .notif-master__icon {
+        background: linear-gradient(135deg, #10B981, #059669);
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+    }
+    .notif-master__text { flex: 1; min-width: 0; }
+    .notif-master__title {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 2px;
+    }
+    .notif-master__status {
+        font-size: 13px;
+        color: var(--text-muted);
+        transition: color 0.2s;
+    }
+    .notif-master--on .notif-master__status { color: #059669; }
+    .notif-master__switch {
+        position: relative;
+        display: inline-block;
+        width: 54px;
+        height: 30px;
+        flex-shrink: 0;
+        cursor: pointer;
+    }
+    .notif-master__switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    .notif-master__slider {
+        position: absolute;
+        inset: 0;
+        background: #D1D5DB;
+        border-radius: 30px;
+        transition: background 0.25s ease;
+    }
+    .notif-master__slider::before {
+        content: '';
+        position: absolute;
+        height: 24px;
+        width: 24px;
+        left: 3px;
+        bottom: 3px;
+        background: #fff;
+        border-radius: 50%;
+        transition: transform 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+    }
+    .notif-master__switch input:checked + .notif-master__slider {
+        background: linear-gradient(135deg, #10B981, #059669);
+    }
+    .notif-master__switch input:checked + .notif-master__slider::before {
+        transform: translateX(24px);
+    }
+    .notif-master__switch input:disabled + .notif-master__slider {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    [data-theme="dark"] .notif-master__slider { background: #4B5563; }
+
+    .notif-details {
+        display: flex;
+        align-items: center;
         gap: 12px;
+        flex-wrap: wrap;
         margin-top: 16px;
         padding-top: 16px;
         border-top: 1px solid var(--border);
     }
-    .push-actions[hidden] { display: none; }
+    .notif-details[hidden] { display: none; }
 
-    .push-device-pill,
-    .push-device-count {
+    .notif-test-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--primary);
+        background: transparent;
+        border: 1.5px solid var(--primary);
+        border-radius: 20px;
+        cursor: pointer;
+        transition: var(--transition);
+        font-family: inherit;
+    }
+    .notif-test-btn:hover {
+        background: var(--primary);
+        color: #fff;
+        transform: translateY(-1px);
+    }
+    .notif-test-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    .notif-device-pill {
         display: inline-flex;
         align-items: center;
         font-size: 12px;
         color: var(--text-muted);
-        padding: 3px 10px;
+        padding: 4px 11px;
         border-radius: 20px;
         background: var(--surface-alt);
         border: 1px solid var(--border);
         font-weight: 500;
     }
-    .push-device-pill:empty,
-    .push-device-count:empty { display: none; }
+    .notif-device-pill:empty { display: none; }
 
-    .push-result {
-        margin-top: 12px;
-        padding: 10px 14px;
+    .notif-types {
+        margin-top: 18px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+    }
+    .notif-types[hidden] { display: none; }
+
+    .notif-types__header {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 14px;
+    }
+    .notif-types__header > i {
+        font-size: 16px;
+        color: var(--primary);
+        margin-top: 2px;
+        flex-shrink: 0;
+    }
+    .notif-types__header strong {
+        display: block;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 2px;
+    }
+    .notif-types__header span {
+        display: block;
+        font-size: 12px;
+        color: var(--text-muted);
+        line-height: 1.4;
+    }
+
+    .notif-types__list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    .notif-type-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px;
+        background: transparent;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .notif-type-row:hover { background: var(--surface-alt); }
+    .notif-type-row__text { flex: 1; min-width: 0; }
+    .notif-type-row__title {
+        display: block;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text);
+        margin-bottom: 2px;
+    }
+    .notif-type-row__desc {
+        display: block;
+        font-size: 12px;
+        color: var(--text-muted);
+        line-height: 1.4;
+    }
+    .notif-type-row__switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 22px;
+        flex-shrink: 0;
+    }
+    .notif-type-row__switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    .notif-type-row__slider {
+        position: absolute;
+        inset: 0;
+        background: #D1D5DB;
+        border-radius: 22px;
+        transition: background 0.2s;
+    }
+    .notif-type-row__slider::before {
+        content: '';
+        position: absolute;
+        height: 18px;
+        width: 18px;
+        left: 2px;
+        bottom: 2px;
+        background: #fff;
+        border-radius: 50%;
+        transition: transform 0.2s;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    }
+    .notif-type-row__switch input:checked + .notif-type-row__slider {
+        background: var(--primary);
+    }
+    .notif-type-row__switch input:checked + .notif-type-row__slider::before {
+        transform: translateX(18px);
+    }
+    .notif-type-row__switch input:disabled + .notif-type-row__slider {
+        opacity: 0.5;
+    }
+    [data-theme="dark"] .notif-type-row__slider { background: #4B5563; }
+
+    .notif-result {
+        margin-top: 14px;
+        padding: 11px 16px;
         border-radius: var(--radius-sm);
         font-size: 13px;
         font-weight: 500;
         border: 1px solid transparent;
     }
-    .push-result.ok { background: #ECFDF5; color: #065F46; border-color: #A7F3D0; }
-    .push-result.err { background: #FEF2F2; color: #991B1B; border-color: #FCA5A5; }
-    [data-theme="dark"] .push-result.ok { background: #1A3A2E; color: #34D399; border-color: #065F46; }
-    [data-theme="dark"] .push-result.err { background: #3A1A1A; color: #FCA5A5; border-color: #7F1D1D; }
-
-    /* ─── Per-type push toggles ─── */
-    .push-types {
-        margin-top: 18px;
-        padding-top: 16px;
-        border-top: 1px solid var(--border);
+    .notif-result.ok {
+        background: #ECFDF5;
+        color: #065F46;
+        border-color: #A7F3D0;
     }
-    .push-types[hidden] { display: none; }
-    .push-types-title {
-        font-size: 13px;
+    .notif-result.err {
+        background: #FEF2F2;
+        color: #991B1B;
+        border-color: #FCA5A5;
+    }
+    [data-theme="dark"] .notif-result.ok {
+        background: #1A3A2E;
+        color: #34D399;
+        border-color: #065F46;
+    }
+    [data-theme="dark"] .notif-result.err {
+        background: #3A1A1A;
+        color: #FCA5A5;
+        border-color: #7F1D1D;
+    }
+
+    .notif-secondary {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 22px 24px;
+    }
+    .notif-secondary__header {
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+        margin-bottom: 18px;
+        padding-bottom: 18px;
+        border-bottom: 1px solid var(--border);
+    }
+    .notif-secondary__badge {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        background: var(--surface-alt);
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        flex-shrink: 0;
+    }
+    .notif-secondary__intro { flex: 1; min-width: 0; }
+    .notif-secondary__intro h3 {
+        font-size: 15px;
         font-weight: 600;
         color: var(--text);
-        margin: 0 0 4px 0;
+        margin: 0 0 3px;
     }
-    .push-types-desc {
+    .notif-secondary__intro p {
         font-size: 12px;
         color: var(--text-muted);
-        margin: 0 0 12px 0;
+        margin: 0;
+        line-height: 1.5;
     }
-    .push-types .toggle-group { margin-bottom: 8px; }
+    .notif-secondary__intro b { color: var(--text-secondary); font-weight: 600; }
+
+    .notif-secondary__grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 4px 20px;
+        margin-bottom: 20px;
+    }
+    @media (max-width: 640px) {
+        .notif-secondary__grid { grid-template-columns: 1fr; }
+    }
+
+    .notif-check {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 4px;
+        cursor: pointer;
+        border-radius: var(--radius-sm);
+        transition: background 0.15s;
+    }
+    .notif-check:hover { background: var(--surface-alt); }
+    .notif-check input[type="checkbox"] {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 20px;
+        height: 20px;
+        border: 1.5px solid var(--border);
+        border-radius: 5px;
+        background: var(--bg);
+        cursor: pointer;
+        position: relative;
+        flex-shrink: 0;
+        transition: var(--transition);
+    }
+    .notif-check input[type="checkbox"]:checked {
+        background: var(--primary);
+        border-color: var(--primary);
+    }
+    .notif-check input[type="checkbox"]:checked::after {
+        content: '';
+        position: absolute;
+        left: 6px;
+        top: 2px;
+        width: 5px;
+        height: 10px;
+        border: solid #fff;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+    }
+    .notif-check__label {
+        font-size: 13px;
+        color: var(--text);
+        font-weight: 500;
+    }
 
     @media (max-width: 480px) {
-        .push-actions { flex-direction: column; align-items: stretch; }
-        .push-device-pill, .push-device-count { justify-content: center; }
+        .notif-hero { padding: 18px; }
+        .notif-hero__header { gap: 12px; }
+        .notif-hero__badge { width: 40px; height: 40px; font-size: 17px; }
+        .notif-hero__intro h3 { font-size: 16px; }
+        .notif-master { padding: 16px; gap: 12px; }
+        .notif-master__icon { width: 38px; height: 38px; font-size: 15px; }
+        .notif-master__title { font-size: 14px; }
+        .notif-details { flex-direction: column; align-items: stretch; }
+        .notif-device-pill { justify-content: center; }
+        .notif-secondary { padding: 18px; }
     }
-
-  .notif-intro {
-      display: flex;
-      gap: 16px;
-      align-items: flex-start;
-      padding: 18px 20px;
-      margin-bottom: 20px;
-      background: linear-gradient(135deg,
-          rgba(59, 130, 246, 0.08),
-          rgba(139, 92, 246, 0.08));
-      border: 1px solid rgba(59, 130, 246, 0.2);
-      border-radius: var(--radius-md);
-      font-size: 14px;
-      line-height: 1.6;
-  }
-  .notif-intro__icon { font-size: 28px; line-height: 1; flex-shrink: 0; margin-top: 2px; }
-  .notif-intro__text { flex: 1; min-width: 0; }
-  .notif-intro__text strong {
-      display: block; font-size: 15px; font-weight: 600;
-      color: var(--text); margin-bottom: 6px;
-  }
-  .notif-intro__text p { margin: 0; color: var(--text-secondary); }
-  .notif-intro__text b { color: var(--text); font-weight: 600; }
-  [data-theme="dark"] .notif-intro {
-      background: linear-gradient(135deg,
-          rgba(59, 130, 246, 0.12),
-          rgba(139, 92, 246, 0.12));
-      border-color: rgba(59, 130, 246, 0.3);
-  }
-  @media (max-width: 540px) {
-      .notif-intro { flex-direction: column; gap: 10px; }
-      .notif-intro__icon { font-size: 24px; }
-  }
-  
-  .push-master {
-      padding: 14px 16px;
-      background: var(--surface-alt);
-      border-radius: var(--radius-sm);
-      border-left: 3px solid var(--primary);
-  }
-  .push-master .toggle-text {
-      font-size: 15px; font-weight: 600; color: var(--text);
-  }
-  .push-master__switch .slider {
-      transform: scale(1.15);
-      transform-origin: center right;
-  }
 </style>
 
 <script src="{{ url_for('static', filename='js/push-client.js') }}"></script>
@@ -1272,11 +1540,18 @@
         attachTracking(notifForm);
         notifForm.addEventListener('submit', function (e) {
             e.preventDefault();
-            var toggles = notifForm.querySelectorAll('.toggle-switch input');
-            var payload = {};
-            toggles.forEach(function (t) {
-                payload[t.id.replace('notify_', 'notifications.')] = t.checked;
-            });
+            var payload = {
+                'notifications.quiz_complete':       document.getElementById('notify_quiz_complete').checked,
+                'notifications.new_pdf':             document.getElementById('notify_new_pdf').checked,
+                'notifications.live_quiz_start':     document.getElementById('notify_live_quiz_start').checked,
+                'notifications.live_quiz_result':    document.getElementById('notify_live_quiz_result').checked,
+                'notifications.participant_joined':  document.getElementById('notify_participant_joined').checked,
+                'notifications.admin_announcement':  document.getElementById('notify_admin_announcement').checked,
+                'notifications.achievement_unlock':  document.getElementById('notify_achievement_unlock').checked,
+                'notifications.live_quiz_reminder':  document.getElementById('notify_live_quiz_reminder').checked,
+                'notifications.daily_digest':        document.getElementById('notify_daily_digest').checked,
+                'notifications.weekly_summary':      document.getElementById('notify_weekly_summary').checked
+            };
             submitForm(notifForm, '/settings/api', payload, 'Notification preferences saved!');
         });
     }
@@ -1570,19 +1845,22 @@
     (function () {
         if (!window.NuunPush) return;
 
-        var loading   = document.getElementById('push-state-loading');
-        var unsup     = document.getElementById('push-state-unsupported');
-        var ios       = document.getElementById('push-state-ios');
-        var denied    = document.getElementById('push-state-denied');
-        var disabled  = document.getElementById('push-state-disabled');
-        var active    = document.getElementById('push-state-active');
-        var toggle    = document.getElementById('push-toggle');
-        var actions   = document.getElementById('push-actions');
-        var testBtn   = document.getElementById('push-test-btn');
-        var countEl   = document.getElementById('push-device-count');
-        var deviceEl  = document.getElementById('push-device-label');
-        var resultEl  = document.getElementById('push-result');
-        var typesWrap = document.getElementById('push-types');
+        var loading       = document.getElementById('push-state-loading');
+        var unsup         = document.getElementById('push-state-unsupported');
+        var ios           = document.getElementById('push-state-ios');
+        var denied        = document.getElementById('push-state-denied');
+        var disabled      = document.getElementById('push-state-disabled');
+        var active        = document.getElementById('push-state-active');
+        var master        = document.querySelector('.notif-master');
+        var masterIcon    = document.getElementById('push-master-icon');
+        var masterStatus  = document.getElementById('push-master-status');
+        var toggle        = document.getElementById('push-toggle');
+        var actions       = document.getElementById('push-actions');
+        var testBtn       = document.getElementById('push-test-btn');
+        var countEl       = document.getElementById('push-device-count');
+        var deviceEl      = document.getElementById('push-device-label');
+        var resultEl      = document.getElementById('push-result');
+        var typesWrap     = document.getElementById('push-types');
 
         var typeLiveStart    = document.getElementById('push-type-live-start');
         var typeLiveResult   = document.getElementById('push-type-live-result');
@@ -1609,22 +1887,38 @@
             if (!resultEl) return;
             resultEl.hidden = false;
             resultEl.textContent = msg;
-            resultEl.className = 'push-result ' + (ok ? 'ok' : 'err');
+            resultEl.className = 'notif-result ' + (ok ? 'ok' : 'err');
             clearTimeout(resultEl._hideTimer);
             resultEl._hideTimer = setTimeout(function () {
                 resultEl.hidden = true;
             }, 6000);
         }
 
+        function setMasterVisual(isOn) {
+            if (master) {
+                master.classList.toggle('notif-master--on', isOn);
+            }
+            if (masterIcon) {
+                masterIcon.innerHTML = isOn
+                    ? '<i class="fas fa-bell"></i>'
+                    : '<i class="fas fa-bell-slash"></i>';
+            }
+            if (masterStatus) {
+                masterStatus.textContent = isOn
+                    ? 'Enabled — you\'ll receive alerts on this device'
+                    : 'Off';
+            }
+        }
+
         function deviceLabel() {
             var ua = navigator.userAgent || '';
-            if (/iPhone/.test(ua))    return 'iPhone';
-            if (/iPad/.test(ua))      return 'iPad';
-            if (/iPod/.test(ua))      return 'iPod';
-            if (/Android/.test(ua))   return 'Android';
-            if (/Macintosh/.test(ua)) return 'Mac';
-            if (/Windows/.test(ua))   return 'Windows';
-            if (/Linux/.test(ua))     return 'Linux';
+            if (/iPhone/.test(ua))    return 'This iPhone';
+            if (/iPad/.test(ua))      return 'This iPad';
+            if (/iPod/.test(ua))      return 'This iPod';
+            if (/Android/.test(ua))   return 'This Android';
+            if (/Macintosh/.test(ua)) return 'This Mac';
+            if (/Windows/.test(ua))   return 'This PC';
+            if (/Linux/.test(ua))     return 'This device';
             return '';
         }
 
@@ -1652,14 +1946,17 @@
             TYPE_MAP.forEach(function (t) {
                 if (t.el) payload[t.key] = t.el.checked ? 1 : 0;
             });
-            var token = window.NuunPush.csrfToken ? window.NuunPush.csrfToken() : '';
+            var token = '';
+            if (window.NuunPush && window.NuunPush.csrfToken) {
+                token = window.NuunPush.csrfToken();
+            }
             if (!token) {
                 var m = document.querySelector('meta[name="csrf-token"]');
                 if (m) token = m.content;
-                if (!token) {
-                    var i = document.querySelector('input[name="csrf_token"]');
-                    if (i) token = i.value;
-                }
+            }
+            if (!token) {
+                var i = document.querySelector('input[name="csrf_token"]');
+                if (i) token = i.value;
             }
             return fetch('/settings/api', {
                 method: 'PATCH',
@@ -1689,24 +1986,23 @@
 
                 show(active);
                 toggle.checked = !!s.subscribed;
+                setMasterVisual(!!s.subscribed);
                 actions.hidden = !s.subscribed;
                 if (typesWrap) typesWrap.hidden = !s.subscribed;
                 if (s.subscribed) loadTypePrefs();
                 renderCount(s.serverCount);
-                if (deviceEl) {
-                    var label = deviceLabel();
-                    deviceEl.textContent = label ? ('This ' + label) : '';
-                }
+                if (deviceEl) deviceEl.textContent = deviceLabel();
             }).catch(function () {
                 show(unsup);
             });
         }
 
-        // ─── Master toggle ───────────────────────────────────
         if (toggle) {
             toggle.addEventListener('change', function () {
                 var wantOn = toggle.checked;
                 toggle.disabled = true;
+                setMasterVisual(wantOn);
+
                 var promise = wantOn
                     ? window.NuunPush.subscribe()
                     : window.NuunPush.unsubscribe();
@@ -1714,12 +2010,13 @@
                 promise.then(function (r) {
                     if (wantOn && !r.success) {
                         toggle.checked = false;
+                        setMasterVisual(false);
                         var msg = 'Could not enable notifications.';
-                        if (r.reason === 'denied')              msg = 'Permission denied in the browser.';
+                        if (r.reason === 'denied')                 msg = 'Permission denied in the browser.';
                         else if (r.reason === 'ios-needs-install') msg = 'Add to Home Screen first.';
-                        else if (r.reason === 'no-csrf-token')  msg = 'Page token missing — refresh and try again.';
-                        else if (r.reason === 'server-rejected') msg = 'Server rejected the subscription: ' + (r.detail || '');
-                        else if (r.reason === 'subscribe-failed') msg = 'Browser refused to subscribe: ' + (r.detail || '');
+                        else if (r.reason === 'no-csrf-token')     msg = 'Page token missing — refresh and try again.';
+                        else if (r.reason === 'server-rejected')   msg = 'Server rejected the subscription: ' + (r.detail || '');
+                        else if (r.reason === 'subscribe-failed')  msg = 'Browser refused to subscribe: ' + (r.detail || '');
                         showResult(msg, false);
                     } else if (!wantOn) {
                         showResult('Notifications disabled on this device.', true);
@@ -1728,6 +2025,7 @@
                     }
                 }).catch(function (e) {
                     toggle.checked = !wantOn;
+                    setMasterVisual(!wantOn);
                     showResult('Something went wrong: ' + e, false);
                 }).then(function () {
                     toggle.disabled = false;
@@ -1736,7 +2034,6 @@
             });
         }
 
-        // ─── Test button ─────────────────────────────────────
         if (testBtn) {
             testBtn.addEventListener('click', function () {
                 testBtn.disabled = true;
@@ -1755,7 +2052,6 @@
             });
         }
 
-        // ─── Per-type toggles ────────────────────────────────
         TYPE_MAP.forEach(function (t) {
             if (!t.el) return;
             t.el.addEventListener('change', function () {
@@ -1771,7 +2067,6 @@
             });
         });
 
-        // ─── Kick off ────────────────────────────────────────
         refresh();
     })();
 })();
