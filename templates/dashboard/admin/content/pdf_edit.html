@@ -1,13 +1,17 @@
 {# ============================================================
    templates/dashboard/admin/content/pdf_edit.html
-   Edit an existing library PDF's metadata.
+   Edit a library PDF's metadata — with a live PDF preview.
+
+   Layout:
+     Left:  File info card + PDF.js preview (zoom + page nav)
+     Right: Metadata form (identity + classification + premium)
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
 {% block admin_title_icon %}<i class="fas fa-pen header-icon"></i>{% endblock %}
 {% block admin_title %}Edit PDF{% endblock %}
 {% block admin_subtitle %}
-    Code <code style="font-family:monospace;color:var(--primary);">{{ pdf.code }}</code>
+    Code <code style="font-family:ui-monospace,monospace;color:var(--primary);">{{ pdf.code }}</code>
     · {{ pdf.title }}
 {% endblock %}
 
@@ -24,130 +28,695 @@
     </a>
 {% endblock %}
 
+
 {% block admin_content %}
 
-<form method="POST" id="pdfEditForm"
-      action="{{ url_for('admin_content.pdf_edit', pdf_id=pdf.id) }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="pdf-edit-layout">
 
-    <section class="admin-card">
-        <div class="admin-card-head">
-            <h3><i class="fas fa-id-card"></i> Identity</h3>
-            <span class="hint">Code is immutable</span>
-        </div>
-        <div class="admin-card-body">
-            <div class="pdf-info-grid" style="margin-bottom:20px;">
-                <div class="pdf-info-item">
-                    <span class="k">Code</span>
-                    <span class="v" style="font-family:monospace;color:var(--primary);">{{ pdf.code }}</span>
+    {# ═══════════ LEFT: LIVE PREVIEW ═══════════ #}
+    <div class="pdf-edit-left">
+
+        <section class="admin-card">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-id-card"></i> File information</h3>
+            </div>
+            <div class="admin-card-body">
+                <div class="pdf-info-grid">
+                    <div class="pdf-info-item">
+                        <span class="k">Code</span>
+                        <span class="v" style="font-family:ui-monospace,monospace;color:var(--primary);">{{ pdf.code }}</span>
+                    </div>
+                    <div class="pdf-info-item">
+                        <span class="k">Uploaded</span>
+                        <span class="v">{{ (pdf.uploaded_at or '')[:16] }}</span>
+                    </div>
+                    <div class="pdf-info-item">
+                        <span class="k">Views</span>
+                        <span class="v">{{ pdf.view_count or 0 }}</span>
+                    </div>
+                    <div class="pdf-info-item">
+                        <span class="k">Uploaded by</span>
+                        <span class="v">{{ pdf.uploaded_by or 'NUUN' }}</span>
+                    </div>
+                    <div class="pdf-info-item">
+                        <span class="k">Unique ID</span>
+                        <span class="v" style="font-family:ui-monospace,monospace;font-size:11px;">
+                            {% if pdf.file_unique_id %}
+                                {{ pdf.file_unique_id[:16] }}…
+                            {% else %}
+                                —
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="pdf-info-item">
+                        <span class="k">Source</span>
+                        <span class="v">
+                            {% if pdf.file_url %}
+                                📁 Local
+                            {% elif pdf.file_id %}
+                                ✈️ Telegram
+                            {% else %}
+                                Unknown
+                            {% endif %}
+                        </span>
+                    </div>
                 </div>
-                <div class="pdf-info-item">
-                    <span class="k">Uploaded</span>
-                    <span class="v">{{ (pdf.uploaded_at or '')[:10] }}</span>
-                </div>
-                <div class="pdf-info-item">
-                    <span class="k">Views</span>
-                    <span class="v">{{ pdf.view_count or 0 }}</span>
-                </div>
-                <div class="pdf-info-item">
-                    <span class="k">Uploaded by</span>
-                    <span class="v">{{ pdf.uploaded_by or 'NUUN' }}</span>
+            </div>
+        </section>
+
+        <section class="admin-card" style="margin-top:16px;">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-book-open-reader"></i> Live preview</h3>
+                <div class="pdf-preview-controls">
+                    <button type="button" id="pdfPrevPage" class="admin-btn secondary sm" title="Previous page">
+                        <i class="fas fa-chevron-up"></i>
+                    </button>
+                    <span class="pdf-page-info" id="pdfPageInfo">— / —</span>
+                    <button type="button" id="pdfNextPage" class="admin-btn secondary sm" title="Next page">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <span class="pdf-divider"></span>
+                    <button type="button" id="pdfZoomOut" class="admin-btn secondary sm" title="Zoom out">
+                        <i class="fas fa-search-minus"></i>
+                    </button>
+                    <span class="pdf-zoom-level" id="pdfZoomLevel">100%</span>
+                    <button type="button" id="pdfZoomIn" class="admin-btn secondary sm" title="Zoom in">
+                        <i class="fas fa-search-plus"></i>
+                    </button>
+                    <span class="pdf-divider"></span>
+                    <a href="{{ url_for('admin_content.pdf_library_preview', pdf_id=pdf.id) }}"
+                       target="_blank" rel="noopener"
+                       class="admin-btn secondary sm"
+                       title="Open in a new tab">
+                        <i class="fas fa-external-link-alt"></i>
+                    </a>
                 </div>
             </div>
 
-            <div class="admin-form-group">
-                <label>Title <span style="color:var(--primary);">*</span></label>
-                <input type="text" name="title" class="admin-input" required
-                       value="{{ pdf.title }}" maxlength="200">
-            </div>
+            <div class="admin-card-body" style="padding:0;">
+                <div class="pdf-preview-frame" id="pdfPreviewFrame">
 
-            <div class="admin-form-group">
-                <label>Description</label>
-                <textarea name="description" class="admin-textarea" rows="3"
-                          maxlength="500">{{ pdf.description or '' }}</textarea>
-            </div>
-        </div>
-    </section>
+                    <div class="pdf-preview-loading" id="previewLoading">
+                        <div class="spinner"></div>
+                        <span id="previewLoadingText">Fetching PDF…</span>
+                        <div class="pdf-progress-bar">
+                            <div class="pdf-progress-fill" id="pdfProgressFill"></div>
+                        </div>
+                    </div>
 
-    <section class="admin-card" style="margin-top:16px;">
-        <div class="admin-card-head">
-            <h3><i class="fas fa-tags"></i> Classification</h3>
-        </div>
-        <div class="admin-card-body">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-                <div class="admin-form-group">
-                    <label>Curriculum <span style="color:var(--primary);">*</span></label>
-                    <select name="curriculum" class="admin-select" required>
-                        {% for c in curricula %}
-                            <option value="{{ c }}" {% if pdf.curriculum == c %}selected{% endif %}>{{ c }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="admin-form-group">
-                    <label>Class</label>
-                    <select name="class" class="admin-select">
-                        <option value="">— None —</option>
-                        {% for c in classes %}
-                            <option value="{{ c }}" {% if pdf.class == c %}selected{% endif %}>{{ c }}</option>
-                        {% endfor %}
-                    </select>
+                    <div class="pdf-pages-container" id="pdfPagesContainer"></div>
+
+                    <div class="pdf-preview-fallback" id="previewFallback" style="display:none;">
+                        <span class="pvf-icon">⚠️</span>
+                        <div class="pvf-title">Could not display the PDF</div>
+                        <div class="pvf-sub" id="pvfMessage">
+                            The preview could not be loaded.
+                        </div>
+                        <a href="{{ url_for('admin_content.pdf_library_preview', pdf_id=pdf.id) }}"
+                           target="_blank" rel="noopener"
+                           class="admin-btn primary">
+                            <i class="fas fa-external-link-alt"></i> Open in a new tab
+                        </a>
+                    </div>
+
                 </div>
             </div>
+        </section>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-                <div class="admin-form-group">
-                    <label>Subject <span style="color:var(--primary);">*</span></label>
-                    <select name="subject" class="admin-select" required>
-                        {% for s in subjects %}
-                            <option value="{{ s.code }}" {% if pdf.subject == s.code %}selected{% endif %}>
-                                {{ s.name }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="admin-form-group">
-                    <label>Chapter</label>
-                    <input type="text" name="chapter" class="admin-input"
-                           value="{{ pdf.chapter or '' }}" maxlength="100">
-                </div>
-            </div>
-
-            <div class="admin-form-group">
-                <label>Tags (comma-separated)</label>
-                <input type="text" name="tags" class="admin-input"
-                       value="{{ pdf.tags or '' }}" maxlength="200">
-            </div>
-
-            <div class="admin-form-group">
-                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-                    <input type="checkbox" name="is_premium" value="1"
-                           {% if pdf.is_premium %}checked{% endif %}
-                           style="width:18px;height:18px;accent-color:var(--primary);">
-                    <span>💎 Premium content</span>
-                </label>
-            </div>
-        </div>
-    </section>
-
-    <div style="display:flex;gap:10px;margin-top:20px;">
-        <a href="{{ url_for('admin_content.pdfs') }}" class="admin-btn secondary lg">Cancel</a>
-        <button type="submit" class="admin-btn primary lg">
-            <i class="fas fa-save"></i> Save Changes
-        </button>
     </div>
 
-</form>
+    {# ═══════════ RIGHT: METADATA FORM ═══════════ #}
+    <div class="pdf-edit-right">
 
-{% endblock %}
+        <form method="POST" id="pdfEditForm"
+              action="{{ url_for('admin_content.pdf_edit', pdf_id=pdf.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-{% block admin_js %}
-<script src="{{ url_for('static', filename='js/admin/core.js') }}"></script>
+            <section class="admin-card">
+                <div class="admin-card-head">
+                    <h3><i class="fas fa-pen"></i> Identity</h3>
+                </div>
+                <div class="admin-card-body">
+                    <div class="admin-form-group">
+                        <label>Title <span style="color:var(--primary);">*</span></label>
+                        <input type="text" name="title" class="admin-input" required
+                               value="{{ pdf.title }}" maxlength="200">
+                    </div>
+
+                    <div class="admin-form-group" style="margin-bottom:0;">
+                        <label>Description</label>
+                        <textarea name="description" class="admin-textarea" rows="3"
+                                  maxlength="500">{{ pdf.description or '' }}</textarea>
+                    </div>
+                </div>
+            </section>
+
+            <section class="admin-card" style="margin-top:16px;">
+                <div class="admin-card-head">
+                    <h3><i class="fas fa-tags"></i> Classification</h3>
+                </div>
+                <div class="admin-card-body">
+
+                    <div class="pdf-form-row">
+                        <div class="admin-form-group" style="margin-bottom:0;">
+                            <label>Curriculum <span style="color:var(--primary);">*</span></label>
+                            <select name="curriculum" class="admin-select" required>
+                                {% for c in curricula %}
+                                    <option value="{{ c }}" {% if pdf.curriculum == c %}selected{% endif %}>{{ c }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="admin-form-group" style="margin-bottom:0;">
+                            <label>Class</label>
+                            <select name="class" class="admin-select">
+                                <option value="">— None —</option>
+                                {% for c in classes %}
+                                    <option value="{{ c }}" {% if pdf.class == c %}selected{% endif %}>{{ c }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="pdf-form-row" style="margin-top:14px;">
+                        <div class="admin-form-group" style="margin-bottom:0;">
+                            <label>Subject <span style="color:var(--primary);">*</span></label>
+                            <select name="subject" class="admin-select" required>
+                                <option value="">— Select —</option>
+                                {% for s in subjects %}
+                                    <option value="{{ s.code }}" {% if pdf.subject == s.code %}selected{% endif %}>
+                                        {{ s.name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="admin-form-group" style="margin-bottom:0;">
+                            <label>Chapter</label>
+                            <input type="text" name="chapter" class="admin-input"
+                                   value="{{ pdf.chapter or '' }}" maxlength="100">
+                        </div>
+                    </div>
+
+                    <div class="admin-form-group" style="margin-top:14px;">
+                        <label>Tags (comma separated)</label>
+                        <input type="text" name="tags" class="admin-input"
+                               value="{{ pdf.tags or '' }}" maxlength="200">
+                    </div>
+
+                    <div class="admin-form-group" style="margin-bottom:0;">
+                        <label class="pdf-toggle-row">
+                            <input type="checkbox" name="is_premium" value="1"
+                                   {% if pdf.is_premium %}checked{% endif %}>
+                            <div class="pdf-toggle-body">
+                                <div class="pdf-toggle-title">💎 Premium content</div>
+                                <div class="pdf-toggle-desc">
+                                    Only users on premium tier or higher will see this file.
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+
+                </div>
+            </section>
+
+            <div class="pdf-edit-actions">
+                <a href="{{ url_for('admin_content.pdfs') }}" class="admin-btn secondary lg">Cancel</a>
+                <button type="submit" class="admin-btn primary lg">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   Two-column layout
+   ═══════════════════════════════════════════════════════════ */
+.pdf-edit-layout {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 20px;
+    align-items: start;
+}
+@media (max-width: 1100px) {
+    .pdf-edit-layout { grid-template-columns: 1fr; }
+}
+
+.pdf-edit-right form { position: sticky; top: 90px; }
+
+/* ═══════════════════════════════════════════════════════════
+   Info grid
+   ═══════════════════════════════════════════════════════════ */
+.pdf-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+}
+.pdf-info-item {
+    display: flex;
+    gap: 8px;
+    padding: 8px 0;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border-light);
+    align-items: baseline;
+}
+.pdf-info-item .k {
+    color: var(--text-muted);
+    min-width: 80px;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+.pdf-info-item .v {
+    color: var(--text);
+    font-weight: 600;
+    word-break: break-all;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Preview frame
+   ═══════════════════════════════════════════════════════════ */
+.pdf-preview-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    flex-wrap: wrap;
+}
+.pdf-preview-controls .admin-btn.sm {
+    padding: 4px 8px;
+    min-width: 30px;
+    justify-content: center;
+}
+.pdf-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+    margin: 0 4px;
+}
+.pdf-page-info {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    min-width: 60px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.pdf-zoom-level {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    min-width: 42px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.pdf-preview-frame {
+    position: relative;
+    height: 720px;
+    overflow: auto;
+    background: #e9e7e4;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+[data-theme="dark"] .pdf-preview-frame { background: #1a1a20; }
+
+.pdf-pages-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 12px;
+    min-height: 100%;
+}
+.pdf-pages-container:empty { display: none; }
+
+.pdf-page-wrapper {
+    background: #ffffff;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+    border-radius: 4px;
+    overflow: hidden;
+    max-width: 100%;
+    line-height: 0;
+}
+.pdf-page-wrapper canvas {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+.pdf-preview-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    background: var(--background);
+    z-index: 2;
+}
+.pdf-preview-loading .spinner {
+    width: 34px;
+    height: 34px;
+    border: 3px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: pdfSpin 0.9s linear infinite;
+}
+@keyframes pdfSpin { to { transform: rotate(360deg); } }
+
+.pdf-progress-bar {
+    width: 200px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 4px;
+}
+.pdf-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--primary);
+    border-radius: 4px;
+    transition: width 0.2s ease;
+}
+
+.pdf-preview-fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 40px 24px;
+    text-align: center;
+    background: var(--background);
+    z-index: 3;
+}
+.pdf-preview-fallback .pvf-icon { font-size: 52px; opacity: 0.4; }
+.pdf-preview-fallback .pvf-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+}
+.pdf-preview-fallback .pvf-sub {
+    font-size: 13px;
+    color: var(--text-secondary);
+    max-width: 340px;
+    line-height: 1.55;
+    margin-bottom: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Form bits (reuse the patterns from pdf_process.html)
+   ═══════════════════════════════════════════════════════════ */
+.pdf-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+@media (max-width: 540px) {
+    .pdf-form-row { grid-template-columns: 1fr; }
+}
+
+.pdf-toggle-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.pdf-toggle-row:hover {
+    border-color: var(--primary);
+    background: var(--primary-light);
+}
+.pdf-toggle-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary);
+    cursor: pointer;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+.pdf-toggle-body { flex: 1; min-width: 0; }
+.pdf-toggle-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+.pdf-toggle-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+    line-height: 1.4;
+}
+
+.pdf-edit-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+.pdf-edit-actions .admin-btn { min-width: 140px; }
+@media (max-width: 540px) {
+    .pdf-edit-actions { flex-direction: column-reverse; }
+    .pdf-edit-actions .admin-btn { width: 100%; justify-content: center; }
+}
+
+@media (max-width: 768px) {
+    .pdf-preview-frame { height: 460px; }
+    .pdf-page-info, .pdf-zoom-level { display: none; }
+}
+</style>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 (function () {
-    var form = document.getElementById('pdfEditForm');
-    if (form) {
-        AdminCore.initDirtyForm(form, { barId: null });
+    'use strict';
+
+    if (typeof pdfjsLib !== 'undefined') {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
+
+    var container    = document.getElementById('pdfPagesContainer');
+    var frame        = document.getElementById('pdfPreviewFrame');
+    var loading      = document.getElementById('previewLoading');
+    var loadingText  = document.getElementById('previewLoadingText');
+    var progressFill = document.getElementById('pdfProgressFill');
+    var fallback     = document.getElementById('previewFallback');
+    var pvfMsg       = document.getElementById('pvfMessage');
+    var zoomInBtn    = document.getElementById('pdfZoomIn');
+    var zoomOutBtn   = document.getElementById('pdfZoomOut');
+    var zoomLabel    = document.getElementById('pdfZoomLevel');
+    var prevPageBtn  = document.getElementById('pdfPrevPage');
+    var nextPageBtn  = document.getElementById('pdfNextPage');
+    var pageInfoEl   = document.getElementById('pdfPageInfo');
+
+    if (!container || typeof pdfjsLib === 'undefined') return;
+
+    var previewUrl = {{ url_for('admin_content.pdf_library_preview', pdf_id=pdf.id)|tojson }};
+
+    var pdfDoc = null;
+    var scale = 1.0;
+    var MIN_SCALE = 0.5;
+    var MAX_SCALE = 3.0;
+    var RENDER_MULTIPLIER = 1.5;
+
+    function showFallback(msg) {
+        if (loading) loading.style.display = 'none';
+        if (pvfMsg) pvfMsg.textContent = msg;
+        if (fallback) fallback.style.display = 'flex';
+    }
+
+    function updateZoomLabel() {
+        if (zoomLabel) zoomLabel.textContent = Math.round(scale * 100) + '%';
+    }
+
+    function updatePageInfo() {
+        if (!pdfDoc || !pageInfoEl) return;
+        pageInfoEl.textContent = '1 / ' + pdfDoc.numPages;
+    }
+
+    function clearContainer() {
+        while (container.firstChild) container.removeChild(container.firstChild);
+    }
+
+    function renderAllPages() {
+        if (!pdfDoc) return Promise.resolve();
+        var total = pdfDoc.numPages;
+        var chain = Promise.resolve();
+        for (var i = 1; i <= total; i++) {
+            (function (pageNum) {
+                chain = chain.then(function () {
+                    return pdfDoc.getPage(pageNum).then(function (page) {
+                        var viewport = page.getViewport({
+                            scale: scale * RENDER_MULTIPLIER
+                        });
+                        var wrapper = document.createElement('div');
+                        wrapper.className = 'pdf-page-wrapper';
+                        wrapper.dataset.pageNumber = pageNum;
+                        wrapper.id = 'pdfPage-' + pageNum;
+
+                        var canvas = document.createElement('canvas');
+                        canvas.width  = Math.floor(viewport.width);
+                        canvas.height = Math.floor(viewport.height);
+                        canvas.style.width  = Math.floor(viewport.width / RENDER_MULTIPLIER) + 'px';
+                        canvas.style.height = 'auto';
+                        wrapper.appendChild(canvas);
+                        container.appendChild(wrapper);
+
+                        return page.render({
+                            canvasContext: canvas.getContext('2d'),
+                            viewport: viewport,
+                        }).promise;
+                    });
+                });
+            })(i);
+        }
+        return chain;
+    }
+
+    function handleZoom(delta) {
+        var next = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale + delta));
+        if (next === scale) return;
+        scale = next;
+        updateZoomLabel();
+        clearContainer();
+        renderAllPages();
+    }
+
+    if (zoomInBtn)  zoomInBtn.addEventListener('click', function () { handleZoom(0.2); });
+    if (zoomOutBtn) zoomOutBtn.addEventListener('click', function () { handleZoom(-0.2); });
+
+    function currentVisiblePage() {
+        var wrappers = container.querySelectorAll('.pdf-page-wrapper');
+        if (!wrappers.length) return 1;
+        var frameTop = frame.scrollTop + 40;
+        var best = 1;
+        wrappers.forEach(function (w) {
+            if (w.offsetTop <= frameTop) {
+                best = parseInt(w.dataset.pageNumber, 10) || 1;
+            }
+        });
+        return best;
+    }
+
+    function scrollToPage(n) {
+        var el = document.getElementById('pdfPage-' + n);
+        if (el) frame.scrollTo({ top: el.offsetTop - 20, behavior: 'smooth' });
+    }
+
+    if (prevPageBtn) {
+        prevPageBtn.addEventListener('click', function () {
+            if (!pdfDoc) return;
+            scrollToPage(Math.max(1, currentVisiblePage() - 1));
+        });
+    }
+    if (nextPageBtn) {
+        nextPageBtn.addEventListener('click', function () {
+            if (!pdfDoc) return;
+            scrollToPage(Math.min(pdfDoc.numPages, currentVisiblePage() + 1));
+        });
+    }
+
+    function setProgress(pct) {
+        if (progressFill) progressFill.style.width = pct + '%';
+    }
+
+    function start() {
+        setProgress(5);
+        loadingText.textContent = 'Fetching PDF…';
+
+        fetch(previewUrl, { credentials: 'same-origin' })
+            .then(function (r) {
+                if (!r.ok) {
+                    return r.text().then(function (t) {
+                        throw new Error('HTTP ' + r.status + (t ? ' — ' + t.slice(0, 120) : ''));
+                    });
+                }
+                var contentType = (r.headers.get('Content-Type') || '').toLowerCase();
+                if (contentType && contentType.indexOf('pdf') === -1 &&
+                    contentType.indexOf('octet-stream') === -1) {
+                    throw new Error('Server returned ' + contentType + ' instead of a PDF');
+                }
+
+                var total = parseInt(r.headers.get('Content-Length') || '0', 10);
+                var reader = r.body && r.body.getReader ? r.body.getReader() : null;
+                if (!reader) return r.arrayBuffer();
+
+                var chunks = [];
+                var received = 0;
+
+                return new Promise(function (resolve, reject) {
+                    function pump() {
+                        reader.read().then(function (res) {
+                            if (res.done) {
+                                var size = chunks.reduce(function (a, b) {
+                                    return a + b.byteLength;
+                                }, 0);
+                                var merged = new Uint8Array(size);
+                                var off = 0;
+                                chunks.forEach(function (c) {
+                                    merged.set(c, off);
+                                    off += c.byteLength;
+                                });
+                                resolve(merged.buffer);
+                                return;
+                            }
+                            chunks.push(res.value);
+                            received += res.value.byteLength;
+                            if (total > 0) {
+                                setProgress(5 + Math.round((received / total) * 55));
+                            }
+                            pump();
+                        }).catch(reject);
+                    }
+                    pump();
+                });
+            })
+            .then(function (buffer) {
+                loadingText.textContent = 'Decoding PDF…';
+                setProgress(65);
+                return pdfjsLib.getDocument({ data: buffer }).promise;
+            })
+            .then(function (pdf) {
+                pdfDoc = pdf;
+                loadingText.textContent = 'Rendering pages…';
+                setProgress(75);
+                updateZoomLabel();
+                updatePageInfo();
+                return renderAllPages();
+            })
+            .then(function () {
+                setProgress(100);
+                setTimeout(function () {
+                    if (loading) loading.style.display = 'none';
+                }, 220);
+            })
+            .catch(function (err) {
+                console.error('PDF preview failed:', err);
+                showFallback(
+                    'Could not render the PDF.' +
+                    (err && err.message ? ' (' + err.message + ')' : '')
+                );
+            });
+    }
+
+    start();
 })();
 </script>
+
 {% endblock %}

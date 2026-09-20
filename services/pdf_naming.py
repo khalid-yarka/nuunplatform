@@ -14,12 +14,13 @@
 #   5. subject (detected but NOT stripped — kept in the title)
 #   6. grade tokens are protected
 #   7. dates / standalone numbers stripped
-#   8. remaining text is filtered to letters + digits + '&' + spaces
-#   9. title-cased, with acronym whitelist preserved
+#   8. remaining text is filtered to Unicode letters + digits + '&'
+#   9. title-cased for Latin words; non-Latin scripts left as-is
 # ============================================================
 
 import re
 import logging
+import unicodedata
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +28,6 @@ logger = logging.getLogger(__name__)
 # ============================================================
 # ACRONYM WHITELIST
 # ============================================================
-# Words that must stay uppercase even after title-casing.
-# Add more here as your content evolves.
-
 ACRONYM_WHITELIST = frozenset({
     'ICT', 'SST', 'GPE', 'GP', 'PDF', 'MCQ', 'CGSE',
     'QA', 'OK', 'ID', 'UI', 'AI',
@@ -39,7 +37,6 @@ ACRONYM_WHITELIST = frozenset({
 # ============================================================
 # SUBJECT ALIASES
 # ============================================================
-
 SUBJECT_ALIASES = {
     'mathematics': ['mathematics', 'math', 'maths', 'mathmatics', 'xisaab', 'mat'],
     'english':     ['english', 'eng', 'ingiriisi'],
@@ -61,7 +58,6 @@ SUBJECT_ALIASES = {
 # ============================================================
 # TAG VOCABULARY
 # ============================================================
-
 TAG_PATTERNS = [
     (r'\bsualo\s+iyo\s+jawabo\b',              'Q&A'),
     (r'\bquestions?\s+and\s+answers?\b',       'Q&A'),
@@ -87,7 +83,6 @@ TAG_PATTERNS = [
 # ============================================================
 # CHAPTER PATTERNS
 # ============================================================
-
 _CHAPTER_WORDS = r'(?:ch|chp|chap|chapter|cutub|unit)'
 _NUMBER_WORDS  = (
     r'(?:one|two|three|four|five|six|seven|eight|nine|ten|'
@@ -114,7 +109,6 @@ NUMBER_WORD_MAP = {
 # ============================================================
 # GRADE / FORM TOKENS
 # ============================================================
-
 GRADE_RE = re.compile(
     r'\b(?:form|f|grade|g)\s*([1-9]|1[0-2])\b',
     re.IGNORECASE,
@@ -124,34 +118,60 @@ GRADE_RE = re.compile(
 # ============================================================
 # YEAR PATTERNS
 # ============================================================
-
-# Academic-year span: 2023-2024, 2023/2024, 2023–2024, 2023 2024
 YEAR_SPAN_RE = re.compile(
     r'\b((?:19|20)\d{2})\s*[\-–—/]\s*((?:19|20)\d{2})\b'
 )
-
-# Standalone 4-digit year in 1900-2099.
 YEAR_RE = re.compile(r'\b(?:19|20)\d{2}\b')
-
-# Date separators — used after year extraction to clean leftover fragments.
 DATE_RE = re.compile(r'\b\d{1,4}[\s\-\./]\d{1,2}[\s\-\./]\d{1,4}\b')
 
 
 # ============================================================
-# TITLE SANITIZER
+# TITLE FILTERING — UNICODE-AWARE
 # ============================================================
+# Keep every character that is:
+#   • a Unicode letter (Arabic, Latin, Cyrillic, Somali, ...)
+#   • a Unicode decimal digit
+#   • a Unicode combining mark (Arabic diacritics)
+#   • the ampersand `&`
+#   • any whitespace
+#
+# Everything else becomes a space.
+#
+# The old regex `[^A-Za-z0-9&\s]` stripped Arabic completely.
+# These helpers replace it.
 
-# Allowed characters in the final title: letters, digits, `&`, spaces.
-# Everything else becomes a space and is later collapsed.
-_TITLE_DISALLOWED_RE = re.compile(r'[^A-Za-z0-9&\s]')
-_WHITESPACE_RE       = re.compile(r'\s+')
+_WHITESPACE_RE = re.compile(r'\s+')
+
+# Characters kept as-is. `c.isalnum()` alone is not enough because
+# it excludes combining marks, which are important for proper
+# Arabic rendering.
+_KEPT_CATEGORIES = ('L', 'N', 'M')  # Letter, Number, Mark
+
+
+def _is_kept_char(c):
+    if c == '&':
+        return True
+    if c.isspace():
+        return True
+    cat = unicodedata.category(c)
+    return cat and cat[0] in _KEPT_CATEGORIES
+
+
+def _strip_disallowed(s):
+    """
+    Replace every character that isn't a Unicode letter/digit/mark,
+    `&`, or whitespace, with a single space.
+    """
+    if not s:
+        return ''
+    return ''.join(c if _is_kept_char(c) else ' ' for c in s)
 
 
 # ============================================================
 # HELPERS
 # ============================================================
 
-def _normalize_separators(text: str) -> str:
+def _normalize_separators(text):
     """Replace _, -, . with a single space and collapse runs."""
     if not text:
         return ''
@@ -159,7 +179,7 @@ def _normalize_separators(text: str) -> str:
     return text.strip()
 
 
-def _pretty_subject_name(code: str) -> str:
+def _pretty_subject_name(code):
     """Human-readable subject name for a canonical code."""
     try:
         from subjects_config import get_subject
@@ -169,8 +189,23 @@ def _pretty_subject_name(code: str) -> str:
         return code
 
 
-def _title_case_with_acronyms(text: str) -> str:
-    """Title-case every word, preserving the acronym whitelist."""
+def _word_is_latin(word):
+    """True if the word contains at least one Latin letter."""
+    for c in word:
+        if 'LATIN' in unicodedata.name(c, ''):
+            return True
+    return False
+
+
+def _title_case_with_acronyms(text):
+    """
+    Title-case every word that contains Latin letters.
+    Non-Latin words (Arabic, etc.) are left untouched.
+
+    Arabic, for example, has no case, so `word.upper()` is a no-op —
+    but explicitly skipping the transform is clearer and avoids any
+    edge cases with mixed content.
+    """
     if not text:
         return ''
     parts = []
@@ -179,13 +214,15 @@ def _title_case_with_acronyms(text: str) -> str:
             continue
         if word.upper() in ACRONYM_WHITELIST:
             parts.append(word.upper())
-        else:
+            continue
+        if _word_is_latin(word):
             parts.append(word[:1].upper() + word[1:].lower())
+        else:
+            parts.append(word)
     return ' '.join(parts)
 
 
-# Build a reverse alias -> code map and a subject regex once.
-
+# Build the reverse alias -> code map and subject regex once.
 _ALIAS_TO_CODE = {}
 for _code, _aliases in SUBJECT_ALIASES.items():
     for _alias in _aliases:
@@ -206,42 +243,37 @@ else:
 # PUBLIC: TITLE CLEANER
 # ============================================================
 
-def clean_title(raw: str) -> str:
+def clean_title(raw):
     """
-    Return a title containing only letters, digits, spaces, and '&'.
-
-    Handles separators and punctuation by replacing them with spaces,
-    strips everything else, collapses whitespace, and title-cases the
-    result. Acronyms from ACRONYM_WHITELIST stay uppercase.
+    Return a title containing only Unicode letters, digits, `&`,
+    and spaces.
 
     Examples:
         'chemistry_ch4_(2023)-final.pdf'  ->  'Chemistry Ch4 2023 Final'
+        'كتاب_الرياضيات_2024.pdf'          ->  'كتاب الرياضيات 2024'
         'ICT & MATH F4.pdf'               ->  'ICT & Math F4'
-        'a.b.c'                           ->  'A B C'
         '###'                             ->  ''
     """
     if not raw:
         return ''
 
-    # 1. Strip a trailing .pdf if present
     s = raw
     lower = s.lower()
     if lower.endswith('.pdf'):
         s = s[:-4]
 
-    # 2. Separators to spaces
+    # Separators to spaces
     s = re.sub(r'[\s_\-\.\,;:\(\)\[\]\{\}/\\|!?@#$%^*+=~`\'"<>]+', ' ', s)
 
-    # 3. Remove anything not allowed
-    s = _TITLE_DISALLOWED_RE.sub(' ', s)
+    # Unicode-safe filter
+    s = _strip_disallowed(s)
 
-    # 4. Collapse
+    # Collapse
     s = _WHITESPACE_RE.sub(' ', s).strip()
 
     if not s:
         return ''
 
-    # 5. Title case + acronyms
     return _title_case_with_acronyms(s)
 
 
@@ -249,17 +281,14 @@ def clean_title(raw: str) -> str:
 # PUBLIC: YEAR EXTRACTOR
 # ============================================================
 
-def extract_year(raw: str):
+def extract_year(raw):
     """
     Find year patterns and return (cleaned_text, years_list).
 
     Recognises:
-        2023-2024  /  2023/2024  /  2023-2024     ->  both years
+        2023-2024  /  2023/2024  /  2023–2024     ->  both years
         2023                                       ->  single year
         (2023)  /  [2023]  /  _2023_  /  -2023-   ->  extracted the same way
-
-    The years are removed from the returned text and returned as a
-    list, in the order they appeared, deduplicated.
     """
     if not raw:
         return '', []
@@ -267,7 +296,6 @@ def extract_year(raw: str):
     years = []
     working = raw
 
-    # Academic-year spans first (more specific)
     def _span_repl(m):
         years.append(m.group(1))
         years.append(m.group(2))
@@ -275,14 +303,12 @@ def extract_year(raw: str):
 
     working = YEAR_SPAN_RE.sub(_span_repl, working)
 
-    # Then standalone years
     def _single_repl(m):
         years.append(m.group(0))
         return ' '
 
     working = YEAR_RE.sub(_single_repl, working)
 
-    # Dedupe, preserving order
     seen = set()
     unique = []
     for y in years:
@@ -297,7 +323,7 @@ def extract_year(raw: str):
 # PUBLIC: FULL SUGGESTION
 # ============================================================
 
-def suggest_full(filename: str) -> dict:
+def suggest_full(filename):
     """
     Extended suggestion: title, subject, chapter, tags, plus
     confidence flags and warnings.
@@ -327,7 +353,7 @@ def suggest_full(filename: str) -> dict:
         result['warnings'].append('no filename')
         return result
 
-    # ---- 1. Strip extension -------------------------------------------
+    # 1. Strip extension
     base = filename
     lower = base.lower()
     for ext in ('.pdf',):
@@ -335,13 +361,13 @@ def suggest_full(filename: str) -> dict:
             base = base[:-len(ext)]
             break
 
-    # ---- 2. Normalise separators --------------------------------------
+    # 2. Normalise separators
     working = _normalize_separators(base)
 
-    # ---- 3. Extract years ---------------------------------------------
+    # 3. Extract years
     working, year_tags = extract_year(working)
 
-    # ---- 4. Chapter detection -----------------------------------------
+    # 4. Chapter detection
     chapter = ''
 
     m_all = ALL_CHAPTERS_RE.search(working)
@@ -361,7 +387,7 @@ def suggest_full(filename: str) -> dict:
                 chapter = f'Chapter {num}'
             working = working[:m_ch.start()] + ' ' + working[m_ch.end():]
 
-    # ---- 5. Tag detection ---------------------------------------------
+    # 5. Tag detection
     detected_tags = []
     for pattern, canonical in TAG_PATTERNS:
         matches = re.findall(pattern, working, re.IGNORECASE)
@@ -376,9 +402,8 @@ def suggest_full(filename: str) -> dict:
             seen.add(t)
             unique_tags.append(t)
 
-    # ---- 6. Subject detection -----------------------------------------
-    # NOTE: the matched subject alias is INTENTIONALLY LEFT IN `working`
-    # so it survives into the final title. Do not strip it.
+    # 6. Subject detection — the alias is INTENTIONALLY LEFT IN
+    #    `working` so it survives into the final title.
     subject_code = ''
     if _SUBJECT_RE:
         m_sub = _SUBJECT_RE.search(working)
@@ -386,7 +411,7 @@ def suggest_full(filename: str) -> dict:
             alias = _normalize_separators(m_sub.group(0)).lower()
             subject_code = _ALIAS_TO_CODE.get(alias, '')
 
-    # ---- 7. Protect grade tokens --------------------------------------
+    # 7. Protect grade tokens
     protected_grades = []
 
     def _stash(match):
@@ -395,22 +420,22 @@ def suggest_full(filename: str) -> dict:
 
     working = GRADE_RE.sub(_stash, working)
 
-    # ---- 8. Strip dates + stray numbers (grades already stashed) ------
+    # 8. Strip dates + stray numbers
     working = DATE_RE.sub(' ', working)
     working = re.sub(r'\b\d{1,4}\b', ' ', working)
 
-    # ---- 9. Restore grades --------------------------------------------
+    # 9. Restore grade tokens
     for i, g in enumerate(protected_grades):
         working = working.replace(f'\x00G{i}\x00', g)
 
-    # ---- 10. Clean remaining text to letters + digits + '&' -----------
-    working = _TITLE_DISALLOWED_RE.sub(' ', working)
+    # 10. Unicode-safe filter — keeps Arabic, Latin, any script
+    working = _strip_disallowed(working)
     working = _WHITESPACE_RE.sub(' ', working).strip()
 
-    # ---- 11. Title case with acronyms ---------------------------------
+    # 11. Title case (Latin only)
     title = _title_case_with_acronyms(working)
 
-    # ---- 12. Fallback if the title ended up empty ---------------------
+    # 12. Fallback if the title ended up empty
     if not title:
         parts = []
         if subject_code:
@@ -427,14 +452,14 @@ def suggest_full(filename: str) -> dict:
             title = 'Untitled'
             result['warnings'].append('could not derive a title from filename')
 
-    # ---- 13. Combine tags (vocabulary tags + year tags) ---------------
+    # 13. Combine tags
     all_tags = list(unique_tags)
     for y in year_tags:
         if y not in all_tags:
             all_tags.append(y)
     tags_str = ', '.join(all_tags)
 
-    # ---- 14. Confidence -------------------------------------------------
+    # 14. Confidence
     signal_score = 0
     if subject_code:
         signal_score += 2
@@ -475,11 +500,6 @@ def suggest_full(filename: str) -> dict:
 # ============================================================
 
 def suggest_from_filename(filename):
-    """
-    Legacy entry point. Returns the same shape as before:
-        {'title', 'subject', 'chapter', 'tags'}
-    Internally uses suggest_full().
-    """
     full = suggest_full(filename)
     return {
         'title':   full['title'],

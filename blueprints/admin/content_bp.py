@@ -1301,6 +1301,89 @@ def pdfs():
 # ============================================================
 # PDFs — LIBRARY EDIT / DELETE
 # ============================================================
+@admin_content_bp.route('/pdfs/<int:pdf_id>/preview', methods=['GET'],
+                        endpoint='pdf_library_preview')
+@admin_can('pdfs.view')
+def pdf_library_preview(pdf_id):
+    """
+    Stream the actual PDF for admin review on the edit page.
+
+    Priority:
+      1. A local file_url on the row.
+      2. Telegram (via the bot staging row keyed by the same code).
+
+    No tier check — admin-only access is enforced by @admin_can.
+    Returns inline Content-Disposition so it renders inside the reader.
+    """
+    pdf = get_pdf_by_id(pdf_id)
+    if not pdf:
+        abort(404)
+
+    # 1. Local file
+    file_url = pdf.get('file_url')
+    if file_url and os.path.exists(file_url) and os.path.isfile(file_url):
+        try:
+            return send_file(
+                file_url,
+                mimetype='application/pdf',
+                as_attachment=False,
+                download_name=f"{pdf.get('title') or pdf.get('code') or 'document'}.pdf",
+                conditional=True,
+            )
+        except Exception as e:
+            logger.warning(f"Local file send failed for pdf {pdf_id}: {e}")
+
+    # 2. Telegram stream
+    code = pdf.get('code')
+    if not code:
+        abort(404, 'PDF has no code')
+
+    try:
+        from bot.db import get_bot_pdf_by_code
+        bot_pdf = get_bot_pdf_by_code(code)
+    except Exception as e:
+        logger.warning(f"Bot lookup failed for pdf {pdf_id} (code {code}): {e}")
+        bot_pdf = None
+
+    if not bot_pdf:
+        abort(404, 'PDF is not available in Telegram storage.')
+
+    file_id = bot_pdf.get('file_id')
+    if not file_id:
+        abort(404, 'No Telegram file_id stored for this PDF.')
+
+    try:
+        from bot.utils import get_bot
+        bot = get_bot()
+        tg_file = bot.get_file(file_id)
+        data = bot.download_file(tg_file.file_path)
+
+        if not data:
+            abort(502, 'Telegram returned an empty file.')
+
+        buf = io.BytesIO(data)
+        buf.seek(0)
+
+        filename = (pdf.get('title') or code) + '.pdf'
+
+        response = send_file(
+            buf,
+            mimetype='application/pdf',
+            as_attachment=False,
+            download_name=filename,
+            conditional=True,
+        )
+        response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
+        response.headers.pop('X-Frame-Options', None)
+        response.headers['Cache-Control'] = 'private, max-age=300'
+        return response
+
+    except Exception as e:
+        logger.error(
+            f"Admin preview failed for pdf {pdf_id} (code {code}): {e}",
+            exc_info=True,
+        )
+        abort(502)
 
 @admin_content_bp.route('/pdfs/<int:pdf_id>/edit', methods=['GET'],
                         endpoint='pdf_edit')
