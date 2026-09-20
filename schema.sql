@@ -140,8 +140,8 @@ CREATE TABLE IF NOT EXISTS pdfs (
     title          TEXT NOT NULL,
     description    TEXT DEFAULT '',
     curriculum     TEXT DEFAULT 'PL' CHECK (curriculum IN ('PL', 'SO', 'SL')),
-    class          TEXT DEFAULT ''   CHECK (class IN ('', '7aad', '8aad', 'F3', 'F4')),
-    subject        TEXT NOT NULL,
+    class          TEXT DEFAULT 'F4' CHECK (class IN ('F4', 'F3', 'G8', 'G7')),
+    subject        TEXT,
     chapter        TEXT DEFAULT '',
     tags           TEXT DEFAULT '',
     is_premium     INTEGER DEFAULT 0,
@@ -165,7 +165,7 @@ CREATE INDEX IF NOT EXISTS idx_pdfs_file_unique_id ON pdfs(file_unique_id);
 -- UNVERIFIED PDFs (direct-publish review queue)
 -- ============================================
 
-CREATE TABLE IF NOT EXISTS unverified_pdfs (
+CREATE TABLE IF NOT EXISTS _pdfs (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     pdf_id        INTEGER NOT NULL UNIQUE,
     published_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -851,26 +851,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_log_created
 
 
 
--- ============================================
--- UNVERIFIED PDFs (direct-publish review queue)
--- ============================================
--- Records PDFs published directly from intake via the super-admin
--- "Super Publish" action. Metadata was auto-generated from the
--- filename and needs review by any admin.
--- Deleting a row here does NOT delete the PDF from the library.
 
-CREATE TABLE IF NOT EXISTS unverified_pdfs (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    pdf_id        INTEGER NOT NULL UNIQUE,
-    published_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-    confirmed     INTEGER NOT NULL DEFAULT 0,
-    FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_unverified_pdfs_confirmed
-    ON unverified_pdfs(confirmed);
-CREATE INDEX IF NOT EXISTS idx_unverified_pdfs_published
-    ON unverified_pdfs(published_at DESC);
 
 -- ============================================
 -- PUSH SUBSCRIPTIONS (Web Push)

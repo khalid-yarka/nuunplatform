@@ -2,16 +2,27 @@
 #
 # Fire-and-forget. Never raises, never blocks the main write path.
 #
+# ─── THREAD SAFETY (2024-09 rewrite) ────────────────────────────
+#   • Connections are per-thread. A single module-level connection
+#     raised "SQLite objects created in a thread can only be used
+#     in that same thread" whenever a Flask worker alternated
+#     between request threads and background threads.
+#   • Main DB introspection still opens its own short-lived
+#     connection per schema-sync call — that path never caches.
+#   • Global state (the sync-once set and the warn-once set) is
+#     guarded by an RLock.
+#
 # ─── DEFENSIVE BEHAVIOUR ────────────────────────────────────────
 #   • Lazy init — DB is created on the first mirrored write.
 #   • Schema is auto-synced from the main DB per table:
 #       - Table missing → created from main's exact DDL.
-#       - Table exists but missing columns → missing columns added
-#         via ALTER TABLE (constraints relaxed, since SQLite won't
-#         let us add NOT NULL / UNIQUE / PK columns post-hoc).
-#   • Per-write verification: if a needed column is still missing
-#     after a sync attempt, the write is skipped with a SINGLE
-#     warning per (table, column) pair — no log spam.
+#       - Schema drift (e.g. main made a column nullable but the
+#         shadow still has NOT NULL) → shadow table is dropped
+#         and recreated from main's DDL. The mirror is not a
+#         source of truth, so losing rows is acceptable.
+#       - Missing columns only → added via ALTER TABLE ADD COLUMN.
+#   • Per-write verification: a skipped write logs ONE warning
+#     per (table, column) pair — no log spam.
 #   • Any exception is swallowed. The main DB is never affected.
 # ─────────────────────────────────────────────────────────────────
 
@@ -42,14 +53,23 @@ WHITELISTED_TABLES = {
 
 
 # ============================================
-# MODULE STATE (thread-safe)
+# MODULE STATE
 # ============================================
 
+# Per-thread connection holder. Each thread gets its own shadow
+# connection on first use. No sharing across threads.
+_thread_local = threading.local()
+
+# Guards the module-level state dicts/sets below.
 _lock = threading.RLock()
-_shadow_conn = None
-_initialized = False
-_warned = set()          # dedup for warnings
-_synced_tables = set()   # tables we've already checked this session
+
+# Dedup set for warnings — safe to share, guarded by _lock.
+_warned = set()
+
+# Tables we've already verified against main's schema this process.
+# Shared across threads: once a table is synced, it's synced in the
+# underlying file, regardless of which connection did the sync.
+_synced_tables = set()
 
 
 def _warn_once(key, message):
@@ -69,6 +89,7 @@ def _warn_once(key, message):
 # ============================================
 
 def _open_connection(path):
+    """Open a SQLite connection with the mirror's pragmas."""
     conn = sqlite3.connect(path, timeout=10)
     conn.row_factory = sqlite3.Row
     try:
@@ -81,6 +102,7 @@ def _open_connection(path):
 
 
 def _open_main_connection():
+    """Short-lived connection to the main DB for schema introspection."""
     if not os.path.exists(MAIN_DB_PATH):
         return None
     try:
@@ -90,21 +112,23 @@ def _open_main_connection():
 
 
 def _get_shadow_connection():
-    """Lazy-open the shadow DB. Returns None on any failure."""
-    global _shadow_conn
+    """
+    Return this thread's shadow connection, creating it lazily.
+    Returns None on any failure (never raises).
+    """
+    conn = getattr(_thread_local, 'conn', None)
+    if conn is not None:
+        return conn
 
-    with _lock:
-        if _shadow_conn is not None:
-            return _shadow_conn
-
-        try:
-            os.makedirs(os.path.dirname(SAFETY_DB_PATH), exist_ok=True)
-            _shadow_conn = _open_connection(SAFETY_DB_PATH)
-        except Exception as e:
-            _warn_once('shadow_open', f"safe_db: could not open shadow DB: {e}")
-            _shadow_conn = None
-
-        return _shadow_conn
+    try:
+        os.makedirs(os.path.dirname(SAFETY_DB_PATH), exist_ok=True)
+        conn = _open_connection(SAFETY_DB_PATH)
+        _thread_local.conn = conn
+        return conn
+    except Exception as e:
+        _warn_once('shadow_open', f"safe_db: could not open shadow DB: {e}")
+        _thread_local.conn = None
+        return None
 
 
 # ============================================
@@ -187,8 +211,50 @@ def _column_definition(conn, table, column):
                 return frag
     except Exception:
         pass
-    # Fallback: bare TEXT column
     return column + " TEXT"
+
+
+# ============================================
+# SCHEMA DRIFT DETECTION
+# ============================================
+
+_NOT_NULL_RE = re.compile(
+    r'([A-Za-z_][A-Za-z0-9_]*)\s+[A-Za-z]+'
+    r'(?:\s*\([^)]*\))?'                 # optional type args
+    r'[^,)]*?'                           # any other modifiers
+    r'\bNOT\s+NULL\b',
+    re.IGNORECASE,
+)
+
+
+def _extract_not_null_columns(ddl):
+    """Return the set of column names declared NOT NULL in a DDL string."""
+    if not ddl:
+        return set()
+    cols = set()
+    for m in _NOT_NULL_RE.finditer(ddl):
+        cols.add(m.group(1).lower())
+    return cols
+
+
+def _needs_rebuild(shadow, main, table):
+    """
+    Return True when the shadow table has a NOT NULL column that the
+    main table does not. That's the specific drift that breaks writes
+    (e.g. main.pdfs.subject became nullable, but safety.pdfs.subject
+    still has NOT NULL).
+    """
+    shadow_ddl = _fetch_ddl(shadow, table)
+    main_ddl = _fetch_ddl(main, table)
+    if not shadow_ddl or not main_ddl:
+        return False
+
+    shadow_nn = _extract_not_null_columns(shadow_ddl)
+    main_nn = _extract_not_null_columns(main_ddl)
+
+    # If the shadow enforces NOT NULL on any column main has relaxed,
+    # the shadow's schema is stale and must be rebuilt.
+    return bool(shadow_nn - main_nn)
 
 
 # ============================================
@@ -197,10 +263,12 @@ def _column_definition(conn, table, column):
 
 def _sync_table_schema(shadow, table, force=False):
     """
-    Ensure the shadow table exists and has all columns the main table has.
+    Ensure the shadow table exists and matches the main table's shape.
 
-    - Table missing → CREATE from main's DDL + indexes.
-    - Columns missing → ALTER TABLE ADD COLUMN for each.
+    Order of operations:
+      1. If the table is missing entirely → create from main's DDL.
+      2. If a NOT NULL mismatch exists → drop and recreate.
+      3. Otherwise, add any missing columns (ALTER ADD COLUMN).
 
     Returns True on success (or nothing-to-do), False on hard failure.
     """
@@ -215,7 +283,7 @@ def _sync_table_schema(shadow, table, force=False):
         return False
 
     try:
-        # ---- Table missing in shadow ----
+        # ── Case 1: table doesn't exist in shadow ────────────────
         if not _table_exists(shadow, table):
             ddl = _fetch_ddl(main, table)
             if not ddl:
@@ -224,8 +292,6 @@ def _sync_table_schema(shadow, table, force=False):
                 shadow.execute(ddl)
                 shadow.commit()
             except sqlite3.OperationalError as e:
-                # Race: another thread created it just now. Fall through
-                # to column check below.
                 if 'already exists' not in str(e).lower():
                     _warn_once(
                         f'schema_create_{table}',
@@ -233,7 +299,7 @@ def _sync_table_schema(shadow, table, force=False):
                     )
                     return False
 
-            # Copy indexes (best-effort, ignore conflicts)
+            # Copy indexes (best-effort)
             for idx_sql in _fetch_indexes(main, table):
                 try:
                     shadow.execute(idx_sql)
@@ -244,7 +310,36 @@ def _sync_table_schema(shadow, table, force=False):
             except Exception:
                 pass
 
-        # ---- Column drift ----
+            with _lock:
+                _synced_tables.add(table)
+            return True
+
+        # ── Case 2: shadow schema has stale NOT NULL constraints ──
+        if _needs_rebuild(shadow, main, table):
+            ddl = _fetch_ddl(main, table)
+            if not ddl:
+                return False
+            try:
+                shadow.execute("DROP TABLE IF EXISTS " + table)
+                shadow.execute(ddl)
+                for idx_sql in _fetch_indexes(main, table):
+                    try:
+                        shadow.execute(idx_sql)
+                    except Exception:
+                        pass
+                shadow.commit()
+            except Exception as e:
+                _warn_once(
+                    f'schema_rebuild_{table}',
+                    f"safe_db: rebuild failed for {table}: {e}"
+                )
+                return False
+
+            with _lock:
+                _synced_tables.add(table)
+            return True
+
+        # ── Case 3: additive column drift ────────────────────────
         shadow_cols = set(_columns_of(shadow, table))
         main_cols = set(_columns_of(main, table))
         missing = main_cols - shadow_cols
@@ -278,6 +373,7 @@ def _sync_table_schema(shadow, table, force=False):
         with _lock:
             _synced_tables.add(table)
         return True
+
     finally:
         try:
             main.close()
@@ -338,7 +434,6 @@ def _do_mirror(conn, sql, params):
                 or 'no such table' in err
                 or 'no such column' in err):
             raise
-        # Anything else: log once and skip.
         _warn_once('op_' + str(e)[:60], f"safe_db: write error: {e}")
         return False
     except Exception as e:
@@ -371,17 +466,15 @@ def mirror_write(sql, params=()):
                 _warn_once(f'mirror1_{table}', f"safe_db: {table}: {e}")
                 return
 
-        # ---- Attempt 2: force re-sync (column drift, race) ----
+        # ---- Attempt 2: force re-sync ----
         try:
             with _lock:
                 _synced_tables.discard(table)
             _sync_table_schema(conn, table, force=True)
             _do_mirror(conn, sql, params)
         except sqlite3.OperationalError as e:
-            # Still failing — one warning, give up.
             err = str(e).lower()
             if 'no column' in err:
-                # Extract the column name if possible for a cleaner message.
                 m = re.search(r'no column named\s+(\w+)', err)
                 col = m.group(1) if m else '?'
                 _warn_once(
@@ -394,7 +487,6 @@ def mirror_write(sql, params=()):
         except Exception as e:
             _warn_once(f'mirror2_{table}', f"safe_db: {table}: {e}")
     except Exception as e:
-        # Absolute last-resort guard — should never fire.
         _warn_once('mirror_fatal', f"safe_db: fatal: {e}")
 
 
@@ -415,14 +507,12 @@ def mirror_write_batch(sql, params_list):
         if conn is None:
             return
 
-        # Ensure schema once
         try:
             _sync_table_schema(conn, table)
         except Exception as e:
             _warn_once(f'batch_sync_{table}', f"safe_db: {table}: {e}")
             return
 
-        # Attempt in one transaction.
         try:
             cur = conn.cursor()
             cur.executemany(sql, params_list)
@@ -433,13 +523,11 @@ def mirror_write_batch(sql, params_list):
             if not ('no column' in err or 'no such' in err):
                 _warn_once(f'batch_{table}', f"safe_db: {table}: {e}")
                 return
-            # Roll back the partial batch, then retry below.
             try:
                 conn.rollback()
             except Exception:
                 pass
 
-        # Force re-sync, retry once.
         try:
             with _lock:
                 _synced_tables.discard(table)
@@ -465,7 +553,7 @@ def mirror_write_batch(sql, params_list):
 
 
 # ============================================
-# READ-ONLY VIEWER (used by admin safety panel)
+# READ-ONLY VIEWER (admin safety panel)
 # ============================================
 
 def list_tables():
@@ -529,14 +617,13 @@ def stats():
 
 
 # ============================================
-# STARTUP (optional)
+# STARTUP
 # ============================================
 
 def prime_schema():
     """
-    Optional: sync all whitelisted tables once at startup.
-    Not required — lazy sync happens on first write — but calling this
-    after app startup avoids the first-write hiccup.
+    Sync all whitelisted tables once. Called from app startup so the
+    first mirrored write doesn't pay the schema-sync cost.
     """
     conn = _get_shadow_connection()
     if conn is None:
@@ -547,22 +634,15 @@ def prime_schema():
         except Exception:
             pass
 
-# ============================================================
-# BACKWARD-COMPAT ALIASES
-# ============================================================
-# The defensive rewrite renamed some internals. Downstream callers
-# (blueprints/admin/safety_bp.py in particular) still import the
-# old names. Keep them working with zero runtime cost.
-# ============================================================
 
-# Old name for the whitelist — was a set of tuple (name, columns) in
-# the v1 module, now just a set of names. Anything that imported it
-# only used membership checks, so a plain set works.
+# ============================================
+# BACKWARD-COMPAT ALIASES
+# ============================================
+
+# Old name for the whitelist.
 MIRROR_TABLES = WHITELISTED_TABLES
 
-# The old module exposed these internal helpers. They no longer exist
-# under the same names; the defensive version handles both tasks
-# automatically on first write. Provide no-op stubs so imports succeed.
+
 def _copy_schema_from_main(*args, **kwargs):
     """Legacy no-op. Schema sync now happens per-table on first write."""
     return True

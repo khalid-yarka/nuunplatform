@@ -45,23 +45,23 @@ def init_bot_db():
     # ---- Fulfilled Bot PDFs (staging) ----
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS pdfs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            code TEXT UNIQUE NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT DEFAULT '',
-            curriculum TEXT DEFAULT 'PL' CHECK (curriculum IN ('PL', 'SO', 'SL')),
-            class TEXT DEFAULT '' CHECK (class IN ('', '7aad', '8aad', 'F3', 'F4')),
-            subject TEXT NOT NULL,
-            chapter TEXT DEFAULT '',
-            tags TEXT DEFAULT '',
-            is_premium INTEGER DEFAULT 0,
-            file_id TEXT NOT NULL,
-            file_unique_id TEXT UNIQUE NOT NULL,
-            uploaded_by INTEGER,
-            uploaded_at TEXT DEFAULT (datetime('now', 'localtime')),
-            original_filename TEXT DEFAULT '',
-            published INTEGER NOT NULL DEFAULT 0,
-            published_at TEXT
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            code              TEXT UNIQUE NOT NULL,
+            title             TEXT NOT NULL,
+            description       TEXT DEFAULT '',
+            curriculum        TEXT DEFAULT 'PL' CHECK (curriculum IN ('PL', 'SO', 'SL')),
+            class             TEXT DEFAULT 'F4' CHECK (class IN ('F4', 'F3', 'G8', 'G7')),
+            subject           TEXT,
+            chapter           TEXT DEFAULT '',
+            tags              TEXT DEFAULT '',
+            is_premium        INTEGER DEFAULT 0,
+            file_id           TEXT,
+            file_unique_id    TEXT UNIQUE,
+            original_filename TEXT,
+            uploaded_by       TEXT NOT NULL DEFAULT 'NUUN',
+            uploaded_at       TEXT DEFAULT (datetime('now', 'localtime')),
+            published         INTEGER DEFAULT 0,
+            published_at      TEXT
         )
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bot_pdfs_code ON pdfs(code)")

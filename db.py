@@ -1222,7 +1222,17 @@ def get_group_by_id(group_id: int):
 # PDF FUNCTIONS (Main Platform – Redesigned)
 # ============================================
 
-def get_all_pdfs(limit=100, offset=0, search='', subject='', curriculum='', class_filter=''):
+_SORT_MAP = {
+    'newest':      'uploaded_at DESC',
+    'oldest':      'uploaded_at ASC',
+    'popular':     'view_count DESC, uploaded_at DESC',
+    'title_asc':   'LOWER(title) ASC',
+    'title_desc':  'LOWER(title) DESC',
+}
+
+
+def get_all_pdfs(limit=100, offset=0, search='', subject='', curriculum='',
+                 class_filter='', sort='newest'):
     try:
         query = "SELECT * FROM pdfs WHERE 1=1"
         params = []
@@ -1239,15 +1249,17 @@ def get_all_pdfs(limit=100, offset=0, search='', subject='', curriculum='', clas
         if class_filter:
             query += " AND class = ?"
             params.append(class_filter)
-        query += " ORDER BY uploaded_at DESC LIMIT ? OFFSET ?"
+
+        order_sql = _SORT_MAP.get(sort, _SORT_MAP['newest'])
+        query += f" ORDER BY {order_sql} LIMIT ? OFFSET ?"
         params.extend([limit, offset])
+
         cursor = execute_with_retry(query, params)
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
     except Exception as e:
         logger.error(f"Error fetching PDFs: {e}")
         return []
-
 
 def get_pdf_by_code(code):
     try:

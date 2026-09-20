@@ -1,0 +1,2144 @@
+{# ============================================================
+   templates/dashboard/admin/content/bulk_pdf_workspace.html
+
+   Full-page bulk PDF workspace — mobile-first.
+
+   Layout:
+     • Toolbar (search, filters, count)
+     • Progress bar
+     • Selection bar (appears when rows are selected)
+     • Wide table with inline-editable cells
+     • Column-header bulk edit buttons
+     • Long-press any row → bottom sheet with all fields
+     • Pagination
+
+   Everything edits in memory. One POST commits everything.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-cloud-upload-alt header-icon"></i>{% endblock %}
+{% block admin_title %}Bulk PDF Workspace{% endblock %}
+{% block admin_subtitle %}
+    Edit any field inline. Long-press a row for the full form. Use the column headers for bulk edits.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_content.pdfs') }}">PDFs</a>
+    <span class="sep">/</span>
+    <span class="current">Bulk Workspace</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_content.pdfs', tab='intake') }}"
+       class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+{% endblock %}
+
+
+{% block admin_content %}
+
+<div class="bp-page" id="bpPage">
+
+    {# ═════════════════ TOOLBAR ═════════════════ #}
+    <div class="bp-toolbar">
+        <div class="bp-search">
+            <i class="fas fa-search"></i>
+            <input type="text" id="bpSearch"
+                   placeholder="Search…" autocomplete="off" spellcheck="false">
+        </div>
+
+        <select id="bpFilterSubject" class="bp-select">
+            <option value="">All subjects</option>
+            {% for s in subjects %}
+                <option value="{{ s.code }}">{{ s.name }}</option>
+            {% endfor %}
+            <option value="__none__">— No subject —</option>
+        </select>
+
+        <select id="bpFilterStatus" class="bp-select">
+            <option value="">All rows</option>
+            <option value="needs_review">Needs review</option>
+            <option value="edited">Edited</option>
+            <option value="unedited">Not edited</option>
+            <option value="premium">💎 Premium</option>
+        </select>
+
+        <button type="button" class="bp-btn bp-btn--ghost bp-btn--sm"
+                id="bpResetFilters" title="Reset filters">
+            <i class="fas fa-undo"></i>
+        </button>
+
+        <span class="bp-toolbar__stat">
+            <strong id="bpTotalCount">{{ rows|length }}</strong>
+        </span>
+    </div>
+
+    {# ═════════════════ PROGRESS ═════════════════ #}
+    <div class="bp-progress">
+        <div class="bp-progress__label">
+            <span><strong id="bpEditedCount">0</strong> / <strong id="bpProgressTotal">{{ rows|length }}</strong></span>
+            <span class="bp-progress__pct" id="bpProgressPct">0%</span>
+        </div>
+        <div class="bp-progress__bar">
+            <div class="bp-progress__fill" id="bpProgressFill"></div>
+        </div>
+    </div>
+
+    {# ═════════════════ SELECTION BAR ═════════════════ #}
+    <div class="bp-selection" id="bpSelection" hidden>
+        <div class="bp-selection__count">
+            <strong id="bpSelectedCount">0</strong> selected
+            <button type="button" class="bp-selection__clear" id="bpClearSelection">Clear</button>
+        </div>
+        <div class="bp-selection__actions">
+            <button type="button" class="bp-btn bp-btn--sm bp-btn--primary"
+                    id="bpStageSelected">
+                <i class="fas fa-check"></i> Stage
+            </button>
+            {% if can_publish %}
+                <button type="button" class="bp-btn bp-btn--sm bp-btn--accent"
+                        id="bpPublishSelected">
+                    <i class="fas fa-cloud-upload-alt"></i> Publish
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ═════════════════ TABLE ═════════════════ #}
+    <div class="bp-table-wrap">
+        <table class="bp-table" id="bpTable">
+            <thead>
+                <tr>
+                    <th class="bp-th bp-th--check">
+                        <label class="bp-check">
+                            <input type="checkbox" id="bpSelectAllVisible">
+                            <span></span>
+                        </label>
+                    </th>
+                    <th class="bp-th bp-th--num">#</th>
+                    <th class="bp-th bp-th--code">
+                        <span>Code</span>
+                        <button type="button" class="bp-col-bulk" data-field="code" title="Bulk edit code">
+                            <i class="fas fa-layer-group"></i>
+                        </button>
+                    </th>
+                    <th class="bp-th bp-th--title">
+                        <span>Title</span>
+                        <button type="button" class="bp-col-bulk" data-field="title" title="Bulk edit title">
+                            <i class="fas fa-layer-group"></i>
+                        </button>
+                    </th>
+                    <th class="bp-th bp-th--subject">
+                        <span>Subject</span>
+                        <button type="button" class="bp-col-bulk" data-field="subject" title="Bulk edit subject">
+                            <i class="fas fa-layer-group"></i>
+                        </button>
+                    </th>
+                    <th class="bp-th bp-th--class">
+                        <span>Class</span>
+                        <button type="button" class="bp-col-bulk" data-field="class" title="Bulk edit class">
+                            <i class="fas fa-layer-group"></i>
+                        </button>
+                    </th>
+                    <th class="bp-th bp-th--curr">
+                        <span>Curr.</span>
+                        <button type="button" class="bp-col-bulk" data-field="curriculum" title="Bulk edit curriculum">
+                            <i class="fas fa-layer-group"></i>
+                        </button>
+                    </th>
+                    <th class="bp-th bp-th--chapter">
+                        <span>Chapter</span>
+                        <button type="button" class="bp-col-bulk" data-field="chapter" title="Bulk edit chapter">
+                            <i class="fas fa-layer-group"></i>
+                        </button>
+                    </th>
+                    <th class="bp-th bp-th--tags">
+                        <span>Tags</span>
+                        <button type="button" class="bp-col-bulk" data-field="tags" title="Bulk edit tags">
+                            <i class="fas fa-layer-group"></i>
+                        </button>
+                    </th>
+                    <th class="bp-th bp-th--prem">
+                        <span>💎</span>
+                        <button type="button" class="bp-col-bulk" data-field="is_premium" title="Bulk edit premium">
+                            <i class="fas fa-layer-group"></i>
+                        </button>
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="bpTableBody"></tbody>
+        </table>
+        <div class="bp-empty" id="bpEmpty" hidden>
+            <i class="fas fa-inbox"></i>
+            <p>No rows match the current filters.</p>
+        </div>
+    </div>
+
+    {# ═════════════════ PAGINATION ═════════════════ #}
+    <div class="bp-pagination">
+        <button type="button" class="bp-btn bp-btn--ghost bp-btn--sm" id="bpPrevPage">
+            <i class="fas fa-chevron-left"></i>
+        </button>
+        <span class="bp-pagination__info">
+            Page <strong id="bpPageNum">1</strong> / <strong id="bpPageTotal">1</strong>
+        </span>
+        <button type="button" class="bp-btn bp-btn--ghost bp-btn--sm" id="bpNextPage">
+            <i class="fas fa-chevron-right"></i>
+        </button>
+        <span class="bp-pagination__spacer"></span>
+        <label class="bp-pagination__size">
+            <select id="bpPerPage">
+                <option value="25">25 / page</option>
+                <option value="50" selected>50 / page</option>
+                <option value="100">100 / page</option>
+                <option value="200">200 / page</option>
+            </select>
+        </label>
+    </div>
+
+</div>
+
+
+{# ═════════════════ BOTTOM SHEET (mobile-friendly row editor) ═════════════════ #}
+<div class="bp-sheet-overlay" id="bpSheet" hidden>
+    <div class="bp-sheet" id="bpSheetInner">
+        <div class="bp-sheet__handle"></div>
+
+        <div class="bp-sheet__header">
+            <div class="bp-sheet__filename" id="bpSheetFilename"></div>
+            <button type="button" class="bp-sheet__close" id="bpSheetClose">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="bp-sheet__body">
+            <div class="bp-field">
+                <label>Code <span class="bp-req">*</span></label>
+                <div class="bp-code-row">
+                    <input type="text" id="bpFCode" maxlength="9"
+                           autocomplete="off" spellcheck="false"
+                           class="bp-input bp-input--code">
+                    <button type="button" class="bp-btn bp-btn--ghost bp-btn--sm"
+                            id="bpRegenCode" title="Regenerate">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="bp-field">
+                <label>
+                    Title <span class="bp-req">*</span>
+                    <button type="button" class="bp-field__mini" id="bpReCleanTitle">
+                        <i class="fas fa-magic"></i> Clean
+                    </button>
+                </label>
+                <input type="text" id="bpFTitle" maxlength="200" class="bp-input">
+            </div>
+
+            <div class="bp-grid-2">
+                <div class="bp-field">
+                    <label>Subject</label>
+                    <select id="bpFSubject" class="bp-input">
+                        <option value="">— None —</option>
+                        {% for s in subjects %}
+                            <option value="{{ s.code }}">{{ s.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="bp-field">
+                    <label>Class</label>
+                    <select id="bpFClass" class="bp-input">
+                        {% for c in classes %}
+                            <option value="{{ c }}">{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="bp-grid-2">
+                <div class="bp-field">
+                    <label>Curriculum</label>
+                    <select id="bpFCurriculum" class="bp-input">
+                        {% for code, label in curricula %}
+                            <option value="{{ code }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="bp-field">
+                    <label>Chapter</label>
+                    <input type="text" id="bpFChapter" maxlength="100"
+                           class="bp-input" placeholder="e.g. Chapter 5">
+                </div>
+            </div>
+
+            <div class="bp-field">
+                <label>Tags</label>
+                <input type="text" id="bpFTags" maxlength="200"
+                       class="bp-input" placeholder="e.g. Notes, 2023">
+            </div>
+
+            <div class="bp-field">
+                <label class="bp-toggle">
+                    <input type="checkbox" id="bpFPremium">
+                    <span class="bp-toggle__track">
+                        <span class="bp-toggle__knob"></span>
+                    </span>
+                    <span class="bp-toggle__label">💎 Premium content</span>
+                </label>
+            </div>
+
+            <div class="bp-warnings" id="bpWarnings" hidden></div>
+        </div>
+
+        <div class="bp-sheet__footer">
+            <button type="button" class="bp-btn bp-btn--ghost" id="bpSheetPrev">
+                <i class="fas fa-arrow-left"></i> Prev
+            </button>
+            <div class="bp-sheet__footer-right">
+                <button type="button" class="bp-btn bp-btn--ghost" id="bpSheetNextUnedited">
+                    Next unedited
+                </button>
+                <button type="button" class="bp-btn bp-btn--primary" id="bpSheetSave">
+                    <i class="fas fa-check"></i> Save &amp; next
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{# ═════════════════ BULK EDIT MODAL ═════════════════ #}
+<div class="bp-modal-overlay" id="bpModal" hidden>
+    <div class="bp-modal">
+        <div class="bp-modal__head">
+            <h3 id="bpModalTitle">Bulk edit</h3>
+            <button type="button" class="bp-modal__close" id="bpModalClose">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="bp-modal__body" id="bpModalBody"></div>
+        <div class="bp-modal__foot">
+            <button type="button" class="bp-btn bp-btn--ghost" id="bpModalCancel">Cancel</button>
+            <button type="button" class="bp-btn bp-btn--primary" id="bpModalApply">Apply</button>
+        </div>
+    </div>
+</div>
+
+
+{# ═════════════════ TOAST ═════════════════ #}
+<div class="bp-toast" id="bpToast" hidden>
+    <span id="bpToastMsg"></span>
+    <button type="button" class="bp-toast__undo" id="bpToastUndo" hidden>Undo</button>
+</div>
+
+
+<style>
+/* ─── Global hidden fix ─────────────────────────────── */
+[hidden] { display: none !important; }
+
+/* ─── Root ───────────────────────────────────────────── */
+.bp-page {
+    --bp-radius:        10px;
+    --bp-radius-sm:     6px;
+    --bp-border:        var(--border, #e5e7eb);
+    --bp-border-light:  var(--border-light, #f1f3f5);
+    --bp-surface:       var(--surface, #ffffff);
+    --bp-surface-alt:   var(--surface-alt, #f8f9fb);
+    --bp-bg:            var(--background, #f4f5f7);
+    --bp-text:          var(--text, #111827);
+    --bp-text-2:        var(--text-secondary, #4b5563);
+    --bp-text-muted:    var(--text-muted, #9ca3af);
+    --bp-primary:       var(--primary, #FF3138);
+    --bp-primary-light: var(--primary-light, #FFEBE8);
+    --bp-accent:        #10b981;
+    --bp-accent-hover:  #059669;
+    font-size: 14px;
+    color: var(--bp-text);
+    padding-bottom: 40px;
+}
+
+/* ─── Shared variables for overlays (they live outside .bp-page) ─── */
+.bp-modal-overlay,
+.bp-sheet-overlay,
+.bp-toast {
+    --bp-radius:        10px;
+    --bp-radius-sm:     6px;
+    --bp-border:        var(--border, #e5e7eb);
+    --bp-border-light:  var(--border-light, #f1f3f5);
+    --bp-surface:       var(--surface, #ffffff);
+    --bp-surface-alt:   var(--surface-alt, #f8f9fb);
+    --bp-bg:            var(--background, #f4f5f7);
+    --bp-text:          var(--text, #111827);
+    --bp-text-2:        var(--text-secondary, #4b5563);
+    --bp-text-muted:    var(--text-muted, #9ca3af);
+    --bp-primary:       var(--primary, #FF3138);
+    --bp-primary-light: var(--primary-light, #FFEBE8);
+    --bp-accent:        #10b981;
+    --bp-accent-hover:  #059669;
+}
+
+/* ─── Toolbar ────────────────────────────────────────── */
+.bp-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--bp-surface);
+    border: 1px solid var(--bp-border);
+    border-radius: var(--bp-radius);
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+.bp-search {
+    position: relative;
+    flex: 1;
+    min-width: 180px;
+}
+.bp-search i {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--bp-text-muted);
+    font-size: 13px;
+    pointer-events: none;
+}
+.bp-search input {
+    width: 100%;
+    padding: 9px 12px 9px 34px;
+    font-size: 13px;
+    border: 1px solid var(--bp-border);
+    border-radius: var(--bp-radius-sm);
+    background: var(--bp-bg);
+    color: var(--bp-text);
+    font-family: inherit;
+}
+.bp-search input:focus {
+    outline: none;
+    border-color: var(--bp-primary);
+    background: var(--bp-surface);
+}
+.bp-select {
+    padding: 9px 12px;
+    font-size: 13px;
+    border: 1px solid var(--bp-border);
+    border-radius: var(--bp-radius-sm);
+    background: var(--bp-bg);
+    color: var(--bp-text);
+    cursor: pointer;
+    font-family: inherit;
+}
+.bp-select:focus { outline: none; border-color: var(--bp-primary); }
+.bp-toolbar__stat {
+    margin-left: auto;
+    font-size: 13px;
+    color: var(--bp-text-2);
+}
+.bp-toolbar__stat strong { color: var(--bp-text); font-size: 15px; }
+
+/* ─── Buttons ────────────────────────────────────────── */
+.bp-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: var(--bp-radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+    white-space: nowrap;
+    text-decoration: none;
+}
+.bp-btn--primary {
+    background: var(--bp-primary);
+    color: #fff;
+    border-color: var(--bp-primary);
+}
+.bp-btn--primary:hover { filter: brightness(0.93); transform: translateY(-1px); }
+.bp-btn--accent {
+    background: var(--bp-accent);
+    color: #fff;
+    border-color: var(--bp-accent);
+}
+.bp-btn--accent:hover { background: var(--bp-accent-hover); transform: translateY(-1px); }
+.bp-btn--ghost {
+    background: transparent;
+    color: var(--bp-text-2);
+    border-color: var(--bp-border);
+}
+.bp-btn--ghost:hover {
+    background: var(--bp-surface-alt);
+    color: var(--bp-text);
+    border-color: var(--bp-text-muted);
+}
+.bp-btn--sm { padding: 6px 10px; font-size: 12px; }
+.bp-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+
+/* ─── Progress ───────────────────────────────────────── */
+.bp-progress {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 16px;
+    background: var(--bp-surface);
+    border: 1px solid var(--bp-border);
+    border-radius: var(--bp-radius);
+    margin-bottom: 12px;
+}
+.bp-progress__label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--bp-text-2);
+    flex-shrink: 0;
+}
+.bp-progress__pct {
+    font-weight: 700;
+    color: var(--bp-primary);
+    font-variant-numeric: tabular-nums;
+    min-width: 38px;
+    text-align: right;
+}
+.bp-progress__bar {
+    flex: 1;
+    height: 6px;
+    background: var(--bp-surface-alt);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.bp-progress__fill {
+    height: 100%;
+    width: 0%;
+    background: var(--bp-primary);
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Selection bar ──────────────────────────────────── */
+.bp-selection {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, rgba(255,49,56,0.06), rgba(139,92,246,0.06));
+    border: 1px solid var(--bp-primary);
+    border-radius: var(--bp-radius);
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+.bp-selection__count {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--bp-text);
+}
+.bp-selection__count strong {
+    background: var(--bp-primary);
+    color: #fff;
+    padding: 2px 9px;
+    border-radius: 10px;
+    font-size: 12px;
+}
+.bp-selection__clear {
+    background: transparent;
+    border: none;
+    color: var(--bp-text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+    font-family: inherit;
+}
+.bp-selection__clear:hover { color: var(--bp-primary); }
+.bp-selection__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+/* ─── Table ──────────────────────────────────────────── */
+.bp-table-wrap {
+    background: var(--bp-surface);
+    border: 1px solid var(--bp-border);
+    border-radius: var(--bp-radius);
+    overflow: hidden;
+}
+.bp-table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.bp-table {
+    width: 100%;
+    min-width: 900px;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 13px;
+}
+
+.bp-th {
+    padding: 8px 10px;
+    background: var(--bp-surface-alt);
+    border-bottom: 1px solid var(--bp-border);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--bp-text-muted);
+    text-align: left;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+.bp-th--check { width: 40px; }
+.bp-th--num   { width: 40px; }
+.bp-th--code  { width: 100px; }
+.bp-th--title { min-width: 200px; }
+.bp-th--subject { width: 110px; }
+.bp-th--class { width: 60px; }
+.bp-th--curr  { width: 60px; }
+.bp-th--chapter { width: 100px; }
+.bp-th--tags  { width: 130px; }
+.bp-th--prem  { width: 50px; text-align: center; }
+
+.bp-th > span { display: inline-block; vertical-align: middle; }
+.bp-col-bulk {
+    background: transparent;
+    border: none;
+    color: var(--bp-text-muted);
+    cursor: pointer;
+    padding: 3px 5px;
+    border-radius: 4px;
+    font-size: 10px;
+    margin-left: 4px;
+    transition: all 0.15s;
+    vertical-align: middle;
+}
+.bp-col-bulk:hover {
+    background: var(--bp-primary-light);
+    color: var(--bp-primary);
+}
+
+.bp-row {
+    transition: background 0.1s;
+}
+.bp-row:hover { background: var(--bp-surface-alt); }
+.bp-row.is-selected { background: var(--bp-primary-light); }
+.bp-row.is-active  { background: var(--bp-surface-alt); }
+.bp-row.is-active td:first-child { box-shadow: inset 3px 0 0 var(--bp-primary); }
+
+.bp-td {
+    padding: 0;
+    border-bottom: 1px solid var(--bp-border-light);
+    vertical-align: middle;
+    position: relative;
+}
+.bp-td--num {
+    padding: 10px;
+    color: var(--bp-text-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+.bp-td--check { padding: 10px 6px; text-align: center; }
+
+.bp-cell {
+    padding: 10px;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: background 0.1s;
+    border-radius: 4px;
+    margin: 2px;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+.bp-cell:hover { background: var(--bp-surface-alt); }
+.bp-cell:active { background: var(--bp-primary-light); }
+.bp-cell.is-editing { padding: 0; margin: 0; }
+
+.bp-cell__text {
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bp-cell__text.is-empty { color: var(--bp-text-muted); font-style: italic; }
+.bp-cell--code    .bp-cell__text { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--bp-primary); font-weight: 600; }
+.bp-cell--subject .bp-cell__text { color: var(--bp-text-2); font-size: 12px; }
+.bp-cell--class   .bp-cell__text { color: var(--bp-text-2); font-size: 12px; }
+.bp-cell--curr    .bp-cell__text { color: var(--bp-text-2); font-size: 12px; }
+.bp-cell--tags    .bp-cell__text { color: var(--bp-text-muted); font-size: 11.5px; }
+
+.bp-cell--prem {
+    justify-content: center;
+    cursor: pointer;
+}
+.bp-premium-check {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 24px;
+    height: 24px;
+    border: 1.5px solid var(--bp-border);
+    border-radius: 6px;
+    background: var(--bp-surface);
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+.bp-premium-check:checked {
+    background: var(--bp-primary);
+    border-color: var(--bp-primary);
+}
+.bp-premium-check:checked::after {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 3px;
+    width: 6px;
+    height: 12px;
+    border: solid #fff;
+    border-width: 0 2.5px 2.5px 0;
+    transform: rotate(45deg);
+}
+
+.bp-cell-input,
+.bp-cell-select {
+    width: 100%;
+    height: 100%;
+    min-height: 40px;
+    padding: 9px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--bp-text);
+    background: var(--bp-surface);
+    border: 2px solid var(--bp-primary);
+    border-radius: 4px;
+    outline: none;
+    margin: 0;
+    display: block;
+}
+.bp-cell-input[type="text"] { text-transform: none; }
+.bp-cell-input--code {
+    font-family: ui-monospace, Menlo, monospace;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-weight: 700;
+    font-size: 13px;
+}
+.bp-cell-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M6 9L1 4h10z' fill='%236B7280'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    background-size: 10px;
+    padding-right: 22px;
+}
+
+.bp-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    padding: 4px;
+}
+.bp-check input { position: absolute; opacity: 0; pointer-events: none; }
+.bp-check span {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    border: 1.5px solid var(--bp-border);
+    background: var(--bp-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+.bp-check input:checked + span {
+    background: var(--bp-primary);
+    border-color: var(--bp-primary);
+}
+.bp-check input:checked + span::after {
+    content: '';
+    width: 5px;
+    height: 10px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg) translate(-1px, -2px);
+}
+
+.bp-row-flag {
+    position: absolute;
+    right: 4px;
+    top: 4px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+.bp-row-flag--high   { background: var(--bp-accent); }
+.bp-row-flag--medium { background: #f59e0b; }
+.bp-row-flag--low    { background: #dc2626; }
+
+.bp-empty {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--bp-text-muted);
+}
+.bp-empty i { font-size: 40px; opacity: 0.4; margin-bottom: 10px; display: block; }
+
+/* ─── Pagination ─────────────────────────────────────── */
+.bp-pagination {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--bp-surface);
+    border: 1px solid var(--bp-border);
+    border-radius: var(--bp-radius);
+    margin-top: 12px;
+}
+.bp-pagination__info { font-size: 13px; color: var(--bp-text-2); }
+.bp-pagination__info strong { color: var(--bp-text); }
+.bp-pagination__spacer { flex: 1; }
+.bp-pagination__size select {
+    padding: 6px 8px;
+    border: 1px solid var(--bp-border);
+    border-radius: 6px;
+    background: var(--bp-bg);
+    font-size: 12px;
+    font-family: inherit;
+    color: var(--bp-text);
+}
+
+/* ─── Bottom sheet ───────────────────────────────────── */
+.bp-sheet-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 1000;
+    animation: bp-fade-in 0.15s ease-out;
+}
+@keyframes bp-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.bp-sheet {
+    background: var(--bp-surface);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.2);
+    width: 100%;
+    max-width: 640px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: bp-sheet-in 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes bp-sheet-in {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+}
+@media (min-width: 720px) {
+    .bp-sheet-overlay { align-items: center; }
+    .bp-sheet {
+        border-radius: 16px;
+        max-height: 85vh;
+        animation: bp-modal-in 0.2s ease-out;
+    }
+    @keyframes bp-modal-in {
+        from { opacity: 0; transform: scale(0.96); }
+        to   { opacity: 1; transform: scale(1); }
+    }
+    .bp-sheet__handle { display: none; }
+}
+
+.bp-sheet__handle {
+    width: 40px;
+    height: 4px;
+    background: var(--bp-border);
+    border-radius: 2px;
+    margin: 10px auto 0;
+    flex-shrink: 0;
+}
+.bp-sheet__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--bp-border);
+}
+.bp-sheet__filename {
+    font-size: 12px;
+    font-family: ui-monospace, Menlo, monospace;
+    color: var(--bp-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+.bp-sheet__close {
+    background: transparent;
+    border: none;
+    font-size: 18px;
+    color: var(--bp-text-muted);
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+.bp-sheet__close:hover { background: var(--bp-surface-alt); color: var(--bp-text); }
+
+.bp-sheet__body {
+    padding: 18px 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+.bp-sheet__footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--bp-border);
+    background: var(--bp-surface-alt);
+}
+.bp-sheet__footer-right {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
+/* ─── Form fields (sheet + modal) ───────────────────── */
+.bp-field { margin-bottom: 14px; }
+.bp-field label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--bp-text-2);
+    margin-bottom: 6px;
+}
+.bp-req { color: var(--bp-primary); }
+.bp-field__mini {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--bp-border);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 11px;
+    color: var(--bp-text-2);
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.bp-field__mini:hover { border-color: var(--bp-primary); color: var(--bp-primary); }
+
+.bp-input {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+    border: 1px solid var(--bp-border);
+    border-radius: var(--bp-radius-sm);
+    background: var(--bp-bg);
+    color: var(--bp-text);
+    transition: all 0.15s;
+    font-family: inherit;
+}
+.bp-input:focus {
+    outline: none;
+    border-color: var(--bp-primary);
+    background: var(--bp-surface);
+    box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.10);
+}
+.bp-input--code {
+    font-family: ui-monospace, Menlo, monospace;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-weight: 700;
+    font-size: 15px;
+}
+.bp-code-row { display: flex; gap: 6px; }
+.bp-code-row .bp-input { flex: 1; }
+.bp-code-row .bp-btn { padding: 8px 12px; }
+
+.bp-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+@media (max-width: 540px) {
+    .bp-grid-2 { grid-template-columns: 1fr; }
+}
+
+.bp-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--bp-bg);
+    border: 1px solid var(--bp-border);
+    border-radius: var(--bp-radius-sm);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--bp-text);
+    font-weight: 500;
+}
+.bp-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.bp-toggle__track {
+    width: 44px;
+    height: 24px;
+    background: #d1d5db;
+    border-radius: 24px;
+    position: relative;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+.bp-toggle__track .bp-toggle__knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.bp-toggle input:checked + .bp-toggle__track { background: var(--bp-primary); }
+.bp-toggle input:checked + .bp-toggle__track .bp-toggle__knob { transform: translateX(20px); }
+.bp-toggle__label { flex: 1; }
+
+.bp-warnings {
+    padding: 10px 12px;
+    background: #FFFBEB;
+    border: 1px solid #FDE68A;
+    border-radius: var(--bp-radius-sm);
+    font-size: 12px;
+    color: #92400E;
+    line-height: 1.5;
+    margin-top: 6px;
+}
+.bp-warnings ul { margin: 4px 0 0; padding-left: 18px; }
+.bp-warnings li { margin-bottom: 3px; }
+
+/* ─── Bulk modal ────────────────────────────────────── */
+.bp-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+}
+.bp-modal {
+    background: var(--bp-surface);
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    width: 100%;
+    max-width: 520px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: bp-modal-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes bp-modal-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+}
+.bp-modal__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--bp-border);
+}
+.bp-modal__head h3 { margin: 0; font-size: 16px; font-weight: 700; color: var(--bp-text); }
+.bp-modal__close {
+    background: transparent;
+    border: none;
+    font-size: 18px;
+    color: var(--bp-text-muted);
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 6px;
+}
+.bp-modal__close:hover { background: var(--bp-surface-alt); color: var(--bp-text); }
+.bp-modal__body { padding: 18px 20px; overflow-y: auto; flex: 1; }
+.bp-modal__foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--bp-border);
+    background: var(--bp-surface-alt);
+}
+
+.bp-radio-group { display: flex; flex-direction: column; gap: 10px; }
+.bp-radio {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--bp-border);
+    border-radius: var(--bp-radius-sm);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 13px;
+    color: var(--bp-text);
+    flex-wrap: wrap;
+}
+.bp-radio:hover { border-color: var(--bp-text-muted); }
+.bp-radio.is-active {
+    border-color: var(--bp-primary);
+    background: var(--bp-primary-light);
+}
+.bp-radio input[type="radio"] { accent-color: var(--bp-primary); flex-shrink: 0; }
+.bp-radio__input {
+    flex: 1;
+    min-width: 140px;
+    padding: 8px 10px;
+    border: 1px solid var(--bp-border);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    background: var(--bp-surface);
+    color: var(--bp-text);
+}
+.bp-radio__input:focus { outline: none; border-color: var(--bp-primary); }
+
+/* ─── Toast ─────────────────────────────────────────── */
+.bp-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bp-text);
+    color: #fff;
+    padding: 12px 18px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    z-index: 2000;
+    max-width: calc(100vw - 32px);
+    animation: bp-toast-in 0.2s ease-out;
+}
+@keyframes bp-toast-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.bp-toast__undo {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.3);
+    color: #fff;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+}
+.bp-toast__undo:hover { background: rgba(255,255,255,0.15); }
+
+/* ─── Dark mode ─────────────────────────────────────── */
+[data-theme="dark"] .bp-page,
+[data-theme="dark"] .bp-modal-overlay,
+[data-theme="dark"] .bp-sheet-overlay,
+[data-theme="dark"] .bp-toast {
+    --bp-surface-alt:  #1f2937;
+    --bp-bg:           #111827;
+    --bp-border-light: #1f2937;
+    --bp-surface:      #1e293b;
+    --bp-border:       #334155;
+    --bp-text:         #f1f5f9;
+    --bp-text-2:       #cbd5e1;
+    --bp-text-muted:   #94a3b8;
+}
+
+[data-theme="dark"] .bp-th { background: #1a1f2e; }
+[data-theme="dark"] .bp-row:hover { background: #1a1f2e; }
+[data-theme="dark"] .bp-row.is-selected { background: rgba(255, 49, 56, 0.10); }
+[data-theme="dark"] .bp-toggle__track { background: #4b5563; }
+[data-theme="dark"] .bp-warnings {
+    background: #3A2E15; border-color: #6B5320; color: #FCD34D;
+}
+</style>
+
+
+<script>
+window.NUUN_BULK = {
+    rows:      {{ rows|tojson }},
+    preselect: {{ preselect|tojson }},
+    subjects:  {{ subjects|tojson }},
+    curricula: {{ curricula|tojson }},
+    classes:   {{ classes|tojson }},
+    total:     {{ total_pending }},
+    canPublish: {{ 'true' if can_publish else 'false' }},
+    csrf:      "{{ csrf_token }}",
+    commitUrl: "{{ url_for('admin_content.pdfs_bulk_workspace_commit') }}"
+};
+
+(function () {
+    'use strict';
+
+    const DATA = window.NUUN_BULK;
+
+    const STATE = {
+        rows:        JSON.parse(JSON.stringify(DATA.rows)),
+        original:    JSON.parse(JSON.stringify(DATA.rows)),
+        selected:    new Set(DATA.preselect || []),
+        activeId:    null,
+        editing:     null,   // { pending_id, field } or null
+        page:        1,
+        perPage:     50,
+        filterText:  '',
+        filterSubject: '',
+        filterStatus: '',
+        sheetId:     null,   // pending_id currently in the bottom sheet
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const tbody = $('bpTableBody');
+    const empty = $('bpEmpty');
+
+    const selectionBar = $('bpSelection');
+    const selectedCount = $('bpSelectedCount');
+    const selectAllBox = $('bpSelectAllVisible');
+
+    const progressFill = $('bpProgressFill');
+    const progressPct = $('bpProgressPct');
+    const editedCountEl = $('bpEditedCount');
+    const totalCountEl = $('bpTotalCount');
+    const pageNumEl = $('bpPageNum');
+    const pageTotalEl = $('bpPageTotal');
+
+    const toast = $('bpToast');
+    const toastMsg = $('bpToastMsg');
+    const toastUndo = $('bpToastUndo');
+
+    const sheet = $('bpSheet');
+    const sheetFilename = $('bpSheetFilename');
+    const sheetWarnings = $('bpWarnings');
+
+    const modal = $('bpModal');
+    const modalTitle = $('bpModalTitle');
+    const modalBody = $('bpModalBody');
+    const modalApplyBtn = $('bpModalApply');
+
+    const fCode = $('bpFCode');
+    const fTitle = $('bpFTitle');
+    const fSubject = $('bpFSubject');
+    const fClass = $('bpFClass');
+    const fCurriculum = $('bpFCurriculum');
+    const fChapter = $('bpFChapter');
+    const fTags = $('bpFTags');
+    const fPremium = $('bpFPremium');
+
+    // ─── Helpers ────────────────────────────────────────
+    const esc = (s) => String(s ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    const subjectName = (code) => {
+        const s = DATA.subjects.find(x => x.code === code);
+        return s ? s.name : (code || '');
+    };
+
+    const ACRONYMS = new Set([
+        'ICT','SST','GPE','GP','PDF','MCQ','CGSE','QA','OK','ID','UI','AI',
+    ]);
+    function cleanTitleClient(raw) {
+        if (!raw) return '';
+        let s = String(raw);
+        if (s.toLowerCase().endsWith('.pdf')) s = s.slice(0, -4);
+        s = s.replace(/[\s_\-\.\,;:\(\)\[\]\{\}\/\\|!?@#$%^*+=~`'"<>]+/g, ' ');
+        s = s.replace(/[^A-Za-z0-9&\s]/g, ' ');
+        s = s.replace(/\s+/g, ' ').trim();
+        if (!s) return '';
+        return s.split(' ').map(w => {
+            if (!w) return '';
+            const U = w.toUpperCase();
+            if (ACRONYMS.has(U)) return U;
+            return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+        }).join(' ');
+    }
+
+    function rowIsEdited(r) {
+        const initial = DATA.rows.find(x => x.pending_id === r.pending_id);
+        if (!initial) return false;
+        return (
+            r.title !== initial.title ||
+            r.subject !== initial.subject ||
+            r.class !== initial.class ||
+            r.curriculum !== initial.curriculum ||
+            r.chapter !== initial.chapter ||
+            r.tags !== initial.tags ||
+            r.is_premium !== initial.is_premium ||
+            r.code !== initial.code
+        );
+    }
+
+    function updateProgress() {
+        const edited = STATE.rows.filter(rowIsEdited).length;
+        const total = STATE.rows.length || 1;
+        const pct = Math.round((edited / total) * 100);
+        progressFill.style.width = pct + '%';
+        progressPct.textContent = pct + '%';
+        editedCountEl.textContent = edited;
+        totalCountEl.textContent = STATE.rows.length;
+    }
+
+    // ─── Filtering ──────────────────────────────────────
+    function filteredRows() {
+        const q = STATE.filterText.toLowerCase().trim();
+        return STATE.rows.filter(r => {
+            if (STATE.filterSubject) {
+                if (STATE.filterSubject === '__none__') {
+                    if (r.subject) return false;
+                } else if (r.subject !== STATE.filterSubject) {
+                    return false;
+                }
+            }
+            if (STATE.filterStatus === 'needs_review' && !r.needs_review) return false;
+            if (STATE.filterStatus === 'edited'   && !rowIsEdited(r)) return false;
+            if (STATE.filterStatus === 'unedited' && rowIsEdited(r)) return false;
+            if (STATE.filterStatus === 'premium'  && !r.is_premium) return false;
+            if (q) {
+                const hay = [
+                    r.code, r.title, r.filename,
+                    subjectName(r.subject), r.class, r.tags, r.chapter,
+                ].join(' ').toLowerCase();
+                if (!hay.includes(q)) return false;
+            }
+            return true;
+        });
+    }
+
+    // ─── Cell renderers ─────────────────────────────────
+    function renderTextCell(field, value, opts) {
+        opts = opts || {};
+        const cls = 'bp-cell bp-cell--' + field;
+        const empty = !value;
+        const text = empty ? (opts.placeholder || '—') : value;
+        return `<div class="${cls}" data-field="${field}">
+            <span class="bp-cell__text ${empty ? 'is-empty' : ''}">${esc(text)}</span>
+        </div>`;
+    }
+
+    function renderSelectCell(field, value, opts) {
+        opts = opts || {};
+        const label = opts.display ? opts.display(value) : (value || '—');
+        const cls = 'bp-cell bp-cell--' + field;
+        const empty = !value;
+        return `<div class="${cls}" data-field="${field}">
+            <span class="bp-cell__text ${empty ? 'is-empty' : ''}">${esc(label)}</span>
+        </div>`;
+    }
+
+    function renderPremiumCell(value) {
+        return `<div class="bp-cell bp-cell--prem" data-field="is_premium">
+            <input type="checkbox" class="bp-premium-check"
+                   data-premium-check="1" ${value ? 'checked' : ''}>
+        </div>`;
+    }
+
+    // ─── Table render ───────────────────────────────────
+    function renderTable() {
+        const rows = filteredRows();
+        const start = (STATE.page - 1) * STATE.perPage;
+        const pageRows = rows.slice(start, start + STATE.perPage);
+        const totalP = Math.max(1, Math.ceil(rows.length / STATE.perPage));
+        if (STATE.page > totalP) STATE.page = totalP;
+
+        tbody.innerHTML = '';
+        empty.hidden = pageRows.length > 0;
+
+        pageRows.forEach((r, i) => {
+            const idx = start + i + 1;
+            const isSel = STATE.selected.has(r.pending_id);
+            const isAct = STATE.activeId === r.pending_id;
+            const dirty = rowIsEdited(r);
+            const conf = r.confidence || 'low';
+
+            const tr = document.createElement('tr');
+            tr.className = 'bp-row'
+                + (isSel ? ' is-selected' : '')
+                + (isAct ? ' is-active' : '');
+            tr.dataset.id = r.pending_id;
+
+            tr.innerHTML = `
+                <td class="bp-td bp-td--check">
+                    <label class="bp-check">
+                        <input type="checkbox" ${isSel ? 'checked' : ''}
+                               data-row-check="${r.pending_id}">
+                        <span></span>
+                    </label>
+                </td>
+                <td class="bp-td bp-td--num">${idx}</td>
+                <td class="bp-td">${renderTextCell('code', r.code)}<span class="bp-row-flag bp-row-flag--${conf}"></span></td>
+                <td class="bp-td">${renderTextCell('title', r.title, { placeholder: '(no title)' })}</td>
+                <td class="bp-td">${renderSelectCell('subject', r.subject, { display: subjectName })}</td>
+                <td class="bp-td">${renderTextCell('class', r.class)}</td>
+                <td class="bp-td">${renderTextCell('curriculum', r.curriculum)}</td>
+                <td class="bp-td">${renderTextCell('chapter', r.chapter)}</td>
+                <td class="bp-td">${renderTextCell('tags', r.tags)}</td>
+                <td class="bp-td">${renderPremiumCell(r.is_premium)}</td>
+            `;
+
+            // Checkbox
+            tr.querySelector('input[data-row-check]').addEventListener('change', (e) => {
+                const id = r.pending_id;
+                if (e.target.checked) STATE.selected.add(id);
+                else STATE.selected.delete(id);
+                updateSelectionBar();
+                tr.classList.toggle('is-selected', e.target.checked);
+            });
+
+            // Premium checkbox direct toggle
+            const premCheck = tr.querySelector('input[data-premium-check]');
+            if (premCheck) {
+                premCheck.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    r.is_premium = e.target.checked ? 1 : 0;
+                    updateProgress();
+                });
+            }
+
+            // Cell click → inline edit
+            tr.querySelectorAll('.bp-cell').forEach(cell => {
+                const field = cell.dataset.field;
+                if (field === 'is_premium') return; // handled by checkbox
+                cell.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    startCellEdit(cell, r, field);
+                });
+            });
+
+            // Long-press → bottom sheet
+            attachLongPress(tr, r);
+
+            tbody.appendChild(tr);
+        });
+
+        pageNumEl.textContent = STATE.page;
+        pageTotalEl.textContent = totalP;
+
+        const visibleIds = pageRows.map(r => r.pending_id);
+        selectAllBox.checked = visibleIds.length > 0 &&
+            visibleIds.every(id => STATE.selected.has(id));
+
+        updateSelectionBar();
+        updateProgress();
+    }
+
+    // ─── Inline cell edit ───────────────────────────────
+    function startCellEdit(cell, row, field) {
+        // Prevent duplicate edit
+        if (cell.classList.contains('is-editing')) return;
+
+        const currentValue = row[field] || '';
+        cell.classList.add('is-editing');
+        cell.innerHTML = '';
+
+        let input;
+        if (field === 'subject') {
+            input = document.createElement('select');
+            input.className = 'bp-cell-select';
+            const optNone = document.createElement('option');
+            optNone.value = '';
+            optNone.textContent = '— None —';
+            input.appendChild(optNone);
+            DATA.subjects.forEach(s => {
+                const o = document.createElement('option');
+                o.value = s.code;
+                o.textContent = s.name;
+                if (s.code === currentValue) o.selected = true;
+                input.appendChild(o);
+            });
+        } else if (field === 'class') {
+            input = document.createElement('select');
+            input.className = 'bp-cell-select';
+            DATA.classes.forEach(c => {
+                const o = document.createElement('option');
+                o.value = c;
+                o.textContent = c;
+                if (c === currentValue) o.selected = true;
+                input.appendChild(o);
+            });
+        } else if (field === 'curriculum') {
+            input = document.createElement('select');
+            input.className = 'bp-cell-select';
+            DATA.curricula.forEach(([code, label]) => {
+                const o = document.createElement('option');
+                o.value = code;
+                o.textContent = code;
+                if (code === currentValue) o.selected = true;
+                input.appendChild(o);
+            });
+        } else {
+            input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'bp-cell-input' + (field === 'code' ? ' bp-cell-input--code' : '');
+            input.value = currentValue;
+            if (field === 'code') input.maxLength = 9;
+            if (field === 'title') input.maxLength = 200;
+            if (field === 'chapter') input.maxLength = 100;
+            if (field === 'tags') input.maxLength = 200;
+        }
+
+        cell.appendChild(input);
+
+        let committed = false;
+
+        function commit() {
+            if (committed) return;
+            committed = true;
+
+            let newValue = input.value;
+            if (field === 'code') newValue = newValue.toUpperCase().trim();
+            else newValue = newValue.trim();
+
+            row[field] = newValue;
+            renderTable();
+        }
+
+        function cancel() {
+            if (committed) return;
+            committed = true;
+            renderTable();
+        }
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                input.blur();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancel();
+            }
+        });
+        input.addEventListener('blur', commit);
+        input.addEventListener('change', commit);
+
+        // Focus + select
+        setTimeout(() => {
+            input.focus();
+            if (input.select) {
+                try { input.select(); } catch (e) {}
+            }
+        }, 30);
+    }
+
+    // ─── Long-press handler ─────────────────────────────
+    function attachLongPress(tr, row) {
+        let pressTimer = null;
+        let didLongPress = false;
+
+        const start = () => {
+            didLongPress = false;
+            pressTimer = setTimeout(() => {
+                didLongPress = true;
+                openSheet(row.pending_id);
+            }, 500);
+        };
+        const cancel = () => {
+            if (pressTimer) {
+                clearTimeout(pressTimer);
+                pressTimer = null;
+            }
+        };
+
+        tr.addEventListener('touchstart', start, { passive: true });
+        tr.addEventListener('touchend', cancel);
+        tr.addEventListener('touchcancel', cancel);
+        tr.addEventListener('touchmove', cancel);
+
+        tr.addEventListener('mousedown', (e) => {
+            // Only trigger on left mouse button on the row itself
+            if (e.button !== 0) return;
+            start();
+        });
+        tr.addEventListener('mouseup', cancel);
+        tr.addEventListener('mouseleave', cancel);
+    }
+
+    // ─── Selection ──────────────────────────────────────
+    function updateSelectionBar() {
+        const n = STATE.selected.size;
+        selectionBar.hidden = n === 0;
+        selectedCount.textContent = n;
+    }
+
+    selectAllBox.addEventListener('change', () => {
+        const rows = filteredRows();
+        const start = (STATE.page - 1) * STATE.perPage;
+        const pageIds = rows.slice(start, start + STATE.perPage).map(r => r.pending_id);
+        if (selectAllBox.checked) pageIds.forEach(id => STATE.selected.add(id));
+        else pageIds.forEach(id => STATE.selected.delete(id));
+        renderTable();
+    });
+
+    $('bpClearSelection').addEventListener('click', () => {
+        STATE.selected.clear();
+        renderTable();
+    });
+
+    // ─── Bottom sheet ───────────────────────────────────
+    function openSheet(pendingId) {
+        const r = STATE.rows.find(x => x.pending_id === pendingId);
+        if (!r) return;
+        STATE.sheetId = pendingId;
+
+        sheetFilename.textContent = r.filename || '';
+        fCode.value = r.code || '';
+        fTitle.value = r.title || '';
+        fSubject.value = r.subject || '';
+        fClass.value = r.class || 'F4';
+        fCurriculum.value = r.curriculum || 'PL';
+        fChapter.value = r.chapter || '';
+        fTags.value = r.tags || '';
+        fPremium.checked = !!r.is_premium;
+
+        const warns = Array.isArray(r.warnings) ? r.warnings : [];
+        if (warns.length) {
+            sheetWarnings.hidden = false;
+            sheetWarnings.innerHTML = '<strong>Review suggested:</strong><ul>' +
+                warns.map(w => `<li>${esc(w)}</li>`).join('') + '</ul>';
+        } else {
+            sheetWarnings.hidden = true;
+        }
+
+        sheet.hidden = false;
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeSheet() {
+        sheet.hidden = true;
+        document.body.style.overflow = '';
+        STATE.sheetId = null;
+    }
+
+    function commitSheetToState() {
+        if (!STATE.sheetId) return;
+        const r = STATE.rows.find(x => x.pending_id === STATE.sheetId);
+        if (!r) return;
+        r.code = (fCode.value || '').toUpperCase().trim();
+        r.title = (fTitle.value || '').trim();
+        r.subject = fSubject.value || '';
+        r.class = fClass.value || 'F4';
+        r.curriculum = fCurriculum.value || 'PL';
+        r.chapter = (fChapter.value || '').trim();
+        r.tags = (fTags.value || '').trim();
+        r.is_premium = fPremium.checked ? 1 : 0;
+    }
+
+    $('bpSheetClose').addEventListener('click', closeSheet);
+
+    sheet.addEventListener('click', (e) => {
+        if (e.target === sheet) closeSheet();
+    });
+
+    $('bpReCleanTitle').addEventListener('click', () => {
+        fTitle.value = cleanTitleClient(fTitle.value);
+    });
+
+    fCode.addEventListener('input', function () {
+        let v = this.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+        if (v.length > 4 && v.charAt(4) !== '-') {
+            v = v.slice(0, 4) + '-' + v.slice(4);
+        }
+        this.value = v.slice(0, 9);
+    });
+
+    $('bpRegenCode').addEventListener('click', () => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789';
+        let code = '';
+        for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+        code += '-';
+        for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+        fCode.value = code;
+    });
+
+    $('bpSheetSave').addEventListener('click', () => {
+        commitSheetToState();
+        const currentId = STATE.sheetId;
+        const rows = filteredRows();
+        const i = rows.findIndex(r => r.pending_id === currentId);
+        const next = rows[i + 1];
+        closeSheet();
+        renderTable();
+        if (next) setTimeout(() => openSheet(next.pending_id), 150);
+    });
+
+    $('bpSheetPrev').addEventListener('click', () => {
+        commitSheetToState();
+        const currentId = STATE.sheetId;
+        const rows = filteredRows();
+        const i = rows.findIndex(r => r.pending_id === currentId);
+        const prev = rows[i - 1];
+        if (prev) {
+            closeSheet();
+            renderTable();
+            setTimeout(() => openSheet(prev.pending_id), 150);
+        }
+    });
+
+    $('bpSheetNextUnedited').addEventListener('click', () => {
+        commitSheetToState();
+        const rows = filteredRows();
+        const start = rows.findIndex(r => r.pending_id === STATE.sheetId);
+        const after = rows.slice(start + 1);
+        const next = after.find(r => !rowIsEdited(r)) || rows.find(r => !rowIsEdited(r));
+        if (next) {
+            closeSheet();
+            renderTable();
+            setTimeout(() => openSheet(next.pending_id), 150);
+        } else {
+            showToast('No unedited rows remain', false);
+        }
+    });
+
+    // ─── Column bulk edit ───────────────────────────────
+    document.querySelectorAll('.bp-col-bulk').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openBulkModal(btn.dataset.field);
+        });
+    });
+
+    const FIELD_LABELS = {
+        code:       'Code',
+        title:      'Title',
+        subject:    'Subject',
+        class:      'Class',
+        curriculum: 'Curriculum',
+        chapter:    'Chapter',
+        tags:       'Tags',
+        is_premium: 'Premium',
+    };
+
+    let bulkField = null;
+
+    function openBulkModal(field) {
+        bulkField = field;
+
+        let scope = STATE.selected.size;
+        let scopeLabel = scope > 0
+            ? `${scope} selected row${scope === 1 ? '' : 's'}`
+            : `${filteredRows().length} filtered row${filteredRows().length === 1 ? '' : 's'}`;
+
+        modalTitle.textContent = `Bulk edit ${FIELD_LABELS[field] || field}`;
+        modalApplyBtn.textContent = `Apply to ${scopeLabel}`;
+
+        let html = '';
+        if (field === 'subject') {
+            html = `
+                <div class="bp-radio-group">
+                    <label class="bp-radio is-active">
+                        <input type="radio" name="bkm" value="set" checked>
+                        <span>Set to</span>
+                        <select class="bp-radio__input" id="bkmValue">
+                            <option value="">— None —</option>
+                            ${DATA.subjects.map(s => `<option value="${s.code}">${esc(s.name)}</option>`).join('')}
+                        </select>
+                    </label>
+                    <label class="bp-radio">
+                        <input type="radio" name="bkm" value="clear">
+                        <span>Clear subject</span>
+                    </label>
+                </div>`;
+        } else if (field === 'class') {
+            html = `
+                <div class="bp-radio-group">
+                    <label class="bp-radio is-active">
+                        <input type="radio" name="bkm" value="set" checked>
+                        <span>Set to</span>
+                        <select class="bp-radio__input" id="bkmValue">
+                            ${DATA.classes.map(c => `<option value="${c}">${c}</option>`).join('')}
+                        </select>
+                    </label>
+                </div>`;
+        } else if (field === 'curriculum') {
+            html = `
+                <div class="bp-radio-group">
+                    <label class="bp-radio is-active">
+                        <input type="radio" name="bkm" value="set" checked>
+                        <span>Set to</span>
+                        <select class="bp-radio__input" id="bkmValue">
+                            ${DATA.curricula.map(([code, label]) => `<option value="${code}">${esc(label)}</option>`).join('')}
+                        </select>
+                    </label>
+                </div>`;
+        } else if (field === 'is_premium') {
+            html = `
+                <div class="bp-radio-group">
+                    <label class="bp-radio is-active">
+                        <input type="radio" name="bkm" value="on" checked>
+                        <span>Mark as 💎 Premium</span>
+                    </label>
+                    <label class="bp-radio">
+                        <input type="radio" name="bkm" value="off">
+                        <span>Remove premium</span>
+                    </label>
+                </div>`;
+        } else if (field === 'tags') {
+            html = `
+                <div class="bp-radio-group">
+                    <label class="bp-radio is-active">
+                        <input type="radio" name="bkm" value="replace" checked>
+                        <span>Replace with</span>
+                        <input type="text" class="bp-radio__input" id="bkmValue"
+                               placeholder="e.g. Notes, 2023">
+                    </label>
+                    <label class="bp-radio">
+                        <input type="radio" name="bkm" value="append">
+                        <span>Append</span>
+                        <input type="text" class="bp-radio__input" id="bkmValueAppend"
+                               placeholder="e.g. 2024">
+                    </label>
+                    <label class="bp-radio">
+                        <input type="radio" name="bkm" value="clear">
+                        <span>Clear tags</span>
+                    </label>
+                </div>`;
+        } else if (field === 'code') {
+            html = `
+                <div class="bp-radio-group">
+                    <label class="bp-radio is-active">
+                        <input type="radio" name="bkm" value="regenerate" checked>
+                        <span>Generate new random codes</span>
+                    </label>
+                    <label class="bp-radio">
+                        <input type="radio" name="bkm" value="set">
+                        <span>Set to specific code</span>
+                        <input type="text" class="bp-radio__input" id="bkmValue"
+                               placeholder="XXXX-XXXX" maxlength="9"
+                               style="font-family:monospace;text-transform:uppercase;">
+                    </label>
+                </div>`;
+        } else if (field === 'title') {
+            html = `
+                <div class="bp-radio-group">
+                    <label class="bp-radio is-active">
+                        <input type="radio" name="bkm" value="clean" checked>
+                        <span>Re-run cleaning on each title</span>
+                    </label>
+                    <label class="bp-radio">
+                        <input type="radio" name="bkm" value="set">
+                        <span>Set to same title</span>
+                        <input type="text" class="bp-radio__input" id="bkmValue"
+                               placeholder="Title for all selected">
+                    </label>
+                </div>`;
+        } else {
+            html = `
+                <div class="bp-radio-group">
+                    <label class="bp-radio is-active">
+                        <input type="radio" name="bkm" value="set" checked>
+                        <span>Set to</span>
+                        <input type="text" class="bp-radio__input" id="bkmValue"
+                               placeholder="New value">
+                    </label>
+                    <label class="bp-radio">
+                        <input type="radio" name="bkm" value="clear">
+                        <span>Clear</span>
+                    </label>
+                </div>`;
+        }
+
+        modalBody.innerHTML = html;
+        modal.hidden = false;
+
+        modalBody.querySelectorAll('input[name="bkm"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                modalBody.querySelectorAll('.bp-radio').forEach(el => {
+                    el.classList.toggle('is-active',
+                        el.querySelector('input[name="bkm"]')?.checked);
+                });
+            });
+        });
+
+        setTimeout(() => {
+            const inp = modalBody.querySelector('#bkmValue');
+            if (inp && inp.focus) inp.focus();
+        }, 80);
+    }
+
+    function closeModal() {
+        modal.hidden = true;
+        modalBody.innerHTML = '';
+        bulkField = null;
+    }
+
+    $('bpModalClose').addEventListener('click', closeModal);
+    $('bpModalCancel').addEventListener('click', closeModal);
+
+    modalApplyBtn.addEventListener('click', () => {
+        if (!bulkField) return;
+
+        const chosen = modalBody.querySelector('input[name="bkm"]:checked')?.value;
+        const targetIds = STATE.selected.size > 0
+            ? Array.from(STATE.selected)
+            : filteredRows().map(r => r.pending_id);
+
+        if (!targetIds.length) {
+            showToast('No rows to update', false);
+            return;
+        }
+
+        const before = STATE.rows.map(r => ({ ...r }));
+
+        targetIds.forEach(id => {
+            const r = STATE.rows.find(x => x.pending_id === id);
+            if (!r) return;
+
+            switch (bulkField) {
+                case 'subject': {
+                    if (chosen === 'clear') r.subject = '';
+                    else r.subject = modalBody.querySelector('#bkmValue').value || '';
+                    break;
+                }
+                case 'class':
+                    r.class = modalBody.querySelector('#bkmValue').value || 'F4';
+                    break;
+                case 'curriculum':
+                    r.curriculum = modalBody.querySelector('#bkmValue').value || 'PL';
+                    break;
+                case 'is_premium':
+                    r.is_premium = (chosen === 'on') ? 1 : 0;
+                    break;
+                case 'chapter': {
+                    if (chosen === 'clear') r.chapter = '';
+                    else r.chapter = modalBody.querySelector('#bkmValue').value.trim();
+                    break;
+                }
+                case 'tags': {
+                    if (chosen === 'clear') r.tags = '';
+                    else if (chosen === 'replace') r.tags = modalBody.querySelector('#bkmValue').value.trim();
+                    else if (chosen === 'append') {
+                        const extra = modalBody.querySelector('#bkmValueAppend').value.trim();
+                        if (extra) r.tags = r.tags ? r.tags + ', ' + extra : extra;
+                    }
+                    break;
+                }
+                case 'code': {
+                    if (chosen === 'regenerate') {
+                        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789';
+                        let code = '';
+                        for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+                        code += '-';
+                        for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+                        r.code = code;
+                    } else {
+                        r.code = (modalBody.querySelector('#bkmValue').value || '').toUpperCase().trim();
+                    }
+                    break;
+                }
+                case 'title': {
+                    if (chosen === 'clean') {
+                        r.title = cleanTitleClient(r.title || r.filename || '');
+                    } else {
+                        r.title = modalBody.querySelector('#bkmValue').value.trim();
+                    }
+                    break;
+                }
+            }
+        });
+
+        closeModal();
+        renderTable();
+
+        showToast(
+            `${targetIds.length} row${targetIds.length === 1 ? '' : 's'} updated`,
+            true,
+            () => { STATE.rows = before; renderTable(); }
+        );
+    });
+
+    // ─── Toast ──────────────────────────────────────────
+    let toastTimer = null;
+    function showToast(msg, allowUndo, undoFn) {
+        clearTimeout(toastTimer);
+        toastMsg.textContent = msg;
+        toast.hidden = false;
+        if (allowUndo && typeof undoFn === 'function') {
+            toastUndo.hidden = false;
+            toastUndo.onclick = () => { undoFn(); toast.hidden = true; };
+        } else {
+            toastUndo.hidden = true;
+            toastUndo.onclick = null;
+        }
+        toastTimer = setTimeout(() => { toast.hidden = true; }, allowUndo ? 7000 : 2400);
+    }
+
+    // ─── Pagination ─────────────────────────────────────
+    $('bpPrevPage').addEventListener('click', () => {
+        if (STATE.page > 1) { STATE.page--; renderTable(); scrollTop(); }
+    });
+    $('bpNextPage').addEventListener('click', () => {
+        const total = Math.max(1, Math.ceil(filteredRows().length / STATE.perPage));
+        if (STATE.page < total) { STATE.page++; renderTable(); scrollTop(); }
+    });
+    $('bpPerPage').addEventListener('change', (e) => {
+        STATE.perPage = parseInt(e.target.value, 10) || 50;
+        STATE.page = 1;
+        renderTable();
+    });
+    function scrollTop() {
+        const wrap = document.querySelector('.bp-table-wrap');
+        if (wrap) wrap.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+
+    // ─── Filters ────────────────────────────────────────
+    let filterTimer = null;
+    $('bpSearch').addEventListener('input', (e) => {
+        clearTimeout(filterTimer);
+        filterTimer = setTimeout(() => {
+            STATE.filterText = e.target.value;
+            STATE.page = 1;
+            renderTable();
+        }, 120);
+    });
+    $('bpFilterSubject').addEventListener('change', (e) => {
+        STATE.filterSubject = e.target.value;
+        STATE.page = 1;
+        renderTable();
+    });
+    $('bpFilterStatus').addEventListener('change', (e) => {
+        STATE.filterStatus = e.target.value;
+        STATE.page = 1;
+        renderTable();
+    });
+    $('bpResetFilters').addEventListener('click', () => {
+        $('bpSearch').value = '';
+        $('bpFilterSubject').value = '';
+        $('bpFilterStatus').value = '';
+        STATE.filterText = '';
+        STATE.filterSubject = '';
+        STATE.filterStatus = '';
+        STATE.page = 1;
+        renderTable();
+    });
+
+    // ─── Commit ─────────────────────────────────────────
+    function collectRows(ids) {
+        return ids.map(id => {
+            const r = STATE.rows.find(x => x.pending_id === id);
+            if (!r) return null;
+            return {
+                pending_id: r.pending_id,
+                code:       r.code,
+                title:      r.title,
+                subject:    r.subject || '',
+                curriculum: r.curriculum || 'PL',
+                class:      r.class || 'F4',
+                chapter:    r.chapter || '',
+                tags:       r.tags || '',
+                is_premium: r.is_premium ? 1 : 0,
+            };
+        }).filter(Boolean);
+    }
+
+    function doCommit(ids, mode, btn) {
+        const payload = collectRows(ids);
+        if (!payload.length) { showToast('No rows to commit', false); return; }
+
+        if (btn) {
+            btn.disabled = true;
+            btn.dataset._label = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        }
+
+        fetch(DATA.commitUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': DATA.csrf,
+            },
+            body: JSON.stringify({ rows: payload, mode: mode }),
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.error) { showToast(res.error, false); return; }
+            const staged = res.staged || 0;
+            const published = res.published || 0;
+            const failed = res.failed || 0;
+
+            const committedIds = new Set(payload.map(p => p.pending_id));
+            STATE.rows = STATE.rows.filter(r => !committedIds.has(r.pending_id));
+            STATE.selected.clear();
+            STATE.activeId = null;
+
+            renderTable();
+
+            let msg = mode === 'publish'
+                ? `${published} published · ${staged} staged`
+                : `${staged} staged`;
+            if (failed) msg += ` · ${failed} failed`;
+            showToast(msg, false);
+
+            if (failed && (res.failures || []).length) console.warn(res.failures);
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('Network error — retry', false);
+        })
+        .finally(() => {
+            if (btn && btn.dataset._label) {
+                btn.innerHTML = btn.dataset._label;
+                btn.disabled = false;
+            }
+        });
+    }
+
+    $('bpStageSelected').addEventListener('click', (e) => {
+        doCommit(Array.from(STATE.selected), 'stage', e.currentTarget);
+    });
+
+    const publishBtn = $('bpPublishSelected');
+    if (publishBtn) {
+        publishBtn.addEventListener('click', (e) => {
+            const n = STATE.selected.size;
+            if (!confirm(`Publish ${n} PDF${n === 1 ? '' : 's'} directly to the library?`)) return;
+            doCommit(Array.from(STATE.selected), 'publish', e.currentTarget);
+        });
+    }
+
+    // ─── Init ───────────────────────────────────────────
+    renderTable();
+
+    window.addEventListener('beforeunload', (e) => {
+        if (STATE.rows.filter(rowIsEdited).length > 0) {
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        }
+    });
+
+})();
+</script>
+
+{% endblock %}

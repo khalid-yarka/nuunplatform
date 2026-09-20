@@ -5,7 +5,6 @@
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
-{# ─── Shared pagination macro ────────────────────────────── #}
 {% macro pager(page, total_pages, tab, extra={}) %}
     {% if total_pages > 1 %}
         <nav class="pdf-pager" aria-label="Pagination">
@@ -92,7 +91,6 @@
 
 {% block admin_content %}
 
-{# ───────────── TABS ───────────── #}
 <nav class="pdf-tabs" role="tablist">
     <a href="{{ url_for('admin_content.pdfs', tab='library') }}"
        class="pdf-tab {% if tab == 'library' %}active{% endif %}"
@@ -275,6 +273,10 @@
                 <i class="fas fa-times"></i> Clear
             </a>
         {% endif %}
+        <a href="{{ url_for('admin_content.pdfs_bulk_workspace') }}"
+           class="admin-btn secondary">
+            <i class="fas fa-sliders-h"></i> Bulk workspace
+        </a>
     </form>
 
     {% if pending_list %}
@@ -295,7 +297,7 @@
                     <div class="pdf-staging-spacer"></div>
                     <button type="submit" class="admin-btn primary"
                             id="intakeSuperPublishBtn" disabled>
-                        <i class="fas fa-bolt"></i> Super Publish selected
+                        <i class="fas fa-sliders-h"></i> Open in workspace
                     </button>
                 </div>
         {% endif %}
@@ -376,7 +378,6 @@
    ═══════════════════════════════════════════════════════════ #}
 {% if tab == 'staging' and (can_intake or can_publish) %}
 
-    {# ----- Toolbar (always visible, even when empty) ----- #}
     <div class="pdf-staging-toolbar">
         <a href="{{ url_for('admin_content.pdfs', tab='staging',
                             show_published=('0' if show_published else '1')) }}"
@@ -535,7 +536,6 @@
    ═══════════════════════════════════════════════════════════ #}
 {% if tab == 'unverified' and can_intake %}
 
-    {# ----- Toolbar (always visible, even when empty) ----- #}
     <div class="pdf-staging-toolbar">
         <a href="{{ url_for('admin_content.pdfs', tab='unverified',
                             show_confirmed=('0' if show_confirmed else '1')) }}"

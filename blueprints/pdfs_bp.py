@@ -5,7 +5,7 @@ from flask import (
     redirect, url_for, abort, send_file, Response, jsonify,
 )
 from db import (
-    get_all_pdfs, get_pdf_by_code, get_pdf_by_id,
+    get_all_pdfs, get_main_pdf_count, get_pdf_by_code, get_pdf_by_id,
     increment_pdf_view, increment_pdf_view_by_code,
     get_pdf_distinct_subjects, get_pdf_distinct_classes,
     get_pdf_distinct_curricula,
@@ -24,15 +24,31 @@ logger = logging.getLogger(__name__)
 
 pdfs_bp = Blueprint('pdfs', __name__, url_prefix='/pdfs')
 
+PER_PAGE = 50
+_VALID_SORTS = {'newest', 'oldest', 'popular', 'title_asc', 'title_desc'}
+
 
 @pdfs_bp.route('/')
 def list_pdfs():
     """Public PDF listing – no login required."""
-    subject_filter = request.args.get('subject', '')
-    class_filter = request.args.get('class', '')
-    curriculum_filter = request.args.get('curriculum', '')
-    search_query = request.args.get('search', '').strip()
+    # ── Read and sanitize query args ─────────────────────────────
+    subject_filter   = (request.args.get('subject') or '').strip()
+    class_filter     = (request.args.get('class') or '').strip()
+    curriculum_filter= (request.args.get('curriculum') or '').strip()
+    search_query     = (request.args.get('search') or '').strip()
 
+    sort = (request.args.get('sort') or 'newest').strip()
+    if sort not in _VALID_SORTS:
+        sort = 'newest'
+
+    try:
+        page = int(request.args.get('page') or 1)
+    except (ValueError, TypeError):
+        page = 1
+    if page < 1:
+        page = 1
+
+    # ── Tier + entitlements ──────────────────────────────────────
     user_id = session.get('user_id')
     if user_id:
         user_tier = get_user_tier(user_id)
@@ -43,35 +59,74 @@ def list_pdfs():
         search_level = 0
         can_access_premium = False
 
+    # ── Apply filters only if the user's tier permits ────────────
+    effective_search    = search_query if search_level > 0 else ''
+    effective_subject   = subject_filter if search_level >= 1 else ''
+    effective_curriculum= curriculum_filter if search_level >= 2 else ''
+    effective_class     = class_filter if search_level >= 2 else ''
+
+    # ── Count total matching rows ────────────────────────────────
+    total = get_main_pdf_count(
+        search=effective_search,
+        subject=effective_subject,
+        curriculum=effective_curriculum,
+        class_filter=effective_class,
+    )
+
+    total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
+    if page > total_pages:
+        page = total_pages
+
+    offset = (page - 1) * PER_PAGE
+
+    # ── Fetch one page ───────────────────────────────────────────
     pdfs = get_all_pdfs(
-        limit=100,
-        offset=0,
-        search=search_query if search_level > 0 else '',
-        subject=subject_filter if search_level >= 1 else '',
-        curriculum=curriculum_filter if search_level >= 2 else '',
-        class_filter=class_filter if search_level >= 2 else ''
+        limit=PER_PAGE,
+        offset=offset,
+        search=effective_search,
+        subject=effective_subject,
+        curriculum=effective_curriculum,
+        class_filter=effective_class,
+        sort=sort,
     )
 
     if not can_access_premium:
         pdfs = [p for p in pdfs if not p.get('is_premium', 0)]
 
-    subjects = get_pdf_distinct_subjects() if search_level >= 1 else []
-    classes = get_pdf_distinct_classes() if search_level >= 2 else []
+    # ── Filter dropdown options ──────────────────────────────────
+    subjects  = get_pdf_distinct_subjects()  if search_level >= 1 else []
+    classes   = get_pdf_distinct_classes()   if search_level >= 2 else []
     curricula = get_pdf_distinct_curricula() if search_level >= 2 else []
 
-    return render_template('dashboard/pdfs.html',
-                         pdfs=pdfs,
-                         subjects=subjects,
-                         classes=classes,
-                         curricula=curricula,
-                         subject_filter=subject_filter if search_level >= 1 else '',
-                         class_filter=class_filter if search_level >= 2 else '',
-                         curriculum_filter=curriculum_filter if search_level >= 2 else '',
-                         search_query=search_query if search_level > 0 else '',
-                         search_level=search_level,
-                         user_tier=user_tier,
-                         can_access_premium=can_access_premium,
-                         is_logged_in=bool(user_id))
+    # ── Result range text ────────────────────────────────────────
+    if total == 0:
+        range_start, range_end = 0, 0
+    else:
+        range_start = offset + 1
+        range_end = min(offset + PER_PAGE, total)
+
+    return render_template(
+        'dashboard/pdfs.html',
+        pdfs=pdfs,
+        subjects=subjects,
+        classes=classes,
+        curricula=curricula,
+        subject_filter=effective_subject,
+        class_filter=effective_class,
+        curriculum_filter=effective_curriculum,
+        search_query=effective_search,
+        search_level=search_level,
+        user_tier=user_tier,
+        can_access_premium=can_access_premium,
+        is_logged_in=bool(user_id),
+        sort=sort,
+        page=page,
+        per_page=PER_PAGE,
+        total=total,
+        total_pages=total_pages,
+        range_start=range_start,
+        range_end=range_end,
+    )
 
 
 # ============================================================
@@ -94,7 +149,6 @@ def view_pdf(pdf_id):
         flash('This is a premium resource. Upgrade to access it.', 'error')
         return redirect(url_for('pdfs.list_pdfs'))
 
-    # Bump the counter and reflect the fresh value on the page.
     new_count = increment_pdf_view(pdf_id)
     if new_count is not None:
         pdf['view_count'] = new_count
@@ -164,8 +218,6 @@ def download_pdf(pdf_id):
 
 @pdfs_bp.route('/telegram/<code>')
 def telegram_download(code):
-    """Direct Telegram link – counts as a view since the user is
-    proceeding to fetch the file from the bot."""
     pdf = get_pdf_by_code(code)
     if not pdf:
         flash('PDF not found.', 'error')
@@ -196,7 +248,6 @@ def telegram_download(code):
 
 @pdfs_bp.route('/stream/<code>')
 def stream_pdf(code):
-    """Stream a PDF from Telegram — counts as a view."""
     if 'user_id' not in session:
         return jsonify({'error': 'Please login first.'}), 401
 
@@ -217,7 +268,6 @@ def stream_pdf(code):
     if not bot_pdf:
         return jsonify({'error': 'PDF not available in Telegram storage.'}), 404
 
-    # Count the view as soon as we know we're going to serve bytes.
     increment_pdf_view_by_code(code)
 
     try:
@@ -248,5 +298,4 @@ def stream_pdf(code):
 
 @pdfs_bp.route('/preview/<code>')
 def preview_telegram(code):
-    """Alias for /stream/<code> – used by the 'Preview' button."""
     return stream_pdf(code)
