@@ -91,6 +91,7 @@ def list_pdfs():
     class_filter      = (request.args.get('class') or '').strip()
     curriculum_filter = (request.args.get('curriculum') or '').strip()
     search_query      = (request.args.get('search') or '').strip()
+    saved_only        = request.args.get('saved') == '1'
 
     sort = (request.args.get('sort') or 'newest').strip()
     if sort not in _VALID_SORTS:
@@ -112,46 +113,15 @@ def list_pdfs():
         user_tier = 'free'
         search_level = 0
         can_access_premium = False
+        saved_only = False   # guests can't use the saved view
 
     effective_search     = search_query     if search_level > 0  else ''
     effective_subject    = subject_filter   if search_level >= 1 else ''
     effective_curriculum = curriculum_filter if search_level >= 2 else ''
     effective_class      = class_filter     if search_level >= 2 else ''
 
-    total = get_main_pdf_count(
-        search=effective_search,
-        subject=effective_subject,
-        curriculum=effective_curriculum,
-        class_filter=effective_class,
-    )
-
-    total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
-    if page > total_pages:
-        page = total_pages
-    offset = (page - 1) * PER_PAGE
-
-    # All PDFs (free + premium) reach the template.
-    pdfs = get_all_pdfs(
-        limit=PER_PAGE,
-        offset=offset,
-        search=effective_search,
-        subject=effective_subject,
-        curriculum=effective_curriculum,
-        class_filter=effective_class,
-        sort=sort,
-    )
-
-    subjects  = get_pdf_distinct_subjects()  if search_level >= 1 else []
-    classes   = get_pdf_distinct_classes()   if search_level >= 2 else []
-    curricula = get_pdf_distinct_curricula() if search_level >= 2 else []
-
-    if total == 0:
-        range_start, range_end = 0, 0
-    else:
-        range_start = offset + 1
-        range_end = min(offset + PER_PAGE, total)
-
-    # Per-user save + report state (empty for guests)
+    # Per-user save + report state — computed up front so the saved
+    # view can filter against it.
     saved_ids    = set()
     reported_ids = set()
     if user_id:
@@ -163,6 +133,56 @@ def list_pdfs():
             reported_ids = get_user_reported_pdf_ids(user_id)
         except Exception:
             reported_ids = set()
+
+    # ─── Branch A: saved-only view ──────────────────────────────
+    if saved_only:
+        all_saved = _list_saved_pdfs(
+            saved_ids=saved_ids,
+            search=effective_search,
+            subject=effective_subject,
+            curriculum=effective_curriculum,
+            class_filter=effective_class,
+            sort=sort,
+        )
+        total = len(all_saved)
+        total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
+        if page > total_pages:
+            page = total_pages
+        offset = (page - 1) * PER_PAGE
+        pdfs = all_saved[offset:offset + PER_PAGE]
+
+    # ─── Branch B: normal view (unchanged) ──────────────────────
+    else:
+        total = get_main_pdf_count(
+            search=effective_search,
+            subject=effective_subject,
+            curriculum=effective_curriculum,
+            class_filter=effective_class,
+        )
+        total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
+        if page > total_pages:
+            page = total_pages
+        offset = (page - 1) * PER_PAGE
+
+        pdfs = get_all_pdfs(
+            limit=PER_PAGE,
+            offset=offset,
+            search=effective_search,
+            subject=effective_subject,
+            curriculum=effective_curriculum,
+            class_filter=effective_class,
+            sort=sort,
+        )
+
+    subjects  = get_pdf_distinct_subjects()  if search_level >= 1 else []
+    classes   = get_pdf_distinct_classes()   if search_level >= 2 else []
+    curricula = get_pdf_distinct_curricula() if search_level >= 2 else []
+
+    if total == 0:
+        range_start, range_end = 0, 0
+    else:
+        range_start = offset + 1
+        range_end = min(offset + PER_PAGE, total)
 
     return render_template(
         'dashboard/pdfs.html',
@@ -188,7 +208,58 @@ def list_pdfs():
         saved_pdf_ids=saved_ids,
         reported_pdf_ids=reported_ids,
         report_reasons=_report_reasons(),
+        saved_filter=saved_only,
     )
+
+
+def _list_saved_pdfs(saved_ids, search, subject, curriculum,
+                     class_filter, sort):
+    """
+    Return every saved PDF belonging to the user, filtered and sorted
+    the same way the normal view does. Caller paginates.
+
+    Saved sets are tier-limited (a few dozen rows at most), so
+    iterating them and hitting get_pdf_by_id() is cheap.
+    """
+    if not saved_ids:
+        return []
+
+    items = []
+    for pid in saved_ids:
+        try:
+            p = get_pdf_by_id(pid)
+        except Exception:
+            continue
+        if not p:
+            continue
+        if subject and (p.get('subject') or '') != subject:
+            continue
+        if curriculum and (p.get('curriculum') or '') != curriculum:
+            continue
+        if class_filter and (p.get('class') or '') != class_filter:
+            continue
+        if search:
+            hay = ' '.join([
+                p.get('title') or '',
+                p.get('code') or '',
+                p.get('subject') or '',
+            ]).lower()
+            if search.lower() not in hay:
+                continue
+        items.append(p)
+
+    if sort == 'popular':
+        items.sort(key=lambda x: x.get('view_count') or 0, reverse=True)
+    elif sort == 'title_asc':
+        items.sort(key=lambda x: (x.get('title') or '').lower())
+    elif sort == 'title_desc':
+        items.sort(key=lambda x: (x.get('title') or '').lower(), reverse=True)
+    elif sort == 'oldest':
+        items.sort(key=lambda x: x.get('uploaded_at') or '')
+    else:  # newest
+        items.sort(key=lambda x: x.get('uploaded_at') or '', reverse=True)
+
+    return items
 
 
 # ============================================================
