@@ -9,9 +9,13 @@ from db import (
     increment_pdf_view, increment_pdf_view_by_code,
     get_pdf_distinct_subjects, get_pdf_distinct_classes,
     get_pdf_distinct_curricula,
+    save_pdf_for_user, unsave_pdf_for_user, is_pdf_saved,
+    get_user_saved_pdf_ids, count_user_saved_pdfs,
+    create_pdf_report, user_reported_pdf, get_user_reported_pdf_ids,
 )
 from services.tier_service import (
     can_access_premium_resources, get_user_tier, get_feature_level,
+    get_saved_content_limit,
 )
 from bot.utils import get_bot
 from bot.db import get_bot_pdf_by_code
@@ -28,14 +32,65 @@ PER_PAGE = 50
 _VALID_SORTS = {'newest', 'oldest', 'popular', 'title_asc', 'title_desc'}
 
 
+# ============================================================
+# GUEST ATTEMPT LOGGING
+# ============================================================
+
+def _log_guest_attempt(action: str, pdf=None, pdf_code=None):
+    """
+    Record when a logged-out user tries to perform a gated action.
+    Best-effort — never raises.
+    """
+    try:
+        from activity_logger import log_activity
+        meta = {'action': action}
+        if pdf:
+            meta['pdf_id'] = pdf.get('id')
+            meta['pdf_code'] = pdf.get('code')
+            meta['title'] = pdf.get('title')
+            meta['subject'] = pdf.get('subject')
+        elif pdf_code:
+            meta['pdf_code'] = pdf_code
+
+        msg = f"Guest attempted: {action}"
+        if pdf_code:
+            msg += f" ({pdf_code})"
+
+        log_activity(
+            activity_type='pdf_guest_attempt',
+            message=msg,
+            severity='info',
+            metadata=meta,
+            ip_address=request.headers.get('X-Forwarded-For',
+                                            request.remote_addr or '').split(',')[0].strip(),
+            user_agent=request.headers.get('User-Agent', '')[:200],
+        )
+    except Exception:
+        # Never let logging break the redirect
+        pass
+
+
+def _report_reasons():
+    return [
+        ('wrong_file',    'Wrong file'),
+        ('wrong_metadata','Wrong title, subject, or class'),
+        ('broken_file',   'Broken or unreadable file'),
+        ('duplicate',     'Duplicate PDF'),
+        ('inappropriate', 'Inappropriate content'),
+        ('other',         'Other'),
+    ]
+
+
+# ============================================================
+# LIST
+# ============================================================
+
 @pdfs_bp.route('/')
 def list_pdfs():
-    """Public PDF listing – no login required."""
-    # ── Read and sanitize query args ─────────────────────────────
-    subject_filter   = (request.args.get('subject') or '').strip()
-    class_filter     = (request.args.get('class') or '').strip()
-    curriculum_filter= (request.args.get('curriculum') or '').strip()
-    search_query     = (request.args.get('search') or '').strip()
+    subject_filter    = (request.args.get('subject') or '').strip()
+    class_filter      = (request.args.get('class') or '').strip()
+    curriculum_filter = (request.args.get('curriculum') or '').strip()
+    search_query      = (request.args.get('search') or '').strip()
 
     sort = (request.args.get('sort') or 'newest').strip()
     if sort not in _VALID_SORTS:
@@ -48,7 +103,6 @@ def list_pdfs():
     if page < 1:
         page = 1
 
-    # ── Tier + entitlements ──────────────────────────────────────
     user_id = session.get('user_id')
     if user_id:
         user_tier = get_user_tier(user_id)
@@ -59,13 +113,11 @@ def list_pdfs():
         search_level = 0
         can_access_premium = False
 
-    # ── Apply filters only if the user's tier permits ────────────
-    effective_search    = search_query if search_level > 0 else ''
-    effective_subject   = subject_filter if search_level >= 1 else ''
-    effective_curriculum= curriculum_filter if search_level >= 2 else ''
-    effective_class     = class_filter if search_level >= 2 else ''
+    effective_search     = search_query     if search_level > 0  else ''
+    effective_subject    = subject_filter   if search_level >= 1 else ''
+    effective_curriculum = curriculum_filter if search_level >= 2 else ''
+    effective_class      = class_filter     if search_level >= 2 else ''
 
-    # ── Count total matching rows ────────────────────────────────
     total = get_main_pdf_count(
         search=effective_search,
         subject=effective_subject,
@@ -76,10 +128,9 @@ def list_pdfs():
     total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
     if page > total_pages:
         page = total_pages
-
     offset = (page - 1) * PER_PAGE
 
-    # ── Fetch one page ───────────────────────────────────────────
+    # All PDFs (free + premium) reach the template.
     pdfs = get_all_pdfs(
         limit=PER_PAGE,
         offset=offset,
@@ -90,20 +141,28 @@ def list_pdfs():
         sort=sort,
     )
 
-    if not can_access_premium:
-        pdfs = [p for p in pdfs if not p.get('is_premium', 0)]
-
-    # ── Filter dropdown options ──────────────────────────────────
     subjects  = get_pdf_distinct_subjects()  if search_level >= 1 else []
     classes   = get_pdf_distinct_classes()   if search_level >= 2 else []
     curricula = get_pdf_distinct_curricula() if search_level >= 2 else []
 
-    # ── Result range text ────────────────────────────────────────
     if total == 0:
         range_start, range_end = 0, 0
     else:
         range_start = offset + 1
         range_end = min(offset + PER_PAGE, total)
+
+    # Per-user save + report state (empty for guests)
+    saved_ids    = set()
+    reported_ids = set()
+    if user_id:
+        try:
+            saved_ids = get_user_saved_pdf_ids(user_id)
+        except Exception:
+            saved_ids = set()
+        try:
+            reported_ids = get_user_reported_pdf_ids(user_id)
+        except Exception:
+            reported_ids = set()
 
     return render_template(
         'dashboard/pdfs.html',
@@ -126,16 +185,20 @@ def list_pdfs():
         total_pages=total_pages,
         range_start=range_start,
         range_end=range_end,
+        saved_pdf_ids=saved_ids,
+        reported_pdf_ids=reported_ids,
+        report_reasons=_report_reasons(),
     )
 
 
 # ============================================================
-# READ — opens the in-browser reader
+# VIEW
 # ============================================================
 
 @pdfs_bp.route('/view/<pdf_id>')
 def view_pdf(pdf_id):
     if 'user_id' not in session:
+        _log_guest_attempt('view', pdf_code=request.args.get('code'))
         flash('Please login to view PDFs.', 'warning')
         return redirect(url_for('auth.login', next=request.url))
 
@@ -169,12 +232,13 @@ def view_pdf(pdf_id):
 
 
 # ============================================================
-# DOWNLOAD — by id
+# DOWNLOAD
 # ============================================================
 
 @pdfs_bp.route('/download/<pdf_id>')
 def download_pdf(pdf_id):
     if 'user_id' not in session:
+        _log_guest_attempt('download', pdf_code=request.args.get('code'))
         flash('Please login to download PDFs.', 'warning')
         return redirect(url_for('auth.login', next=request.url))
 
@@ -212,16 +276,15 @@ def download_pdf(pdf_id):
     return redirect(url_for('pdfs.telegram_download', code=pdf['code']))
 
 
-# ============================================================
-# TELEGRAM DOWNLOAD — redirect to bot
-# ============================================================
-
 @pdfs_bp.route('/telegram/<code>')
 def telegram_download(code):
     pdf = get_pdf_by_code(code)
     if not pdf:
         flash('PDF not found.', 'error')
         return redirect(url_for('pdfs.list_pdfs'))
+
+    if 'user_id' not in session:
+        _log_guest_attempt('telegram_get', pdf=pdf)
 
     increment_pdf_view_by_code(code)
 
@@ -249,6 +312,7 @@ def telegram_download(code):
 @pdfs_bp.route('/stream/<code>')
 def stream_pdf(code):
     if 'user_id' not in session:
+        _log_guest_attempt('stream', pdf_code=code)
         return jsonify({'error': 'Please login first.'}), 401
 
     user_id = session['user_id']
@@ -299,3 +363,277 @@ def stream_pdf(code):
 @pdfs_bp.route('/preview/<code>')
 def preview_telegram(code):
     return stream_pdf(code)
+
+
+# ============================================================
+# SAVE / UNSAVE
+# ============================================================
+
+@pdfs_bp.route('/<int:pdf_id>/save', methods=['POST'])
+def save_pdf(pdf_id):
+    if 'user_id' not in session:
+        _log_guest_attempt('save', pdf_code=request.form.get('code'))
+        return jsonify({'error': 'Please login first.', 'reason': 'login'}), 401
+
+    user_id = session['user_id']
+    pdf = get_pdf_by_id(pdf_id)
+    if not pdf:
+        return jsonify({'error': 'PDF not found'}), 404
+
+    already = is_pdf_saved(user_id, pdf_id)
+    if not already:
+        limit = get_saved_content_limit(user_id)
+        if limit is not None:
+            current = count_user_saved_pdfs(user_id)
+            if current >= limit:
+                return jsonify({
+                    'error': 'Save limit reached',
+                    'reason': 'quota',
+                    'limit': limit,
+                    'current': current,
+                }), 429
+
+    if not save_pdf_for_user(user_id, pdf_id):
+        return jsonify({'error': 'Could not save'}), 500
+
+    if not already:
+        add_history_entry(
+            user_id=user_id,
+            entry_type='save',
+            action='saved',
+            entry_id=pdf_id,
+            metadata={'title': pdf['title'], 'code': pdf['code'], 'type': 'pdf'},
+        )
+
+    return jsonify({'success': True, 'saved': True})
+
+
+@pdfs_bp.route('/<int:pdf_id>/unsave', methods=['POST'])
+def unsave_pdf(pdf_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Please login first.', 'reason': 'login'}), 401
+
+    user_id = session['user_id']
+    if not unsave_pdf_for_user(user_id, pdf_id):
+        return jsonify({'error': 'Could not unsave'}), 500
+
+    add_history_entry(
+        user_id=user_id,
+        entry_type='save',
+        action='unsaved',
+        entry_id=pdf_id,
+        metadata={'type': 'pdf'},
+    )
+    return jsonify({'success': True, 'saved': False})
+
+
+# ============================================================
+# REPORT
+# ============================================================
+
+@pdfs_bp.route('/<int:pdf_id>/report', methods=['POST'])
+def report_pdf(pdf_id):
+    if 'user_id' not in session:
+        _log_guest_attempt('report', pdf_code=request.form.get('code'))
+        return jsonify({'error': 'Please login first.', 'reason': 'login'}), 401
+
+    user_id = session['user_id']
+    data = request.get_json(silent=True) or {}
+    reason = (data.get('reason') or '').strip()
+    comment = (data.get('comment') or '').strip()[:500]
+
+    valid = {r[0] for r in _report_reasons()}
+    if reason not in valid:
+        return jsonify({'error': 'Please select a valid reason'}), 400
+
+    pdf = get_pdf_by_id(pdf_id)
+    if not pdf:
+        return jsonify({'error': 'PDF not found'}), 404
+
+    if user_reported_pdf(user_id, pdf_id):
+        return jsonify({'error': 'You have already reported this PDF.',
+                        'reason': 'duplicate'}), 409
+
+    if not create_pdf_report(user_id, pdf_id, reason, comment):
+        return jsonify({'error': 'Could not submit report'}), 500
+
+    add_history_entry(
+        user_id=user_id,
+        entry_type='report',
+        action='reported',
+        entry_id=pdf_id,
+        metadata={'title': pdf['title'], 'code': pdf['code'], 'reason': reason},
+    )
+
+    # ── Notify admins ─────────────────────────────────────
+    try:
+        _notify_admins_about_report(user_id, pdf, reason, comment)
+    except Exception as e:
+        logger.warning(f"Failed to notify admins about pdf report: {e}")
+
+    return jsonify({'success': True})
+
+
+# ============================================================
+# Admin notification helpers
+# ============================================================
+
+_REASON_LABELS = {
+    'wrong_file':     'Wrong file',
+    'wrong_metadata': 'Wrong title, subject, or class',
+    'broken_file':    'Broken or unreadable file',
+    'duplicate':      'Duplicate PDF',
+    'inappropriate':  'Inappropriate content',
+    'other':          'Other',
+}
+
+
+def _notify_admins_about_report(reporter_id, pdf, reason, comment):
+    """
+    Send an in-app notification to every admin, plus a Telegram DM to
+    super admins with a rich markdown report.
+    """
+    from db import get_student_by_id
+
+    reporter = get_student_by_id(reporter_id) or {}
+    reporter_name = (
+        f"{reporter.get('first_name', '')} {reporter.get('last_name', '')}"
+    ).strip() or f"User #{reporter_id}"
+    reporter_public = reporter.get('public_id') or '----'
+
+    reason_label = _REASON_LABELS.get(reason, reason)
+
+    title = f"🚩 PDF reported: {pdf.get('title', '')[:60]}"
+    body = (
+        f"{reporter_name} (@{reporter_public}) reported "
+        f"\"{pdf.get('title', '')}\" ({pdf.get('code', '')}) — {reason_label}."
+    )
+    link = f"/admin/reports?type=pdf&id={pdf.get('id')}"
+
+    # ── In-app notification to every admin ─────────────
+    try:
+        from db import execute_with_retry
+        cursor = execute_with_retry(
+            "SELECT id FROM students WHERE is_admin = 1"
+        )
+        admin_ids = [r['id'] for r in cursor.fetchall()]
+
+        from services.notification_service import send_notification
+        for aid in admin_ids:
+            try:
+                send_notification(
+                    user_id=aid,
+                    notification_type='question_report',  # reuse existing type
+                    title=title,
+                    body=body,
+                    link=link,
+                    icon='🚩',
+                    force=True,
+                )
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning(f"In-app admin notify failed: {e}")
+
+    # ── Telegram DM to super admins ────────────────────
+    try:
+        from services.telegram_notify import (
+            notify_super_admins,
+            build_markdown_document,
+            make_report_filename,
+            summary_row,
+            truncate,
+        )
+
+        base_url = (getattr(Config, 'BASE_URL', '') or '').rstrip('/')
+        admin_url = None
+        if base_url:
+            admin_url = f"{base_url}/admin/reports?type=pdf&id={pdf.get('id')}"
+
+        meta = {
+            'type':        'pdf_report',
+            'pdf_id':      pdf.get('id'),
+            'pdf_code':    pdf.get('code'),
+            'reporter_id': reporter_id,
+            'reporter':    reporter_public,
+            'reason':      reason,
+        }
+
+        # PDF details table
+        pdf_table = '\n'.join([
+            '| Field | Value |',
+            '|:--|:--|',
+            f"| Title | {pdf.get('title') or '—'} |",
+            f"| Code | `{pdf.get('code') or '—'}` |",
+            f"| Subject | {pdf.get('subject') or '—'} |",
+            f"| Class | {pdf.get('class') or '—'} |",
+            f"| Curriculum | {pdf.get('curriculum') or '—'} |",
+            f"| Views | {pdf.get('view_count') or 0} |",
+        ])
+
+        # Reporter details table
+        reporter_table = '\n'.join([
+            '| Field | Value |',
+            '|:--|:--|',
+            f"| Name | {reporter_name} |",
+            f"| Public ID | `{reporter_public}` |",
+            f"| Phone | `{reporter.get('phone_number') or '—'}` |",
+            f"| School | {reporter.get('school') or '—'} |",
+            f"| Grade | {reporter.get('grade') or '—'} |",
+        ])
+
+        # Report details
+        report_lines = [
+            f"**Reason:** {reason_label}",
+        ]
+        if comment:
+            report_lines.append("")
+            report_lines.append(f"**Comment:**")
+            report_lines.append(truncate(comment, 500))
+
+        actions = [
+            '- [ ] Open the PDF and verify the metadata',
+            '- [ ] Contact the reporter if more info is needed',
+            '- [ ] Fix or dismiss the report',
+        ]
+        if admin_url:
+            actions.append(f'- [ ] [Open admin →]({admin_url})')
+
+        sections = [
+            ('📄 Reported PDF', pdf_table),
+            ('👤 Reporter', reporter_table),
+            ('📝 Report details', '\n'.join(report_lines)),
+            ('🛠️ Next Steps', '\n'.join(actions)),
+        ]
+
+        md_body = build_markdown_document(
+            title=f"PDF report — {pdf.get('code', '')}",
+            severity='warning',
+            meta=meta,
+            sections=sections,
+            footer_id=f"PDF-{pdf.get('code') or 'UNKNOWN'}",
+        )
+
+        filename = make_report_filename('pdf_report', pdf.get('code') or 'unknown')
+
+        summary = [
+            summary_row('📄', 'PDF', truncate(pdf.get('title', ''), 60)),
+            summary_row('🆔', 'Code', pdf.get('code') or '—'),
+            summary_row('👤', 'Reporter', reporter_name),
+            summary_row('❗', 'Reason', reason_label),
+        ]
+
+        notify_super_admins(
+            event_type='pdf_report',
+            title=f"PDF reported: {pdf.get('code', '')}",
+            md_body=md_body,
+            md_filename=filename,
+            summary=summary,
+            primary_url=admin_url,
+            primary_url_label='Open admin panel',
+            severity='warning',
+            reference_id=f"PDF-{pdf.get('code') or 'UNKNOWN'}",
+            icon='🚩',
+        )
+    except Exception as e:
+        logger.warning(f"Telegram admin notify failed: {e}")

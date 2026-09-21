@@ -1,15 +1,26 @@
 {% extends "dashboard_base.html" %}
 
 {% block title %}{{ _('pdfs.page_title') }} - NuunPlatform{% endblock %}
-
 {% block page_title %}{{ _('pdfs.page_title') }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
 <style>
 /* ═══════════════════════════════════════════════════════════
-   PDFs library page
+   USER PDF LIBRARY
+   Color rules:
+     • Accent   → interactive (buttons, focus, links)
+     • Gold     → premium status (fixed, never changes)
+     • Blue     → Telegram (fixed)
    ═══════════════════════════════════════════════════════════ */
+
+:root {
+    --lib-gold:       #F59E0B;
+    --lib-gold-dark:  #B45309;
+    --lib-gold-light: #FFFBEB;
+    --lib-radius:     14px;
+    --lib-radius-sm:  10px;
+}
 
 /* ─── Focus banner ─── */
 .focus-focus-banner {
@@ -21,7 +32,7 @@
     background: linear-gradient(135deg, var(--primary) 0%, #B91C1C 100%);
     color: #fff;
     margin-bottom: 20px;
-    box-shadow: 0 8px 28px rgba(255, 49, 56, 0.35);
+    box-shadow: 0 8px 28px rgba(var(--primary-rgb, 255 49 56), 0.35);
     position: sticky;
     top: 80px;
     z-index: 50;
@@ -29,53 +40,35 @@
 }
 .focus-focus-banner.visible { display: flex; }
 .focus-focus-banner .ff-icon {
-    width: 44px;
-    height: 44px;
+    width: 44px; height: 44px;
     border-radius: 12px;
     background: rgba(255,255,255,0.22);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 22px;
-    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; flex-shrink: 0;
 }
 .focus-focus-banner .ff-text { flex: 1; min-width: 0; line-height: 1.4; }
 .focus-focus-banner .ff-text .ff-label {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    opacity: 0.85;
-    display: block;
-    margin-bottom: 2px;
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px;
+    opacity: 0.85; display: block; margin-bottom: 2px;
 }
 .focus-focus-banner .ff-text .ff-title {
-    font-size: 16px;
-    font-weight: 700;
-    display: block;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 16px; font-weight: 700;
+    display: block; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
 }
 .focus-focus-banner .ff-text .ff-sub {
-    font-size: 12px;
-    opacity: 0.9;
-    display: block;
-    margin-top: 2px;
+    font-size: 12px; opacity: 0.9;
+    display: block; margin-top: 2px;
 }
 .focus-focus-banner .ff-close {
     background: rgba(255,255,255,0.18);
     border: 1px solid rgba(255,255,255,0.3);
-    color: #fff;
-    border-radius: 8px;
-    padding: 8px 14px;
-    font-size: 13px;
-    font-weight: 600;
+    color: #fff; border-radius: 8px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600;
     cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
+    display: inline-flex; align-items: center; gap: 6px;
+    flex-shrink: 0; font-family: inherit;
 }
 .focus-focus-banner .ff-close:hover { background: rgba(255,255,255,0.3); }
 @keyframes focusBannerIn {
@@ -83,79 +76,75 @@
     to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ─── Page header ─── */
+/* ─── Breadcrumb ─── */
+.breadcrumb {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--text-muted);
+    margin-bottom: 18px;
+}
+.breadcrumb a {
+    color: var(--text-secondary);
+    text-decoration: none; font-weight: 500;
+}
+.breadcrumb a:hover { color: var(--primary); }
+.breadcrumb .separator { opacity: 0.5; }
+.breadcrumb .current { color: var(--text); font-weight: 600; }
+
+/* ─── Header ─── */
 .lib-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 20px;
-    flex-wrap: wrap;
-    margin-bottom: 20px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 20px; flex-wrap: wrap; margin-bottom: 22px;
 }
 .lib-header__left { flex: 1; min-width: 0; }
 .lib-header__title {
-    font-size: 22px;
-    font-weight: 800;
-    color: var(--text);
-    margin: 0 0 4px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    font-size: 24px; font-weight: 800;
+    color: var(--text); margin: 0 0 6px;
+    display: flex; align-items: center; gap: 12px;
+    letter-spacing: -0.01em;
 }
-.lib-header__title i { color: #E74C3C; }
+.lib-header__title i { color: #E74C3C; font-size: 22px; }
 .lib-header__subtitle {
-    color: var(--text-secondary);
-    font-size: 14px;
-    margin: 0;
+    color: var(--text-secondary); font-size: 14px;
+    margin: 0; line-height: 1.5;
 }
 .lib-header__subtitle a {
-    color: var(--primary);
-    font-weight: 600;
-    text-decoration: none;
+    color: var(--primary); font-weight: 600; text-decoration: none;
 }
 .lib-header__subtitle a:hover { text-decoration: underline; }
 .lib-header__right {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
 }
 .lib-quota {
-    font-size: 12px;
-    color: var(--text-muted);
+    font-size: 12px; color: var(--text-muted);
     background: var(--surface);
     border: 1px solid var(--border);
-    padding: 6px 14px;
-    border-radius: 20px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    padding: 7px 14px; border-radius: 20px;
+    display: inline-flex; align-items: center; gap: 6px;
     font-weight: 500;
 }
+.lib-quota i { color: var(--primary); font-size: 12px; }
 
 /* ─── Filter bar ─── */
 .lib-filters {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--lib-radius);
     padding: 14px 16px;
     margin-bottom: 18px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-items: center;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 .lib-search {
     position: relative;
     flex: 1;
-    min-width: 200px;
+    min-width: 220px;
 }
 .lib-search input {
     width: 100%;
-    padding: 10px 40px 10px 38px;
+    padding: 11px 16px 11px 42px;
     font-size: 14px;
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--lib-radius-sm);
     background: var(--background);
     color: var(--text);
     font-family: inherit;
@@ -165,42 +154,93 @@
     outline: none;
     border-color: var(--primary);
     background: var(--surface);
-    box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.10);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb, 255 49 56), 0.12);
 }
-.lib-search input:disabled {
-    background: var(--background);
-    color: var(--text-muted);
-    cursor: not-allowed;
-}
-.lib-search i {
+.lib-search > i {
     position: absolute;
-    left: 12px;
+    left: 14px;
     top: 50%;
     transform: translateY(-50%);
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: 15px;
     pointer-events: none;
-}
-.lib-search__lock {
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 11px;
-    color: var(--primary);
-    font-weight: 700;
+    z-index: 2;
 }
 
+/* ─── Locked search bar ─── */
+.lib-search--locked {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    width: 100%;
+    flex: 1;
+    min-width: 220px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    text-align: left;
+}
+.lib-search--locked input {
+    background: var(--background);
+    color: var(--text-muted);
+    cursor: pointer;
+    padding-right: 100px;
+    border-color: var(--border);
+    width: 100%;
+    opacity: 1;
+}
+.lib-search--locked:hover input {
+    border-color: var(--lib-gold);
+    background: var(--lib-gold-light);
+}
+[data-theme="dark"] .lib-search--locked:hover input {
+    background: rgba(245, 158, 11, 0.08);
+}
+.lib-search--locked > i {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 15px;
+    pointer-events: none;
+    z-index: 2;
+}
+.lib-search--locked:hover > i { color: var(--lib-gold); }
+.lib-search__lock-pill {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: linear-gradient(135deg, var(--lib-gold), var(--lib-gold-dark));
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    padding: 5px 11px;
+    border-radius: 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.28);
+    pointer-events: none;
+    white-space: nowrap;
+}
+.lib-search__lock-pill i { font-size: 10px; }
+
 .lib-select {
-    padding: 10px 12px;
-    font-size: 13px;
+    padding: 11px 12px; font-size: 13px;
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--lib-radius-sm);
     background: var(--background);
     color: var(--text);
-    font-family: inherit;
-    cursor: pointer;
+    font-family: inherit; cursor: pointer;
     min-width: 130px;
+    transition: all 0.15s;
 }
 .lib-select:focus {
     outline: none;
@@ -208,278 +248,426 @@
     background: var(--surface);
 }
 .lib-select:disabled {
-    opacity: 0.6;
+    opacity: 0.55;
     cursor: not-allowed;
 }
 
 .lib-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 10px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    border-radius: 10px;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 11px 18px; font-size: 13px; font-weight: 600;
+    border-radius: var(--lib-radius-sm);
     border: 1px solid transparent;
-    cursor: pointer;
-    text-decoration: none;
+    cursor: pointer; text-decoration: none;
     font-family: inherit;
     transition: all 0.15s;
     white-space: nowrap;
 }
-.lib-btn--primary {
-    background: var(--primary);
-    color: #fff;
-}
-.lib-btn--primary:hover { filter: brightness(0.93); transform: translateY(-1px); }
-.lib-btn--ghost {
-    background: transparent;
-    color: var(--text-secondary);
-    border-color: var(--border);
-}
-.lib-btn--ghost:hover {
-    background: var(--background);
-    color: var(--text);
-}
-.lib-btn--sm { padding: 8px 14px; font-size: 12px; }
-
-/* ─── Active filter chips ─── */
-.lib-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 16px;
-    align-items: center;
-}
-.lib-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 5px 12px;
-    background: var(--primary-light);
-    color: var(--primary);
-    font-size: 12px;
-    font-weight: 600;
-    border-radius: 20px;
-    text-decoration: none;
-    transition: all 0.15s;
-}
-.lib-chip:hover {
-    background: var(--primary);
-    color: #fff;
-}
-.lib-chip i { font-size: 10px; opacity: 0.7; }
-.lib-chip:hover i { opacity: 1; }
-.lib-chips__reset {
-    margin-left: auto;
-    font-size: 12px;
-    color: var(--text-muted);
-    text-decoration: none;
-    font-weight: 600;
-    padding: 5px 12px;
-    border-radius: 20px;
-}
-.lib-chips__reset:hover {
-    color: var(--primary);
-    background: var(--primary-light);
+.lib-btn--primary { background: var(--primary); color: #fff; }
+.lib-btn--primary:hover {
+    filter: brightness(0.93);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(var(--primary-rgb, 255 49 56), 0.25);
 }
 
 /* ─── Results bar ─── */
 .lib-results {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-bottom: 14px;
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px; flex-wrap: wrap; margin-bottom: 16px;
 }
 .lib-results__count {
-    font-size: 13px;
-    color: var(--text-secondary);
+    font-size: 13px; color: var(--text-secondary);
 }
 .lib-results__count strong {
-    color: var(--text);
-    font-weight: 700;
+    color: var(--text); font-weight: 700;
+    font-variant-numeric: tabular-nums;
 }
+
+/* ─── NEW: Saved filter tabs ─── */
+.lib-results__right {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.lib-saved-tabs {
+    display: inline-flex;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--lib-radius-sm);
+    padding: 3px; gap: 2px;
+}
+.lib-saved-tab {
+    background: transparent; border: none;
+    padding: 7px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 13px; font-weight: 600;
+    font-family: inherit;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.lib-saved-tab:hover:not(.is-active):not(:disabled) {
+    color: var(--text);
+}
+.lib-saved-tab.is-active {
+    background: var(--primary-light, rgba(255,49,56,0.08));
+    color: var(--primary);
+}
+.lib-saved-tab:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.lib-saved-tab i { font-size: 11px; }
+.lib-saved-tab__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 9px;
+    background: var(--background);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.lib-saved-tab.is-active .lib-saved-tab__count {
+    background: var(--primary);
+    color: #fff;
+}
+
+/* Saved highlight on a card */
+.pdf-card.is-saved::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--primary);
+    border-radius: var(--lib-radius) 0 0 var(--lib-radius);
+    pointer-events: none;
+}
+.pdf-card.is-premium.is-saved::before {
+    background: var(--lib-gold);
+}
+
+/* Empty state for saved filter */
+.lib-empty--saved .lib-empty__icon {
+    color: var(--primary);
+    opacity: 0.35;
+}
+
 .lib-view-toggle {
     display: inline-flex;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 3px;
-    gap: 2px;
+    border-radius: var(--lib-radius-sm);
+    padding: 3px; gap: 2px;
 }
 .lib-view-toggle button {
-    background: transparent;
-    border: none;
-    padding: 6px 10px;
-    border-radius: 7px;
-    cursor: pointer;
-    color: var(--text-muted);
-    font-size: 13px;
-    transition: all 0.15s;
+    background: transparent; border: none;
+    padding: 7px 11px; border-radius: 7px;
+    cursor: pointer; color: var(--text-muted);
+    font-size: 13px; transition: all 0.15s;
+    font-family: inherit;
 }
 .lib-view-toggle button.active {
     background: var(--primary-light);
     color: var(--primary);
 }
+.lib-view-toggle button:hover:not(.active) { color: var(--text); }
 
 /* ─── Grid ─── */
 .pdf-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 18px;
     margin-bottom: 24px;
 }
-.pdf-grid.list-view {
-    grid-template-columns: 1fr;
-}
+.pdf-grid.list-view { grid-template-columns: 1fr; }
 
 /* ─── Card ─── */
 .pdf-card {
+    position: relative;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--lib-radius);
     padding: 18px;
-    display: flex;
-    flex-direction: column;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
+    display: flex; flex-direction: column;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: hidden;
+    min-height: 190px;
 }
 .pdf-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 10px 28px rgba(0,0,0,0.08);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.09);
     border-color: var(--primary);
 }
+
+/* Premium — always GOLD, never accent */
+.pdf-card.is-premium {
+    background: linear-gradient(180deg,
+        rgba(245, 158, 11, 0.045) 0%,
+        var(--surface) 35%);
+    border-color: rgba(245, 158, 11, 0.32);
+}
+.pdf-card.is-premium:hover {
+    border-color: var(--lib-gold);
+    box-shadow: 0 12px 32px rgba(245, 158, 11, 0.16);
+}
+
+/* Focus highlight — accent ring OUTSIDE the gold border */
 .pdf-card.focus-highlight {
-    border: 2px solid var(--primary) !important;
-    box-shadow: 0 0 0 5px rgba(255, 49, 56, 0.15),
-                0 12px 32px rgba(255, 49, 56, 0.28) !important;
+    box-shadow:
+        0 0 0 6px rgba(var(--primary-rgb, 255 49 56), 0.14),
+        0 12px 32px rgba(var(--primary-rgb, 255 49 56), 0.28);
     transform: translateY(-4px);
 }
+.pdf-card.focus-highlight.is-premium {
+    border-color: var(--lib-gold);
+}
 .pdf-card.focus-highlight::after {
-    content: '🎯 SUGGESTED';
+    content: '🎯';
+    position: absolute;
+    top: 12px; left: 12px;
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--primary), #B91C1C);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    z-index: 3;
+    box-shadow: 0 4px 12px rgba(var(--primary-rgb, 255 49 56), 0.45);
+    animation: focusPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes focusPop {
+    0%   { transform: scale(0); }
+    60%  { transform: scale(1.15); }
+    100% { transform: scale(1); }
+}
+
+/* Top-right: badge + menu side by side */
+.pdf-card__top-right {
     position: absolute;
     top: 12px;
     right: 12px;
-    background: linear-gradient(135deg, var(--primary), #B91C1C);
-    color: #fff;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    padding: 4px 10px;
-    border-radius: 12px;
-    z-index: 3;
-    box-shadow: 0 4px 12px rgba(255, 49, 56, 0.4);
-}
-
-.pdf-card__head {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-    margin-bottom: 12px;
-}
-.pdf-card__icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 11px;
-    background: #FEF2F2;
-    color: #E74C3C;
     display: flex;
     align-items: center;
+    gap: 6px;
+    z-index: 4;
+}
+
+/* Premium badge */
+.pdf-card__badge {
+    background: linear-gradient(135deg, var(--lib-gold), var(--lib-gold-dark));
+    color: #fff;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    padding: 5px 10px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 3px 10px rgba(245, 158, 11, 0.35);
+}
+.pdf-card__badge i { font-size: 9px; }
+
+/* Menu button */
+.pdf-card__menu-btn {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
-    font-size: 20px;
-    flex-shrink: 0;
+    font-size: 13px;
+    padding: 0;
+    font-family: inherit;
+    transition: all 0.15s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.pdf-card__menu-btn:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+}
+.pdf-card.is-premium .pdf-card__menu-btn {
+    border-color: rgba(245, 158, 11, 0.35);
+    color: var(--lib-gold-dark);
+}
+.pdf-card.is-premium .pdf-card__menu-btn:hover {
+    border-color: var(--lib-gold);
+    color: var(--lib-gold-dark);
+    background: var(--lib-gold-light);
+}
+[data-theme="dark"] .pdf-card.is-premium .pdf-card__menu-btn:hover {
+    background: rgba(245, 158, 11, 0.12);
+}
+
+/* Menu dropdown */
+.pdf-card__menu-dropdown {
+    position: absolute;
+    top: 44px;
+    right: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--lib-radius-sm);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+    min-width: 180px;
+    padding: 6px;
+    z-index: 20;
+    animation: menuIn 0.15s ease-out;
+}
+@keyframes menuIn {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.pdf-card__menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 12px;
+    border: none;
+    background: transparent;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    transition: all 0.12s;
+}
+.pdf-card__menu-item:hover {
+    background: var(--background);
+    color: var(--text);
+}
+.pdf-card__menu-item i {
+    width: 16px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.pdf-card__menu-item:hover i { color: var(--primary); }
+.pdf-card__menu-item.is-saved i { color: var(--primary); }
+.pdf-card__menu-item.is-saved { color: var(--primary); font-weight: 600; }
+.pdf-card__menu-item.is-reported i { color: #DC2626; }
+.pdf-card__menu-item.is-reported { color: #DC2626; font-weight: 600; }
+
+/* Card head */
+.pdf-card__head {
+    display: flex; gap: 13px; align-items: flex-start;
+    margin-bottom: 13px;
+    padding-right: 90px;
+}
+.pdf-card__icon {
+    width: 46px; height: 46px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #FEF2F2, #FEE2E2);
+    color: #E74C3C;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+}
+.pdf-card.is-premium .pdf-card__icon {
+    background: linear-gradient(135deg, var(--lib-gold-light), #FEF3C7);
+    color: var(--lib-gold-dark);
 }
 [data-theme="dark"] .pdf-card__icon {
-    background: rgba(231, 76, 60, 0.15);
+    background: linear-gradient(135deg, rgba(231, 76, 60, 0.15), rgba(231, 76, 60, 0.08));
 }
+[data-theme="dark"] .pdf-card.is-premium .pdf-card__icon {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0.08));
+}
+
 .pdf-card__info { flex: 1; min-width: 0; }
 .pdf-card__title {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text);
-    line-height: 1.3;
-    margin: 0 0 4px;
+    font-size: 15px; font-weight: 700;
+    color: var(--text); line-height: 1.35;
+    margin: 0 0 5px;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    letter-spacing: -0.005em;
 }
 .pdf-card__code {
-    font-size: 11px;
+    font-size: 10.5px;
     font-family: ui-monospace, Menlo, monospace;
     color: var(--text-muted);
     font-weight: 600;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
 }
 
+/* Tags */
 .pdf-card__tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    margin-bottom: 10px;
+    display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 11px;
 }
 .pdf-card__tag {
     font-size: 10.5px;
     color: var(--text-secondary);
     background: var(--background);
-    padding: 2px 9px;
-    border-radius: 10px;
+    padding: 3px 10px; border-radius: 10px;
     font-weight: 600;
     text-transform: capitalize;
+    letter-spacing: 0.01em;
 }
-.pdf-card__tag--premium {
-    background: linear-gradient(135deg, var(--primary), #B91C1C);
-    color: #fff;
+.pdf-card.is-premium .pdf-card__tag {
+    background: rgba(245, 158, 11, 0.08);
+    color: var(--lib-gold-dark);
+}
+[data-theme="dark"] .pdf-card.is-premium .pdf-card__tag {
+    background: rgba(245, 158, 11, 0.12);
+    color: #FCD34D;
 }
 
+/* Description */
 .pdf-card__desc {
     font-size: 12.5px;
     color: var(--text-secondary);
-    line-height: 1.5;
-    margin: 0 0 12px;
+    line-height: 1.55;
+    margin: 0 0 13px;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
 
+/* Meta (views removed) */
 .pdf-card__meta {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 14px;
+    font-size: 12px; color: var(--text-muted);
+    margin-bottom: 13px;
 }
 .pdf-card__meta span {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
+    display: inline-flex; align-items: center; gap: 5px;
 }
-.pdf-card__meta i { font-size: 11px; }
+.pdf-card__meta i { font-size: 11px; opacity: 0.7; }
 
+/* Actions */
 .pdf-card__actions {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
+    display: flex; gap: 7px; flex-wrap: wrap;
     margin-top: auto;
-    padding-top: 12px;
-    border-top: 1px solid var(--border-light);
+    padding-top: 14px;
+    border-top: 1px solid var(--border-light, var(--border));
 }
+.pdf-card.is-premium .pdf-card__actions {
+    border-top-color: rgba(245, 158, 11, 0.18);
+}
+
 .pdf-card__btn {
     flex: 1 1 auto;
-    min-width: 70px;
+    min-width: 74px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
-    padding: 8px 10px;
+    gap: 6px;
+    padding: 9px 12px;
     font-size: 12px;
     font-weight: 600;
-    border-radius: 8px;
+    border-radius: 9px;
     text-decoration: none;
     border: 1px solid var(--border);
     background: var(--background);
@@ -489,11 +677,15 @@
     transition: all 0.15s;
     white-space: nowrap;
 }
+.pdf-card__btn i { font-size: 11px; }
 .pdf-card__btn:hover {
     background: var(--surface);
     border-color: var(--primary);
     color: var(--primary);
+    transform: translateY(-1px);
 }
+
+/* Read (Pro) */
 .pdf-card__btn--accent {
     background: var(--primary);
     color: #fff;
@@ -501,66 +693,114 @@
 }
 .pdf-card__btn--accent:hover {
     background: var(--primary);
-    filter: brightness(0.93);
     color: #fff;
-}
-.pdf-card__btn--locked {
-    opacity: 0.65;
-    cursor: pointer;
-}
-.pdf-card__btn--locked:hover {
-    opacity: 1;
-    border-color: var(--primary);
-    color: var(--primary);
+    filter: brightness(0.92);
+    box-shadow: 0 4px 12px rgba(var(--primary-rgb, 255 49 56), 0.25);
 }
 
-/* ─── List view adjustments ─── */
+/* Telegram */
+.pdf-card__btn--telegram {
+    background: linear-gradient(135deg, #0088cc, #0077b5);
+    color: #fff;
+    border-color: transparent;
+}
+.pdf-card__btn--telegram:hover {
+    filter: brightness(0.93);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(0, 136, 204, 0.28);
+}
+
+/* Locked (login or premium) */
+.pdf-card__btn--locked {
+    background: var(--background);
+    color: var(--text-secondary);
+    border-color: var(--border);
+    opacity: 0.85;
+    cursor: pointer;
+    text-decoration: none;
+    position: relative;
+}
+.pdf-card__btn--locked:hover {
+    background: var(--lib-gold-light);
+    border-color: var(--lib-gold);
+    color: var(--lib-gold-dark);
+    opacity: 1;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.18);
+}
+.pdf-card__btn--locked i.fa-lock {
+    font-size: 10px;
+    color: var(--lib-gold-dark);
+}
+[data-theme="dark"] .pdf-card__btn--locked:hover {
+    background: rgba(245, 158, 11, 0.10);
+    border-color: var(--lib-gold);
+    color: #FCD34D;
+}
+[data-theme="dark"] .pdf-card__btn--locked i.fa-lock {
+    color: #FCD34D;
+}
+
+/* ─── List view ─── */
 .pdf-grid.list-view .pdf-card {
-    flex-direction: row;
-    align-items: center;
-    padding: 14px 18px;
-    gap: 16px;
+    flex-direction: row; align-items: center;
+    padding: 14px 20px; gap: 18px;
+    min-height: auto; transform: none;
 }
+.pdf-grid.list-view .pdf-card:hover { transform: none; }
 .pdf-grid.list-view .pdf-card__head {
-    margin-bottom: 0;
-    flex: 0 0 320px;
+    margin-bottom: 0; flex: 0 0 300px; padding-right: 0;
 }
-.pdf-grid.list-view .pdf-card__tags { margin-bottom: 0; flex: 0 0 auto; }
+.pdf-grid.list-view .pdf-card__tags {
+    margin-bottom: 0; flex: 0 0 auto;
+    max-width: 220px; overflow: hidden;
+}
 .pdf-grid.list-view .pdf-card__desc { display: none; }
-.pdf-grid.list-view .pdf-card__meta { margin-bottom: 0; }
+.pdf-grid.list-view .pdf-card__meta { margin-bottom: 0; flex: 0 0 auto; }
 .pdf-grid.list-view .pdf-card__actions {
-    margin-top: 0;
-    padding-top: 0;
-    border-top: none;
+    margin-top: 0; padding-top: 0; border-top: none;
     flex: 0 0 auto;
 }
-@media (max-width: 720px) {
-    .pdf-grid.list-view .pdf-card { flex-direction: column; align-items: stretch; }
-    .pdf-grid.list-view .pdf-card__head { flex: 1 1 auto; }
+.pdf-grid.list-view .pdf-card__actions .pdf-card__btn {
+    flex: 0 0 auto; min-width: 42px;
+}
+.pdf-grid.list-view .pdf-card__top-right {
+    position: static; margin-left: auto;
+}
+.pdf-grid.list-view .pdf-card__menu-dropdown { top: auto; right: 0; }
+.pdf-grid.list-view .pdf-card.focus-highlight::after {
+    top: 50%; left: 8px; transform: translateY(-50%);
+}
+.pdf-grid.list-view .pdf-card.focus-highlight { transform: none; }
+
+@media (max-width: 900px) {
+    .pdf-grid.list-view .pdf-card {
+        flex-direction: column; align-items: stretch;
+    }
+    .pdf-grid.list-view .pdf-card__head {
+        flex: 1 1 auto; padding-right: 90px;
+    }
+    .pdf-grid.list-view .pdf-card__tags { max-width: none; }
+    .pdf-grid.list-view .pdf-card__top-right {
+        position: absolute; top: 12px; right: 12px;
+        margin-left: 0;
+    }
 }
 
 /* ─── Pagination ─── */
 .lib-pagination {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    padding: 20px 0;
+    display: flex; justify-content: center; align-items: center;
+    gap: 6px; flex-wrap: wrap; padding: 24px 0;
 }
 .lib-page {
-    min-width: 38px;
-    height: 38px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 10px;
+    min-width: 40px; height: 40px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--lib-radius-sm);
     background: var(--surface);
     border: 1px solid var(--border);
     color: var(--text-secondary);
     text-decoration: none;
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 13px; font-weight: 600;
     padding: 0 12px;
     transition: all 0.15s;
     font-family: inherit;
@@ -568,77 +808,204 @@
 .lib-page:hover {
     border-color: var(--primary);
     color: var(--primary);
+    transform: translateY(-1px);
 }
 .lib-page.is-active {
     background: var(--primary);
     border-color: var(--primary);
     color: #fff;
+    box-shadow: 0 4px 12px rgba(var(--primary-rgb, 255 49 56), 0.28);
 }
 .lib-page.is-disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    pointer-events: none;
+    opacity: 0.35; cursor: not-allowed; pointer-events: none;
 }
-.lib-page--nav {
-    min-width: 38px;
-    padding: 0 12px;
-}
+.lib-page--nav { min-width: 40px; padding: 0 12px; }
 .lib-page--gap {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    padding: 0 4px;
-    min-width: auto;
+    background: transparent; border: none;
+    color: var(--text-muted); padding: 0 4px; min-width: auto;
 }
 
-/* ─── Empty state ─── */
+/* ─── Empty ─── */
 .lib-empty {
-    padding: 60px 24px;
-    text-align: center;
+    padding: 72px 24px; text-align: center;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--lib-radius);
 }
 .lib-empty__icon {
-    font-size: 56px;
-    opacity: 0.25;
-    margin-bottom: 14px;
-    display: block;
+    font-size: 60px; opacity: 0.22;
+    margin-bottom: 16px; display: block;
 }
 .lib-empty h3 {
-    font-size: 17px;
-    font-weight: 700;
-    color: var(--text);
-    margin: 0 0 6px;
+    font-size: 18px; font-weight: 700;
+    color: var(--text); margin: 0 0 8px;
 }
 .lib-empty p {
+    color: var(--text-secondary); font-size: 14px;
+    margin: 0 0 20px; line-height: 1.5;
+}
+
+/* ─── Report modal ─── */
+.report-modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(2px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000; padding: 16px;
+    animation: rmFade 0.15s ease-out;
+}
+@keyframes rmFade { from { opacity: 0; } to { opacity: 1; } }
+.report-modal {
+    background: var(--surface);
+    border-radius: 16px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+    width: 100%; max-width: 480px;
+    max-height: 90vh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    animation: rmSlide 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes rmSlide {
+    from { opacity: 0; transform: scale(0.96) translateY(8px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.report-modal__header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+}
+.report-modal__header h3 {
+    font-size: 16px; font-weight: 700;
+    color: var(--text); margin: 0;
+    display: flex; align-items: center; gap: 10px;
+}
+.report-modal__header h3 i { color: #DC2626; }
+.report-modal__close {
+    background: transparent; border: none;
+    font-size: 16px; color: var(--text-muted);
+    cursor: pointer; padding: 4px 8px; border-radius: 6px;
+    font-family: inherit;
+}
+.report-modal__close:hover { background: var(--background); color: var(--text); }
+.report-modal__body {
+    padding: 20px 22px; overflow-y: auto; flex: 1;
+}
+.report-modal__field { margin-bottom: 16px; }
+.report-modal__field label {
+    display: block;
+    font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 7px;
+}
+.report-modal__field select,
+.report-modal__field textarea {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--lib-radius-sm);
+    background: var(--background);
+    color: var(--text);
+    font-family: inherit;
+    transition: all 0.15s;
+}
+.report-modal__field select:focus,
+.report-modal__field textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--surface);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb, 255 49 56), 0.10);
+}
+.report-modal__field textarea {
+    resize: vertical; min-height: 80px; max-height: 180px;
+    line-height: 1.5;
+}
+.report-modal__pdf {
+    padding: 10px 12px;
+    background: var(--background);
+    border-radius: var(--lib-radius-sm);
+    font-size: 13px;
     color: var(--text-secondary);
-    font-size: 13.5px;
-    margin: 0 0 18px;
+    margin-bottom: 16px;
+    word-break: break-word;
+}
+.report-modal__pdf strong { color: var(--text); font-weight: 600; }
+.report-modal__footer {
+    display: flex; justify-content: flex-end; gap: 10px;
+    padding: 14px 22px;
+    border-top: 1px solid var(--border);
+    background: var(--surface-alt, var(--background));
+}
+.report-modal__btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 18px;
+    border-radius: var(--lib-radius-sm);
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; border: 1px solid transparent;
+    font-family: inherit; transition: all 0.15s;
+}
+.report-modal__btn--ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    border-color: var(--border);
+}
+.report-modal__btn--ghost:hover {
+    background: var(--background); color: var(--text);
+}
+.report-modal__btn--danger {
+    background: #DC2626; color: #fff; border-color: #DC2626;
+}
+.report-modal__btn--danger:hover {
+    filter: brightness(0.93); transform: translateY(-1px);
+}
+.report-modal__btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+/* ─── Toast ─── */
+.lib-toast {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--text); color: var(--surface);
+    padding: 12px 20px; border-radius: 10px;
+    font-size: 13px; font-weight: 600;
+    display: flex; align-items: center; gap: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.24);
+    z-index: 2000;
+    max-width: calc(100vw - 32px);
+    animation: toastIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes toastIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 /* ─── Responsive ─── */
 @media (max-width: 640px) {
     .focus-focus-banner {
-        flex-direction: column;
-        align-items: stretch;
-        text-align: center;
-        padding: 14px;
-        top: 66px;
+        flex-direction: column; align-items: stretch;
+        text-align: center; padding: 14px; top: 66px;
     }
     .focus-focus-banner .ff-icon { align-self: center; }
     .focus-focus-banner .ff-text .ff-title { white-space: normal; }
-    .lib-header__title { font-size: 18px; }
+    .focus-focus-banner .ff-close { justify-content: center; }
+    .lib-header__title { font-size: 19px; }
     .pdf-grid { grid-template-columns: 1fr; gap: 12px; }
-    .lib-page { min-width: 34px; height: 34px; padding: 0 10px; font-size: 12px; }
+    .pdf-card { padding: 16px; }
+    .lib-page { min-width: 36px; height: 36px; padding: 0 10px; font-size: 12px; }
+    .lib-select { flex: 1; min-width: 0; }
+    .lib-search { min-width: 100%; flex-basis: 100%; }
+    .lib-search--locked { min-width: 100%; flex-basis: 100%; }
+    .lib-results__right { width: 100%; justify-content: space-between; }
 }
 </style>
 {% endblock %}
 
+
 {% block dashboard_content %}
 <div style="max-width: 100%;">
 
-    <!-- FOCUS BANNER -->
+    {# ─── Focus banner ─── #}
     <div id="focusBanner" class="focus-focus-banner" aria-live="polite">
         <span class="ff-icon">🎯</span>
         <div class="ff-text">
@@ -651,13 +1018,14 @@
         </button>
     </div>
 
+    {# ─── Breadcrumb ─── #}
     <div class="breadcrumb">
         <a href="{{ url_for('dashboard.home') if is_logged_in else '#' }}">{{ _('nav.dashboard') }}</a>
         <span class="separator">/</span>
         <span class="current">{{ _('nav.pdfs') }}</span>
     </div>
 
-    <!-- Page header -->
+    {# ─── Header ─── #}
     <div class="lib-header">
         <div class="lib-header__left">
             <h1 class="lib-header__title">
@@ -689,29 +1057,45 @@
         </div>
     </div>
 
-    <!-- Filter bar -->
-    <form method="GET" class="lib-filters" id="filterForm">
-        <input type="hidden" name="sort" value="{{ sort }}">
-
-        <div class="lib-search">
-            {% if search_level == 0 or not is_logged_in %}
-                <i class="fas fa-lock"></i>
-                <input type="text" disabled
-                       placeholder="{{ _('pdfs.search_locked_placeholder') }}"
-                       data-tier-locked data-feature="resource_search" data-required-tier="premium">
-                <span class="lib-search__lock">
-                    {% if not is_logged_in %}{{ _('pdfs.lock_login') }}{% else %}Premium{% endif %}
-                </span>
+    {# ─── Filters ─── #}
+    <form method="GET" class="lib-filters">
+        {% if search_level == 0 or not is_logged_in %}
+            {# ── Locked search bar — visible, clickable, gold lock pill ── #}
+            {% if not is_logged_in %}
+                <a href="{{ url_for('auth.login', next=request.url) }}"
+                   class="lib-search lib-search--locked">
+                    <i class="fas fa-search"></i>
+                    <input type="text" disabled
+                           placeholder="Search title, code, subject…"
+                           aria-label="Search (login required)">
+                    <span class="lib-search__lock-pill">
+                        <i class="fas fa-lock"></i> Login
+                    </span>
+                </a>
             {% else %}
+                <button type="button"
+                        class="lib-search lib-search--locked js-upgrade"
+                        data-feature="resource_search"
+                        data-required-tier="premium">
+                    <i class="fas fa-search"></i>
+                    <input type="text" disabled
+                           placeholder="Search title, code, subject…"
+                           aria-label="Search (premium required)">
+                    <span class="lib-search__lock-pill">
+                        <i class="fas fa-lock"></i> Premium
+                    </span>
+                </button>
+            {% endif %}
+        {% else %}
+            <div class="lib-search">
                 <i class="fas fa-search"></i>
                 <input type="text" name="search" value="{{ search_query }}"
                        placeholder="{{ _('pdfs.search_placeholder') }}"
                        autocomplete="off" spellcheck="false">
-            {% endif %}
-        </div>
+            </div>
+        {% endif %}
 
-        <select name="subject" class="lib-select"
-                onchange="this.form.submit()"
+        <select name="subject" class="lib-select" onchange="this.form.submit()"
                 {% if search_level < 1 %}disabled{% endif %}>
             <option value="">{{ _('pdfs.all_subjects') }}</option>
             {% for sub in subjects %}
@@ -719,8 +1103,7 @@
             {% endfor %}
         </select>
 
-        <select name="class" class="lib-select"
-                onchange="this.form.submit()"
+        <select name="class" class="lib-select" onchange="this.form.submit()"
                 {% if search_level < 2 %}disabled{% endif %}>
             <option value="">{{ _('pdfs.all_classes') }}</option>
             {% for cls in classes %}
@@ -728,8 +1111,7 @@
             {% endfor %}
         </select>
 
-        <select name="curriculum" class="lib-select"
-                onchange="this.form.submit()"
+        <select name="curriculum" class="lib-select" onchange="this.form.submit()"
                 {% if search_level < 2 %}disabled{% endif %}>
             <option value="">{{ _('pdfs.all_curricula') }}</option>
             {% for cur in curricula %}
@@ -737,74 +1119,110 @@
             {% endfor %}
         </select>
 
-        <select name="sort" class="lib-select" onchange="this.form.submit()">
-            <option value="newest"     {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
-            <option value="oldest"     {% if sort == 'oldest' %}selected{% endif %}>Oldest first</option>
-            <option value="popular"    {% if sort == 'popular' %}selected{% endif %}>Most viewed</option>
-            <option value="title_asc"  {% if sort == 'title_asc' %}selected{% endif %}>Title A → Z</option>
-            <option value="title_desc" {% if sort == 'title_desc' %}selected{% endif %}>Title Z → A</option>
-        </select>
-
-        <button type="submit" class="lib-btn lib-btn--primary">
-            <i class="fas fa-search"></i> {{ _('pdfs.search_btn') }}
-        </button>
+        {% if search_level >= 1 and is_logged_in %}
+            <button type="submit" class="lib-btn lib-btn--primary">
+                <i class="fas fa-search"></i> {{ _('pdfs.search_btn') }}
+            </button>
+        {% endif %}
     </form>
 
-    <!-- Active filter chips -->
-    {% set has_filter = search_query or subject_filter or class_filter or curriculum_filter %}
-    {% if has_filter %}
-        <div class="lib-chips">
-            {% if search_query %}
-                <a class="lib-chip" href="{{ url_for('pdfs.list_pdfs', sort=sort) }}">
-                    🔍 {{ search_query }} <i class="fas fa-times"></i>
-                </a>
-            {% endif %}
-            {% if subject_filter %}
-                <a class="lib-chip" href="{{ url_for('pdfs.list_pdfs', search=search_query, class=class_filter, curriculum=curriculum_filter, sort=sort) }}">
-                    📚 {{ subject_filter }} <i class="fas fa-times"></i>
-                </a>
-            {% endif %}
-            {% if class_filter %}
-                <a class="lib-chip" href="{{ url_for('pdfs.list_pdfs', search=search_query, subject=subject_filter, curriculum=curriculum_filter, sort=sort) }}">
-                    🎓 {{ class_filter }} <i class="fas fa-times"></i>
-                </a>
-            {% endif %}
-            {% if curriculum_filter %}
-                <a class="lib-chip" href="{{ url_for('pdfs.list_pdfs', search=search_query, subject=subject_filter, class=class_filter, sort=sort) }}">
-                    🌍 {{ curriculum_filter }} <i class="fas fa-times"></i>
-                </a>
-            {% endif %}
-            <a class="lib-chips__reset" href="{{ url_for('pdfs.list_pdfs') }}">
-                <i class="fas fa-times-circle"></i> Clear all
-            </a>
-        </div>
-    {% endif %}
-
-    <!-- Results bar -->
+    {# ─── Results ─── #}
     {% if pdfs %}
         <div class="lib-results">
             <div class="lib-results__count">
                 Showing <strong>{{ range_start }}–{{ range_end }}</strong>
                 of <strong>{{ total }}</strong> PDF{{ '' if total == 1 else 's' }}
             </div>
-            <div class="lib-view-toggle">
-                <button type="button" id="viewGridBtn" class="active" title="Grid view">
-                    <i class="fas fa-th-large"></i>
-                </button>
-                <button type="button" id="viewListBtn" title="List view">
-                    <i class="fas fa-list"></i>
-                </button>
+
+            {# ─── NEW: All / Saved filter + view toggle ─── #}
+            <div class="lib-results__right">
+                {% if is_logged_in %}
+                <div class="lib-saved-tabs" role="tablist" aria-label="Filter by saved">
+                    <button type="button" class="lib-saved-tab is-active"
+                            id="pdfFilterAll" data-filter="all" role="tab"
+                            aria-selected="true">
+                        All <span class="lib-saved-tab__count">{{ total }}</span>
+                    </button>
+                    <button type="button" class="lib-saved-tab"
+                            id="pdfFilterSaved" data-filter="saved" role="tab"
+                            aria-selected="false">
+                        <i class="fas fa-bookmark"></i>
+                        Saved
+                        <span class="lib-saved-tab__count" id="savedCountBadge">
+                            {{ saved_pdf_ids|length }}
+                        </span>
+                    </button>
+                </div>
+                {% endif %}
+
+                <div class="lib-view-toggle">
+                    <button type="button" id="viewGridBtn" class="active" title="Grid view">
+                        <i class="fas fa-th-large"></i>
+                    </button>
+                    <button type="button" id="viewListBtn" title="List view">
+                        <i class="fas fa-list"></i>
+                    </button>
+                </div>
             </div>
         </div>
 
-        <!-- PDF grid -->
         <div id="pdfGrid" class="pdf-grid">
             {% for pdf in pdfs %}
-                <div class="pdf-card {% if pdf.is_premium and not can_access_premium %}is-premium-locked{% endif %}"
+                {% set tier = normalize_tier(user_tier|default('free')) %}
+                {% set is_premium = pdf.is_premium %}
+                {% set has_url = pdf.file_url is not none and pdf.file_url != '' %}
+                {% set logged_in = is_logged_in|default(false) %}
+                {% set locked = is_premium and not can_access_premium %}
+                {% set is_saved = pdf.id in saved_pdf_ids %}
+                {% set is_reported = pdf.id in reported_pdf_ids %}
+                {% set bot_username = config.TELEGRAM_BOT_USERNAME or 'nuunplatformbot' %}
+
+                <div class="pdf-card {% if is_premium %}is-premium{% endif %}{% if is_saved %} is-saved{% endif %}"
                      data-code="{{ pdf.code }}"
                      data-title="{{ pdf.title }}"
                      data-subject="{{ pdf.subject or '' }}"
+                     data-pdf-id="{{ pdf.id }}"
+                     data-saved="{{ 'true' if is_saved else 'false' }}"
                      id="pdf-{{ pdf.code }}">
+
+                    {# Top-right: badge + menu #}
+                    <div class="pdf-card__top-right">
+                        {% if is_premium %}
+                            <span class="pdf-card__badge">
+                                <i class="fas fa-crown"></i> PREMIUM
+                            </span>
+                        {% endif %}
+                        <button type="button" class="pdf-card__menu-btn"
+                                data-menu-toggle
+                                aria-label="More actions">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                    </div>
+
+                    {# Menu dropdown #}
+                    <div class="pdf-card__menu-dropdown" hidden>
+                        <button type="button"
+                                class="pdf-card__menu-item {% if is_saved %}is-saved{% endif %}"
+                                data-action="save"
+                                data-pdf-id="{{ pdf.id }}"
+                                data-pdf-code="{{ pdf.code }}">
+                            <i class="fas fa-bookmark"></i>
+                            <span class="js-save-label">
+                                {% if is_saved %}Saved{% else %}Save{% endif %}
+                            </span>
+                        </button>
+                        <button type="button"
+                                class="pdf-card__menu-item {% if is_reported %}is-reported{% endif %}"
+                                data-action="report"
+                                data-pdf-id="{{ pdf.id }}"
+                                data-pdf-code="{{ pdf.code }}"
+                                data-pdf-title="{{ pdf.title }}">
+                            <i class="fas fa-flag"></i>
+                            <span class="js-report-label">
+                                {% if is_reported %}Reported{% else %}Report{% endif %}
+                            </span>
+                        </button>
+                    </div>
 
                     <div class="pdf-card__head">
                         <div class="pdf-card__icon">
@@ -817,13 +1235,9 @@
                     </div>
 
                     <div class="pdf-card__tags">
-                        {% if pdf.is_premium %}
-                            <span class="pdf-card__tag pdf-card__tag--premium">💎 Premium</span>
-                        {% endif %}
                         {% if pdf.subject %}<span class="pdf-card__tag">{{ pdf.subject }}</span>{% endif %}
                         {% if pdf.class %}<span class="pdf-card__tag">{{ pdf.class }}</span>{% endif %}
                         {% if pdf.curriculum %}<span class="pdf-card__tag">{{ pdf.curriculum }}</span>{% endif %}
-                        {% if pdf.tags %}<span class="pdf-card__tag">{{ pdf.tags }}</span>{% endif %}
                     </div>
 
                     {% if pdf.description %}
@@ -831,106 +1245,122 @@
                     {% endif %}
 
                     <div class="pdf-card__meta">
-                        <span><i class="fas fa-eye"></i> {{ pdf.view_count or 0 }}</span>
                         <span><i class="fas fa-calendar"></i> {{ (pdf.uploaded_at or '')[:10] }}</span>
                     </div>
 
+                    {# ── Actions: always all three buttons, locked ones show lock icon ── #}
                     <div class="pdf-card__actions">
-                        {% set tier = normalize_tier(user_tier|default('free')) %}
-                        {% set has_url = pdf.file_url is not none and pdf.file_url != '' %}
-                        {% set logged_in = is_logged_in|default(false) %}
-                        {% set bot_username = config.TELEGRAM_BOT_USERNAME or 'nuunplatformbot' %}
+                        {% set read_locked = (not logged_in) or (has_url and locked) %}
+                        {% set preview_locked = (not logged_in) or locked %}
+                        {% set get_locked = not logged_in %}
 
-                        {# Read button — pro only when file_url exists #}
-                        {% if has_url and tier == 'pro' and logged_in %}
-                            <a href="{{ url_for('pdfs.view_pdf', pdf_id=pdf.id) }}"
-                               class="pdf-card__btn pdf-card__btn--accent"
-                               title="{{ _('pdfs.read_online_title') }}">
-                                <i class="fas fa-book-open"></i> Read
-                            </a>
-                        {% elif has_url %}
-                            <button type="button"
-                                    class="pdf-card__btn pdf-card__btn--locked"
-                                    {% if logged_in %}
-                                        data-tier-locked data-feature="direct_view" data-required-tier="pro"
-                                    {% else %}
-                                        onclick="window.location.href='{{ url_for('auth.login', next=request.url) }}'"
-                                    {% endif %}>
-                                <i class="fas fa-lock"></i> Read
-                            </button>
+                        {# READ (only when file_url exists) #}
+                        {% if has_url %}
+                            {% if read_locked %}
+                                {% if not logged_in %}
+                                    <a href="{{ url_for('auth.login', next=request.url) }}"
+                                       class="pdf-card__btn pdf-card__btn--locked"
+                                       title="Login to read">
+                                        <i class="fas fa-lock"></i>
+                                        <span>Read</span>
+                                    </a>
+                                {% else %}
+                                    <button type="button"
+                                            class="pdf-card__btn pdf-card__btn--locked js-upgrade"
+                                            data-feature="premium_resources"
+                                            data-required-tier="premium"
+                                            title="Upgrade to read">
+                                        <i class="fas fa-lock"></i>
+                                        <span>Read</span>
+                                    </button>
+                                {% endif %}
+                            {% else %}
+                                <a href="{{ url_for('pdfs.view_pdf', pdf_id=pdf.id) }}"
+                                   class="pdf-card__btn pdf-card__btn--accent"
+                                   title="{{ _('pdfs.read_online_title') }}">
+                                    <i class="fas fa-book-open"></i>
+                                    <span>Read</span>
+                                </a>
+                            {% endif %}
                         {% endif %}
 
-                        {# Preview button — premium+ #}
-                        {% if tier in ['premium', 'pro'] and logged_in %}
+                        {# PREVIEW #}
+                        {% if preview_locked %}
+                            {% if not logged_in %}
+                                <a href="{{ url_for('auth.login', next=request.url) }}"
+                                   class="pdf-card__btn pdf-card__btn--locked"
+                                   title="Login to preview">
+                                    <i class="fas fa-lock"></i>
+                                    <span>Preview</span>
+                                </a>
+                            {% else %}
+                                <button type="button"
+                                        class="pdf-card__btn pdf-card__btn--locked js-upgrade"
+                                        data-feature="premium_resources"
+                                        data-required-tier="premium"
+                                        title="Upgrade to preview">
+                                    <i class="fas fa-lock"></i>
+                                    <span>Preview</span>
+                                </button>
+                            {% endif %}
+                        {% else %}
                             <a href="{{ url_for('pdfs.preview_telegram', code=pdf.code) }}"
                                target="_blank" rel="noopener"
                                class="pdf-card__btn"
                                title="{{ _('pdfs.preview_telegram_title') }}">
-                                <i class="fas fa-eye"></i> Preview
+                                <i class="fas fa-eye"></i>
+                                <span>Preview</span>
                             </a>
-                        {% else %}
-                            <button type="button"
-                                    class="pdf-card__btn pdf-card__btn--locked"
-                                    {% if logged_in %}
-                                        data-tier-locked data-feature="telegram_view" data-required-tier="premium"
-                                    {% else %}
-                                        onclick="window.location.href='{{ url_for('auth.login', next=request.url) }}'"
-                                    {% endif %}>
-                                <i class="fas fa-lock"></i> Preview
-                            </button>
                         {% endif %}
 
-                        {# Telegram button — always available #}
-                        <a href="https://t.me/{{ bot_username }}?start={{ pdf.code }}"
-                           target="_blank" rel="noopener"
-                           class="pdf-card__btn"
-                           title="{{ _('pdfs.get_telegram_title') }}">
-                            <i class="fab fa-telegram-plane"></i> Get
-                        </a>
-                    </div>
-
-                    {% if pdf.is_premium and not can_access_premium %}
-                        <div class="pdf-card__premium-overlay"
-                             data-tier-locked data-feature="premium_resources" data-required-tier="premium">
-                            <span><i class="fas fa-lock"></i>
-                                {% if not is_logged_in %}
-                                    {{ _('pdfs.premium_lock_login') }}
-                                {% else %}
-                                    {{ _('pdfs.premium_lock_upgrade') }}
-                                {% endif %}
-                            </span>
-                        </div>
-                    {% endif %}
-
-                    {% if not is_logged_in %}
-                        <div class="pdf-card__premium-overlay">
-                            <span>
+                        {# GET #}
+                        {% if get_locked %}
+                            <a href="{{ url_for('auth.login', next=request.url) }}"
+                               class="pdf-card__btn pdf-card__btn--locked"
+                               title="Login to get">
                                 <i class="fas fa-lock"></i>
-                                <a href="{{ url_for('auth.login', next=request.url) }}"
-                                   style="color: var(--primary); text-decoration: none;">
-                                    {{ _('pdfs.login_link') }}
-                                </a>
-                                {{ _('pdfs.login_to_access') }}
-                            </span>
-                        </div>
-                    {% endif %}
+                                <span>Get</span>
+                            </a>
+                        {% else %}
+                            <a href="https://t.me/{{ bot_username }}?start={{ pdf.code }}"
+                               target="_blank" rel="noopener"
+                               class="pdf-card__btn pdf-card__btn--telegram"
+                               title="{{ _('pdfs.get_telegram_title') }}">
+                                <i class="fab fa-telegram-plane"></i>
+                                <span>Get</span>
+                            </a>
+                        {% endif %}
+                    </div>
                 </div>
             {% endfor %}
         </div>
 
-        <!-- Pagination -->
+        {# ─── NEW: Empty state for saved filter ─── #}
+        <div id="savedEmptyState" class="lib-empty lib-empty--saved" style="display:none;">
+            <span class="lib-empty__icon">🔖</span>
+            <h3>No saved PDFs on this page</h3>
+            <p>
+                Tap the <strong>⋮</strong> menu on any PDF and choose <strong>Save</strong>
+                to bookmark it here.
+                {% if total_pages > 1 %}
+                    Saved PDFs may be on other pages — clear the filter to browse.
+                {% endif %}
+            </p>
+            <button type="button" class="lib-btn lib-btn--primary" onclick="document.getElementById('pdfFilterAll').click();">
+                <i class="fas fa-th-large"></i> Show all PDFs
+            </button>
+        </div>
+
+        {# ─── Pagination ─── #}
         {% if total_pages > 1 %}
             <nav class="lib-pagination" aria-label="Pagination">
-                {# Build base query dict once, reused below #}
                 {% set base_args = {
                     'search': search_query or None,
                     'subject': subject_filter or None,
                     'class': class_filter or None,
                     'curriculum': curriculum_filter or None,
-                    'sort': sort if sort != 'newest' else None,
                 } %}
 
-                {# Prev #}
                 {% if page > 1 %}
                     <a href="{{ url_for('pdfs.list_pdfs', page=page-1, **base_args) }}"
                        class="lib-page lib-page--nav">
@@ -942,7 +1372,6 @@
                     </span>
                 {% endif %}
 
-                {# Page numbers with ellipsis #}
                 {% set shown = [] %}
                 {% set win = 2 %}
                 {% for p in range(1, total_pages + 1) %}
@@ -961,7 +1390,6 @@
                     {% set prev.v = p %}
                 {% endfor %}
 
-                {# Next #}
                 {% if page < total_pages %}
                     <a href="{{ url_for('pdfs.list_pdfs', page=page+1, **base_args) }}"
                        class="lib-page lib-page--nav">
@@ -980,57 +1408,34 @@
             <span class="lib-empty__icon">📄</span>
             <h3>{{ _('pdfs.empty_title') }}</h3>
             <p>{{ _('pdfs.empty_desc') }}</p>
-            {% if has_filter %}
-                <a href="{{ url_for('pdfs.list_pdfs') }}" class="lib-btn lib-btn--primary">
-                    <i class="fas fa-times"></i> Clear filters
-                </a>
-            {% endif %}
         </div>
     {% endif %}
 </div>
 
-<style>
-/* Premium + login overlay on card */
-.pdf-card__premium-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.08);
-    backdrop-filter: blur(1.5px);
-    border-radius: var(--radius);
-    cursor: pointer;
-    z-index: 2;
-    transition: all 0.2s;
-}
-.pdf-card__premium-overlay span {
-    background: var(--surface);
-    padding: 8px 18px;
-    border-radius: 24px;
-    font-weight: 700;
-    font-size: 12.5px;
-    color: var(--primary);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    pointer-events: auto;
-}
-.pdf-card__premium-overlay:hover {
-    background: rgba(0, 0, 0, 0.14);
-}
-</style>
+{# ─── Report modal mount point ─── #}
+<div id="reportModalContainer"></div>
 
 <script>
+window.NUUN_PDF = {
+    isLoggedIn: {{ 'true' if is_logged_in else 'false' }},
+    csrfToken: {{ csrf_token|tojson }},
+    loginUrl: {{ url_for('auth.login', next=request.url)|tojson }},
+    reportReasons: {{ report_reasons|tojson }},
+    saveUrlTemplate: '/pdfs/__ID__/save',
+    unsaveUrlTemplate: '/pdfs/__ID__/unsave',
+    reportUrlTemplate: '/pdfs/__ID__/report'
+};
+
 (function () {
     'use strict';
 
-    // ─── View toggle ─────────────────────────────────────────
-    const grid = document.getElementById('pdfGrid');
-    const gridBtn = document.getElementById('viewGridBtn');
-    const listBtn = document.getElementById('viewListBtn');
-    const STORAGE_KEY = 'nuun.pdfs.view';
+    var CFG = window.NUUN_PDF;
+
+    // ─── View toggle ─────────────────────────────────────
+    var grid = document.getElementById('pdfGrid');
+    var gridBtn = document.getElementById('viewGridBtn');
+    var listBtn = document.getElementById('viewListBtn');
+    var STORAGE_KEY = 'nuun.pdfs.view';
 
     function applyView(view) {
         if (!grid) return;
@@ -1039,33 +1444,378 @@
         if (listBtn) listBtn.classList.toggle('active', view === 'list');
         try { localStorage.setItem(STORAGE_KEY, view); } catch (e) {}
     }
-
-    if (gridBtn) gridBtn.addEventListener('click', () => applyView('grid'));
-    if (listBtn) listBtn.addEventListener('click', () => applyView('list'));
-
+    if (gridBtn) gridBtn.addEventListener('click', function () { applyView('grid'); });
+    if (listBtn) listBtn.addEventListener('click', function () { applyView('list'); });
     try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved === 'list') applyView('list');
+        if (localStorage.getItem(STORAGE_KEY) === 'list') applyView('list');
     } catch (e) {}
 
-    // ─── Focus highlight ─────────────────────────────────────
-    const params = new URLSearchParams(window.location.search);
-    const highlightCode = params.get('highlight');
+    // ─── NEW: Saved filter ───────────────────────────────
+    var filterAllBtn = document.getElementById('pdfFilterAll');
+    var filterSavedBtn = document.getElementById('pdfFilterSaved');
+    var savedCountBadge = document.getElementById('savedCountBadge');
+    var savedEmptyState = document.getElementById('savedEmptyState');
+    var FILTER_STORAGE = 'nuun.pdfs.filter';
+
+    function countSaved() {
+        var n = 0;
+        document.querySelectorAll('.pdf-card[data-saved="true"]').forEach(function () { n++; });
+        return n;
+    }
+
+    function updateSavedBadge() {
+        if (savedCountBadge) savedCountBadge.textContent = String(countSaved());
+    }
+
+    function applyFilter(filter) {
+        if (!grid) return;
+
+        var savedCount = 0;
+        var cards = document.querySelectorAll('.pdf-card');
+        cards.forEach(function (card) {
+            var isSaved = card.dataset.saved === 'true';
+            if (isSaved) savedCount++;
+            var show = (filter === 'all') || isSaved;
+            card.style.display = show ? '' : 'none';
+        });
+
+        if (filterAllBtn) filterAllBtn.classList.toggle('is-active', filter === 'all');
+        if (filterSavedBtn) filterSavedBtn.classList.toggle('is-active', filter === 'saved');
+        if (filterAllBtn) filterAllBtn.setAttribute('aria-selected', filter === 'all' ? 'true' : 'false');
+        if (filterSavedBtn) filterSavedBtn.setAttribute('aria-selected', filter === 'saved' ? 'true' : 'false');
+
+        if (savedEmptyState) {
+            savedEmptyState.style.display =
+                (filter === 'saved' && savedCount === 0) ? '' : 'none';
+        }
+        if (grid) {
+            grid.style.display =
+                (filter === 'saved' && savedCount === 0) ? 'none' : '';
+        }
+
+        try { localStorage.setItem(FILTER_STORAGE, filter); } catch (e) {}
+    }
+
+    if (filterAllBtn) {
+        filterAllBtn.addEventListener('click', function () { applyFilter('all'); });
+    }
+    if (filterSavedBtn) {
+        filterSavedBtn.addEventListener('click', function () { applyFilter('saved'); });
+    }
+
+    // Restore last filter preference
+    try {
+        if (localStorage.getItem(FILTER_STORAGE) === 'saved') {
+            applyFilter('saved');
+        }
+    } catch (e) {}
+    updateSavedBadge();
+
+    // ─── Toast ───────────────────────────────────────────
+    var toastTimer = null;
+    function showToast(msg, kind) {
+        var existing = document.querySelector('.lib-toast');
+        if (existing) existing.remove();
+        clearTimeout(toastTimer);
+        var t = document.createElement('div');
+        t.className = 'lib-toast';
+        var icon = kind === 'ok' ? '✓' : kind === 'err' ? '✕' : '•';
+        t.innerHTML = '<span>' + icon + '</span><span>' + msg + '</span>';
+        document.body.appendChild(t);
+        toastTimer = setTimeout(function () { t.remove(); }, 3200);
+    }
+
+    // ─── Menu ────────────────────────────────────────────
+    function closeAllMenus() {
+        document.querySelectorAll('.pdf-card__menu-dropdown').forEach(function (d) {
+            d.hidden = true;
+        });
+    }
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest && e.target.closest('[data-menu-toggle]');
+        if (btn) {
+            e.preventDefault();
+            e.stopPropagation();
+            var card = btn.closest('.pdf-card');
+            var dropdown = card && card.querySelector('.pdf-card__menu-dropdown');
+            if (!dropdown) return;
+            var wasOpen = !dropdown.hidden;
+            closeAllMenus();
+            dropdown.hidden = wasOpen;
+            return;
+        }
+
+        var item = e.target.closest && e.target.closest('.pdf-card__menu-item');
+        if (item) {
+            e.preventDefault();
+            e.stopPropagation();
+            var action = item.dataset.action;
+            var pdfId = item.dataset.pdfId;
+            var card = item.closest('.pdf-card');
+            closeAllMenus();
+
+            if (action === 'save') {
+                handleSaveToggle(card, pdfId, item);
+            } else if (action === 'report') {
+                handleReportOpen(card, pdfId, item.dataset.pdfCode, item.dataset.pdfTitle);
+            }
+            return;
+        }
+
+        if (!e.target.closest || !e.target.closest('.pdf-card__menu-dropdown')) {
+            closeAllMenus();
+        }
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            closeAllMenus();
+            var modal = document.querySelector('.report-modal-overlay');
+            if (modal) modal.remove();
+        }
+    });
+
+    // ─── Save toggle ─────────────────────────────────────
+    function handleSaveToggle(card, pdfId, item) {
+        if (!CFG.isLoggedIn) {
+            window.location.href = CFG.loginUrl;
+            return;
+        }
+
+        var currentlySaved = item.classList.contains('is-saved');
+        var url = (currentlySaved
+            ? CFG.unsaveUrlTemplate
+            : CFG.saveUrlTemplate).replace('__ID__', pdfId);
+
+        item.disabled = true;
+
+        fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'X-CSRF-Token': CFG.csrfToken }
+        })
+        .then(function (r) {
+            return r.json().then(function (d) { return { ok: r.ok, data: d }; });
+        })
+        .then(function (res) {
+            if (!res.ok || res.data.error) {
+                if (res.data && res.data.reason === 'login') {
+                    window.location.href = CFG.loginUrl;
+                    return;
+                }
+                if (res.data && res.data.reason === 'quota') {
+                    showToast('Save limit reached. Upgrade to save more.', 'err');
+                    return;
+                }
+                showToast((res.data && res.data.error) || 'Could not save.', 'err');
+                return;
+            }
+
+            var saved = !!res.data.saved;
+            item.classList.toggle('is-saved', saved);
+            var label = item.querySelector('.js-save-label');
+            if (label) label.textContent = saved ? 'Saved' : 'Save';
+
+            // ─── NEW: keep card, filter, badge in sync ───
+            if (card) {
+                card.dataset.saved = saved ? 'true' : 'false';
+                card.classList.toggle('is-saved', saved);
+            }
+            updateSavedBadge();
+
+            // Re-apply active filter so the card shows/hides immediately
+            var activeFilter = 'all';
+            if (filterSavedBtn && filterSavedBtn.classList.contains('is-active')) {
+                activeFilter = 'saved';
+            }
+            applyFilter(activeFilter);
+
+            showToast(saved ? 'PDF saved.' : 'PDF removed from saves.', 'ok');
+        })
+        .catch(function () {
+            showToast('Network error.', 'err');
+        })
+        .finally(function () {
+            item.disabled = false;
+        });
+    }
+
+    // ─── Report modal ────────────────────────────────────
+    function handleReportOpen(card, pdfId, pdfCode, pdfTitle) {
+        if (!CFG.isLoggedIn) {
+            window.location.href = CFG.loginUrl;
+            return;
+        }
+
+        if (card.classList.contains('is-reported')) {
+            showToast('You already reported this PDF.', 'err');
+            return;
+        }
+
+        var container = document.getElementById('reportModalContainer');
+        if (!container) return;
+
+        var reasonOptions = CFG.reportReasons.map(function (r) {
+            return '<option value="' + r[0] + '">' + r[1] + '</option>';
+        }).join('');
+
+        container.innerHTML = ''
+            + '<div class="report-modal-overlay">'
+            +   '<div class="report-modal" role="dialog" aria-modal="true">'
+            +     '<div class="report-modal__header">'
+            +       '<h3><i class="fas fa-flag"></i> Report this PDF</h3>'
+            +       '<button type="button" class="report-modal__close" data-close>'
+            +         '<i class="fas fa-times"></i>'
+            +       '</button>'
+            +     '</div>'
+            +     '<form class="report-modal__form">'
+            +       '<div class="report-modal__body">'
+            +         '<div class="report-modal__pdf">'
+            +           '<strong>' + escapeHtml(pdfTitle) + '</strong>'
+            +           '<br><span style="font-family:monospace;font-size:12px;">' + escapeHtml(pdfCode) + '</span>'
+            +         '</div>'
+            +         '<div class="report-modal__field">'
+            +           '<label>Reason <span style="color:#DC2626;">*</span></label>'
+            +           '<select name="reason" required>'
+            +             '<option value="">Select a reason...</option>'
+            +             reasonOptions
+            +           '</select>'
+            +         '</div>'
+            +         '<div class="report-modal__field">'
+            +           '<label>Additional details (optional)</label>'
+            +           '<textarea name="comment" maxlength="500" '
+            +             'placeholder="Tell us what\'s wrong..."></textarea>'
+            +         '</div>'
+            +       '</div>'
+            +       '<div class="report-modal__footer">'
+            +         '<button type="button" class="report-modal__btn report-modal__btn--ghost" data-close>Cancel</button>'
+            +         '<button type="submit" class="report-modal__btn report-modal__btn--danger">'
+            +           '<i class="fas fa-flag"></i> Submit report'
+            +         '</button>'
+            +       '</div>'
+            +     '</form>'
+            +   '</div>'
+            + '</div>';
+
+        var modal = container.querySelector('.report-modal-overlay');
+        var form = container.querySelector('.report-modal__form');
+
+        function close() { container.innerHTML = ''; }
+
+        container.querySelectorAll('[data-close]').forEach(function (b) {
+            b.addEventListener('click', close);
+        });
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal) close();
+        });
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var submitBtn = form.querySelector('button[type="submit"]');
+            var reason = form.reason.value;
+            var comment = form.comment.value.trim();
+
+            if (!reason) {
+                showToast('Please select a reason.', 'err');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+
+            var url = CFG.reportUrlTemplate.replace('__ID__', pdfId);
+            fetch(url, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': CFG.csrfToken
+                },
+                body: JSON.stringify({ reason: reason, comment: comment })
+            })
+            .then(function (r) {
+                return r.json().then(function (d) { return { ok: r.ok, data: d }; });
+            })
+            .then(function (res) {
+                if (!res.ok || res.data.error) {
+                    if (res.data && res.data.reason === 'login') {
+                        window.location.href = CFG.loginUrl;
+                        return;
+                    }
+                    showToast((res.data && res.data.error) || 'Could not submit report.', 'err');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fas fa-flag"></i> Submit report';
+                    return;
+                }
+
+                card.classList.add('is-reported');
+                var reportMenuItem = card.querySelector('[data-action="report"]');
+                if (reportMenuItem) {
+                    reportMenuItem.classList.add('is-reported');
+                    var label = reportMenuItem.querySelector('.js-report-label');
+                    if (label) label.textContent = 'Reported';
+                }
+
+                close();
+                showToast('Report submitted. Thank you.', 'ok');
+            })
+            .catch(function () {
+                showToast('Network error.', 'err');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-flag"></i> Submit report';
+            });
+        });
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // ─── Upgrade sheet ───────────────────────────────────
+    document.addEventListener('click', function (e) {
+        var el = e.target.closest && e.target.closest('.js-upgrade');
+        if (!el) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        var feature = el.dataset.feature || 'premium_resources';
+        var requiredTier = el.dataset.requiredTier || 'premium';
+
+        if (typeof window.openUpgradeSheet === 'function') {
+            window.openUpgradeSheet({
+                feature: feature,
+                requiredTier: requiredTier
+            });
+            return;
+        }
+        window.location.href = '/upgrade/?feature=' + encodeURIComponent(feature) +
+                               '&tier=' + encodeURIComponent(requiredTier);
+    });
+
+    // ─── Focus highlight ─────────────────────────────────
+    var params = new URLSearchParams(window.location.search);
+    var highlightCode = params.get('highlight');
     if (!highlightCode) return;
 
-    const card = document.querySelector('.pdf-card[data-code="' + CSS.escape(highlightCode) + '"]');
+    var card = document.querySelector('.pdf-card[data-code="' + CSS.escape(highlightCode) + '"]');
     if (!card) return;
 
-    const title = card.dataset.title || highlightCode;
-    const subject = card.dataset.subject || '';
-    const pagesFromUrl = params.get('pages') || '';
-    const missesFromUrl = params.get('misses') || '';
+    var title = card.dataset.title || highlightCode;
+    var subject = card.dataset.subject || '';
+    var pagesFromUrl = params.get('pages') || '';
+    var missesFromUrl = params.get('misses') || '';
 
-    const banner = document.getElementById('focusBanner');
+    var banner = document.getElementById('focusBanner');
     document.getElementById('focusBannerTitle').textContent = title;
-    const subParts = [];
+    var subParts = [];
     if (subject) subParts.push('📚 ' + subject);
-    if (missesFromUrl) subParts.push('❌ ' + missesFromUrl + ' missed question' + (missesFromUrl === '1' ? '' : 's'));
+    if (missesFromUrl) subParts.push('❌ ' + missesFromUrl + ' missed');
     if (pagesFromUrl) subParts.push('📑 pages ' + pagesFromUrl);
     if (subParts.length === 0) subParts.push('Highlighted below');
     document.getElementById('focusBannerSub').textContent = subParts.join(' · ');
@@ -1074,15 +1824,17 @@
     card.classList.add('focus-highlight');
 
     setTimeout(function () {
-        const rect = card.getBoundingClientRect();
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-        const bannerHeight = banner.offsetHeight || 0;
-        const targetY = rect.top + scrollTop - bannerHeight - 104;
-        window.scrollTo({ top: targetY, behavior: 'smooth' });
+        var rect = card.getBoundingClientRect();
+        var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        var bannerHeight = banner.offsetHeight || 0;
+        window.scrollTo({
+            top: rect.top + scrollTop - bannerHeight - 104,
+            behavior: 'smooth'
+        });
     }, 120);
 
     try {
-        const cleanUrl = window.location.pathname +
+        var cleanUrl = window.location.pathname +
             window.location.search.replace(/([?&])highlight=[^&]*/g, '$1')
                 .replace(/[?&]$/, '').replace(/&&/g, '&');
         history.replaceState({}, '', cleanUrl || window.location.pathname);

@@ -874,3 +874,42 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 
 CREATE INDEX IF NOT EXISTS idx_push_subs_user     ON push_subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_push_subs_endpoint ON push_subscriptions(endpoint);
+
+
+-- ============================================
+-- PDF REPORTS (user-submitted issues)
+-- ============================================
+-- Distinct from question_interactions. A PDF can be reported many times,
+-- each by a different user. One report per user per PDF.
+
+CREATE TABLE IF NOT EXISTS pdf_reports (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL,
+    pdf_id       INTEGER NOT NULL,
+    reason       TEXT NOT NULL CHECK (reason IN (
+                     'wrong_file',
+                     'wrong_metadata',
+                     'broken_file',
+                     'duplicate',
+                     'inappropriate',
+                     'other'
+                 )),
+    comment      TEXT DEFAULT '',
+    status       TEXT DEFAULT 'pending' CHECK (status IN (
+                     'pending', 'resolved', 'dismissed'
+                 )),
+    admin_reply  TEXT,
+    resolved_by  INTEGER,
+    resolved_at  TEXT,
+    created_at   TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (user_id)     REFERENCES students(id) ON DELETE CASCADE,
+    FOREIGN KEY (pdf_id)      REFERENCES pdfs(id) ON DELETE CASCADE,
+    FOREIGN KEY (resolved_by) REFERENCES students(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_pdf_reports_status
+    ON pdf_reports(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pdf_reports_pdf
+    ON pdf_reports(pdf_id);
+CREATE INDEX IF NOT EXISTS idx_pdf_reports_user
+    ON pdf_reports(user_id, created_at DESC);

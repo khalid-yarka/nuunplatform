@@ -2300,3 +2300,86 @@ def pdfs_bulk_workspace_commit():
         pass
 
     return jsonify(results)
+
+@admin_content_bp.route('/pdfs/bulk-action', methods=['POST'],
+                        endpoint='pdfs_bulk_action')
+@admin_can('pdfs.edit')
+def pdfs_bulk_action():
+    """
+    Perform one action on many PDFs at once.
+
+    Body:
+        { "action": "premium_on" | "premium_off" | "delete",
+          "ids": [1, 2, 3] }
+
+    Returns: {"success": True, "affected": N}
+    """
+    if not _csrf_ok():
+        return jsonify({'error': 'Invalid session. Refresh the page.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    action = (data.get('action') or '').strip()
+    raw_ids = data.get('ids') or []
+
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return jsonify({'error': 'No IDs provided'}), 400
+
+    clean_ids = []
+    for i in raw_ids:
+        try:
+            clean_ids.append(int(i))
+        except (ValueError, TypeError):
+            continue
+
+    if not clean_ids:
+        return jsonify({'error': 'No valid IDs'}), 400
+
+    placeholders = ','.join('?' for _ in clean_ids)
+
+    try:
+        if action == 'premium_on':
+            execute_with_retry(
+                f"UPDATE pdfs SET is_premium = 1 WHERE id IN ({placeholders})",
+                tuple(clean_ids), commit=True,
+            )
+            write_audit(
+                action='pdf.bulk_premium_on',
+                target_type='pdf', before=None,
+                after={'count': len(clean_ids), 'ids': clean_ids},
+                severity='info',
+            )
+            return jsonify({'success': True, 'affected': len(clean_ids)})
+
+        if action == 'premium_off':
+            execute_with_retry(
+                f"UPDATE pdfs SET is_premium = 0 WHERE id IN ({placeholders})",
+                tuple(clean_ids), commit=True,
+            )
+            write_audit(
+                action='pdf.bulk_premium_off',
+                target_type='pdf', before=None,
+                after={'count': len(clean_ids), 'ids': clean_ids},
+                severity='info',
+            )
+            return jsonify({'success': True, 'affected': len(clean_ids)})
+
+        if action == 'delete':
+            if not admin_can('pdfs.delete'):
+                return jsonify({'error': 'Delete permission required'}), 403
+            execute_with_retry(
+                f"DELETE FROM pdfs WHERE id IN ({placeholders})",
+                tuple(clean_ids), commit=True,
+            )
+            write_audit(
+                action='pdf.bulk_delete',
+                target_type='pdf', before=None,
+                after={'count': len(clean_ids), 'ids': clean_ids},
+                severity='warning',
+            )
+            return jsonify({'success': True, 'affected': len(clean_ids)})
+
+        return jsonify({'error': f'Unknown action: {action}'}), 400
+
+    except Exception as e:
+        logger.exception(f"bulk action '{action}' failed")
+        return jsonify({'error': str(e)}), 500

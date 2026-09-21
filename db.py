@@ -3495,3 +3495,114 @@ def get_questions_filter_options() -> dict:
         logger.warning(f"get_questions_filter_options: pdf codes failed: {e}")
 
     return result
+
+
+# ============================================
+# PDF SAVES (via the polymorphic saved_content table)
+# ============================================
+
+def save_pdf_for_user(user_id: int, pdf_id: int) -> bool:
+    """Add a PDF to the user's saved items. Idempotent."""
+    try:
+        execute_with_retry("""
+            INSERT OR IGNORE INTO saved_content
+                (user_id, content_type, content_id, saved_at)
+            VALUES (?, 'pdf', ?, ?)
+        """, (user_id, pdf_id, now()), commit=True)
+        return True
+    except Exception as e:
+        logger.error(f"save_pdf_for_user failed: {e}")
+        return False
+
+
+def unsave_pdf_for_user(user_id: int, pdf_id: int) -> bool:
+    """Remove a PDF from the user's saved items."""
+    try:
+        execute_with_retry("""
+            DELETE FROM saved_content
+            WHERE user_id = ? AND content_type = 'pdf' AND content_id = ?
+        """, (user_id, pdf_id), commit=True)
+        return True
+    except Exception as e:
+        logger.error(f"unsave_pdf_for_user failed: {e}")
+        return False
+
+
+def is_pdf_saved(user_id: int, pdf_id: int) -> bool:
+    """True if the user has saved this PDF."""
+    try:
+        cursor = execute_with_retry("""
+            SELECT 1 FROM saved_content
+            WHERE user_id = ? AND content_type = 'pdf' AND content_id = ?
+            LIMIT 1
+        """, (user_id, pdf_id))
+        return cursor.fetchone() is not None
+    except Exception as e:
+        logger.error(f"is_pdf_saved failed: {e}")
+        return False
+
+
+def get_user_saved_pdf_ids(user_id: int):
+    """Return the set of pdf_ids the user has saved. Empty set on error."""
+    try:
+        cursor = execute_with_retry("""
+            SELECT content_id FROM saved_content
+            WHERE user_id = ? AND content_type = 'pdf'
+        """, (user_id,))
+        return {row['content_id'] for row in cursor.fetchall()}
+    except Exception as e:
+        logger.error(f"get_user_saved_pdf_ids failed: {e}")
+        return set()
+
+
+def count_user_saved_pdfs(user_id: int) -> int:
+    try:
+        cursor = execute_with_retry("""
+            SELECT COUNT(*) AS n FROM saved_content
+            WHERE user_id = ? AND content_type = 'pdf'
+        """, (user_id,))
+        row = cursor.fetchone()
+        return int(row['n']) if row else 0
+    except Exception:
+        return 0
+
+
+# ============================================
+# PDF REPORTS
+# ============================================
+
+def create_pdf_report(user_id: int, pdf_id: int, reason: str,
+                      comment: str = '') -> bool:
+    try:
+        execute_with_retry("""
+            INSERT INTO pdf_reports
+                (user_id, pdf_id, reason, comment, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, pdf_id, reason, comment or '', now()), commit=True)
+        return True
+    except Exception as e:
+        logger.error(f"create_pdf_report failed: {e}")
+        return False
+
+
+def user_reported_pdf(user_id: int, pdf_id: int) -> bool:
+    try:
+        cursor = execute_with_retry("""
+            SELECT 1 FROM pdf_reports
+            WHERE user_id = ? AND pdf_id = ?
+            LIMIT 1
+        """, (user_id, pdf_id))
+        return cursor.fetchone() is not None
+    except Exception:
+        return False
+
+
+def get_user_reported_pdf_ids(user_id: int):
+    """Set of pdf_ids the user has reported."""
+    try:
+        cursor = execute_with_retry("""
+            SELECT DISTINCT pdf_id FROM pdf_reports WHERE user_id = ?
+        """, (user_id,))
+        return {row['pdf_id'] for row in cursor.fetchall()}
+    except Exception:
+        return set()

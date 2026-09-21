@@ -8,109 +8,188 @@
 {{ super() }}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/groups.css') }}" />
 <style>
-    .group-card {
-        position: relative;
-        transition: all 0.25s ease;
-        cursor: pointer;
-    }
-    .group-card:hover {
-        transform: translateY(-4px);
-        box-shadow: var(--shadow-md);
-    }
-
+    /* ============================================
+       GROUP CARD LOCKING (unchanged)
+       ============================================ */
+    .group-card { position: relative; transition: all 0.25s ease; cursor: pointer; }
+    .group-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
     .group-card .lock-badge {
-        position: absolute;
-        top: 12px;
-        right: 12px;
-        font-size: 18px;
-        color: var(--text-muted);
-        opacity: 0.7;
-        transition: opacity 0.2s ease;
-        z-index: 2;
-        pointer-events: none;
+        position: absolute; top: 12px; right: 12px;
+        font-size: 18px; color: var(--text-muted);
+        opacity: 0.7; transition: opacity 0.2s ease;
+        z-index: 2; pointer-events: none;
     }
-    .group-card.locked .lock-badge {
-        color: #F59E0B;
-        opacity: 1;
-    }
+    .group-card.locked .lock-badge { color: #F59E0B; opacity: 1; }
     .group-card .join-btn-area {
-        margin-top: 12px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
+        margin-top: 12px; display: flex;
+        align-items: center; gap: 8px; flex-wrap: wrap;
     }
-    .group-card .join-btn-area .btn-join {
-        pointer-events: none;
-    }
-    .group-card .join-btn-area .btn-join.locked {
-        opacity: 0.7;
-    }
+    .group-card .join-btn-area .btn-join { pointer-events: none; }
+    .group-card .join-btn-area .btn-join.locked { opacity: 0.7; }
     .group-card .join-btn-area .lock-hint {
-        font-size: 12px;
-        color: var(--text-muted);
-        margin-left: 4px;
+        font-size: 12px; color: var(--text-muted); margin-left: 4px;
     }
 
     .featured-grid .featured-card {
-        cursor: pointer;
-        position: relative;
-        transition: all 0.25s ease;
+        cursor: pointer; position: relative; transition: all 0.25s ease;
     }
     .featured-card:hover {
-        transform: translateY(-4px);
-        border-color: var(--primary);
+        transform: translateY(-4px); border-color: var(--primary);
         box-shadow: var(--shadow-md);
     }
     .featured-card .lock-badge {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        font-size: 16px;
-        opacity: 0.7;
-        pointer-events: none;
+        position: absolute; top: 8px; right: 8px;
+        font-size: 16px; opacity: 0.7; pointer-events: none;
     }
-    .featured-card.locked .lock-badge {
-        color: #F59E0B;
-        opacity: 1;
+    .featured-card.locked .lock-badge { color: #F59E0B; opacity: 1; }
+
+    /* ============================================
+       JOIN MODAL — READ-THEN-ACCEPT LAYOUT
+       ============================================ */
+    .join-modal .modal-content {
+        max-width: 520px;
+        width: 100%;
+        padding: 0;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        max-height: 86vh;
+        overflow: hidden;
+        position: relative;
+        border-radius: var(--radius);
     }
 
-    .join-modal .modal-content {
-        max-width: 500px;
-        text-align: left;
+    .join-modal .jm-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 20px 22px 14px;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+        background: var(--surface);
     }
-    .join-modal .rules-box {
-        background: var(--background);
-        border-radius: var(--radius-sm);
-        padding: 14px 18px;
-        margin: 12px 0 16px;
-        border: 1px solid var(--border);
-        font-size: 14px;
-        line-height: 1.6;
-        white-space: pre-wrap;
-        color: var(--text-secondary);
-        max-height: 200px;
+    .join-modal .jm-icon {
+        font-size: 30px;
+        line-height: 1;
+        flex-shrink: 0;
+    }
+    .join-modal .jm-title {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.3;
+        word-break: break-word;
+    }
+
+    .join-modal .jm-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
         overflow-y: auto;
+        padding: 18px 22px 22px;
+        -webkit-overflow-scrolling: touch;
+        scroll-behavior: smooth;
     }
-    .join-modal .group-details {
+    .join-modal .jm-scroll::-webkit-scrollbar { width: 6px; }
+    .join-modal .jm-scroll::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .join-modal .jm-scroll::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 10px;
+    }
+    .join-modal .jm-scroll::-webkit-scrollbar-thumb:hover {
+        background: var(--text-muted);
+    }
+
+    .join-modal .jm-details {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 8px 16px;
-        margin-bottom: 12px;
+        margin-bottom: 16px;
     }
-    .join-modal .group-details .detail-item {
+    .join-modal .jm-detail {
         font-size: 13px;
         color: var(--text-secondary);
+        line-height: 1.5;
+        min-width: 0;
     }
-    .join-modal .group-details .detail-item strong {
+    .join-modal .jm-detail.full { grid-column: 1 / -1; }
+    .join-modal .jm-detail strong {
         color: var(--text);
+        font-weight: 600;
+        margin-right: 4px;
+    }
+    .join-modal .jm-detail span { word-break: break-word; }
+
+    .join-modal .jm-rules-label {
+        font-weight: 700;
+        font-size: 14px;
+        color: var(--text);
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .join-modal .jm-rules {
+        white-space: pre-wrap;
+        font-size: 14px;
+        line-height: 1.75;
+        color: var(--text-secondary);
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 14px 16px;
+    }
+
+    /* Actions live INSIDE the scroll container, at the end. */
+    .join-modal .jm-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+    }
+    .join-modal .jm-actions .btn {
+        flex: 1;
+        justify-content: center;
+    }
+
+    /* Floating scroll hint that fades once the user scrolls. */
+    .join-modal .jm-scroll-hint {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 10px 12px 8px;
+        background: linear-gradient(to top, var(--surface) 65%, transparent);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+    }
+    .join-modal .jm-scroll-hint i {
+        animation: jmBounce 1.4s ease-in-out infinite;
+    }
+    .join-modal .jm-scroll-hint.hidden { opacity: 0; }
+
+    @keyframes jmBounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(3px); }
     }
 
     @media (max-width: 480px) {
-        .join-modal .group-details {
-            grid-template-columns: 1fr;
-            gap: 4px;
-        }
+        .join-modal .modal-content { max-height: 92vh; }
+        .join-modal .jm-header { padding: 16px 16px 12px; }
+        .join-modal .jm-title { font-size: 16px; }
+        .join-modal .jm-scroll { padding: 14px 16px 18px; }
+        .join-modal .jm-details { grid-template-columns: 1fr; gap: 4px; }
     }
 </style>
 {% endblock %}
@@ -161,7 +240,6 @@
                         {% if group.category %}
                             <span>· {{ group.category }}</span>
                         {% endif %}
-                        <span class="count">· {{ group.click_count or 0 }} {{ _('groups.clicks') }}</span>
                     </div>
                     <span class="lock-badge">{% if group.locked %}🔒{% endif %}</span>
                     {% if group.locked %}
@@ -226,7 +304,6 @@
                             {% if group.curriculum %}
                                 <span>🎓 {{ group.curriculum }}</span>
                             {% endif %}
-                            <span>👥 {{ group.click_count or 0 }} {{ _('groups.joins') }}</span>
                         </div>
                     </div>
                 </div>
@@ -281,28 +358,63 @@
     {% endif %}
 </div>
 
-<!-- Join Confirmation Modal -->
+<!-- ============================================
+     JOIN CONFIRMATION MODAL — READ-THEN-ACCEPT
+     Actions live at the end of the scroll area
+     so the user must scroll through the rules
+     to reach them.
+     ============================================ -->
 <div class="modal-overlay join-modal" id="joinModal">
     <div class="modal-content">
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 4px;">
-            <span id="joinModalIcon" style="font-size: 28px;">📚</span>
-            <h3 class="modal-title" id="joinModalTitle">{{ _('groups.modal_group_name') }}</h3>
+
+        {# Fixed header — always visible #}
+        <div class="jm-header">
+            <span class="jm-icon" id="joinModalIcon">📚</span>
+            <h3 class="jm-title" id="joinModalTitle">{{ _('groups.modal_group_name') }}</h3>
         </div>
-        <div class="modal-body" style="margin-bottom: 8px;">
-            <div class="group-details">
-                <div class="detail-item"><strong>{{ _('groups.modal_platform') }}</strong> <span id="joinModalPlatform"></span></div>
-                <div class="detail-item"><strong>{{ _('groups.modal_category') }}</strong> <span id="joinModalCategory"></span></div>
-                <div class="detail-item" style="grid-column: 1 / -1;"><strong>{{ _('groups.modal_description') }}</strong> <span id="joinModalDescription"></span></div>
+
+        {# Scrollable body — details, rules, and actions #}
+        <div class="jm-scroll" id="joinModalScroll">
+
+            <div class="jm-details">
+                <div class="jm-detail">
+                    <strong>{{ _('groups.modal_platform') }}</strong>
+                    <span id="joinModalPlatform"></span>
+                </div>
+                <div class="jm-detail">
+                    <strong>{{ _('groups.modal_category') }}</strong>
+                    <span id="joinModalCategory"></span>
+                </div>
+                <div class="jm-detail full">
+                    <strong>{{ _('groups.modal_description') }}</strong>
+                    <span id="joinModalDescription"></span>
+                </div>
             </div>
-            <div style="font-weight: 600; margin-top: 12px;">📋 {{ _('groups.modal_rules_title') }}</div>
-            <div class="rules-box" id="joinModalRules">{{ join_rules }}</div>
+
+            <div class="jm-rules-label">
+                📋 {{ _('groups.modal_rules_title') }}
+            </div>
+            <div class="jm-rules" id="joinModalRules">{{ join_rules }}</div>
+
+            {# Actions INSIDE the scroll area, at the very end.
+               The user reaches these only after scrolling the rules. #}
+            <div class="jm-actions">
+                <button type="button" onclick="closeJoinModal()" class="btn btn-secondary">
+                    {{ _('common.cancel') }}
+                </button>
+                <a href="#" id="joinModalProceedBtn" class="btn btn-primary" target="_blank" style="text-decoration: none;">
+                    <i class="fas fa-arrow-right"></i> {{ _('groups.modal_proceed') }}
+                </a>
+            </div>
+
         </div>
-        <div class="modal-actions">
-            <button onclick="closeJoinModal()" class="btn btn-secondary">{{ _('common.cancel') }}</button>
-            <a href="#" id="joinModalProceedBtn" class="btn btn-primary" target="_blank" style="text-decoration: none;">
-                <i class="fas fa-arrow-right"></i> {{ _('groups.modal_proceed') }}
-            </a>
+
+        {# Floating scroll hint — fades once the user scrolls #}
+        <div class="jm-scroll-hint" id="joinModalScrollHint">
+            <i class="fas fa-chevron-down"></i>
+            <span>{{ _('groups.modal_scroll_hint') if _('groups.modal_scroll_hint') != 'groups.modal_scroll_hint' else 'Scroll to see buttons' }}</span>
         </div>
+
     </div>
 </div>
 
@@ -321,7 +433,6 @@ document.addEventListener('DOMContentLoaded', function() {
         tab.addEventListener('click', function() {
             tabs.forEach(t => t.classList.remove('active'));
             this.classList.add('active');
-            // Curriculum filtering is currently UI-only (server renders all).
         });
     });
 
@@ -333,7 +444,6 @@ document.addEventListener('DOMContentLoaded', function() {
     function applyFilters() {
         const platform = platformFilter.value;
         const category = categoryFilter.value;
-        let hasFilter = false;
 
         groups.forEach(card => {
             let show = true;
@@ -342,7 +452,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (platform && cardPlatform.toLowerCase() !== platform) show = false;
             if (category && cardCategory !== category) show = false;
             card.style.display = show ? '' : 'none';
-            if (!show) hasFilter = true;
         });
 
         clearFiltersBtn.style.display = (platform || category) ? 'inline-block' : 'none';
@@ -380,12 +489,72 @@ document.addEventListener('DOMContentLoaded', function() {
         applyFilters();
     });
 
+    // ============================================
+    // MODAL OPEN / CLOSE
+    // ============================================
+    const joinModal        = document.getElementById('joinModal');
+    const joinModalScroll  = document.getElementById('joinModalScroll');
+    const joinModalHint    = document.getElementById('joinModalScrollHint');
+
+    function openJoinModal(card) {
+        const name = card.dataset.groupName || 'Group';
+        const description = card.dataset.groupDescription || '';
+        const platform = card.dataset.groupPlatform || 'WhatsApp';
+        const category = card.dataset.groupCategory || I18N.category_general;
+        const icon = card.querySelector('.icon')?.textContent || '📚';
+        const inviteLink = card.dataset.inviteLink;
+
+        if (!inviteLink) return;
+
+        document.getElementById('joinModalTitle').textContent = name;
+        document.getElementById('joinModalDescription').textContent =
+            description || "{{ _('groups.modal_no_description') }}";
+        document.getElementById('joinModalPlatform').textContent =
+            platform.charAt(0).toUpperCase() + platform.slice(1);
+        document.getElementById('joinModalCategory').textContent = category;
+        document.getElementById('joinModalIcon').textContent = icon;
+        document.getElementById('joinModalProceedBtn').href = inviteLink;
+
+        joinModal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+
+        // Reset scroll to top + show hint every time
+        if (joinModalScroll) joinModalScroll.scrollTop = 0;
+        if (joinModalHint) joinModalHint.classList.remove('hidden');
+    }
+
+    function closeJoinModal() {
+        joinModal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    window.closeJoinModal = closeJoinModal;
+
+    // Track scrolling — hide the hint once the user moves down
+    if (joinModalScroll && joinModalHint) {
+        joinModalScroll.addEventListener('scroll', function() {
+            var scrolled = joinModalScroll.scrollTop > 20;
+            joinModalHint.classList.toggle('hidden', scrolled);
+        }, { passive: true });
+    }
+
+    // Click-backdrop and Escape close
+    joinModal.addEventListener('click', function(e) {
+        if (e.target === this) closeJoinModal();
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && joinModal.classList.contains('active')) {
+            closeJoinModal();
+        }
+    });
+
+    // ============================================
+    // GROUP CLICK HANDLING
+    // ============================================
     function handleGroupClick(card) {
         const locked = card.dataset.locked === 'true';
-        const groupId = card.dataset.groupId;
         const requiredTier = card.dataset.requiredTier || 'free';
         const lockReason = card.dataset.lockReason || '';
-        const inviteLink = card.dataset.inviteLink;
 
         if (locked) {
             let feature = 'group_join';
@@ -398,7 +567,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 slideTarget = 'premium';
             } else {
                 slideTarget = requiredTier;
-                message = I18N.tier_lock_msg.replace('{tier}', requiredTier.charAt(0).toUpperCase() + requiredTier.slice(1));
+                message = I18N.tier_lock_msg.replace('{tier}',
+                    requiredTier.charAt(0).toUpperCase() + requiredTier.slice(1));
             }
 
             if (typeof openUpgradeSheet === 'function') {
@@ -413,23 +583,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        if (inviteLink) {
-            const name = card.dataset.groupName || 'Group';
-            const description = card.dataset.groupDescription || '';
-            const platform = card.dataset.groupPlatform || 'WhatsApp';
-            const category = card.dataset.groupCategory || I18N.category_general;
-            const icon = card.querySelector('.icon')?.textContent || '📚';
-
-            document.getElementById('joinModalTitle').textContent = name;
-            document.getElementById('joinModalDescription').textContent = description || "{{ _('groups.modal_no_description') }}";
-            document.getElementById('joinModalPlatform').textContent = platform.charAt(0).toUpperCase() + platform.slice(1);
-            document.getElementById('joinModalCategory').textContent = category;
-            document.getElementById('joinModalIcon').textContent = icon;
-            document.getElementById('joinModalProceedBtn').href = inviteLink;
-
-            document.getElementById('joinModal').classList.add('active');
-            document.body.style.overflow = 'hidden';
-        }
+        openJoinModal(card);
     }
 
     document.querySelectorAll('.group-card, .featured-card').forEach(card => {
@@ -447,24 +601,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    function closeJoinModal() {
-        document.getElementById('joinModal').classList.remove('active');
-        document.body.style.overflow = '';
-    }
-
-    document.getElementById('joinModal').addEventListener('click', function(e) {
-        if (e.target === this) closeJoinModal();
-    });
-
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && document.getElementById('joinModal').classList.contains('active')) {
-            closeJoinModal();
-        }
-    });
-
-    window.closeJoinModal = closeJoinModal;
-
     applyFilters();
 });
 </script>
+
+{# Optional translation key — add to translations/{en,so}.json:
+   "groups.modal_scroll_hint": "Scroll down to see buttons"
+   The template falls back gracefully if the key is missing. #}
 {% endblock %}
