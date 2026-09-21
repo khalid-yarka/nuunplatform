@@ -300,24 +300,29 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(error => { if (error.name === 'AbortError') throw new Error('Request timeout'); throw error; });
     }
 
-    function requestNotificationPermission() {
-        if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
-    }
+    // ── Browser notification: uses service worker when available.
+    //    Never asks for permission here — the prompt card handles that.
     function sendBrowserNotification(title, body, url) {
         if (!('Notification' in window)) return;
-        if (Notification.permission !== 'granted') {
-            Notification.requestPermission().then(function(perm) {
-                if (perm === 'granted') sendBrowserNotification(title, body, url);
-            });
-            return;
-        }
+        if (Notification.permission !== 'granted') return;
         try {
+            if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+                navigator.serviceWorker.ready.then(function (reg) {
+                    reg.showNotification(title, {
+                        body: body,
+                        icon: '/static/images/logo.png',
+                        tag: 'live-quiz-' + quizId,
+                        requireInteraction: true,
+                        data: { url: url }
+                    });
+                }).catch(function () {});
+                return;
+            }
             const notification = new Notification(title, { body, icon: '/static/images/logo.png', tag: 'live-quiz-' + quizId, requireInteraction: true });
             notification.onclick = function() { window.focus(); if (url) window.location.href = url; notification.close(); };
             setTimeout(() => notification.close(), 10000);
         } catch (e) { console.warn('Browser notification error:', e); }
     }
-    requestNotificationPermission();
 
     function showToast(message, type, duration) {
         if (typeof window.showToast === 'function') {

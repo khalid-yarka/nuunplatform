@@ -1,0 +1,81 @@
+{# ============================================================
+   templates/partials/_prompt_cards.html
+   Floating permission prompt cards (notification + install).
+   Included by dashboard_base.html for authenticated pages only.
+   Visibility is managed by prompt-cards.js.
+   ============================================================ #}
+
+<div class="nuun-prompt-stack" id="nuunPromptStack" aria-live="polite">
+
+    {# ─── Install card ─── #}
+    <div class="nuun-prompt-card" id="nuunInstallCard"
+         role="region" aria-label="Install NuunPlatform" hidden>
+
+        <span class="npc-accent" aria-hidden="true"></span>
+
+        <button type="button" class="npc-close" data-prompt-dismiss="install" aria-label="Close">
+            <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+
+        <div class="npc-header">
+            <span class="npc-icon npc-icon--install" aria-hidden="true">
+                <i class="fas fa-download"></i>
+            </span>
+            <div class="npc-heading">
+                <h3 class="npc-title">Install as Application</h3>
+                <p class="npc-tagline">Fast · Easy · App-like</p>
+            </div>
+        </div>
+
+        <p class="npc-body">
+            Laso dag NuunPlatform oo si fudud ugu isticmaal talefankaaga.
+        </p>
+
+        <div class="npc-actions">
+            <button type="button" class="npc-btn npc-btn--ghost" data-prompt-dismiss="install">
+                Hadda maya
+            </button>
+            <button type="button" class="npc-btn npc-btn--primary" id="nuunInstallBtn">
+                <i class="fas fa-download" aria-hidden="true"></i> Install
+            </button>
+        </div>
+    </div>
+
+    {# ─── Notification card ─── #}
+    <div class="nuun-prompt-card" id="nuunNotifCard"
+         role="region" aria-label="Enable notifications" hidden>
+
+        <span class="npc-accent" aria-hidden="true"></span>
+
+        <button type="button" class="npc-close" data-prompt-dismiss="notif" aria-label="Close">
+            <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+
+        <div class="npc-header">
+            <span class="npc-icon npc-icon--bell" aria-hidden="true">
+                <i class="fas fa-bell"></i>
+                <span class="npc-icon-pulse" aria-hidden="true"></span>
+            </span>
+            <div class="npc-heading">
+                <h3 class="npc-title">Daaro Notification ka</h3>
+                <p class="npc-tagline">Ogeysiisyada NuunPlatform</p>
+            </div>
+        </div>
+
+        <p class="npc-body">
+            Daaro Notification ka si aad u hesho update yada, imtixannada,
+            pdf-yada, sualaha iyo ogeysiisyada NuunPlatform. Intaas iyo
+            ka badan si aad u aragto u oggolow in uu daarmo.
+        </p>
+
+        <div class="npc-actions">
+            <button type="button" class="npc-btn npc-btn--ghost" data-prompt-dismiss="notif">
+                Hadda maya
+            </button>
+            <button type="button" class="npc-btn npc-btn--primary" id="nuunNotifBtn">
+                <i class="fas fa-bell" aria-hidden="true"></i> Daar
+            </button>
+        </div>
+    </div>
+
+</div>

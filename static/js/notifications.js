@@ -1,5 +1,8 @@
 // ============================================
 // NOTIFICATION JAVASCRIPT
+// In-app bell dropdown + polling.
+// Browser push permission is handled by prompt-cards.js —
+// this file never calls Notification.requestPermission().
 // ============================================
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -256,44 +259,52 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // ============================================
-    // BROWSER NOTIFICATION (for live quiz starts)
+    // BROWSER NOTIFICATION DISPLAY HELPER
+    // ============================================
+    // This function is called from other parts of the app when a
+    // notification needs to be shown as a browser-level popup.
+    //
+    // NOTE: This function NEVER asks for permission. Permission is
+    //       handled exclusively by the floating prompt card
+    //       (see prompt-cards.js). If the user hasn't granted
+    //       permission, this function silently no-ops.
+    //
+    // Prefers the service worker's showNotification() so that
+    // notifications display when the tab is in the background or
+    // closed (as long as sw.js handles the push event).
     // ============================================
     
-    function requestNotificationPermission() {
-        if ('Notification' in window && Notification.permission === 'default') {
-            Notification.requestPermission();
-        }
-    }
-    
-    // Request permission on first interaction
-    document.addEventListener('click', function() {
-        requestNotificationPermission();
-    }, { once: true });
-    
-    // Show browser notification (called from server via SSE/WebSocket)
     window.showBrowserNotification = function(title, body, link, icon) {
         if (!('Notification' in window) || Notification.permission !== 'granted') {
             return;
         }
-        
-        const notification = new Notification(title, {
-            body: body,
-            icon: icon || '/static/images/logo.png',
-            tag: 'live-quiz',
-            requireInteraction: true
-        });
-        
-        notification.onclick = function() {
-            window.focus();
-            if (link) {
-                window.location.href = link;
+        try {
+            if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+                navigator.serviceWorker.ready.then(function (reg) {
+                    reg.showNotification(title, {
+                        body: body,
+                        icon: icon || '/static/images/logo.png',
+                        tag: 'live-quiz',
+                        requireInteraction: true,
+                        data: { url: link || '/' }
+                    });
+                }).catch(function () {});
+                return;
             }
-            notification.close();
-        };
-        
-        // Auto-close after 10 seconds
-        setTimeout(function() {
-            notification.close();
-        }, 10000);
+            const notification = new Notification(title, {
+                body: body,
+                icon: icon || '/static/images/logo.png',
+                tag: 'live-quiz',
+                requireInteraction: true
+            });
+            notification.onclick = function() {
+                window.focus();
+                if (link) window.location.href = link;
+                notification.close();
+            };
+            setTimeout(function() { notification.close(); }, 10000);
+        } catch (e) {
+            console.warn('Notification error:', e);
+        }
     };
 });

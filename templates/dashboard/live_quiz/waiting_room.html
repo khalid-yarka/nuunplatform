@@ -19,12 +19,6 @@
         🚀 {{ _('live_quiz.waiting.started_alert') }}
     </div>
 
-    <div class="notification-banner" id="notificationBanner">
-        <span>🔔</span>
-        <span style="flex:1;">{{ _('live_quiz.waiting.notify_banner') }}</span>
-        <button class="btn-allow" onclick="requestNotificationPermission()">{{ _('live_quiz.waiting.allow_btn') }}</button>
-    </div>
-
     <div class="waiting-room-card">
 
         <div class="wr-header">
@@ -174,17 +168,10 @@ const I18N = {
     badge_creator:     "{{ _('live_quiz.waiting.badge_creator') }}",
     badge_you:         "{{ _('live_quiz.waiting.badge_you') }}",
     badge_left:        "{{ _('live_quiz.waiting.badge_left') }}",
-    notif_enabled:     "{{ _('live_quiz.waiting.notif_enabled') }}",
-    notif_failed:      "{{ _('live_quiz.waiting.notif_failed') }}",
     ready_updated_err: "{{ _('live_quiz.waiting.ready_updated_err') }}",
     leave_confirm:     "{{ _('live_quiz.waiting.leave_confirm') }}"
 };
 
-// ============================================
-// EXIT WARNING
-// Fires when the user tries to close the tab, refresh, or navigate away
-// without using the in-app Leave / Delete / Start actions.
-// ============================================
 var quizExiting = false;
 window.addEventListener('beforeunload', function(e) {
     if (quizExiting) return;
@@ -226,7 +213,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const leaveBtn = document.getElementById('leaveBtn');
     const rejoinBtn = document.getElementById('rejoinBtn');
     const deleteBtn = document.getElementById('deleteBtn');
-    const notificationBanner = document.getElementById('notificationBanner');
 
     let initialStartsIn = {{ starts_in_seconds|default(0) }};
 
@@ -277,55 +263,36 @@ document.addEventListener('DOMContentLoaded', function() {
         startCountdown(initialStartsIn);
     }
 
-    function requestNotificationPermission() {
-        if ('Notification' in window) {
-            Notification.requestPermission().then(function(permission) {
-                if (permission === 'granted') {
-                    notificationBanner.classList.remove('show');
-                    if (typeof window.showToast === 'function') {
-                        window.showToast(I18N.notif_enabled, 'success');
-                    }
-                } else {
-                    notificationBanner.classList.remove('show');
-                }
-            });
-        }
-    }
-    window.requestNotificationPermission = requestNotificationPermission;
-
-    if ('Notification' in window) {
-        if (Notification.permission === 'granted' || Notification.permission === 'denied') {
-            notificationBanner.classList.remove('show');
-        } else {
-            notificationBanner.classList.add('show');
-        }
-    } else {
-        notificationBanner.classList.remove('show');
-    }
-
+    // ── Browser notification: uses service worker when available.
+    //    Never asks for permission here — the prompt card handles that.
     function sendBrowserNotification(title, body, url) {
         if (!('Notification' in window)) return;
-        if (Notification.permission !== 'granted') {
-            Notification.requestPermission().then(function(perm) {
-                if (perm === 'granted') {
-                    sendBrowserNotification(title, body, url);
-                }
-            });
-            return;
-        }
+        if (Notification.permission !== 'granted') return;
         try {
-            const notification = new Notification(title, {
+            if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+                navigator.serviceWorker.ready.then(function (reg) {
+                    reg.showNotification(title, {
+                        body: body,
+                        icon: '/static/images/logo.png',
+                        tag: 'live-quiz-' + quizId,
+                        requireInteraction: true,
+                        data: { url: url }
+                    });
+                }).catch(function () {});
+                return;
+            }
+            const n = new Notification(title, {
                 body: body,
                 icon: '/static/images/logo.png',
                 tag: 'live-quiz-' + quizId,
                 requireInteraction: true
             });
-            notification.onclick = function() {
+            n.onclick = function() {
                 window.focus();
                 if (url) window.location.href = url;
-                notification.close();
+                n.close();
             };
-            setTimeout(function() { notification.close(); }, 15000);
+            setTimeout(function() { n.close(); }, 15000);
         } catch (e) {
             console.warn('Notification error:', e);
         }
@@ -696,8 +663,6 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch('/live-quiz/quiz-state/' + quizId + '?t=' + Date.now())
             .then(response => response.json())
             .then(data => {
-                console.log('Poll state:', data);
-
                 if (data.redirect_url && !isRedirecting) {
                     isRedirecting = true;
                     quizExiting = true;
@@ -712,7 +677,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (typeof window.showToast === 'function') {
                         window.showToast(I18N.quiz_started, 'success');
                     }
-                    console.log('Redirecting to /live-quiz/play/' + quizId);
                     window.location.replace('/live-quiz/play/' + quizId);
                     return;
                 }
@@ -740,7 +704,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (isRedirecting) return;
         const alert = document.getElementById('quizStartedAlert');
         if (alert && alert.classList.contains('show') && !isRedirecting) {
-            console.warn('Quiz started alert shown but no redirect; forcing redirect.');
             quizExiting = true;
             window.location.replace('/live-quiz/play/' + quizId);
         }
@@ -751,17 +714,9 @@ document.addEventListener('DOMContentLoaded', function() {
     pollTimer = setInterval(fetchParticipants, pollInterval);
     pollQuizState();
 
-    if (startBtn) {
-        startBtn.addEventListener('click', startQuiz);
-    }
-
-    if (leaveBtn) {
-        leaveBtn.addEventListener('click', leaveQuiz);
-    }
-
-    if (rejoinBtn) {
-        rejoinBtn.addEventListener('click', rejoinQuiz);
-    }
+    if (startBtn) startBtn.addEventListener('click', startQuiz);
+    if (leaveBtn) leaveBtn.addEventListener('click', leaveQuiz);
+    if (rejoinBtn) rejoinBtn.addEventListener('click', rejoinQuiz);
 
     if (!isCreator) {
         const actionsDiv = document.querySelector('.wr-actions');

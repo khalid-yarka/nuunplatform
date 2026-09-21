@@ -151,6 +151,7 @@
 {{ super() }}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/upgrade.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/prompt-cards.css') }}" />
 {% block dashboard_css %}{% endblock %}
 {% endblock %}
 
@@ -660,5 +661,13 @@
     window.upgradeAdminPhone = "{{ super_admin_phone or '' }}";
     window.baseUrl = "{{ request.url_root.rstrip('/') }}";
 </script>
+
+<!-- ============================================ -->
+<!-- FLOATING PROMPT CARDS (notification + install) -->
+<!-- ============================================ -->
+{% if session.user_id %}
+    {% include 'partials/_prompt_cards.html' %}
+    <script src="{{ url_for('static', filename='js/prompt-cards.js') }}" defer></script>
+{% endif %}
 
 {% endblock %}
