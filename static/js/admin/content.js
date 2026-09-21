@@ -779,7 +779,510 @@
     function escapeAttr(s) {
         return escapeHtml(s);
     }
-
+    // ------------------------------------------------------------
+    // QUESTION DUPLICATE SIDEBAR
+    // ------------------------------------------------------------
+    function initDuplicateSidebar() {
+        const bar = document.getElementById('dupBar');
+        const list = document.getElementById('dupList');
+        const empty = document.getElementById('dupEmpty');
+        const countEl = document.getElementById('dupCount');
+        const bulkBar = document.getElementById('dupBulk');
+        const bulkCountEl = document.getElementById('dupSelectedCount');
+        const bulkArchive = document.getElementById('dupBulkArchive');
+        const bulkClear = document.getElementById('dupBulkClear');
+        const toggle = document.getElementById('dupBarToggle');
+        const form = document.getElementById('questionForm');
+    
+        if (!bar || !list || !form) return;
+    
+        const initial = document.getElementById('dupInitialData');
+        let state = [];
+        try {
+            state = initial ? JSON.parse(initial.textContent || '[]') : [];
+        } catch (e) { state = []; }
+    
+        const excludeId = form.dataset.questionId || '';
+        const LAYOUT = document.getElementById('qEditLayout');
+        const STORAGE_KEY = 'nuun.questions.dupbar-collapsed';
+    
+        // ---- Collapse persistence ----
+        function applyCollapsed(collapsed) {
+            bar.classList.toggle('q-dupbar--collapsed', collapsed);
+            if (LAYOUT) LAYOUT.classList.toggle('q-edit-layout--collapsed', collapsed);
+            if (toggle) {
+                toggle.innerHTML = collapsed
+                    ? '<i class="fas fa-chevron-right"></i>'
+                    : '<i class="fas fa-chevron-left"></i>';
+                toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            }
+        }
+        let collapsed = false;
+        try { collapsed = localStorage.getItem(STORAGE_KEY) === '1'; } catch (e) {}
+        applyCollapsed(collapsed);
+    
+        if (toggle) {
+            toggle.addEventListener('click', function () {
+                collapsed = !collapsed;
+                applyCollapsed(collapsed);
+                try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); } catch (e) {}
+            });
+        }
+    
+        // ---- Render ----
+        function render() {
+            if (countEl) countEl.textContent = state.length;
+            if (!state.length) {
+                empty.style.display = 'flex';
+                list.innerHTML = '';
+                updateBulkBar();
+                return;
+            }
+            empty.style.display = 'none';
+            let html = '';
+            state.forEach(function (d) {
+                const tone = d.match_type === 'exact' ? 'exact' : 'fuzzy';
+                const badge = d.match_type === 'exact'
+                    ? '<span class="q-dupcard__badge badge-exact">Identical</span>'
+                    : '<span class="q-dupcard__badge badge-fuzzy">' + d.similarity_pct + '%</span>';
+                html += ''
+                    + '<div class="q-dupcard" data-id="' + d.id + '" data-tone="' + tone + '">'
+                    +   '<div class="q-dupcard__head">'
+                    +     '<input type="checkbox" class="q-dupcard__cb" data-id="' + d.id + '">'
+                    +     '<span class="q-dupcard__id">#' + d.id + '</span>'
+                    +     badge
+                    +   '</div>'
+                    +   '<div class="q-dupcard__body">'
+                    +     '<div class="q-dupcard__text">' + escapeHtml(d.text) + '</div>'
+                    +     '<div class="q-dupcard__meta">'
+                    +       (d.grade ? '<span>' + escapeHtml(d.grade) + '</span>' : '')
+                    +       (d.subject_code ? '<span>' + escapeHtml(d.subject_code) + '</span>' : '')
+                    +       '<span>' + escapeHtml(d.created_at || '') + '</span>'
+                    +     '</div>'
+                    +   '</div>'
+                    +   '<div class="q-dupcard__actions">'
+                    +     '<button type="button" data-act="view" title="View"><i class="fas fa-eye"></i></button>'
+                    +     '<button type="button" data-act="edit" title="Edit"><i class="fas fa-pen"></i></button>'
+                    +     '<button type="button" data-act="archive" title="Archive"><i class="fas fa-box-archive"></i></button>'
+                    +     '<button type="button" data-act="dismiss" title="Not a duplicate"><i class="fas fa-check"></i></button>'
+                    +   '</div>'
+                    + '</div>';
+            });
+            list.innerHTML = html;
+            bind();
+            updateBulkBar();
+        }
+    
+        // ---- Card interactions ----
+        function bind() {
+            list.querySelectorAll('.q-dupcard').forEach(function (card) {
+                const id = parseInt(card.dataset.id, 10);
+    
+                card.querySelectorAll('[data-act]').forEach(function (btn) {
+                    btn.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        const act = btn.dataset.act;
+                        if (act === 'view')   expandView(card, id);
+                        if (act === 'edit')   expandEdit(card, id);
+                        if (act === 'archive') archiveCard(card, id);
+                        if (act === 'dismiss') dismissCard(card, id);
+                    });
+                });
+    
+                const cb = card.querySelector('.q-dupcard__cb');
+                if (cb) cb.addEventListener('change', updateBulkBar);
+            });
+        }
+    
+        function cardData(id) {
+            return state.find(function (x) { return x.id === id; });
+        }
+    
+        function collapseCard(card) {
+            const d = cardData(parseInt(card.dataset.id, 10));
+            if (!d) return;
+            const tone = d.match_type === 'exact' ? 'exact' : 'fuzzy';
+            const badge = d.match_type === 'exact'
+                ? '<span class="q-dupcard__badge badge-exact">Identical</span>'
+                : '<span class="q-dupcard__badge badge-fuzzy">' + d.similarity_pct + '%</span>';
+            card.innerHTML = ''
+                + '<div class="q-dupcard__head">'
+                +   '<input type="checkbox" class="q-dupcard__cb" data-id="' + d.id + '">'
+                +   '<span class="q-dupcard__id">#' + d.id + '</span>'
+                +   badge
+                + '</div>'
+                + '<div class="q-dupcard__body">'
+                +   '<div class="q-dupcard__text">' + escapeHtml(d.text) + '</div>'
+                +   '<div class="q-dupcard__meta">'
+                +     (d.grade ? '<span>' + escapeHtml(d.grade) + '</span>' : '')
+                +     (d.subject_code ? '<span>' + escapeHtml(d.subject_code) + '</span>' : '')
+                +     '<span>' + escapeHtml(d.created_at || '') + '</span>'
+                +   '</div>'
+                + '</div>'
+                + '<div class="q-dupcard__actions">'
+                +   '<button type="button" data-act="view" title="View"><i class="fas fa-eye"></i></button>'
+                +   '<button type="button" data-act="edit" title="Edit"><i class="fas fa-pen"></i></button>'
+                +   '<button type="button" data-act="archive" title="Archive"><i class="fas fa-box-archive"></i></button>'
+                +   '<button type="button" data-act="dismiss" title="Not a duplicate"><i class="fas fa-check"></i></button>'
+                + '</div>';
+            bind();
+        }
+    
+        function expandView(card, id) {
+            const d = cardData(id);
+            if (!d) return;
+            let optHtml = '';
+            ['A','B','C','D','E','F'].forEach(function (k) {
+                if (d.options && d.options[k]) {
+                    const isCorrect = d.correct_answer === k;
+                    optHtml += '<div class="q-dupview__opt' + (isCorrect ? ' correct' : '') + '">'
+                             +   '<span class="l">' + k + '.</span>'
+                             +   '<span>' + escapeHtml(d.options[k]) + '</span>'
+                             + (isCorrect ? '<i class="fas fa-check"></i>' : '')
+                             + '</div>';
+                }
+            });
+            card.innerHTML = ''
+                + '<div class="q-dupcard__head">'
+                +   '<span class="q-dupcard__id">#' + d.id + '</span>'
+                +   (d.match_type === 'exact'
+                        ? '<span class="q-dupcard__badge badge-exact">Identical</span>'
+                        : '<span class="q-dupcard__badge badge-fuzzy">' + d.similarity_pct + '%</span>')
+                +   '<button type="button" class="q-dupcard__close" data-close="1"><i class="fas fa-times"></i></button>'
+                + '</div>'
+                + '<div class="q-dupview">'
+                +   '<div class="q-dupview__q">' + escapeHtml(d.full_text) + '</div>'
+                +   '<div class="q-dupview__opts">' + optHtml + '</div>'
+                +   (d.explanation ? '<div class="q-dupview__expl">💡 ' + escapeHtml(d.explanation) + '</div>' : '')
+                +   '<div class="q-dupcard__meta">'
+                +     (d.grade ? '<span>' + escapeHtml(d.grade) + '</span>' : '')
+                +     (d.subject_code ? '<span>' + escapeHtml(d.subject_code) + '</span>' : '')
+                +     (d.chapter ? '<span>' + escapeHtml(d.chapter) + '</span>' : '')
+                +     '<span>⭐'.concat(String(d.difficulty || 1)).concat('</span>')
+                +   '</div>'
+                + '</div>'
+                + '<div class="q-dupcard__actions">'
+                +   '<button type="button" data-act="edit"><i class="fas fa-pen"></i> Edit</button>'
+                +   '<button type="button" data-act="archive"><i class="fas fa-box-archive"></i> Archive</button>'
+                + '</div>';
+            card.querySelector('[data-close]').addEventListener('click', function (e) {
+                e.stopPropagation();
+                collapseCard(card);
+            });
+            card.querySelector('[data-act="edit"]').addEventListener('click', function (e) {
+                e.stopPropagation(); expandEdit(card, id);
+            });
+            card.querySelector('[data-act="archive"]').addEventListener('click', function (e) {
+                e.stopPropagation(); archiveCard(card, id);
+            });
+        }
+    
+        function expandEdit(card, id) {
+            const d = cardData(id);
+            if (!d) return;
+            const opts = d.options || {};
+            function optRow(k, required) {
+                return ''
+                    + '<div class="q-dupedit__row">'
+                    +   '<label>' + k + (required ? ' *' : '') + '</label>'
+                    +   '<input type="text" data-opt="' + k + '" value="'
+                    +   escapeAttr(opts[k] || '') + '" maxlength="300">'
+                    + '</div>';
+            }
+            card.innerHTML = ''
+                + '<div class="q-dupcard__head">'
+                +   '<span class="q-dupcard__id">#' + d.id + '</span>'
+                +   '<span class="q-dupcard__badge badge-edit">Editing</span>'
+                + '</div>'
+                + '<div class="q-dupedit">'
+                +   '<div class="q-dupedit__row"><label>Subject</label>'
+                +     '<input type="text" data-field="subject_code" value="'
+                +     escapeAttr(d.subject_code) + '"></div>'
+                +   '<div class="q-dupedit__row"><label>Grade</label>'
+                +     '<input type="text" data-field="grade" value="'
+                +     escapeAttr(d.grade) + '" maxlength="4"></div>'
+                +   '<div class="q-dupedit__row"><label>Question *</label>'
+                +     '<textarea data-field="question_text" rows="4">'
+                +     escapeHtml(d.full_text) + '</textarea></div>'
+                +   optRow('A', true) + optRow('B', true) + optRow('C', true)
+                +   optRow('D', false) + optRow('E', false) + optRow('F', false)
+                +   '<div class="q-dupedit__row"><label>Correct</label>'
+                +     '<select data-field="correct_answer">'
+                +       ['A','B','C','D','E','F'].map(function (k) {
+                            return '<option value="' + k + '"'
+                                 + (d.correct_answer === k ? ' selected' : '') + '>'
+                                 + k + '</option>';
+                        }).join('')
+                +     '</select></div>'
+                +   '<div class="q-dupedit__row"><label>Difficulty</label>'
+                +     '<select data-field="difficulty">'
+                +       [1,2,3,4,5].map(function (n) {
+                            return '<option value="' + n + '"'
+                                 + (d.difficulty === n ? ' selected' : '') + '>'
+                                 + '⭐'.repeat(n) + '</option>';
+                        }).join('')
+                +     '</select></div>'
+                +   '<div class="q-dupedit__row"><label>Chapter</label>'
+                +     '<input type="text" data-field="chapter" value="'
+                +     escapeAttr(d.chapter || '') + '"></div>'
+                +   '<div class="q-dupedit__row"><label>Tags</label>'
+                +     '<input type="text" data-field="tags" value="'
+                +     escapeAttr(d.tags || '') + '"></div>'
+                +   '<div class="q-dupedit__row"><label>Explanation</label>'
+                +     '<textarea data-field="explanation" rows="3">'
+                +     escapeHtml(d.explanation || '') + '</textarea></div>'
+                + '</div>'
+                + '<div class="q-dupcard__actions q-dupcard__actions--edit">'
+                +   '<button type="button" class="btn-cancel" data-cancel="1">Cancel</button>'
+                +   '<button type="button" class="btn-save" data-save="1">Save</button>'
+                + '</div>';
+    
+            card.querySelector('[data-cancel]').addEventListener('click', function (e) {
+                e.stopPropagation();
+                collapseCard(card);
+            });
+            card.querySelector('[data-save]').addEventListener('click', function (e) {
+                e.stopPropagation();
+                saveInline(card, id);
+            });
+        }
+    
+        function saveInline(card, id) {
+            const getVal = function (sel) {
+                const el = card.querySelector(sel);
+                return el ? el.value : '';
+            };
+            const opts = {};
+            card.querySelectorAll('[data-opt]').forEach(function (inp) {
+                opts[inp.dataset.opt] = inp.value;
+            });
+            const payload = {
+                subject_code:   getVal('[data-field="subject_code"]'),
+                grade:          getVal('[data-field="grade"]'),
+                question_text:  getVal('[data-field="question_text"]'),
+                correct_answer: getVal('[data-field="correct_answer"]'),
+                difficulty:     getVal('[data-field="difficulty"]'),
+                chapter:        getVal('[data-field="chapter"]'),
+                tags:           getVal('[data-field="tags"]'),
+                explanation:    getVal('[data-field="explanation"]'),
+                options:        opts,
+            };
+    
+            const saveBtn = card.querySelector('[data-save]');
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving…';
+    
+            fetch('/admin/questions/' + id + '/inline-update', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': CSRF,
+                },
+                body: JSON.stringify(payload),
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.success) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Save';
+                    if (window.AdminCore) {
+                        window.AdminCore.toast((res && res.error) || 'Save failed', 'error');
+                    }
+                    return;
+                }
+                if (window.AdminCore) window.AdminCore.toast('Question #' + id + ' updated', 'success');
+                runCheck();
+            })
+            .catch(function () {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save';
+                if (window.AdminCore) window.AdminCore.toast('Network error', 'error');
+            });
+        }
+    
+        function archiveCard(card, id) {
+            if (!confirm('Archive question #' + id + '?\n\nIt will be removed from quizzes but kept in the database.')) {
+                return;
+            }
+            fetch('/admin/questions/' + id + '/delete', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-Token': CSRF,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.success) {
+                    if (window.AdminCore) window.AdminCore.toast('Archive failed', 'error');
+                    return;
+                }
+                removeCard(id);
+                showUndo(id);
+                runCheck();
+            })
+            .catch(function () {
+                if (window.AdminCore) window.AdminCore.toast('Network error', 'error');
+            });
+        }
+    
+        function dismissCard(card, id) {
+            const currentId = parseInt(form.dataset.questionId || '0', 10);
+            if (!currentId) {
+                if (window.AdminCore) window.AdminCore.toast('Save this question first.', 'warning');
+                return;
+            }
+            fetch('/admin/questions/dismiss-duplicate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': CSRF,
+                },
+                body: JSON.stringify({ a_id: currentId, b_id: id }),
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.success) {
+                    if (window.AdminCore) window.AdminCore.toast('Could not dismiss', 'error');
+                    return;
+                }
+                removeCard(id);
+                if (window.AdminCore) {
+                    window.AdminCore.toast('Marked as not a duplicate', 'success');
+                }
+            });
+        }
+    
+        function removeCard(id) {
+            state = state.filter(function (d) { return d.id !== id; });
+            render();
+        }
+    
+        function showUndo(id) {
+            const t = document.createElement('div');
+            t.className = 'dup-undo-toast';
+            t.innerHTML = '<span>Archived #' + id + '</span>' +
+                          '<button type="button">Undo</button>';
+            document.body.appendChild(t);
+            const timer = setTimeout(function () { t.remove(); }, 8000);
+            t.querySelector('button').addEventListener('click', function () {
+                clearTimeout(timer);
+                fetch('/admin/questions/' + id + '/unarchive', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-Token': CSRF },
+                }).then(function () {
+                    t.remove();
+                    runCheck();
+                });
+            });
+        }
+    
+        // ---- Bulk ----
+        function updateBulkBar() {
+            const checked = list.querySelectorAll('.q-dupcard__cb:checked').length;
+            if (bulkCountEl) bulkCountEl.textContent = checked;
+            if (bulkBar) bulkBar.hidden = checked === 0;
+        }
+    
+        if (bulkClear) {
+            bulkClear.addEventListener('click', function () {
+                list.querySelectorAll('.q-dupcard__cb').forEach(function (cb) {
+                    cb.checked = false;
+                });
+                updateBulkBar();
+            });
+        }
+    
+        if (bulkArchive) {
+            bulkArchive.addEventListener('click', function () {
+                const ids = [];
+                list.querySelectorAll('.q-dupcard__cb:checked').forEach(function (cb) {
+                    ids.push(parseInt(cb.dataset.id, 10));
+                });
+                if (!ids.length) return;
+                if (!confirm('Archive ' + ids.length + ' question(s)?')) return;
+    
+                fetch('/admin/questions/bulk-archive', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': CSRF,
+                    },
+                    body: JSON.stringify({ ids: ids }),
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (res) {
+                    if (!res || !res.success) {
+                        if (window.AdminCore) window.AdminCore.toast('Bulk archive failed', 'error');
+                        return;
+                    }
+                    res.archived.forEach(removeCard);
+                    if (window.AdminCore) {
+                        window.AdminCore.toast(res.archived.length + ' archived', 'success');
+                    }
+                    runCheck();
+                });
+            });
+        }
+    
+        // ---- Auto check ----
+        const textarea = form.querySelector('textarea[name="question_text"]');
+        const subjectSel = form.querySelector('select[name="subject_code"]');
+        const gradeSel = form.querySelector('select[name="grade"]');
+        let timer = null;
+        let lastKey = '';
+    
+        function runCheck() {
+            const text = textarea ? (textarea.value || '').trim() : '';
+            const subj = subjectSel ? subjectSel.value : '';
+            const grade = gradeSel ? gradeSel.value : '';
+            if (text.length < 15) {
+                state = [];
+                render();
+                return;
+            }
+            const key = text + '||' + subj + '||' + grade;
+            if (key === lastKey) return;
+    
+            fetch('/admin/questions/check-duplicate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': CSRF,
+                },
+                body: JSON.stringify({
+                    question_text: text,
+                    subject_code: subj,
+                    grade: grade,
+                    exclude_id: excludeId,
+                }),
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                lastKey = key;
+                state = (data && data.duplicates) || [];
+                render();
+            })
+            .catch(function () { /* silent */ });
+        }
+    
+        function schedule() {
+            clearTimeout(timer);
+            timer = setTimeout(runCheck, 700);
+        }
+    
+        if (textarea) {
+            textarea.addEventListener('input', schedule);
+            textarea.addEventListener('paste', function () { setTimeout(schedule, 30); });
+        }
+        if (subjectSel) subjectSel.addEventListener('change', schedule);
+        if (gradeSel) gradeSel.addEventListener('change', schedule);
+    
+        render();
+        // On a fresh "new" form: don't auto-check until user types.
+        // On edit: check immediately against existing values.
+        if (excludeId) schedule();
+    }
     // ------------------------------------------------------------
     // BOOT
     // ------------------------------------------------------------

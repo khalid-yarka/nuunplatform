@@ -1,12 +1,5 @@
 # blueprints/quiz_bp.py
-# Regular quiz blueprint.
-#
-# REACTION UNIFICATION (this version):
-#   - submit_rating()            — DELETED. No UI callers existed.
-#   - skip_rating()              — kept as the "advance" endpoint.
-#   - end_quiz()                 — NEW. Saves partial attempt + flushes reactions.
-#   - results()                  — flushes reactions before saving the attempt.
-#   - flush_quiz_reactions()     — called once per completed/ended quiz.
+# Regular quiz blueprint — with grade-aware question selection.
 
 import json
 import logging
@@ -48,7 +41,6 @@ def _empty_reactions():
 
 
 def _flush_reactions_safe(user_id, reactions):
-    """Best-effort flush of likes + saves. Never raises."""
     try:
         from services.interaction_service import flush_quiz_reactions
         flush_quiz_reactions(
@@ -60,13 +52,20 @@ def _flush_reactions_safe(user_id, reactions):
         logger.error(f"_flush_reactions_safe failed for user {user_id}: {e}", exc_info=True)
 
 
+def _profile_grade(user_id):
+    """Return the student's grade, defaulting to F4 if malformed."""
+    from question_utils import VALID_GRADES, DEFAULT_GRADE
+    user = get_student_by_id(user_id) or {}
+    g = (user.get('grade') or '').strip().upper()
+    return g if g in VALID_GRADES else DEFAULT_GRADE
+
+
 # ============================================
 # SETUP / START
 # ============================================
 
 @quiz_bp.route('/')
 def index():
-    """Unified setup page: choose subject and question count."""
     if 'user_id' not in session:
         flash('Please login first.', 'error')
         return redirect(url_for('auth.login'))
@@ -79,7 +78,8 @@ def index():
     user_id = session['user_id']
     subjects = get_user_subject_list(user_id)
     if not subjects:
-        flash('Please set your location and curriculum in your profile to access quizzes.', 'error')
+        flash('Please set your location and curriculum in your profile to access quizzes.',
+              'error')
         return redirect(url_for('dashboard.profile'))
 
     settings = session.get('settings', {})
@@ -91,15 +91,27 @@ def index():
     tier = get_current_user_tier()
     remaining_attempts = get_remaining_quota(user_id, 'quiz_attempt')
 
-    return render_template('dashboard/quiz/setup.html',
-                           subjects=subjects,
-                           allowed_counts=allowed_counts,
-                           tier=tier,
-                           remaining_attempts=remaining_attempts,
-                           is_custom_allowed=is_custom_question_count_allowed(user_id),
-                           default_subject=default_subject,
-                           default_question_count=default_question_count,
-                           default_difficulty=default_difficulty)
+    from question_utils import VALID_GRADES, grade_label
+    user_grade = _profile_grade(user_id)
+    can_change_grade = tier in ('premium', 'pro')
+    grade_choices = [
+        {'code': g, 'label': grade_label(g)} for g in VALID_GRADES
+    ]
+
+    return render_template(
+        'dashboard/quiz/setup.html',
+        subjects=subjects,
+        allowed_counts=allowed_counts,
+        tier=tier,
+        remaining_attempts=remaining_attempts,
+        is_custom_allowed=is_custom_question_count_allowed(user_id),
+        default_subject=default_subject,
+        default_question_count=default_question_count,
+        default_difficulty=default_difficulty,
+        user_grade=user_grade,
+        can_change_grade=can_change_grade,
+        grade_choices=grade_choices,
+    )
 
 
 @quiz_bp.route('/start', methods=['POST'])
@@ -144,7 +156,17 @@ def start_quiz():
         flash('You have used all your quiz attempts for today. Come back tomorrow!', 'error')
         return redirect(url_for('quiz.index'))
 
-    questions = get_questions_by_subject(subject_code, question_count)
+    # ── Grade resolution ────────────────────────────────
+    from question_utils import VALID_GRADES
+    profile_grade = _profile_grade(user_id)
+    form_grade = (request.form.get('grade') or '').strip().upper()
+    if get_current_user_tier() in ('premium', 'pro') and form_grade in VALID_GRADES:
+        effective_grade = form_grade
+    else:
+        effective_grade = profile_grade
+
+    questions = get_questions_by_subject(subject_code, question_count,
+                                         grade=effective_grade)
     if not questions:
         flash('No questions available for this subject yet.', 'error')
         return redirect(url_for('quiz.index'))
@@ -155,12 +177,13 @@ def start_quiz():
 
     session['quiz'] = {
         'subject_code': subject_code,
+        'grade': effective_grade,
         'question_count': len(questions),
         'questions': questions,
         'current_index': 0,
         'score': 0,
         'answers': [],
-        'ratings': [],           # kept for legacy sessions only
+        'ratings': [],
         'reactions': _empty_reactions(),
     }
     session.modified = True
@@ -183,8 +206,6 @@ def play():
         flash('No quiz in progress. Start a new quiz.', 'error')
         return redirect(url_for('quiz.index'))
 
-    # Ensure reactions bucket exists even for sessions started before
-    # the unification deploy.
     if 'reactions' not in quiz_data:
         quiz_data['reactions'] = _empty_reactions()
         session['quiz'] = quiz_data
@@ -277,10 +298,6 @@ def submit_answer():
 # ============================================
 # ADVANCE (was skip_rating)
 # ============================================
-# IMPORTANT: the endpoint name and URL are UNCHANGED for backwards
-# compatibility with any in-flight pages during deploy. Semantically it
-# is now "advance to next question" — it no longer records any rating.
-# ============================================
 
 @quiz_bp.route('/skip_rating', methods=['POST'])
 def skip_rating():
@@ -314,15 +331,11 @@ def skip_rating():
 
 
 # ============================================
-# END QUIZ (NEW) — partial save + flush
+# END QUIZ
 # ============================================
 
 @quiz_bp.route('/end', methods=['POST'])
 def end_quiz():
-    """
-    End the quiz early. Persists a partial attempt, flushes reactions,
-    awards points for what was earned, and clears the session.
-    """
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
     if not validate_csrf():
@@ -340,21 +353,16 @@ def end_quiz():
     subject_code = quiz_data['subject_code']
     reactions = quiz_data.get('reactions') or _empty_reactions()
 
-    # 1) Save partial attempt
     try:
         save_quiz_attempt(
             user_id, subject_code, score, total, answers,
-            [],                 # ratings kept for schema compat, always empty now
-            reactions,
-            ended_early=True,
+            [], reactions, ended_early=True,
         )
     except Exception as e:
         logger.error(f"end_quiz: save_quiz_attempt failed for user {user_id}: {e}", exc_info=True)
 
-    # 2) Flush reactions (single executemany — no per-click writes)
     _flush_reactions_safe(user_id, reactions)
 
-    # 3) Award points for what was earned
     try:
         student = get_student_by_id(user_id)
         if student:
@@ -363,12 +371,9 @@ def end_quiz():
     except Exception as e:
         logger.error(f"end_quiz: update points failed: {e}")
 
-    # 4) History entry
     try:
         add_history_entry(
-            user_id=user_id,
-            entry_type='quiz_attempt',
-            action='completed',
+            user_id=user_id, entry_type='quiz_attempt', action='completed',
             metadata={
                 'subject': subject_code,
                 'score': score,
@@ -380,13 +385,11 @@ def end_quiz():
     except Exception as e:
         logger.error(f"end_quiz: history entry failed: {e}")
 
-    # 5) Achievement check (partial)
     try:
         check_and_award_achievements(user_id, 'quiz_completed', {'score': score, 'total': total})
     except Exception:
         pass
 
-    # 6) Clear session
     session.pop('quiz', None)
     session.modified = True
 
@@ -423,26 +426,15 @@ def results():
 
     user_id = session['user_id']
 
-    # 1) Save attempt
     save_quiz_attempt(
-        user_id,
-        subject_code,
-        score,
-        total,
-        answers,
-        ratings,
-        reactions,
-        ended_early=False,
+        user_id, subject_code, score, total, answers,
+        ratings, reactions, ended_early=False,
     )
 
-    # 2) Flush reactions (idempotent — safe even if already flushed)
     _flush_reactions_safe(user_id, reactions)
 
-    # 3) History
     add_history_entry(
-        user_id=user_id,
-        entry_type='quiz_attempt',
-        action='completed',
+        user_id=user_id, entry_type='quiz_attempt', action='completed',
         metadata={
             'subject': subject_code,
             'score': score,
@@ -451,20 +443,16 @@ def results():
         }
     )
 
-    # 4) Award points
     student = get_student_by_id(user_id)
     if student:
         current_points = student.get('total_points', 0) or 0
         update_student_points(user_id, current_points + score)
 
     return render_template('dashboard/quiz/results.html',
-                           score=score,
-                           total=total,
+                           score=score, total=total,
                            percentage=round((score / total) * 100) if total > 0 else 0,
-                           answers=answers,
-                           ratings=ratings,
-                           reactions=reactions,
-                           questions=questions)
+                           answers=answers, ratings=ratings,
+                           reactions=reactions, questions=questions)
 
 
 # ============================================
@@ -535,6 +523,5 @@ def leaderboard():
     level = get_feature_level("detailed_ranking_stats", user_id=session['user_id'])
 
     return render_template('dashboard/quiz/leaderboard.html',
-                           leaders=leaders,
-                           user_rank=user_rank,
+                           leaders=leaders, user_rank=user_rank,
                            ranking_level=level)

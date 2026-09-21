@@ -1,7 +1,3 @@
-{# ============================================================
-   templates/dashboard/admin/content/question_edit.html
-   Create or edit a single question.
-   ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
 {% set is_new = (question is none) %}
@@ -26,28 +22,449 @@
     </a>
 {% endblock %}
 
+{% block admin_css %}
+<style>
+    /* ═══════════════════════════════════════════════════════
+       DUPLICATE SIDEBAR
+       ═══════════════════════════════════════════════════════ */
+    .q-edit-layout--with-dupbar {
+        display: grid;
+        grid-template-columns: 300px 1fr;
+        gap: 20px;
+        align-items: start;
+        transition: grid-template-columns 0.2s ease;
+    }
+    .q-edit-layout--with-dupbar.q-edit-layout--collapsed {
+        grid-template-columns: 56px 1fr;
+    }
+    .q-edit-form {
+        display: grid;
+        grid-template-columns: 1fr 280px;
+        gap: 20px;
+        align-items: start;
+        min-width: 0;
+    }
+
+    .q-dupbar {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        display: flex;
+        flex-direction: column;
+        position: sticky;
+        top: 80px;
+        max-height: calc(100vh - 100px);
+        overflow: hidden;
+        transition: width 0.2s ease;
+    }
+    .q-dupbar--collapsed {
+        width: 56px;
+    }
+    .q-dupbar--collapsed .q-dupbar__title,
+    .q-dupbar--collapsed .q-dupbar__body,
+    .q-dupbar--collapsed .q-dupbar__bulk {
+        display: none;
+    }
+
+    .q-dupbar__head {
+        display: flex; align-items: center; gap: 8px;
+        padding: 12px 12px;
+        border-bottom: 1px solid var(--border);
+        background: var(--background);
+        flex-shrink: 0;
+    }
+    .q-dupbar--collapsed .q-dupbar__head {
+        padding: 12px 0;
+        justify-content: center;
+        border-bottom: none;
+    }
+    .q-dupbar__toggle {
+        background: transparent; border: none;
+        width: 28px; height: 28px;
+        border-radius: 6px;
+        color: var(--text-muted);
+        cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 12px;
+        transition: var(--transition);
+    }
+    .q-dupbar__toggle:hover { background: var(--surface); color: var(--text); }
+    .q-dupbar__title {
+        display: flex; align-items: center; gap: 6px;
+        font-size: 13px; font-weight: 700; color: var(--text);
+    }
+    .q-dupbar__count {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 22px; height: 20px; padding: 0 6px;
+        background: var(--primary-light); color: var(--primary);
+        border-radius: 10px;
+        font-size: 11px; font-weight: 800;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .q-dupbar__body {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: 10px;
+        min-height: 0;
+    }
+    .q-dupbar__body::-webkit-scrollbar { width: 6px; }
+    .q-dupbar__body::-webkit-scrollbar-thumb {
+        background: var(--border); border-radius: 10px;
+    }
+
+    .q-dupbar__empty {
+        display: flex; flex-direction: column; align-items: center;
+        gap: 10px;
+        padding: 40px 20px;
+        color: var(--text-muted);
+        text-align: center;
+        font-size: 13px;
+    }
+    .q-dupbar__empty i {
+        font-size: 28px; color: #10B981; opacity: 0.7;
+    }
+
+    .q-dupbar__list {
+        display: flex; flex-direction: column; gap: 8px;
+    }
+
+    .q-dupcard {
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 10px 12px;
+        font-size: 13px;
+        transition: var(--transition);
+    }
+    .q-dupcard[data-tone="exact"] { border-left-color: #DC2626; }
+    .q-dupcard[data-tone="fuzzy"] { border-left-color: #F59E0B; }
+    .q-dupcard:hover { box-shadow: var(--shadow-sm); }
+
+    .q-dupcard__head {
+        display: flex; align-items: center; gap: 8px;
+        margin-bottom: 6px;
+    }
+    .q-dupcard__head input[type="checkbox"] {
+        width: 14px; height: 14px;
+        accent-color: var(--primary);
+        cursor: pointer;
+    }
+    .q-dupcard__id {
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 11px; font-weight: 700;
+        color: var(--text-muted);
+    }
+    .q-dupcard__badge {
+        font-size: 9px; font-weight: 800;
+        padding: 2px 7px; border-radius: 9px;
+        text-transform: uppercase; letter-spacing: 0.4px;
+        margin-left: auto;
+    }
+    .badge-exact { background: #DC2626; color: #fff; }
+    .badge-fuzzy { background: #F59E0B; color: #fff; }
+    .badge-edit  { background: #4F46E5; color: #fff; }
+
+    .q-dupcard__close {
+        background: transparent; border: none;
+        color: var(--text-muted); cursor: pointer;
+        width: 22px; height: 22px; border-radius: 4px;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px;
+    }
+    .q-dupcard__close:hover { background: var(--surface); color: var(--text); }
+
+    .q-dupcard__text {
+        color: var(--text); line-height: 1.45;
+        margin-bottom: 6px;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .q-dupcard__meta {
+        display: flex; flex-wrap: wrap; gap: 6px;
+        font-size: 10.5px; color: var(--text-muted);
+        margin-bottom: 8px;
+    }
+    .q-dupcard__meta span {
+        background: var(--surface);
+        padding: 1px 6px; border-radius: 5px;
+    }
+
+    .q-dupcard__actions {
+        display: flex; gap: 4px;
+        padding-top: 8px;
+        border-top: 1px solid var(--border);
+    }
+    .q-dupcard__actions button {
+        flex: 1;
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 5px 6px;
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 11px;
+        font-family: inherit;
+        font-weight: 600;
+        transition: var(--transition);
+        display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    }
+    .q-dupcard__actions button:hover {
+        background: var(--surface);
+        color: var(--primary);
+        border-color: var(--primary);
+    }
+    .q-dupcard__actions button[data-act="archive"]:hover {
+        color: #DC2626; border-color: #DC2626;
+    }
+    .q-dupcard__actions button[data-act="dismiss"]:hover {
+        color: #10B981; border-color: #10B981;
+    }
+    .q-dupcard__actions--edit button.btn-save {
+        background: var(--primary); color: #fff; border-color: var(--primary);
+    }
+    .q-dupcard__actions--edit button.btn-save:hover {
+        filter: brightness(0.93); color: #fff;
+    }
+
+    /* ---- Expanded view ---- */
+    .q-dupview__q {
+        font-size: 13px; font-weight: 600; line-height: 1.5;
+        color: var(--text);
+        margin-bottom: 8px;
+    }
+    .q-dupview__opts {
+        display: flex; flex-direction: column; gap: 4px;
+        margin-bottom: 8px;
+    }
+    .q-dupview__opt {
+        display: flex; align-items: center; gap: 8px;
+        padding: 5px 8px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 12px;
+    }
+    .q-dupview__opt.correct {
+        border-color: #10B981;
+        background: #ECFDF5;
+        color: #065F46;
+        font-weight: 600;
+    }
+    .q-dupview__opt .l {
+        font-weight: 700; color: var(--text-muted);
+        min-width: 14px;
+    }
+    .q-dupview__opt.correct .l { color: #10B981; }
+    .q-dupview__opt i { margin-left: auto; color: #10B981; }
+    .q-dupview__expl {
+        font-size: 11.5px; color: var(--text-secondary);
+        padding: 6px 8px; margin-bottom: 8px;
+        background: var(--surface);
+        border-radius: 6px;
+        line-height: 1.5;
+    }
+
+    /* ---- Inline edit form ---- */
+    .q-dupedit {
+        display: flex; flex-direction: column; gap: 8px;
+        padding: 4px 0 8px;
+    }
+    .q-dupedit__row label {
+        display: block;
+        font-size: 10px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.4px;
+        color: var(--text-muted);
+        margin-bottom: 3px;
+    }
+    .q-dupedit__row input,
+    .q-dupedit__row textarea,
+    .q-dupedit__row select {
+        width: 100%;
+        font-family: inherit;
+        font-size: 12px;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text);
+        transition: var(--transition);
+    }
+    .q-dupedit__row input:focus,
+    .q-dupedit__row textarea:focus,
+    .q-dupedit__row select:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 2px rgba(255, 49, 56, 0.1);
+    }
+    .q-dupedit__row textarea { resize: vertical; min-height: 50px; }
+
+    /* ---- Bulk bar ---- */
+    .q-dupbar__bulk {
+        display: flex; align-items: center; gap: 6px;
+        padding: 10px 12px;
+        border-top: 1px solid var(--border);
+        background: var(--background);
+        font-size: 12px; font-weight: 600;
+        color: var(--text-secondary);
+    }
+    .q-dupbar__bulk .admin-btn.sm {
+        padding: 5px 10px; font-size: 11px;
+    }
+    .q-dupbar__bulk .admin-btn.ghost {
+        background: transparent;
+        border: 1px solid transparent;
+        color: var(--text-muted);
+    }
+    .q-dupbar__bulk .admin-btn.ghost:hover { color: var(--text); }
+
+    /* ---- Undo toast ---- */
+    .dup-undo-toast {
+        position: fixed;
+        bottom: 24px; left: 50%;
+        transform: translateX(-50%);
+        background: var(--text); color: var(--surface);
+        padding: 10px 12px 10px 18px;
+        border-radius: 10px;
+        display: flex; align-items: center; gap: 12px;
+        font-size: 13px; font-weight: 600;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+        z-index: 3000;
+        animation: undoIn 0.25s ease-out;
+    }
+    .dup-undo-toast button {
+        background: rgba(255,255,255,0.15);
+        color: inherit;
+        border: none;
+        padding: 5px 12px; border-radius: 6px;
+        font-family: inherit;
+        font-size: 12px; font-weight: 700;
+        cursor: pointer;
+    }
+    .dup-undo-toast button:hover { background: rgba(255,255,255,0.25); }
+    @keyframes undoIn {
+        from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+        to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    /* ---- Responsive ---- */
+    @media (max-width: 1280px) {
+        .q-edit-form { grid-template-columns: 1fr; }
+        .q-edit-side { order: 2; }
+    }
+    @media (max-width: 1024px) {
+        .q-edit-layout--with-dupbar { grid-template-columns: 56px 1fr; }
+        .q-edit-layout--with-dupbar .q-dupbar { width: 56px; }
+        .q-edit-layout--with-dupbar .q-dupbar__title,
+        .q-edit-layout--with-dupbar .q-dupbar__body,
+        .q-edit-layout--with-dupbar .q-dupbar__bulk { display: none; }
+        .q-edit-layout--with-dupbar .q-dupbar__head {
+            padding: 12px 0;
+            justify-content: center;
+            border-bottom: none;
+        }
+        .q-edit-layout--with-dupbar:not(.q-edit-layout--collapsed) .q-dupbar {
+            position: fixed;
+            top: 80px; bottom: 20px; left: 20px;
+            width: 340px;
+            z-index: 100;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        }
+        .q-edit-layout--with-dupbar:not(.q-edit-layout--collapsed) .q-dupbar__title,
+        .q-edit-layout--with-dupbar:not(.q-edit-layout--collapsed) .q-dupbar__body,
+        .q-edit-layout--with-dupbar:not(.q-edit-layout--collapsed) .q-dupbar__bulk {
+            display: flex;
+        }
+        .q-edit-layout--with-dupbar:not(.q-edit-layout--collapsed) .q-dupbar__head {
+            padding: 12px;
+            justify-content: flex-start;
+            border-bottom: 1px solid var(--border);
+        }
+    }
+    @media (max-width: 768px) {
+        .q-edit-layout--with-dupbar:not(.q-edit-layout--collapsed) .q-dupbar {
+            left: 12px; right: 12px; width: auto;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block admin_content %}
 
-<form method="POST" id="questionForm"
-      action="{{ url_for('admin_content.question_new') if is_new else url_for('admin_content.question_edit', question_id=question.id) }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="q-edit-layout--with-dupbar" id="qEditLayout">
 
-    <div class="q-edit-layout">
+    {# ═══════════ DUPLICATE SIDEBAR ═══════════ #}
+    <aside class="q-dupbar" id="dupBar" aria-label="Similar questions">
+        <div class="q-dupbar__head">
+            <button type="button" class="q-dupbar__toggle" id="dupBarToggle"
+                    aria-expanded="true" aria-controls="dupList">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <div class="q-dupbar__title">
+                <span class="q-dupbar__count" id="dupCount">0</span>
+                <span>Similar</span>
+            </div>
+        </div>
+        <div class="q-dupbar__body">
+            <div class="q-dupbar__empty" id="dupEmpty">
+                <i class="fas fa-check-circle"></i>
+                <span>No similar questions</span>
+            </div>
+            <div class="q-dupbar__list" id="dupList"></div>
+        </div>
+        <div class="q-dupbar__bulk" id="dupBulk" hidden>
+            <span><span id="dupSelectedCount">0</span> selected</span>
+            <button type="button" class="admin-btn danger sm" id="dupBulkArchive">
+                <i class="fas fa-box-archive"></i> Archive
+            </button>
+            <button type="button" class="admin-btn ghost sm" id="dupBulkClear">Clear</button>
+        </div>
+    </aside>
 
-        {# ─────── MAIN COLUMN ─────── #}
+    {# ═══════════ FORM ═══════════ #}
+    <form method="POST" id="questionForm"
+          class="q-edit-form"
+          data-question-id="{{ question.id if question and question.id else '' }}"
+          action="{{ url_for('admin_content.question_new') if is_new else url_for('admin_content.question_update', question_id=question.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        {# ─── MAIN COLUMN ─── #}
         <div class="q-edit-main">
 
             <div class="q-edit-section">
-                <h3><i class="fas fa-book"></i> Subject</h3>
-                <select name="subject_code" class="admin-select" required>
-                    <option value="">— Select subject —</option>
-                    {% for s in subjects %}
-                        <option value="{{ s.code }}"
-                                {% if question and question.subject_code == s.code %}selected{% endif %}>
-                            {{ s.icon or '📚' }} {{ s.name }}
-                        </option>
-                    {% endfor %}
-                </select>
+                <h3><i class="fas fa-book"></i> Subject &amp; Grade</h3>
+                <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;">
+                    <div>
+                        <label class="admin-muted-sm">Subject</label>
+                        <select name="subject_code" class="admin-select" required>
+                            <option value="">— Select subject —</option>
+                            {% for s in subjects %}
+                                <option value="{{ s.code }}"
+                                        {% if question and question.subject_code == s.code %}selected{% endif %}>
+                                    {{ s.icon or '📚' }} {{ s.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="admin-muted-sm">Grade</label>
+                        {% set current_grade = (question.grade if question and question.grade else default_grade) %}
+                        <select name="grade" class="admin-select">
+                            {% for g in grades %}
+                                <option value="{{ g }}" {% if current_grade == g %}selected{% endif %}>
+                                    {% if g == 'F4' %}Form 4
+                                    {% elif g == 'F3' %}Form 3
+                                    {% elif g == 'G8' %}Grade 8
+                                    {% elif g == 'G7' %}Grade 7
+                                    {% else %}{{ g }}{% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
             </div>
 
             <div class="q-edit-section">
@@ -117,7 +534,7 @@
 
         </div>
 
-        {# ─────── SIDE COLUMN ─────── #}
+        {# ─── SIDE COLUMN ─── #}
         <div class="q-edit-side">
 
             <div class="q-edit-section">
@@ -136,7 +553,8 @@
                 <input type="text" id="pdfCodeInput" name="pdf_code" class="admin-input"
                        value="{{ question.pdf_code if question else '' }}"
                        placeholder="XXXX-XXXX" maxlength="9"
-                       autocomplete="off" spellcheck="false" style="font-family:monospace;letter-spacing:1px;">
+                       autocomplete="off" spellcheck="false"
+                       style="font-family:monospace;letter-spacing:1px;">
 
                 <div class="q-pdf-preview" id="pdfLookupPreview" style="display:none;"></div>
 
@@ -156,8 +574,12 @@
             </div>
 
         </div>
-    </div>
-</form>
+    </form>
+
+</div>
+
+{# Initial duplicate data for JS to render (server-side on POST) #}
+<script type="application/json" id="dupInitialData">{{ duplicates_json|safe }}</script>
 
 {% endblock %}
 

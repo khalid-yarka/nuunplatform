@@ -1,11 +1,6 @@
 {# ============================================================
    templates/dashboard/admin/content/questions.html
-   Question list with:
-     • quick filters (search, subject, sort)
-     • collapsible advanced filters (PDF, difficulty, miss rate,
-       interactions, dates, chapter)
-     • active filter chips with one-click clear
-     • per-question miss-rate chip
+   Question list with grade filter, PDF filter, miss-rate filter.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -61,7 +56,7 @@
     </div>
 </div>
 
-{# ─────── MAIN FORM (toolbar + advanced panel share one form) ─────── #}
+{# ─────── MAIN FORM ─────── #}
 {% set advanced_open = (
     pdf_filter or pdf_code or status_filter or chapter or
     interactions or miss_filter or
@@ -85,6 +80,19 @@
             {% for s in subjects %}
                 <option value="{{ s.code }}" {% if subject_code == s.code %}selected{% endif %}>
                     {{ s.icon or '📚' }} {{ s.name }}
+                </option>
+            {% endfor %}
+        </select>
+
+        <select name="grade" class="q-filter" data-autofilter>
+            <option value="">All grades</option>
+            {% for g in filter_options.grades %}
+                <option value="{{ g }}" {% if grade_filter == g %}selected{% endif %}>
+                    {% if g == 'F4' %}Form 4
+                    {% elif g == 'F3' %}Form 3
+                    {% elif g == 'G8' %}Grade 8
+                    {% elif g == 'G7' %}Grade 7
+                    {% else %}{{ g }}{% endif %}
                 </option>
             {% endfor %}
         </select>
@@ -121,7 +129,7 @@
         </span>
     </div>
 
-    {# ─────── ADVANCED FILTERS (inside the form → autofilter works) ─────── #}
+    {# ─────── ADVANCED FILTERS ─────── #}
     <div id="advancedPanel"
          class="admin-card"
          style="margin-top:12px;{% if not advanced_open %}display:none;{% endif %}">
@@ -134,7 +142,6 @@
         </div>
         <div class="admin-card-body">
 
-            {# ---- ROW 1: PDF + status + chapter ---- #}
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
 
                 <div class="admin-form-group" style="margin-bottom:0;">
@@ -193,7 +200,6 @@
 
             </div>
 
-            {# ---- ROW 2: Miss rate + interactions + difficulty ---- #}
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px;">
 
                 <div class="admin-form-group" style="margin-bottom:0;">
@@ -245,7 +251,6 @@
 
             </div>
 
-            {# ---- ROW 3: dates ---- #}
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px;">
 
                 <div class="admin-form-group" style="margin-bottom:0;">
@@ -313,6 +318,11 @@
                 <div class="q-text">{{ q.question_text }}</div>
                 <div class="q-meta">
                     <span class="q-chip subject">{{ q.subject_name or q.subject_code }}</span>
+
+                    {% if q.grade %}
+                        <span class="q-chip grade">🎓 {{ q.grade }}</span>
+                    {% endif %}
+
                     {% if q.chapter %}
                         <span class="q-chip">📖 {{ q.chapter }}</span>
                     {% endif %}
@@ -338,7 +348,6 @@
                         <span class="q-chip draft">✏️ Draft</span>
                     {% endif %}
 
-                    {# ---- Miss rate chip ---- #}
                     {% if m_attempts > 0 %}
                         {% if m_rate >= 70 %}
                             <span class="q-chip miss-high" title="{{ m_misses }} misses / {{ m_attempts }} attempts">
@@ -386,12 +395,13 @@
     {% endfor %}
 </section>
 
-{# ─────── PAGINATION (URL-encoded, preserves all filters) ─────── #}
+{# ─────── PAGINATION ─────── #}
 {% if total_pages > 1 %}
 <div class="admin-pagination">
     {% set base_params = {
         'search': search,
         'subject': subject_code,
+        'grade': grade_filter,
         'pdf': pdf_filter,
         'pdf_code': pdf_code,
         'status': status_filter,
@@ -432,9 +442,9 @@
     <span class="empty-icon">📭</span>
     <h3>No questions found</h3>
     <p>Try adjusting the filters or clearing them.</p>
-    {% if search or subject_code or pdf_filter or pdf_code or status_filter
-          or chapter or interactions or miss_filter or difficulty_min
-          or difficulty_max or date_from or date_to %}
+    {% if search or subject_code or grade_filter or pdf_filter or pdf_code
+          or status_filter or chapter or interactions or miss_filter
+          or difficulty_min or difficulty_max or date_from or date_to %}
         <a href="{{ url_for('admin_content.questions') }}" class="admin-btn primary">
             <i class="fas fa-times"></i> Clear all filters
         </a>
@@ -447,115 +457,75 @@
 {% endif %}
 
 <style>
-    /* ---- Active filters bar ---- */
     .active-filters-bar {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
+        display: flex; flex-wrap: wrap; align-items: center;
         gap: 8px;
         padding: 10px 14px;
         background: var(--background);
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
-        margin-top: 12px;
-        margin-bottom: 14px;
+        margin-top: 12px; margin-bottom: 14px;
         font-size: 12px;
     }
     .active-filters-bar .af-label {
-        color: var(--text-secondary);
-        font-weight: 600;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
+        color: var(--text-secondary); font-weight: 600;
+        display: inline-flex; align-items: center; gap: 6px;
     }
     .active-filters-bar .af-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
+        display: inline-flex; align-items: center; gap: 6px;
         padding: 4px 10px;
-        background: var(--primary-light);
-        color: var(--primary);
+        background: var(--primary-light); color: var(--primary);
         border-radius: 12px;
-        font-weight: 600;
-        text-decoration: none;
+        font-weight: 600; text-decoration: none;
         transition: var(--transition);
     }
     .active-filters-bar .af-chip:hover {
-        background: var(--primary);
-        color: #fff;
-        text-decoration: none;
+        background: var(--primary); color: #fff; text-decoration: none;
     }
     .active-filters-bar .af-chip-label { opacity: 0.85; }
     .active-filters-bar .af-chip-value {
-        max-width: 140px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        max-width: 140px; overflow: hidden;
+        text-overflow: ellipsis; white-space: nowrap;
     }
-    .active-filters-bar .af-chip-close {
-        font-size: 10px;
-        opacity: 0.7;
-    }
+    .active-filters-bar .af-chip-close { font-size: 10px; opacity: 0.7; }
     .active-filters-bar .af-chip:hover .af-chip-close { opacity: 1; }
     .active-filters-bar .af-clear {
         margin-left: auto;
-        color: var(--text-muted);
-        text-decoration: none;
-        font-weight: 600;
-        padding: 4px 10px;
-        border-radius: 12px;
+        color: var(--text-muted); text-decoration: none;
+        font-weight: 600; padding: 4px 10px; border-radius: 12px;
     }
     .active-filters-bar .af-clear:hover {
-        color: var(--primary);
-        background: var(--primary-light);
+        color: var(--primary); background: var(--primary-light);
     }
 
-    /* ---- Miss rate chips ---- */
-    .q-chip.miss-high {
-        background: #FEF2F2;
-        color: #991B1B;
-        font-weight: 700;
-    }
-    .q-chip.miss-medium {
-        background: #FFFBEB;
-        color: #92400E;
-        font-weight: 700;
-    }
-    .q-chip.miss-low {
-        background: #ECFDF5;
-        color: #065F46;
-        font-weight: 700;
-    }
+    .q-chip.miss-high { background: #FEF2F2; color: #991B1B; font-weight: 700; }
+    .q-chip.miss-medium { background: #FFFBEB; color: #92400E; font-weight: 700; }
+    .q-chip.miss-low { background: #ECFDF5; color: #065F46; font-weight: 700; }
     .q-chip.miss-none {
-        background: var(--background);
-        color: var(--text-muted);
-        font-weight: 500;
-        font-style: italic;
+        background: var(--background); color: var(--text-muted);
+        font-weight: 500; font-style: italic;
+    }
+    .q-chip.grade {
+        background: linear-gradient(135deg, rgba(99,102,241,0.14), rgba(139,92,246,0.10));
+        color: #4F46E5;
+        font-weight: 700;
     }
 
     [data-theme="dark"] .q-chip.miss-high   { background: #3A1A1A; color: #F87171; }
     [data-theme="dark"] .q-chip.miss-medium { background: #3A2E1A; color: #FBBF24; }
     [data-theme="dark"] .q-chip.miss-low    { background: #1A3A2E; color: #34D399; }
+    [data-theme="dark"] .q-chip.grade       { background: rgba(99,102,241,0.20); color: #A5B4FC; }
 
-    [data-theme="dark"] .active-filters-bar {
-        background: var(--surface-alt);
-    }
-    [data-theme="dark"] .active-filters-bar .af-chip {
-        background: var(--primary-light);
-    }
+    [data-theme="dark"] .active-filters-bar { background: var(--surface-alt); }
+    [data-theme="dark"] .active-filters-bar .af-chip { background: var(--primary-light); }
 </style>
 
 <script>
 (function () {
     'use strict';
-
-    // ============================================================
-    // ADVANCED PANEL TOGGLE
-    // ============================================================
     var toggleBtn = document.getElementById('toggleAdvanced');
     var panel = document.getElementById('advancedPanel');
     var icon = document.getElementById('toggleAdvancedIcon');
-
     if (toggleBtn && panel) {
         toggleBtn.addEventListener('click', function () {
             var isOpen = panel.style.display !== 'none';

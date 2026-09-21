@@ -40,7 +40,7 @@ REQUIRED_TABLES = [
 
 REQUIRED_COLUMNS = {
     'students': ['id', 'public_id', 'phone_number', 'password', 'first_name', 'last_name', 'is_admin', 'created_at', 'tier', 'tier_updated_at'],
-    'questions': ['id', 'subject_code', 'question_text', 'options', 'correct_answer', 'difficulty', 'status', 'created_at'],
+    'questions': ['id', 'subject_code', 'question_text', 'options', 'correct_answer', 'difficulty', 'status', 'grade','created_at'],
     'quiz_attempts': ['id', 'student_id', 'subject_code', 'score', 'total_questions', 'answers', 'ratings', 'completed_at'],
     'groups': ['id', 'name', 'platform', 'invite_link', 'is_active', 'created_at'],
     'pdfs': ['id', 'code', 'title', 'file_url', 'view_count', 'uploaded_at', 'is_premium'],

@@ -1,44 +1,6 @@
 # ============================================================
 # blueprints/admin/content_bp.py
 # Content domain — questions, PDFs (library / intake / staging).
-#
-# PDF flow (unified in the admin system):
-#   Telegram bot uploads  →  pending_pdfs (bot.db)
-#   Admin processes       →  pdfs         (bot.db)  ← "staging"
-#   Super admin publishes →  pdfs         (main db) ← "library"
-#
-# Routes:
-#   GET  /admin/questions                            → list
-#   GET  /admin/questions/new                        → new form
-#   POST /admin/questions/new                        → create
-#   GET  /admin/questions/<id>/edit                  → edit form
-#   POST /admin/questions/<id>/edit                  → update
-#   POST /admin/questions/<id>/delete                → archive
-#   GET  /admin/questions/broken                     → broken PDF links
-#   GET  /admin/questions/hard                       → high miss-rate
-#   POST /admin/questions/pdf-info                   → AJAX PDF lookup
-#   GET  /admin/bulk-import                          → bulk import page
-#   POST /admin/bulk-import                          → apply import
-#   GET  /admin/bulk-template                        → download template
-#   POST /admin/bulk-preview                         → AJAX preview
-#
-#   GET  /admin/pdfs                                 → workspace (library/intake/staging)
-#   GET  /admin/pdfs/<id>/edit                       → edit library PDF
-#   POST /admin/pdfs/<id>/edit                       → update library PDF
-#   POST /admin/pdfs/<id>/delete                     → delete library PDF
-#   GET  /admin/pdfs/broken                          → missing PDF codes
-#   GET  /admin/pdfs/intake/<id>/process             → process pending
-#   POST /admin/pdfs/intake/<id>/process             → fulfil pending
-#   GET  /admin/pdfs/intake/<id>/preview             → stream pending file
-#   GET  /admin/pdfs/staging/<id>/edit               → edit staged PDF
-#   POST /admin/pdfs/staging/<id>/edit               → save staged PDF
-#   POST /admin/pdfs/staging/<id>/delete             → delete staged PDF
-#   POST /admin/pdfs/staging/publish                 → publish selected
-#   POST /admin/pdfs/staging/publish-all             → publish all staged
-#
-#   GET  /admin/pdfs/bulk-workspace                  → full-page bulk workspace
-#   POST /admin/pdfs/bulk-workspace/commit           → stage or publish selected
-#   POST /admin/pdfs/intake/publish-direct           → legacy redirect → bulk workspace
 # ============================================================
 
 from flask import (
@@ -62,6 +24,7 @@ from db import (
     create_question,
     update_question,
     delete_question,
+    unarchive_question,
     get_questions_paginated,
     get_question_stats,
     get_questions_filter_options,
@@ -84,6 +47,12 @@ from utils import validate_csrf, get_somali_time_db
 from services.admin.guards import admin_can
 from services.admin.audit import write_audit
 from services.pdf_naming import suggest_from_filename, suggest_full
+from question_utils import VALID_GRADES, DEFAULT_GRADE, normalize_grade
+from services.question_validity import (
+    find_duplicate_questions,
+    to_payload as duplicates_to_payload,
+    dismiss_duplicate_pair,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -220,93 +189,6 @@ def _load_unverified_pdfs(show_confirmed=False, limit=100, offset=0):
     return rows
 
 
-# ============================================================
-# QUESTIONS — LIST
-# ============================================================
-
-@admin_content_bp.route('/questions', methods=['GET'], endpoint='questions')
-@admin_can('questions.view')
-def questions():
-    search = (request.args.get('search') or '').strip()
-    subject_code = (request.args.get('subject') or '').strip()
-    pdf_filter = (request.args.get('pdf') or '').strip()
-    pdf_code = (request.args.get('pdf_code') or '').strip().upper()
-    status_filter = (request.args.get('status') or '').strip()
-    chapter = (request.args.get('chapter') or '').strip()
-    interactions = (request.args.get('interactions') or '').strip()
-    miss_filter = (request.args.get('miss') or '').strip()
-    date_from = (request.args.get('from') or '').strip()
-    date_to = (request.args.get('to') or '').strip()
-    sort = (request.args.get('sort') or 'newest').strip()
-
-    difficulty_min = _int_or_none(request.args.get('difficulty_min'))
-    difficulty_max = _int_or_none(request.args.get('difficulty_max'))
-
-    page = max(1, int(request.args.get('page') or 1))
-    per_page = 20
-
-    questions_list, total = get_questions_paginated(
-        search=search,
-        subject_code=subject_code,
-        pdf_filter=pdf_filter,
-        pdf_code=pdf_code,
-        status_filter=status_filter,
-        difficulty_min=difficulty_min,
-        difficulty_max=difficulty_max,
-        chapter=chapter,
-        date_from=date_from,
-        date_to=date_to,
-        interactions=interactions,
-        miss_filter=miss_filter,
-        sort=sort,
-        page=page,
-        per_page=per_page,
-    )
-
-    stats = get_question_stats()
-    filter_options = get_questions_filter_options()
-    total_pages = (total + per_page - 1) // per_page if total > 0 else 1
-
-    codes_in_page = [q['pdf_code'] for q in questions_list if q.get('pdf_code')]
-    pdf_map = check_pdf_codes_exist(codes_in_page) if codes_in_page else {}
-
-    active_filters = _build_active_filters(
-        search=search, subject_code=subject_code,
-        pdf_filter=pdf_filter, pdf_code=pdf_code,
-        status_filter=status_filter, chapter=chapter,
-        interactions=interactions, miss_filter=miss_filter,
-        difficulty_min=difficulty_min, difficulty_max=difficulty_max,
-        date_from=date_from, date_to=date_to,
-    )
-
-    return render_template(
-        'dashboard/admin/content/questions.html',
-        questions=questions_list,
-        total=total,
-        page=page,
-        per_page=per_page,
-        total_pages=total_pages,
-        stats=stats,
-        subjects=get_all_subjects(),
-        filter_options=filter_options,
-        pdf_map=pdf_map,
-        search=search,
-        subject_code=subject_code,
-        pdf_filter=pdf_filter,
-        pdf_code=pdf_code,
-        status_filter=status_filter,
-        chapter=chapter,
-        interactions=interactions,
-        miss_filter=miss_filter,
-        difficulty_min=difficulty_min,
-        difficulty_max=difficulty_max,
-        date_from=date_from,
-        date_to=date_to,
-        sort=sort,
-        active_filters=active_filters,
-    )
-
-
 def _build_active_filters(**kw):
     chips = []
 
@@ -318,10 +200,8 @@ def _build_active_filters(**kw):
         qs = urlencode(remaining)
         clear_url = ('?' + qs) if qs else url_for('admin_content.questions')
         chips.append({
-            'param': param,
-            'label': label,
-            'value': str(value),
-            'clear_url': clear_url,
+            'param': param, 'label': label,
+            'value': str(value), 'clear_url': clear_url,
         })
 
     if kw.get('search'):
@@ -329,6 +209,8 @@ def _build_active_filters(**kw):
     if kw.get('subject_code'):
         subj = get_subject(kw['subject_code'])
         add('subject', 'Subject', subj['name'] if subj else kw['subject_code'])
+    if kw.get('grade_filter'):
+        add('grade', 'Grade', kw['grade_filter'])
     if kw.get('pdf_filter'):
         label = 'PDF linked' if kw['pdf_filter'] == 'linked' else 'PDF unlinked'
         add('pdf', 'PDF', label)
@@ -371,6 +253,99 @@ def _build_active_filters(**kw):
 
 
 # ============================================================
+# QUESTIONS — LIST
+# ============================================================
+
+@admin_content_bp.route('/questions', methods=['GET'], endpoint='questions')
+@admin_can('questions.view')
+def questions():
+    search = (request.args.get('search') or '').strip()
+    subject_code = (request.args.get('subject') or '').strip()
+    grade_filter = (request.args.get('grade') or '').strip().upper()
+    if grade_filter and grade_filter not in VALID_GRADES:
+        grade_filter = ''
+    pdf_filter = (request.args.get('pdf') or '').strip()
+    pdf_code = (request.args.get('pdf_code') or '').strip().upper()
+    status_filter = (request.args.get('status') or '').strip()
+    chapter = (request.args.get('chapter') or '').strip()
+    interactions = (request.args.get('interactions') or '').strip()
+    miss_filter = (request.args.get('miss') or '').strip()
+    date_from = (request.args.get('from') or '').strip()
+    date_to = (request.args.get('to') or '').strip()
+    sort = (request.args.get('sort') or 'newest').strip()
+
+    difficulty_min = _int_or_none(request.args.get('difficulty_min'))
+    difficulty_max = _int_or_none(request.args.get('difficulty_max'))
+
+    page = max(1, int(request.args.get('page') or 1))
+    per_page = 20
+
+    questions_list, total = get_questions_paginated(
+        search=search,
+        subject_code=subject_code,
+        grade_filter=grade_filter,
+        pdf_filter=pdf_filter,
+        pdf_code=pdf_code,
+        status_filter=status_filter,
+        difficulty_min=difficulty_min,
+        difficulty_max=difficulty_max,
+        chapter=chapter,
+        date_from=date_from,
+        date_to=date_to,
+        interactions=interactions,
+        miss_filter=miss_filter,
+        sort=sort,
+        page=page,
+        per_page=per_page,
+    )
+
+    stats = get_question_stats()
+    filter_options = get_questions_filter_options()
+    total_pages = (total + per_page - 1) // per_page if total > 0 else 1
+
+    codes_in_page = [q['pdf_code'] for q in questions_list if q.get('pdf_code')]
+    pdf_map = check_pdf_codes_exist(codes_in_page) if codes_in_page else {}
+
+    active_filters = _build_active_filters(
+        search=search, subject_code=subject_code,
+        grade_filter=grade_filter,
+        pdf_filter=pdf_filter, pdf_code=pdf_code,
+        status_filter=status_filter, chapter=chapter,
+        interactions=interactions, miss_filter=miss_filter,
+        difficulty_min=difficulty_min, difficulty_max=difficulty_max,
+        date_from=date_from, date_to=date_to,
+    )
+
+    return render_template(
+        'dashboard/admin/content/questions.html',
+        questions=questions_list,
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        stats=stats,
+        subjects=get_all_subjects(),
+        filter_options=filter_options,
+        pdf_map=pdf_map,
+        search=search,
+        subject_code=subject_code,
+        grade_filter=grade_filter,
+        pdf_filter=pdf_filter,
+        pdf_code=pdf_code,
+        status_filter=status_filter,
+        chapter=chapter,
+        interactions=interactions,
+        miss_filter=miss_filter,
+        difficulty_min=difficulty_min,
+        difficulty_max=difficulty_max,
+        date_from=date_from,
+        date_to=date_to,
+        sort=sort,
+        active_filters=active_filters,
+    )
+
+
+# ============================================================
 # QUESTIONS — NEW
 # ============================================================
 
@@ -381,6 +356,9 @@ def question_new():
         'dashboard/admin/content/question_edit.html',
         question=None,
         subjects=get_all_subjects(),
+        grades=VALID_GRADES,
+        default_grade=DEFAULT_GRADE,
+        duplicates_json='[]',
     )
 
 
@@ -404,6 +382,7 @@ def question_create():
     tags = (request.form.get('tags') or '').strip()
     explanation = (request.form.get('explanation') or '').strip()
     status = (request.form.get('status') or 'active').strip()
+    grade = normalize_grade(request.form.get('grade'))
 
     pdf_code = _normalize_pdf_code(request.form.get('pdf_code'))
     pdf_page = _normalize_pdf_page(request.form.get('pdf_page'))
@@ -421,46 +400,60 @@ def question_create():
         errors.append('Invalid PDF code format. Expected XXXX-XXXX.')
     if pdf_page and not pdf_code:
         pdf_page = None
-        flash('Page number was ignored because no PDF code was provided.', 'warning')
+        flash('Page number ignored — no PDF code provided.', 'warning')
 
     if errors:
         for e in errors:
             flash(e, 'error')
         return redirect(url_for('admin_content.question_new'))
 
+    duplicates = find_duplicate_questions(
+        question_text, subject_code=subject_code, grade=grade,
+    )
+    confirm = request.form.get('confirm_duplicate') == '1'
+
     try:
         difficulty = int(difficulty_raw)
     except ValueError:
         difficulty = 1
 
-    options = {'A': option_a, 'B': option_b, 'C': option_c}
-    if option_d: options['D'] = option_d
-    if option_e: options['E'] = option_e
-    if option_f: options['F'] = option_f
+    opts = {'A': option_a, 'B': option_b, 'C': option_c}
+    if option_d: opts['D'] = option_d
+    if option_e: opts['E'] = option_e
+    if option_f: opts['F'] = option_f
+
+    if duplicates and not confirm:
+        return render_template(
+            'dashboard/admin/content/question_edit.html',
+            question={
+                'subject_code': subject_code, 'question_text': question_text,
+                'options': opts, 'correct_answer': correct_answer,
+                'difficulty': difficulty, 'chapter': chapter, 'tags': tags,
+                'explanation': explanation, 'pdf_code': pdf_code,
+                'pdf_page': pdf_page, 'status': status, 'grade': grade,
+            },
+            subjects=get_all_subjects(),
+            grades=VALID_GRADES, default_grade=DEFAULT_GRADE,
+            duplicates_json=json.dumps(duplicates_to_payload(duplicates)),
+        )
 
     data = {
-        'subject_code': subject_code,
-        'question_text': question_text,
-        'options': options,
-        'correct_answer': correct_answer,
-        'difficulty': difficulty,
-        'chapter': chapter,
-        'tags': tags,
-        'explanation': explanation,
-        'pdf_code': pdf_code,
-        'pdf_page': pdf_page,
-        'status': status,
+        'subject_code': subject_code, 'question_text': question_text,
+        'options': opts, 'correct_answer': correct_answer,
+        'difficulty': difficulty, 'chapter': chapter, 'tags': tags,
+        'explanation': explanation, 'pdf_code': pdf_code,
+        'pdf_page': pdf_page, 'status': status, 'grade': grade,
         'created_by': session.get('user_id'),
         'updated_by': session.get('user_id'),
     }
 
     if create_question(data):
         write_audit(
-            action='question.create',
-            target_type='question',
-            before=None,
+            action='question.create', target_type='question', before=None,
             after={'subject_code': subject_code, 'pdf_code': pdf_code,
-                   'difficulty': difficulty, 'status': status},
+                   'difficulty': difficulty, 'status': status,
+                   'grade': grade,
+                   'duplicates_acknowledged': bool(duplicates and confirm)},
             severity='info',
         )
         flash('Question added successfully.', 'success')
@@ -491,7 +484,10 @@ def question_edit(question_id):
         'dashboard/admin/content/question_edit.html',
         question=question,
         subjects=get_all_subjects(),
+        grades=VALID_GRADES,
+        default_grade=DEFAULT_GRADE,
         pdf_info=pdf_info,
+        duplicates_json='[]',
     )
 
 
@@ -520,6 +516,7 @@ def question_update(question_id):
     tags = (request.form.get('tags') or '').strip()
     explanation = (request.form.get('explanation') or '').strip()
     status = (request.form.get('status') or 'active').strip()
+    grade = normalize_grade(request.form.get('grade'))
 
     pdf_code = _normalize_pdf_code(request.form.get('pdf_code'))
     pdf_page = _normalize_pdf_page(request.form.get('pdf_page'))
@@ -535,9 +532,6 @@ def question_update(question_id):
         errors.append('Please select the correct answer.')
     if pdf_code and not _validate_pdf_code_format(pdf_code):
         errors.append('Invalid PDF code format.')
-    if pdf_page and not pdf_code:
-        pdf_page = None
-        flash('Page number was ignored because no PDF code was provided.', 'warning')
 
     if errors:
         for e in errors:
@@ -545,42 +539,58 @@ def question_update(question_id):
         return redirect(url_for('admin_content.question_edit',
                                 question_id=question_id))
 
+    duplicates = find_duplicate_questions(
+        question_text, subject_code=subject_code,
+        grade=grade, exclude_id=question_id,
+    )
+    confirm = request.form.get('confirm_duplicate') == '1'
+
     try:
         difficulty = int(difficulty_raw)
     except ValueError:
         difficulty = 1
 
-    options = {'A': option_a, 'B': option_b, 'C': option_c}
-    if option_d: options['D'] = option_d
-    if option_e: options['E'] = option_e
-    if option_f: options['F'] = option_f
+    opts = {'A': option_a, 'B': option_b, 'C': option_c}
+    if option_d: opts['D'] = option_d
+    if option_e: opts['E'] = option_e
+    if option_f: opts['F'] = option_f
+
+    if duplicates and not confirm:
+        merged = dict(question)
+        merged.update({
+            'subject_code': subject_code, 'question_text': question_text,
+            'options': opts, 'correct_answer': correct_answer,
+            'difficulty': difficulty, 'chapter': chapter, 'tags': tags,
+            'explanation': explanation, 'pdf_code': pdf_code,
+            'pdf_page': pdf_page, 'status': status, 'grade': grade,
+        })
+        return render_template(
+            'dashboard/admin/content/question_edit.html',
+            question=merged,
+            subjects=get_all_subjects(),
+            grades=VALID_GRADES, default_grade=DEFAULT_GRADE,
+            duplicates_json=json.dumps(duplicates_to_payload(duplicates)),
+        )
 
     data = {
-        'subject_code': subject_code,
-        'question_text': question_text,
-        'options': options,
-        'correct_answer': correct_answer,
-        'difficulty': difficulty,
-        'chapter': chapter,
-        'tags': tags,
-        'explanation': explanation,
-        'pdf_code': pdf_code,
-        'pdf_page': pdf_page,
-        'status': status,
+        'subject_code': subject_code, 'question_text': question_text,
+        'options': opts, 'correct_answer': correct_answer,
+        'difficulty': difficulty, 'chapter': chapter, 'tags': tags,
+        'explanation': explanation, 'pdf_code': pdf_code,
+        'pdf_page': pdf_page, 'status': status, 'grade': grade,
         'updated_by': session.get('user_id'),
     }
 
     if update_question(question_id, data):
         write_audit(
-            action='question.update',
-            target_type='question',
+            action='question.update', target_type='question',
             target_id=question_id,
             before={'subject_code': question.get('subject_code'),
-                    'pdf_code': question.get('pdf_code'),
+                    'grade': question.get('grade'),
                     'status': question.get('status')},
-            after={'subject_code': subject_code,
-                   'pdf_code': pdf_code,
-                   'status': status},
+            after={'subject_code': subject_code, 'grade': grade,
+                   'status': status,
+                   'duplicates_acknowledged': bool(duplicates and confirm)},
             severity='info',
         )
         flash('Question updated.', 'success')
@@ -592,34 +602,229 @@ def question_update(question_id):
 
 
 # ============================================================
-# QUESTIONS — ARCHIVE
+# QUESTIONS — ARCHIVE / UNARCHIVE / BULK
 # ============================================================
 
 @admin_content_bp.route('/questions/<int:question_id>/delete', methods=['POST'],
                         endpoint='question_archive')
 @admin_can('questions.archive')
 def question_archive(question_id):
-    if not validate_csrf():
-        abort(403)
+    wants_json = (
+        request.is_json
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    )
+
+    if wants_json:
+        if not _csrf_ok():
+            return jsonify({'error': 'Invalid session.'}), 403
+    else:
+        if not validate_csrf():
+            abort(403)
 
     question = get_question_by_id(question_id)
     if not question:
+        if wants_json:
+            return jsonify({'error': 'Question not found'}), 404
         abort(404)
 
-    if delete_question(question_id):
-        write_audit(
-            action='question.archive',
-            target_type='question',
-            target_id=question_id,
-            before={'status': question.get('status')},
-            after={'status': 'archived'},
-            severity='warning',
-        )
-        flash('Question archived.', 'success')
-    else:
+    ok = delete_question(question_id)
+    if not ok:
+        if wants_json:
+            return jsonify({'error': 'Archive failed'}), 500
         flash('Error archiving question.', 'error')
+        return redirect(url_for('admin_content.questions'))
 
+    write_audit(
+        action='question.archive', target_type='question',
+        target_id=question_id,
+        before={'status': question.get('status')},
+        after={'status': 'archived'},
+        severity='warning',
+    )
+
+    if wants_json:
+        return jsonify({'success': True, 'id': question_id})
+    flash('Question archived.', 'success')
     return redirect(url_for('admin_content.questions'))
+
+
+@admin_content_bp.route('/questions/<int:question_id>/unarchive',
+                        methods=['POST'],
+                        endpoint='question_unarchive')
+@admin_can('questions.edit')
+def question_unarchive(question_id):
+    if not _csrf_ok():
+        return jsonify({'error': 'Invalid session.'}), 403
+
+    if not unarchive_question(question_id):
+        return jsonify({'error': 'Restore failed'}), 500
+
+    write_audit(
+        action='question.unarchive', target_type='question',
+        target_id=question_id, before={'status': 'archived'},
+        after={'status': 'active'}, severity='info',
+    )
+    return jsonify({'success': True, 'id': question_id})
+
+
+@admin_content_bp.route('/questions/bulk-archive', methods=['POST'],
+                        endpoint='questions_bulk_archive')
+@admin_can('questions.archive')
+def questions_bulk_archive():
+    if not _csrf_ok():
+        return jsonify({'error': 'Invalid session.'}), 403
+
+    payload = request.get_json(silent=True) or {}
+    raw_ids = payload.get('ids') or []
+    clean = []
+    for i in raw_ids:
+        try:
+            clean.append(int(i))
+        except (TypeError, ValueError):
+            continue
+    if not clean:
+        return jsonify({'error': 'No IDs'}), 400
+
+    archived, failed = [], []
+    for qid in clean:
+        if delete_question(qid):
+            archived.append(qid)
+        else:
+            failed.append(qid)
+
+    write_audit(
+        action='question.bulk_archive', target_type='question',
+        before=None, after={'archived': archived, 'failed': failed},
+        severity='warning',
+    )
+    return jsonify({'success': True, 'archived': archived, 'failed': failed})
+
+
+# ============================================================
+# QUESTIONS — INLINE UPDATE (from duplicate sidebar)
+# ============================================================
+
+@admin_content_bp.route('/questions/<int:question_id>/inline-update',
+                        methods=['POST'],
+                        endpoint='question_inline_update')
+@admin_can('questions.edit')
+def question_inline_update(question_id):
+    if not _csrf_ok():
+        return jsonify({'error': 'Invalid session.'}), 403
+
+    question = get_question_by_id(question_id)
+    if not question:
+        return jsonify({'error': 'Question not found'}), 404
+
+    data_in = request.get_json(silent=True) or {}
+
+    subject_code = (data_in.get('subject_code') or '').strip()
+    question_text = (data_in.get('question_text') or '').strip()
+    correct_answer = (data_in.get('correct_answer') or '').strip().upper()
+    grade = normalize_grade(data_in.get('grade'))
+
+    if not subject_code or not get_subject(subject_code):
+        return jsonify({'error': 'Invalid subject'}), 400
+    if not question_text:
+        return jsonify({'error': 'Question text required'}), 400
+    if correct_answer not in ('A', 'B', 'C', 'D', 'E', 'F'):
+        return jsonify({'error': 'Invalid correct answer'}), 400
+
+    opts_in = data_in.get('options') or {}
+    opts = {}
+    for letter in ('A', 'B', 'C', 'D', 'E', 'F'):
+        v = (opts_in.get(letter) or '').strip()
+        if v:
+            opts[letter] = v
+    if not opts.get('A') or not opts.get('B') or not opts.get('C'):
+        return jsonify({'error': 'Options A, B, C required'}), 400
+    if correct_answer not in opts:
+        return jsonify({'error': 'Correct answer must match an option'}), 400
+
+    try:
+        difficulty = int(data_in.get('difficulty') or 1)
+        difficulty = max(1, min(5, difficulty))
+    except (TypeError, ValueError):
+        difficulty = 1
+
+    update_data = {
+        'subject_code': subject_code,
+        'question_text': question_text,
+        'options': opts,
+        'correct_answer': correct_answer,
+        'difficulty': difficulty,
+        'chapter': (data_in.get('chapter') or '').strip(),
+        'tags': (data_in.get('tags') or '').strip(),
+        'explanation': (data_in.get('explanation') or '').strip(),
+        'pdf_code': (data_in.get('pdf_code') or '').strip().upper() or None,
+        'pdf_page': data_in.get('pdf_page') or None,
+        'status': (data_in.get('status') or 'active').strip(),
+        'grade': grade,
+        'updated_by': session.get('user_id'),
+    }
+
+    if not update_question(question_id, update_data):
+        return jsonify({'error': 'Save failed'}), 500
+
+    write_audit(
+        action='question.inline_update', target_type='question',
+        target_id=question_id,
+        before={'grade': question.get('grade'),
+                'subject_code': question.get('subject_code')},
+        after={'grade': grade, 'subject_code': subject_code},
+        severity='info',
+    )
+    return jsonify({'success': True})
+
+
+# ============================================================
+# QUESTIONS — DUPLICATE CHECK + DISMISS (AJAX)
+# ============================================================
+
+@admin_content_bp.route('/questions/check-duplicate', methods=['POST'],
+                        endpoint='question_check_duplicate')
+@admin_can('questions.view')
+def question_check_duplicate():
+    if not _csrf_ok():
+        return jsonify({'error': 'Invalid session.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    question_text = (data.get('question_text') or '').strip()
+    subject_code = (data.get('subject_code') or '').strip()
+    grade = (data.get('grade') or '').strip().upper()
+
+    exclude_raw = data.get('exclude_id')
+    try:
+        exclude_id = int(exclude_raw) if exclude_raw else None
+    except (TypeError, ValueError):
+        exclude_id = None
+
+    matches = find_duplicate_questions(
+        question_text, subject_code=subject_code,
+        grade=grade, exclude_id=exclude_id,
+    )
+    return jsonify({'duplicates': duplicates_to_payload(matches)})
+
+
+@admin_content_bp.route('/questions/dismiss-duplicate', methods=['POST'],
+                        endpoint='question_dismiss_duplicate')
+@admin_can('questions.view')
+def question_dismiss_duplicate():
+    if not _csrf_ok():
+        return jsonify({'error': 'Invalid session.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    try:
+        a = int(data.get('a_id'))
+        b = int(data.get('b_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid IDs'}), 400
+
+    if a == b:
+        return jsonify({'error': 'Same question'}), 400
+
+    ok = dismiss_duplicate_pair(a, b, session.get('user_id'))
+    return jsonify({'success': bool(ok)})
 
 
 # ============================================================
@@ -631,7 +836,7 @@ def question_archive(question_id):
 @admin_can('questions.view')
 def questions_broken():
     cursor = execute_with_retry("""
-        SELECT id, question_text, subject_code, pdf_code, created_at
+        SELECT id, question_text, subject_code, grade, pdf_code, created_at
         FROM questions
         WHERE status = 'active'
           AND pdf_code IS NOT NULL
@@ -667,7 +872,8 @@ def questions_hard():
     rows = []
     try:
         cursor = execute_with_retry("""
-            SELECT q.id, q.question_text, q.subject_code, q.difficulty,
+            SELECT q.id, q.question_text, q.subject_code, q.grade,
+                   q.difficulty,
                    qms.total_attempts AS attempts,
                    qms.total_misses   AS misses,
                    qms.miss_rate
@@ -837,6 +1043,9 @@ def bulk_import_apply():
     metadata = data.get('metadata') or {}
     subject_code = (metadata.get('subject_code') or '').strip()
     chapter = (metadata.get('chapter') or '').strip()
+    grade = normalize_grade(
+        metadata.get('grade') or request.form.get('grade') or DEFAULT_GRADE
+    )
 
     all_subject_codes = get_all_subject_codes()
     if not subject_code:
@@ -889,9 +1098,16 @@ def bulk_import_apply():
         if not (1 <= difficulty <= 5):
             difficulty = 3
 
-        if check_question_exists(q_text, subject_code):
-            duplicates.append({'index': idx, 'question': q_text,
-                               'error': 'Duplicate question'})
+        dup_matches = find_duplicate_questions(
+            q_text, subject_code=subject_code, grade=grade,
+        )
+        if dup_matches:
+            top = dup_matches[0]
+            pct = int(round((top.get('similarity') or 0) * 100))
+            duplicates.append({
+                'index': idx, 'question': q_text,
+                'error': f'Duplicate of Q#{top["id"]} ({pct}% match)',
+            })
             continue
 
         pdf_page = _normalize_pdf_page(q.get('pdf_page'))
@@ -915,6 +1131,7 @@ def bulk_import_apply():
             'explanation': (q.get('explanation') or '').strip(),
             'pdf_code': pdf_code,
             'pdf_page': pdf_page,
+            'grade': grade,
             'created_by': session.get('user_id'),
             'updated_by': session.get('user_id'),
         })
@@ -926,6 +1143,7 @@ def bulk_import_apply():
             valid_questions=questions_to_import,
             errors=errors, duplicates=duplicates, warnings=warnings,
             subject_code=subject_code, chapter=chapter,
+            grade=grade,
             pdf_code=pdf_code, total_questions=len(questions_raw),
         )
 
@@ -946,10 +1164,10 @@ def bulk_import_apply():
     if imported > 0:
         write_audit(
             action='question.bulk_import',
-            target_type='question',
-            before=None,
+            target_type='question', before=None,
             after={'subject_code': subject_code,
                    'imported': imported,
+                   'grade': grade,
                    'pdf_code': pdf_code},
             severity='info',
         )
@@ -970,8 +1188,11 @@ def bulk_import_apply():
 @admin_can('questions.bulk_import')
 def bulk_template():
     template = {
-        "metadata": {"subject_code": "geography",
-                     "chapter": "Chapter 1: Introduction"},
+        "metadata": {
+            "subject_code": "geography",
+            "chapter": "Chapter 1: Introduction",
+            "grade": "F4"
+        },
         "questions": [
             {"tags": ["geography", "capitals"], "difficulty": 2,
              "question": "What is the capital of Somalia?",
@@ -1014,9 +1235,12 @@ def bulk_preview():
     metadata = data.get('metadata') or {}
     subject_code = (metadata.get('subject_code') or '').strip()
     chapter = (metadata.get('chapter') or '').strip()
+    grade = normalize_grade(
+        metadata.get('grade') or request.form.get('grade') or DEFAULT_GRADE
+    )
 
     if not subject_code or subject_code not in get_all_subject_codes():
-        return jsonify({'error': f'Unknown or missing subject_code'}), 400
+        return jsonify({'error': 'Unknown or missing subject_code'}), 400
 
     pdf_code_raw = (request.form.get('pdf_code') or '').strip().upper()
     pdf_code = pdf_code_raw or None
@@ -1049,6 +1273,7 @@ def bulk_preview():
             preview.append({'index': idx, 'question': '(invalid entry)',
                             'difficulty': 1, 'options_count': 0,
                             'has_explanation': False, 'tags': '',
+                            'grade': grade,
                             'pdf_code': '', 'pdf_page': None,
                             'pdf_exists': False, 'pdf_title': '',
                             'pdf_source': None,
@@ -1071,6 +1296,7 @@ def bulk_preview():
             'tags': ', '.join(q.get('tags', []))[:40]
                     if isinstance(q.get('tags'), list)
                     else str(q.get('tags', ''))[:40],
+            'grade': grade,
             'pdf_code': pdf_code or '',
             'pdf_page': page,
             'pdf_exists': False, 'pdf_title': '', 'pdf_source': None,
@@ -1089,6 +1315,7 @@ def bulk_preview():
 
     return jsonify({
         'subject_code': subject_code, 'chapter': chapter,
+        'grade': grade,
         'pdf_code': pdf_code or '',
         'pdf_code_valid': pdf_code_valid,
         'pdf_info': pdf_info_payload,
@@ -1105,7 +1332,6 @@ def bulk_preview():
 @admin_content_bp.route('/pdfs', methods=['GET'], endpoint='pdfs')
 @admin_can('pdfs.view')
 def pdfs():
-    """Unified PDF workspace: library / intake / staging / unverified."""
     can_intake  = admin_can('pdfs.intake')
     can_publish = admin_can('pdfs.publish')
     can_edit    = admin_can('pdfs.edit')
@@ -1130,9 +1356,6 @@ def pdfs():
             p = 1
         return max(1, p)
 
-    # ==================================================
-    # LIBRARY TAB
-    # ==================================================
     search = (request.args.get('search') or '').strip()
     subject_filter = (request.args.get('subject') or '').strip()
     curriculum_filter = (request.args.get('curriculum') or '').strip()
@@ -1141,10 +1364,8 @@ def pdfs():
     lib_page = _page_param()
     lib_offset = (lib_page - 1) * PER_PAGE
     lib_total = get_main_pdf_count(
-        search=search,
-        subject=subject_filter,
-        curriculum=curriculum_filter,
-        class_filter=class_filter,
+        search=search, subject=subject_filter,
+        curriculum=curriculum_filter, class_filter=class_filter,
     )
     lib_total_pages = max(1, (lib_total + PER_PAGE - 1) // PER_PAGE)
     if lib_page > lib_total_pages:
@@ -1153,15 +1374,10 @@ def pdfs():
 
     pdf_list = get_all_pdfs(
         limit=PER_PAGE, offset=lib_offset,
-        search=search,
-        subject=subject_filter,
-        curriculum=curriculum_filter,
-        class_filter=class_filter,
+        search=search, subject=subject_filter,
+        curriculum=curriculum_filter, class_filter=class_filter,
     )
 
-    # ==================================================
-    # INTAKE TAB
-    # ==================================================
     q = (request.args.get('q') or '').strip()
     intake_page = _page_param()
     intake_offset = (intake_page - 1) * PER_PAGE
@@ -1186,9 +1402,6 @@ def pdfs():
         except Exception as e:
             logger.warning(f"pending list load failed: {e}")
 
-    # ==================================================
-    # STAGING TAB
-    # ==================================================
     show_published = (request.args.get('show_published') == '1')
     staging_page = _page_param()
     staging_offset = (staging_page - 1) * PER_PAGE
@@ -1202,10 +1415,8 @@ def pdfs():
     if can_intake or can_publish:
         try:
             from bot.db import get_bot_pdfs, count_bot_pdfs
-
             staging_count = count_bot_pdfs(published_filter=False)
             staging_published_count = count_bot_pdfs(published_filter=True)
-
             view_filter = None if show_published else False
             staging_filtered_count = (
                 staging_count + staging_published_count
@@ -1215,7 +1426,6 @@ def pdfs():
             if staging_page > staging_total_pages:
                 staging_page = staging_total_pages
                 staging_offset = (staging_page - 1) * PER_PAGE
-
             staging_list = get_bot_pdfs(
                 limit=PER_PAGE, offset=staging_offset,
                 published_filter=view_filter,
@@ -1223,9 +1433,6 @@ def pdfs():
         except Exception as e:
             logger.warning(f"staging list load failed: {e}")
 
-    # ==================================================
-    # UNVERIFIED TAB
-    # ==================================================
     show_confirmed = (request.args.get('show_confirmed') == '1')
     unverified_page = _page_param()
     unverified_offset = (unverified_page - 1) * PER_PAGE
@@ -1245,11 +1452,9 @@ def pdfs():
             if unverified_page > unverified_total_pages:
                 unverified_page = unverified_total_pages
                 unverified_offset = (unverified_page - 1) * PER_PAGE
-
             unverified_list = _load_unverified_pdfs(
                 show_confirmed=show_confirmed,
-                limit=PER_PAGE,
-                offset=unverified_offset,
+                limit=PER_PAGE, offset=unverified_offset,
             )
         except Exception as e:
             logger.warning(f"unverified list load failed: {e}")
@@ -1257,40 +1462,26 @@ def pdfs():
     return render_template(
         'dashboard/admin/content/pdfs.html',
         tab=tab,
-        can_intake=can_intake,
-        can_publish=can_publish,
-        can_edit=can_edit,
-        can_delete=can_delete,
-
+        can_intake=can_intake, can_publish=can_publish,
+        can_edit=can_edit, can_delete=can_delete,
         pdfs=pdf_list,
         subjects=get_all_subjects(),
         curricula=get_pdf_distinct_curricula(),
         classes=get_pdf_distinct_classes(),
-        search=search,
-        subject_filter=subject_filter,
-        curriculum_filter=curriculum_filter,
-        class_filter=class_filter,
-        lib_page=lib_page,
-        lib_total=lib_total,
+        search=search, subject_filter=subject_filter,
+        curriculum_filter=curriculum_filter, class_filter=class_filter,
+        lib_page=lib_page, lib_total=lib_total,
         lib_total_pages=lib_total_pages,
-
-        pending_list=pending_list,
-        pending_count=pending_count,
+        pending_list=pending_list, pending_count=pending_count,
         intake_filtered_count=intake_filtered_count,
-        intake_page=intake_page,
-        intake_total_pages=intake_total_pages,
+        intake_page=intake_page, intake_total_pages=intake_total_pages,
         q=q,
-
-        staging_list=staging_list,
-        staging_count=staging_count,
+        staging_list=staging_list, staging_count=staging_count,
         staging_published_count=staging_published_count,
         staging_filtered_count=staging_filtered_count,
-        staging_page=staging_page,
-        staging_total_pages=staging_total_pages,
+        staging_page=staging_page, staging_total_pages=staging_total_pages,
         show_published=show_published,
-
-        unverified_list=unverified_list,
-        unverified_count=unverified_count,
+        unverified_list=unverified_list, unverified_count=unverified_count,
         unverified_filtered_count=unverified_filtered_count,
         unverified_page=unverified_page,
         unverified_total_pages=unverified_total_pages,
@@ -1299,33 +1490,22 @@ def pdfs():
 
 
 # ============================================================
-# PDFs — LIBRARY EDIT / DELETE
+# PDFs — LIBRARY EDIT / DELETE / PREVIEW
 # ============================================================
+
 @admin_content_bp.route('/pdfs/<int:pdf_id>/preview', methods=['GET'],
                         endpoint='pdf_library_preview')
 @admin_can('pdfs.view')
 def pdf_library_preview(pdf_id):
-    """
-    Stream the actual PDF for admin review on the edit page.
-
-    Priority:
-      1. A local file_url on the row.
-      2. Telegram (via the bot staging row keyed by the same code).
-
-    No tier check — admin-only access is enforced by @admin_can.
-    Returns inline Content-Disposition so it renders inside the reader.
-    """
     pdf = get_pdf_by_id(pdf_id)
     if not pdf:
         abort(404)
 
-    # 1. Local file
     file_url = pdf.get('file_url')
     if file_url and os.path.exists(file_url) and os.path.isfile(file_url):
         try:
             return send_file(
-                file_url,
-                mimetype='application/pdf',
+                file_url, mimetype='application/pdf',
                 as_attachment=False,
                 download_name=f"{pdf.get('title') or pdf.get('code') or 'document'}.pdf",
                 conditional=True,
@@ -1333,7 +1513,6 @@ def pdf_library_preview(pdf_id):
         except Exception as e:
             logger.warning(f"Local file send failed for pdf {pdf_id}: {e}")
 
-    # 2. Telegram stream
     code = pdf.get('code')
     if not code:
         abort(404, 'PDF has no code')
@@ -1357,33 +1536,27 @@ def pdf_library_preview(pdf_id):
         bot = get_bot()
         tg_file = bot.get_file(file_id)
         data = bot.download_file(tg_file.file_path)
-
         if not data:
             abort(502, 'Telegram returned an empty file.')
-
         buf = io.BytesIO(data)
         buf.seek(0)
-
         filename = (pdf.get('title') or code) + '.pdf'
-
         response = send_file(
-            buf,
-            mimetype='application/pdf',
-            as_attachment=False,
-            download_name=filename,
+            buf, mimetype='application/pdf',
+            as_attachment=False, download_name=filename,
             conditional=True,
         )
         response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
         response.headers.pop('X-Frame-Options', None)
         response.headers['Cache-Control'] = 'private, max-age=300'
         return response
-
     except Exception as e:
         logger.error(
             f"Admin preview failed for pdf {pdf_id} (code {code}): {e}",
             exc_info=True,
         )
         abort(502)
+
 
 @admin_content_bp.route('/pdfs/<int:pdf_id>/edit', methods=['GET'],
                         endpoint='pdf_edit')
@@ -1552,14 +1725,10 @@ def pdf_intake_process(pending_id):
                                     pending_id=pending_id))
 
         bot_pdf_id = insert_bot_pdf({
-            'code': code,
-            'title': title,
-            'description': description,
-            'curriculum': curriculum,
-            'class': class_filter,
-            'subject': subject,
-            'chapter': chapter,
-            'tags': tags,
+            'code': code, 'title': title,
+            'description': description, 'curriculum': curriculum,
+            'class': class_filter, 'subject': subject,
+            'chapter': chapter, 'tags': tags,
             'is_premium': is_premium,
             'file_id': pending['file_id'],
             'file_unique_id': pending['file_unique_id'],
@@ -1576,8 +1745,7 @@ def pdf_intake_process(pending_id):
 
         write_audit(
             action='pdf.intake.processed',
-            target_type='pdf_staging',
-            target_id=bot_pdf_id,
+            target_type='pdf_staging', target_id=bot_pdf_id,
             before={'pending_id': pending_id, 'filename': filename},
             after={'code': code, 'title': title, 'subject': subject},
             severity='info',
@@ -1591,12 +1759,9 @@ def pdf_intake_process(pending_id):
 
     return render_template(
         'dashboard/admin/content/pdf_process.html',
-        pending=pending,
-        auto_code=auto_code,
-        suggested=suggested,
+        pending=pending, auto_code=auto_code, suggested=suggested,
         subjects=get_all_subjects(),
-        curricula=[('PL', 'Puntland'), ('SO', 'Somalia'),
-                   ('SL', 'Somaliland')],
+        curricula=[('PL', 'Puntland'), ('SO', 'Somalia'), ('SL', 'Somaliland')],
         classes=['F4', 'F3', 'G8', 'G7'],
     )
 
@@ -1619,29 +1784,20 @@ def pdf_intake_preview(pending_id):
         bot = get_bot()
         tg_file = bot.get_file(file_id)
         data = bot.download_file(tg_file.file_path)
-
         if not data:
             abort(502, 'Telegram returned an empty file.')
-
         buf = io.BytesIO(data)
         buf.seek(0)
-
         filename = pending.get('filename') or 'document.pdf'
-
         response = send_file(
-            buf,
-            mimetype='application/pdf',
-            as_attachment=False,
-            download_name=filename,
+            buf, mimetype='application/pdf',
+            as_attachment=False, download_name=filename,
             conditional=True,
         )
-        response.headers['Content-Disposition'] = (
-            f'inline; filename="{filename}"'
-        )
+        response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
         response.headers.pop('X-Frame-Options', None)
         response.headers['Cache-Control'] = 'private, max-age=300'
         return response
-
     except Exception as e:
         logger.error(
             f"Preview failed for pending #{pending_id} (file_id={file_id}): {e}",
@@ -1658,12 +1814,6 @@ def pdf_intake_preview(pending_id):
                         endpoint='pdf_intake_publish_direct')
 @admin_can('pdfs.publish')
 def pdf_intake_publish_direct():
-    """
-    Legacy entry point for the old bulk direct publish flow.
-
-    Redirects to the new bulk workspace, preserving the selected pending
-    IDs as a query param so they arrive pre-checked on the new page.
-    """
     if not validate_csrf():
         abort(403)
 
@@ -1686,7 +1836,6 @@ def pdf_intake_publish_direct():
     return redirect(target)
 
 
-# Kept as a safety net for any bookmarked form. Not linked from any template.
 @admin_content_bp.route('/pdfs/intake/publish-commit', methods=['POST'],
                         endpoint='pdf_intake_publish_commit')
 @admin_can('pdfs.publish')
@@ -1698,7 +1847,7 @@ def pdf_intake_publish_commit():
 
 
 # ============================================================
-# PDFs — STAGING (bot pdfs)
+# PDFs — STAGING
 # ============================================================
 
 @admin_content_bp.route('/pdfs/staging/<int:staging_id>/edit',
@@ -1735,8 +1884,7 @@ def pdf_staging_edit(staging_id):
         if update_bot_pdf(staging_id, data):
             write_audit(
                 action='pdf.staging.updated',
-                target_type='pdf_staging',
-                target_id=staging_id,
+                target_type='pdf_staging', target_id=staging_id,
                 before={'title': bot_pdf.get('title'),
                         'subject': bot_pdf.get('subject')},
                 after={'title': data['title'], 'subject': data['subject']},
@@ -1753,8 +1901,7 @@ def pdf_staging_edit(staging_id):
         'dashboard/admin/content/pdf_staging_edit.html',
         pdf=bot_pdf,
         subjects=get_all_subjects(),
-        curricula=[('PL', 'Puntland'), ('SO', 'Somalia'),
-                   ('SL', 'Somaliland')],
+        curricula=[('PL', 'Puntland'), ('SO', 'Somalia'), ('SL', 'Somaliland')],
         classes=['F4', 'F3', 'G8', 'G7'],
     )
 
@@ -1774,12 +1921,10 @@ def pdf_staging_delete(staging_id):
     if delete_bot_pdf(staging_id):
         write_audit(
             action='pdf.staging.deleted',
-            target_type='pdf_staging',
-            target_id=staging_id,
+            target_type='pdf_staging', target_id=staging_id,
             before={'code': bot_pdf.get('code'),
                     'title': bot_pdf.get('title')},
-            after=None,
-            severity='warning',
+            after=None, severity='warning',
         )
         flash('Staging PDF deleted.', 'success')
     else:
@@ -1819,9 +1964,7 @@ def pdf_staging_publish():
 
     if succeeded:
         write_audit(
-            action='pdf.publish_bulk',
-            target_type='pdf',
-            before=None,
+            action='pdf.publish_bulk', target_type='pdf', before=None,
             after={'succeeded': succeeded, 'failed': failed, 'ids': ids},
             severity='warning',
         )
@@ -1860,9 +2003,7 @@ def pdf_staging_publish_all():
 
     if succeeded:
         write_audit(
-            action='pdf.publish_all',
-            target_type='pdf',
-            before=None,
+            action='pdf.publish_all', target_type='pdf', before=None,
             after={'succeeded': succeeded, 'failed': failed},
             severity='warning',
         )
@@ -1875,7 +2016,7 @@ def pdf_staging_publish_all():
 
 
 # ============================================================
-# PDFs — UNVERIFIED (review queue)
+# PDFs — UNVERIFIED
 # ============================================================
 
 @admin_content_bp.route('/pdfs/unverified/confirm', methods=['POST'],
@@ -1911,15 +2052,12 @@ def pdf_unverified_confirm():
         count = cursor.rowcount or 0
         write_audit(
             action='pdf.unverified.confirm',
-            target_type='unverified_pdf',
-            before=None,
+            target_type='unverified_pdf', before=None,
             after={'count': count, 'ids': clean_ids},
             severity='info',
         )
-        flash(
-            f'{count} PDF{"s" if count != 1 else ""} marked as reviewed.',
-            'success',
-        )
+        flash(f'{count} PDF{"s" if count != 1 else ""} marked as reviewed.',
+              'success')
     except Exception as e:
         logger.error(f"unverified confirm failed: {e}")
         flash('Error updating records.', 'error')
@@ -1961,8 +2099,7 @@ def pdf_unverified_delete():
             action='pdf.unverified.remove_from_queue',
             target_type='unverified_pdf',
             before={'ids': clean_ids, 'count': count},
-            after=None,
-            severity='warning',
+            after=None, severity='warning',
         )
         flash(
             f'{count} record{"s" if count != 1 else ""} removed from the '
@@ -1981,29 +2118,13 @@ def pdf_unverified_delete():
 # ============================================================
 
 def _load_all_existing_pdf_codes():
-    """
-    Return a set of every existing PDF code across both DBs.
-    Used to generate non-colliding auto-codes for the bulk workspace
-    without hitting the DB per-row.
-    """
     codes = set()
-
-    # Main DB
     try:
         cursor = execute_with_retry("SELECT code FROM pdfs WHERE code IS NOT NULL")
         for row in cursor.fetchall():
             codes.add(str(row['code']).strip().upper())
     except Exception as e:
         logger.warning(f"_load_all_existing_pdf_codes: main DB read failed: {e}")
-
-    # Bot staging DB
-    try:
-        from bot.db import get_bot_pdfs
-        cursor = execute_with_retry(
-            "SELECT code FROM pdfs WHERE code IS NOT NULL"
-        ) if False else None
-    except Exception:
-        pass
 
     try:
         from bot.db import _get_connection as bot_conn
@@ -2023,7 +2144,6 @@ def _load_all_existing_pdf_codes():
 
 
 def _generate_code_from_set(existing_codes):
-    """Generate a unique PDF code locally against a set. Adds to the set."""
     chars = string.ascii_uppercase + '123456789'
     for _ in range(200):
         code = ''.join(secrets.choice(chars) for _ in range(4)) + '-' + \
@@ -2031,16 +2151,10 @@ def _generate_code_from_set(existing_codes):
         if code not in existing_codes:
             existing_codes.add(code)
             return code
-    # Fallback: 12-char random (essentially guaranteed unique)
     return ''.join(secrets.choice(chars) for _ in range(12))
 
 
 def _bulk_workspace_row(pending, existing_codes):
-    """
-    Turn a raw pending_pdfs row into a workspace row with suggestions.
-    `existing_codes` is a mutable set that gets codes added to it as we
-    generate new ones — guarantees no collisions within the batch.
-    """
     filename = pending.get('filename') or ''
     suggestion = suggest_full(filename)
     auto_code = _generate_code_from_set(existing_codes)
@@ -2087,9 +2201,7 @@ def pdfs_bulk_workspace():
         logger.error(f"bulk workspace: could not load pending: {e}", exc_info=True)
         raw_pending = []
 
-    # Load existing codes ONCE, then generate all workspace codes locally.
     existing_codes = _load_all_existing_pdf_codes()
-
     rows = [_bulk_workspace_row(p, existing_codes) for p in raw_pending]
 
     preselect_raw = (request.args.get('selected') or '').strip()
@@ -2106,11 +2218,9 @@ def pdfs_bulk_workspace():
 
     return render_template(
         'dashboard/admin/content/bulk_pdf_workspace.html',
-        rows=rows,
-        preselect=preselect,
+        rows=rows, preselect=preselect,
         total_pending=total_pending,
-        truncated=truncated,
-        max_rows=BULK_MAX_ROWS,
+        truncated=truncated, max_rows=BULK_MAX_ROWS,
         can_publish=can_publish,
         subjects=get_all_subjects(),
         curricula=[('PL', 'Puntland'), ('SO', 'Somalia'), ('SL', 'Somaliland')],
@@ -2144,15 +2254,11 @@ def pdfs_bulk_workspace_commit():
     )
 
     results = {
-        'staged':    0,
-        'published': 0,
-        'failed':    0,
-        'failures':  [],
-        'skipped':   [],
+        'staged': 0, 'published': 0, 'failed': 0,
+        'failures': [], 'skipped': [],
     }
 
     for idx, row in enumerate(rows, start=1):
-        # ─── Parse and validate row ──────────────────────────
         try:
             pending_id = int(row.get('pending_id'))
         except (TypeError, ValueError):
@@ -2178,7 +2284,6 @@ def pdfs_bulk_workspace_commit():
             results['failures'].append(f'#{pending_id}: title required')
             continue
 
-        # ─── Check code availability across both DBs ─────────
         try:
             if get_bot_pdf_by_code(code) or get_pdf_by_code(code):
                 results['failed'] += 1
@@ -2187,7 +2292,6 @@ def pdfs_bulk_workspace_commit():
         except Exception as e:
             logger.warning(f"code availability check failed: {e}")
 
-        # ─── Fetch pending row ───────────────────────────────
         try:
             pending = get_pending_pdf_by_id(pending_id)
         except Exception as e:
@@ -2200,7 +2304,6 @@ def pdfs_bulk_workspace_commit():
             results['failures'].append(f'#{pending_id}: no longer in intake')
             continue
 
-        # ─── Insert into bot staging (isolated, never leaks) ─
         staging_id = None
         try:
             staging_id = insert_bot_pdf({
@@ -2220,8 +2323,6 @@ def pdfs_bulk_workspace_commit():
             })
         except Exception as e:
             err = str(e).lower()
-
-            # Duplicate file → silently skip
             if 'unique' in err and 'file_unique_id' in err:
                 try:
                     delete_pending_pdf(pending_id)
@@ -2229,19 +2330,14 @@ def pdfs_bulk_workspace_commit():
                     pass
                 results['skipped'].append(f'#{pending_id}: duplicate file')
                 continue
-
-            # Locked database → treat as transient, keep the pending row
             if 'locked' in err or 'busy' in err:
                 results['failed'] += 1
                 results['failures'].append(f'#{pending_id}: DB locked, try again')
                 continue
-
-            # Any other error → record and move on
             results['failed'] += 1
             results['failures'].append(f'#{pending_id}: insert failed: {e}')
             continue
 
-        # ─── Insert returned falsy → record, keep pending row ─
         if not staging_id:
             results['failed'] += 1
             results['failures'].append(f'#{pending_id}: staging insert returned no id')
@@ -2249,7 +2345,6 @@ def pdfs_bulk_workspace_commit():
 
         results['staged'] += 1
 
-        # ─── Publish to main (only if mode=publish) ──────────
         if mode == 'publish':
             try:
                 ok, msg = publish_bot_pdf_to_main(staging_id)
@@ -2268,26 +2363,22 @@ def pdfs_bulk_workspace_commit():
                         execute_with_retry(
                             "INSERT OR IGNORE INTO unverified_pdfs (pdf_id) "
                             "VALUES (?)",
-                            (main_pdf['id'],),
-                            commit=True,
+                            (main_pdf['id'],), commit=True,
                         )
                 except Exception as e:
                     logger.warning(
                         f"unverified_pdfs insert failed for code {code}: {e}"
                     )
 
-        # ─── Delete pending row (best-effort) ────────────────
         try:
             delete_pending_pdf(pending_id)
         except Exception as e:
             logger.warning(f"delete_pending_pdf({pending_id}) failed: {e}")
 
-    # ─── Audit ────────────────────────────────────────────
     try:
         write_audit(
             action=f'pdf.bulk_workspace.{mode}',
-            target_type='pdf',
-            before=None,
+            target_type='pdf', before=None,
             after={
                 'submitted': len(rows),
                 'staged':    results['staged'],
@@ -2301,19 +2392,11 @@ def pdfs_bulk_workspace_commit():
 
     return jsonify(results)
 
+
 @admin_content_bp.route('/pdfs/bulk-action', methods=['POST'],
                         endpoint='pdfs_bulk_action')
 @admin_can('pdfs.edit')
 def pdfs_bulk_action():
-    """
-    Perform one action on many PDFs at once.
-
-    Body:
-        { "action": "premium_on" | "premium_off" | "delete",
-          "ids": [1, 2, 3] }
-
-    Returns: {"success": True, "affected": N}
-    """
     if not _csrf_ok():
         return jsonify({'error': 'Invalid session. Refresh the page.'}), 403
 

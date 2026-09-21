@@ -1,6 +1,6 @@
 {# ============================================================
    templates/dashboard/admin/content/bulk_import.html
-   Paste/upload JSON, live preview, PDF code check.
+   Paste/upload JSON, live preview, PDF code check, grade picker.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -28,11 +28,13 @@
 
 {% block admin_content %}
 
-{# ─────── VALIDATION ERRORS (from previous POST) ─────── #}
+{# ─────── VALIDATION / DUPLICATE ERRORS ─────── #}
 {% if errors or duplicates %}
 <section class="admin-card" style="border-left:4px solid #DC2626;">
     <div class="admin-card-head" style="background:#FEF2F2;">
-        <h3 style="color:#991B1B;"><i class="fas fa-exclamation-triangle"></i> Import blocked</h3>
+        <h3 style="color:#991B1B;">
+            <i class="fas fa-exclamation-triangle"></i> Import blocked
+        </h3>
         <span class="hint" style="color:#991B1B;">
             {{ (errors|length) + (duplicates|length) }} issue{{ '' if (errors|length + duplicates|length) == 1 else 's' }}
         </span>
@@ -82,7 +84,8 @@
                                   placeholder='{
   "metadata": {
     "subject_code": "geography",
-    "chapter": "Chapter 1"
+    "chapter": "Chapter 1",
+    "grade": "F4"
   },
   "questions": [
     {
@@ -141,8 +144,29 @@
                 </div>
             </section>
 
+            {# ─────── GRADE FIELD ─────── #}
+            <section class="admin-card" style="margin-top:16px;">
+                <div class="admin-card-head">
+                    <h3><i class="fas fa-graduation-cap"></i> Grade</h3>
+                    <span class="hint">Applies to every question in this batch</span>
+                </div>
+                <div class="admin-card-body">
+                    <select name="grade" id="biGrade" class="admin-select">
+                        {% set current_grade = grade if grade else 'F4' %}
+                        <option value="F4" {% if current_grade == 'F4' %}selected{% endif %}>Form 4 (F4)</option>
+                        <option value="F3" {% if current_grade == 'F3' %}selected{% endif %}>Form 3 (F3)</option>
+                        <option value="G8" {% if current_grade == 'G8' %}selected{% endif %}>Grade 8 (G8)</option>
+                        <option value="G7" {% if current_grade == 'G7' %}selected{% endif %}>Grade 7 (G7)</option>
+                    </select>
+                    <p class="admin-muted-sm" style="margin:10px 0 0 0;">
+                        The metadata key <code>grade</code> in your JSON overrides this.
+                    </p>
+                </div>
+            </section>
+
             <div style="display:flex;gap:10px;margin-top:16px;">
-                <button type="submit" class="admin-btn primary lg" id="biSubmitBtn" style="flex:1;justify-content:center;">
+                <button type="submit" class="admin-btn primary lg" id="biSubmitBtn"
+                        style="flex:1;justify-content:center;">
                     <i class="fas fa-check"></i> Import Questions
                 </button>
             </div>

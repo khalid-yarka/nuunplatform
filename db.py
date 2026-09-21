@@ -566,29 +566,49 @@ def get_user_subject_list(user_id: int):
 # ============================================
 # QUESTION FUNCTIONS
 # ============================================
+_SCHEMA_READY_FLAG = False
 
-def get_questions_by_subject(subject_code: str, limit: int = 10):
+def _ensure_question_schema():
+    """No-op — schema is guaranteed by migrate_question_grade.py."""
+    global _SCHEMA_READY_FLAG
+    if _SCHEMA_READY_FLAG:
+        return True
+    _SCHEMA_READY_FLAG = True
+    return True
+
+
+def create_question(data: dict):
+    _ensure_question_schema()
     try:
-        cursor = execute_with_retry("""
-            SELECT id, question_text, options, correct_answer, explanation
-            FROM questions
-            WHERE subject_code = ? AND status = 'active'
-            ORDER BY RANDOM()
-            LIMIT ?
-        """, (subject_code, limit))
-        results = cursor.fetchall()
-        questions = []
-        for row in results:
-            q = dict(row)
-            q['options'] = from_json(q['options'])
-            questions.append(q)
-        return questions
+        from question_utils import (
+            normalize_question_text, question_hash, normalize_grade,
+        )
+        text = data['question_text']
+        grade = normalize_grade(data.get('grade'))
+        execute_with_retry("""
+            INSERT INTO questions (
+                subject_code, question_text, options, correct_answer,
+                difficulty, chapter, tags, explanation,
+                pdf_code, pdf_page, grade,
+                question_text_normalized, question_hash,
+                created_by, updated_by, status, version,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data['subject_code'], text, to_json(data['options']),
+            data['correct_answer'], data.get('difficulty', 1),
+            data.get('chapter', ''), data.get('tags', ''),
+            data.get('explanation', ''), data.get('pdf_code'),
+            data.get('pdf_page'), grade,
+            normalize_question_text(text), question_hash(text),
+            data.get('created_by'), data.get('updated_by'),
+            data.get('status', 'active'), data.get('version', 1),
+            now(), now(),
+        ), commit=True)
+        return True
     except Exception as e:
-        try:
-            current_app.logger.error(f"Error fetching questions: {e}")
-        except RuntimeError:
-            logger.error(f"Error fetching questions: {e}")
-        return []
+        logger.error(f"Error creating question: {e}")
+        return False
 
 
 def get_all_questions():
@@ -615,49 +635,15 @@ def get_all_questions():
         return []
 
 
-def create_question(data: dict):
-    try:
-        execute_with_retry("""
-            INSERT INTO questions (
-                subject_code, question_text, options, correct_answer,
-                difficulty, chapter, tags, explanation,
-                pdf_code, pdf_page,
-                created_by, updated_by, status, version, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            data['subject_code'],
-            data['question_text'],
-            to_json(data['options']),
-            data['correct_answer'],
-            data.get('difficulty', 1),
-            data.get('chapter', ''),
-            data.get('tags', ''),
-            data.get('explanation', ''),
-            data.get('pdf_code'),
-            data.get('pdf_page'),
-            data.get('created_by'),
-            data.get('updated_by'),
-            data.get('status', 'active'),
-            data.get('version', 1),
-            now(),
-            now()
-        ), commit=True)
-        return True
-    except Exception as e:
-        try:
-            current_app.logger.error(f"Error creating question: {e}")
-        except RuntimeError:
-            logger.error(f"Error creating question: {e}")
-        return False
-
-
 def bulk_create_questions(questions_data: list, admin_id: int):
     """
     Insert many questions in one transaction. Returns:
-        {'imported': int, 'errors': [ {...} ], 'total': int, 'validation_failed': bool}
-    Columns match the `questions` table exactly (14 + pdf_code + pdf_page = 16).
+        {'imported': int, 'errors': [...], 'total': int, 'validation_failed': bool}
+    Now writes grade + normalized text + hash alongside the standard columns.
     Never raises — all errors are returned in the `errors` list.
     """
+    _ensure_question_schema()
+
     imported_count = 0
     errors = []
     total = len(questions_data)
@@ -704,6 +690,10 @@ def bulk_create_questions(questions_data: list, admin_id: int):
             }
 
         # ---------- Batch insert ----------
+        from question_utils import (
+            normalize_question_text, question_hash, normalize_grade,
+        )
+
         batch_size = BULK_INSERT_BATCH_SIZE
         total_valid = len(valid_questions)
 
@@ -711,9 +701,11 @@ def bulk_create_questions(questions_data: list, admin_id: int):
             INSERT INTO questions (
                 subject_code, question_text, options, correct_answer,
                 difficulty, chapter, tags, explanation,
-                pdf_code, pdf_page,
-                created_by, updated_by, status, version, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                pdf_code, pdf_page, grade,
+                question_text_normalized, question_hash,
+                created_by, updated_by, status, version,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         for i in range(0, total_valid, batch_size):
@@ -726,9 +718,10 @@ def bulk_create_questions(questions_data: list, admin_id: int):
                 cursor = conn.cursor()
                 batch_params = []
                 for q in batch:
+                    text = q['question_text']
                     batch_params.append((
                         q['subject_code'],
-                        q['question_text'],
+                        text,
                         to_json(q['options']),
                         q['correct_answer'],
                         q.get('difficulty', 1),
@@ -737,6 +730,9 @@ def bulk_create_questions(questions_data: list, admin_id: int):
                         q.get('explanation', ''),
                         q.get('pdf_code'),
                         q.get('pdf_page'),
+                        normalize_grade(q.get('grade')),
+                        normalize_question_text(text),
+                        question_hash(text),
                         admin_id,
                         admin_id,
                         'active',
@@ -748,7 +744,6 @@ def bulk_create_questions(questions_data: list, admin_id: int):
                 cursor.executemany(INSERT_SQL, batch_params)
                 conn.commit()
 
-                # ── SAFETY MIRROR (best-effort) ──
                 if _SAFE_DB_AVAILABLE and _safe_mirror_write_batch is not None:
                     try:
                         _safe_mirror_write_batch(INSERT_SQL, batch_params)
@@ -812,46 +807,34 @@ def bulk_create_questions(questions_data: list, admin_id: int):
 
 
 def update_question(question_id: int, data: dict):
-    """Update an existing question, including PDF linkage fields."""
+    _ensure_question_schema()
     try:
+        from question_utils import (
+            normalize_question_text, question_hash, normalize_grade,
+        )
+        text = data['question_text']
+        grade = normalize_grade(data.get('grade'))
         execute_with_retry("""
             UPDATE questions SET
-                subject_code = ?,
-                question_text = ?,
-                options = ?,
-                correct_answer = ?,
-                difficulty = ?,
-                chapter = ?,
-                tags = ?,
-                explanation = ?,
-                pdf_code = ?,
-                pdf_page = ?,
-                status = ?,
-                updated_by = ?,
-                updated_at = ?
+                subject_code = ?, question_text = ?, options = ?,
+                correct_answer = ?, difficulty = ?, chapter = ?,
+                tags = ?, explanation = ?, pdf_code = ?, pdf_page = ?,
+                grade = ?, question_text_normalized = ?, question_hash = ?,
+                status = ?, updated_by = ?, updated_at = ?
             WHERE id = ?
         """, (
-            data['subject_code'],
-            data['question_text'],
-            to_json(data['options']),
-            data['correct_answer'],
-            data.get('difficulty', 1),
-            data.get('chapter', ''),
-            data.get('tags', ''),
-            data.get('explanation', ''),
-            data.get('pdf_code'),
-            data.get('pdf_page'),
-            data.get('status', 'active'),
-            data.get('updated_by'),
-            now(),
-            question_id
+            data['subject_code'], text, to_json(data['options']),
+            data['correct_answer'], data.get('difficulty', 1),
+            data.get('chapter', ''), data.get('tags', ''),
+            data.get('explanation', ''), data.get('pdf_code'),
+            data.get('pdf_page'), grade,
+            normalize_question_text(text), question_hash(text),
+            data.get('status', 'active'), data.get('updated_by'),
+            now(), question_id,
         ), commit=True)
         return True
     except Exception as e:
-        try:
-            current_app.logger.error(f"Error updating question: {e}")
-        except RuntimeError:
-            logger.error(f"Error updating question: {e}")
+        logger.error(f"Error updating question: {e}")
         return False
 
 
@@ -1982,7 +1965,44 @@ def get_question_ids_for_quiz(quiz_id: int):
         except RuntimeError:
             logger.error(f"Error getting question IDs: {e}")
         return []
-
+def get_questions_by_subject(subject_code: str, limit: int = 10,
+                             grade: str = None):
+    """
+    Random active questions for a subject. If `grade` is provided,
+    prefer that grade; fall back to all grades if none match.
+    `grade=None` (live quiz) → no grade filter at all.
+    """
+    _ensure_question_schema()
+    try:
+        rows = []
+        if grade:
+            cursor = execute_with_retry("""
+                SELECT id, question_text, options, correct_answer, explanation
+                FROM questions
+                WHERE subject_code = ? AND status = 'active' AND grade = ?
+                ORDER BY RANDOM() LIMIT ?
+            """, (subject_code, grade, limit))
+            rows = cursor.fetchall()
+        if not rows:
+            cursor = execute_with_retry("""
+                SELECT id, question_text, options, correct_answer, explanation
+                FROM questions
+                WHERE subject_code = ? AND status = 'active'
+                ORDER BY RANDOM() LIMIT ?
+            """, (subject_code, limit))
+            rows = cursor.fetchall()
+        out = []
+        for row in rows:
+            q = dict(row)
+            q['options'] = from_json(q['options'])
+            out.append(q)
+        return out
+    except Exception as e:
+        try:
+            current_app.logger.error(f"Error fetching questions: {e}")
+        except RuntimeError:
+            logger.error(f"Error fetching questions: {e}")
+        return []
 
 def get_questions_by_ids(question_ids: list):
     if not question_ids:
@@ -3288,6 +3308,7 @@ def get_question_stats() -> dict:
 def get_questions_paginated(
     search: str = '',
     subject_code: str = '',
+    grade_filter: str = '',
     pdf_filter: str = '',
     pdf_code: str = '',
     status_filter: str = '',
@@ -3304,8 +3325,9 @@ def get_questions_paginated(
 ):
     """
     Return (questions, total) with the full set of filters.
-    Miss-rate filtering uses the materialized question_miss_stats table.
+    Now supports grade_filter for both the AND-clause and display.
     """
+    _ensure_question_schema()
     ensure_question_miss_stats_table()
 
     where = ["1=1"]
@@ -3322,6 +3344,10 @@ def get_questions_paginated(
     if subject_code:
         where.append("q.subject_code = ?")
         params.append(subject_code)
+
+    if grade_filter:
+        where.append("q.grade = ?")
+        params.append(grade_filter)
 
     if pdf_filter == 'linked':
         where.append("q.pdf_code IS NOT NULL AND q.pdf_code != ''")
@@ -3425,7 +3451,8 @@ def get_questions_paginated(
     cursor = execute_with_retry(f"""
         SELECT
             q.id, q.subject_code, q.question_text, q.options, q.correct_answer,
-            q.difficulty, q.chapter, q.tags, q.explanation, q.pdf_code, q.pdf_page,
+            q.difficulty, q.chapter, q.tags, q.explanation,
+            q.pdf_code, q.pdf_page, q.grade,
             q.status, q.created_at, q.updated_at,
             COALESCE(qms.total_attempts, 0) AS total_attempts,
             COALESCE(qms.total_misses,   0) AS total_misses,
@@ -3449,52 +3476,61 @@ def get_questions_paginated(
 
 
 def get_questions_filter_options() -> dict:
-    """
-    Return dropdown options used by the admin questions toolbar:
-        subjects, chapters, pdf_codes
-    """
-    result = {'subjects': [], 'chapters': [], 'pdf_codes': []}
+    result = {'subjects': [], 'chapters': [], 'pdf_codes': [], 'grades': []}
+    _ensure_question_schema()
 
     try:
-        subj_cursor = execute_with_retry("""
-            SELECT DISTINCT subject_code
-            FROM questions
-            WHERE status != 'archived'
-            ORDER BY subject_code
-        """)
-        result['subjects'] = [row['subject_code'] for row in subj_cursor.fetchall()]
+        c = execute_with_retry(
+            "SELECT DISTINCT subject_code FROM questions "
+            "WHERE status != 'archived' ORDER BY subject_code"
+        )
+        result['subjects'] = [r['subject_code'] for r in c.fetchall()]
     except Exception as e:
-        logger.warning(f"get_questions_filter_options: subjects failed: {e}")
+        logger.warning(f"filter options subjects failed: {e}")
 
     try:
-        chap_cursor = execute_with_retry("""
-            SELECT DISTINCT chapter
-            FROM questions
-            WHERE chapter IS NOT NULL AND chapter != ''
-            ORDER BY chapter
-            LIMIT 100
-        """)
-        result['chapters'] = [row['chapter'] for row in chap_cursor.fetchall()]
+        c = execute_with_retry(
+            "SELECT DISTINCT chapter FROM questions "
+            "WHERE chapter IS NOT NULL AND chapter != '' "
+            "ORDER BY chapter LIMIT 100"
+        )
+        result['chapters'] = [r['chapter'] for r in c.fetchall()]
     except Exception as e:
-        logger.warning(f"get_questions_filter_options: chapters failed: {e}")
+        logger.warning(f"filter options chapters failed: {e}")
 
     try:
-        pdf_cursor = execute_with_retry("""
-            SELECT pdf_code, COUNT(*) AS c
-            FROM questions
-            WHERE pdf_code IS NOT NULL AND pdf_code != ''
-            GROUP BY pdf_code
-            ORDER BY c DESC, pdf_code ASC
-            LIMIT 100
-        """)
+        c = execute_with_retry(
+            "SELECT pdf_code, COUNT(*) AS c FROM questions "
+            "WHERE pdf_code IS NOT NULL AND pdf_code != '' "
+            "GROUP BY pdf_code ORDER BY c DESC, pdf_code ASC LIMIT 100"
+        )
         result['pdf_codes'] = [
-            {'code': row['pdf_code'], 'count': row['c']}
-            for row in pdf_cursor.fetchall()
+            {'code': r['pdf_code'], 'count': r['c']} for r in c.fetchall()
         ]
     except Exception as e:
-        logger.warning(f"get_questions_filter_options: pdf codes failed: {e}")
+        logger.warning(f"filter options pdf codes failed: {e}")
+
+    try:
+        c = execute_with_retry(
+            "SELECT DISTINCT grade FROM questions "
+            "WHERE grade IS NOT NULL AND grade != '' ORDER BY grade"
+        )
+        result['grades'] = [r['grade'] for r in c.fetchall()]
+    except Exception as e:
+        logger.warning(f"filter options grades failed: {e}")
 
     return result
+
+
+def unarchive_question(question_id: int) -> bool:
+    try:
+        execute_with_retry(
+            "UPDATE questions SET status = 'active' WHERE id = ?",
+            (question_id,), commit=True,
+        )
+        return True
+    except Exception:
+        return False
 
 
 # ============================================

@@ -1,16 +1,12 @@
 {% extends "dashboard_base.html" %}
 
 {% block title %}{{ _('quiz.setup.page_title') }}{% endblock %}
-
 {% block page_title %}{{ _('quiz.setup.page_title') }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
 <style>
-    .quiz-setup {
-        max-width: 600px;
-        margin: 0 auto;
-    }
+    .quiz-setup { max-width: 600px; margin: 0 auto; }
     .setup-card {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -19,37 +15,24 @@
         box-shadow: var(--shadow-sm);
     }
     .setup-card h2 {
-        font-size: 20px;
-        font-weight: 700;
-        color: var(--text);
-        margin-bottom: 4px;
-        text-align: center;
+        font-size: 20px; font-weight: 700; color: var(--text);
+        margin-bottom: 4px; text-align: center;
     }
     .setup-card .sub {
-        color: var(--text-secondary);
-        font-size: 14px;
-        text-align: center;
-        margin-bottom: 24px;
+        color: var(--text-secondary); font-size: 14px;
+        text-align: center; margin-bottom: 24px;
     }
-    .form-group {
-        margin-bottom: 20px;
-    }
+    .form-group { margin-bottom: 20px; }
     .form-group label {
-        display: block;
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--text);
-        margin-bottom: 6px;
+        display: block; font-size: 14px; font-weight: 600;
+        color: var(--text); margin-bottom: 6px;
     }
     .form-group select {
-        width: 100%;
-        padding: 12px 16px;
+        width: 100%; padding: 12px 16px;
         border: 2px solid var(--border);
         border-radius: var(--radius-sm);
-        font-size: 16px;
-        background: var(--surface);
-        color: var(--text);
-        transition: var(--transition);
+        font-size: 16px; background: var(--surface);
+        color: var(--text); transition: var(--transition);
         appearance: none;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
         background-repeat: no-repeat;
@@ -57,97 +40,129 @@
         background-size: 20px;
     }
     .form-group select:focus {
-        border-color: var(--primary);
-        outline: none;
+        border-color: var(--primary); outline: none;
         box-shadow: 0 0 0 4px rgba(255, 49, 56, 0.08);
     }
 
+    /* ─── GRADE ROW ─── */
+    .grade-row {
+        display: flex; align-items: center; gap: 12px;
+        padding: 14px 16px;
+        background: var(--background);
+        border: 2px solid var(--border);
+        border-radius: var(--radius-sm);
+        margin-bottom: 20px;
+        cursor: pointer;
+        transition: var(--transition);
+        user-select: none;
+    }
+    .grade-row:hover {
+        border-color: var(--primary);
+        background: var(--primary-light);
+    }
+    .grade-row__icon {
+        font-size: 22px; line-height: 1;
+        flex-shrink: 0;
+    }
+    .grade-row__value {
+        flex: 1; min-width: 0;
+        font-size: 16px; font-weight: 700;
+        color: var(--text);
+    }
+    .grade-row__lock {
+        font-size: 16px;
+        color: var(--text-muted);
+        flex-shrink: 0;
+        transition: var(--transition);
+    }
+    .grade-row:hover .grade-row__lock {
+        color: var(--primary);
+    }
+
+    /* Changeable variant — plain, no hover tint */
+    .grade-row--select {
+        cursor: default;
+        background: var(--surface);
+        padding: 12px 16px;
+    }
+    .grade-row--select:hover {
+        border-color: var(--border);
+        background: var(--surface);
+    }
+    .grade-row--select:focus-within {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 4px rgba(255, 49, 56, 0.08);
+    }
+    .grade-row--select .grade-row__select {
+        flex: 1;
+        border: none;
+        background: transparent;
+        padding: 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text);
+        font-family: inherit;
+        cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0 center;
+        padding-right: 26px;
+    }
+    .grade-row--select .grade-row__select:focus { outline: none; }
+
     .question-count-options {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 10px;
-        margin: 6px 0 12px;
+        display: grid; grid-template-columns: repeat(4, 1fr);
+        gap: 10px; margin: 6px 0 12px;
     }
     .q-option {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
+        position: relative; display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
         padding: 14px 8px;
         border: 2px solid var(--border);
         border-radius: var(--radius-sm);
-        background: var(--surface);
-        cursor: pointer;
+        background: var(--surface); cursor: pointer;
         transition: var(--transition);
-        font-weight: 600;
-        font-size: 18px;
-        color: var(--text);
-        min-height: 64px;
-        user-select: none;
+        font-weight: 600; font-size: 18px; color: var(--text);
+        min-height: 64px; user-select: none;
     }
     .q-option:hover:not(.locked) {
-        border-color: var(--primary);
-        background: var(--primary-light);
+        border-color: var(--primary); background: var(--primary-light);
     }
     .q-option.selected {
-        border-color: var(--primary);
-        background: var(--primary-light);
+        border-color: var(--primary); background: var(--primary-light);
         box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.1);
     }
     .q-option.locked {
-        opacity: 0.6;
-        cursor: pointer;
-        border-color: var(--text-muted);
+        opacity: 0.6; cursor: pointer; border-color: var(--text-muted);
     }
     .q-option.locked .lock-icon {
-        font-size: 14px;
-        margin-top: 4px;
-        color: var(--text-muted);
+        font-size: 14px; margin-top: 4px; color: var(--text-muted);
     }
     .q-option .badge {
-        font-size: 10px;
-        font-weight: 600;
-        background: var(--primary-light);
-        color: var(--primary);
-        padding: 2px 8px;
-        border-radius: 8px;
-        margin-top: 4px;
+        font-size: 10px; font-weight: 600;
+        background: var(--primary-light); color: var(--primary);
+        padding: 2px 8px; border-radius: 8px; margin-top: 4px;
     }
     .q-option .badge.locked-badge {
-        background: var(--background);
-        color: var(--text-muted);
+        background: var(--background); color: var(--text-muted);
     }
-    .q-option input[type="radio"] {
-        display: none;
-    }
+    .q-option input[type="radio"] { display: none; }
     .q-option .custom-input {
-        width: 60px;
-        padding: 4px 6px;
-        font-size: 16px;
-        text-align: center;
-        border: 1px solid var(--border);
+        width: 60px; padding: 4px 6px; font-size: 16px;
+        text-align: center; border: 1px solid var(--border);
         border-radius: var(--radius-sm);
-        background: var(--surface);
-        color: var(--text);
+        background: var(--surface); color: var(--text);
         margin-top: 4px;
     }
-    .q-option .custom-input:focus {
-        border-color: var(--primary);
-        outline: none;
-    }
+    .q-option .custom-input:focus { border-color: var(--primary); outline: none; }
 
     .btn-start {
-        width: 100%;
-        padding: 14px;
-        background: var(--primary);
-        color: white;
-        border: none;
-        border-radius: var(--radius-sm);
-        font-weight: 700;
-        font-size: 18px;
-        cursor: pointer;
-        transition: var(--transition);
+        width: 100%; padding: 14px;
+        background: var(--primary); color: white;
+        border: none; border-radius: var(--radius-sm);
+        font-weight: 700; font-size: 18px;
+        cursor: pointer; transition: var(--transition);
         box-shadow: 0 4px 14px rgba(255, 49, 56, 0.25);
         margin-top: 8px;
     }
@@ -157,28 +172,17 @@
         box-shadow: 0 6px 20px rgba(255, 49, 56, 0.35);
     }
     .btn-start:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        transform: none !important;
+        opacity: 0.5; cursor: not-allowed; transform: none !important;
     }
-
     .quota-info {
-        text-align: center;
-        font-size: 13px;
-        color: var(--text-secondary);
-        margin-top: 16px;
+        text-align: center; font-size: 13px;
+        color: var(--text-secondary); margin-top: 16px;
     }
-    .quota-info strong {
-        color: var(--text);
-    }
+    .quota-info strong { color: var(--text); }
 
     @media (max-width: 480px) {
-        .question-count-options {
-            grid-template-columns: repeat(2, 1fr);
-        }
-        .setup-card {
-            padding: 20px 16px;
-        }
+        .question-count-options { grid-template-columns: repeat(2, 1fr); }
+        .setup-card { padding: 20px 16px; }
     }
 </style>
 {% endblock %}
@@ -193,6 +197,33 @@
 
         <form method="POST" action="{{ url_for('quiz.start_quiz') }}" id="setupForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+            {# ─── GRADE ROW ─── #}
+            {% if can_change_grade %}
+                <div class="grade-row grade-row--select">
+                    <span class="grade-row__icon">🎓</span>
+                    <select name="grade" class="grade-row__select" aria-label="Grade">
+                        {% for g in grade_choices %}
+                            <option value="{{ g.code }}"
+                                {% if user_grade == g.code %}selected{% endif %}>
+                                {{ g.label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            {% else %}
+                <div class="grade-row" id="gradeLocked"
+                     role="button" tabindex="0"
+                     aria-label="Grade — upgrade to change">
+                    <span class="grade-row__icon">🎓</span>
+                    <span class="grade-row__value">
+                        {% for g in grade_choices %}
+                            {% if g.code == user_grade %}{{ g.label }}{% endif %}
+                        {% endfor %}
+                    </span>
+                    <span class="grade-row__lock">🔒</span>
+                </div>
+            {% endif %}
 
             <div class="form-group">
                 <label for="subjectSelect">📚 {{ _('quiz.setup.subject') }} <span style="color:var(--primary);">*</span></label>
@@ -276,6 +307,24 @@ document.addEventListener('DOMContentLoaded', function() {
     const subjectSelect = document.getElementById('subjectSelect');
     const form = document.getElementById('setupForm');
     const customInput = document.getElementById('customCount');
+    const gradeLocked = document.getElementById('gradeLocked');
+
+    if (gradeLocked) {
+        const trigger = function () {
+            if (typeof window.openUpgradeSheet === 'function') {
+                window.openUpgradeSheet({
+                    feature: 'grade_filter',
+                    requiredTier: 'premium',
+                });
+            }
+        };
+        gradeLocked.addEventListener('click', trigger);
+        gradeLocked.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault(); trigger();
+            }
+        });
+    }
 
     let selectedValue = null;
 
@@ -295,14 +344,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 return;
             }
-
             options.forEach(o => o.classList.remove('selected'));
             this.classList.add('selected');
             const radio = this.querySelector('input[type="radio"]');
-            if (radio) {
-                radio.checked = true;
-                selectedValue = radio.value;
-            }
+            if (radio) { radio.checked = true; selectedValue = radio.value; }
 
             if (this.dataset.value === 'custom') {
                 const input = this.querySelector('.custom-input');
@@ -314,7 +359,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (inp) inp.style.display = 'none';
                 }
             }
-
             updateStartButton();
         });
     });
