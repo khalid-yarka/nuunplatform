@@ -76,4 +76,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+{% if request.args.get('grade_locked') == '1' %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (typeof window.openUpgradeSheet === 'function') {
+        window.openUpgradeSheet({
+            feature: 'live_quiz_grade',
+            requiredTier: 'premium',
+            message: 'This quiz is for a different grade.'
+        });
+    }
+});
+</script>
+{% endif %}
 {% endblock %}

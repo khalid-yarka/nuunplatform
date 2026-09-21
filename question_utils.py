@@ -5,6 +5,7 @@ import hashlib
 import re
 
 VALID_GRADES = ('F4', 'F3', 'G8', 'G7')
+UI_GRADES = ('F4', 'F3')          # grades shown in user-facing pickers
 DEFAULT_GRADE = 'F4'
 
 _GRADE_LABELS = {

@@ -10,9 +10,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-shared.css') }}" />
 <style>
     .privacy-option {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
+        display: flex; flex-direction: column; align-items: center;
         padding: 16px;
         border: 2px solid var(--border);
         border-radius: var(--radius-sm);
@@ -21,10 +19,7 @@
         background: var(--surface);
         text-align: center;
     }
-    .privacy-option:hover {
-        border-color: var(--text-muted);
-        background: var(--background);
-    }
+    .privacy-option:hover { border-color: var(--text-muted); background: var(--background); }
     .privacy-option.selected {
         border-color: var(--primary);
         background: var(--primary-light);
@@ -37,87 +32,115 @@
     .privacy-option .privacy-badge.recommended { color: var(--primary); }
     .privacy-option .privacy-badge.private { color: var(--text-muted); }
 
+    /* ─── GRADE PILLS (F4 / F3) ─── */
+    .grade-pills {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+    .grade-pill {
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: center;
+        padding: 14px 8px;
+        border: 2px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        cursor: pointer;
+        transition: var(--transition);
+        text-align: center;
+        min-height: 68px;
+        user-select: none;
+        position: relative;
+    }
+    .grade-pill:hover {
+        border-color: var(--primary);
+        background: var(--primary-light);
+        transform: translateY(-1px);
+    }
+    .grade-pill.active {
+        border-color: var(--primary);
+        background: var(--primary-light);
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.1);
+    }
+    .grade-pill input[type="radio"] { display: none; }
+    .grade-pill .gp-code {
+        font-size: 18px; font-weight: 800; letter-spacing: 0.5px;
+        color: var(--text); line-height: 1.1;
+    }
+    .grade-pill.active .gp-code { color: var(--primary); }
+    .grade-pill .gp-label {
+        font-size: 11px; font-weight: 600;
+        color: var(--text-muted); margin-top: 4px;
+        text-transform: uppercase; letter-spacing: 0.4px;
+    }
+    .grade-pill.active .gp-label { color: var(--primary); opacity: 0.9; }
+
+    .grade-hint {
+        margin-top: 10px;
+        padding: 10px 14px;
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        font-weight: 600;
+        display: flex; align-items: center; gap: 8px;
+        background: var(--background);
+        color: var(--text-muted);
+        transition: var(--transition);
+        min-height: 40px;
+    }
+    .grade-hint i { font-size: 13px; }
+    .grade-hint.ok { background: #ECFDF5; color: #065F46; }
+    .grade-hint.warn { background: #FFFBEB; color: #92400E; }
+    .grade-hint.err { background: #FEF2F2; color: #991B1B; }
+
     .question-count-options {
         display: grid;
         grid-template-columns: repeat(5, 1fr);
         gap: 8px;
     }
     .question-count-options label {
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        display: flex; align-items: center; justify-content: center;
         padding: 10px;
         border: 2px solid var(--border);
         border-radius: var(--radius-sm);
         cursor: pointer;
         transition: var(--transition);
-        font-weight: 600;
-        font-size: 15px;
-        color: var(--text);
+        font-weight: 600; font-size: 15px; color: var(--text);
     }
-    .question-count-options label:hover {
-        border-color: var(--primary);
-        background: var(--primary-light);
-    }
-    .question-count-options label.selected {
-        border-color: var(--primary);
-        background: var(--primary-light);
-    }
+    .question-count-options label:hover { border-color: var(--primary); background: var(--primary-light); }
+    .question-count-options label.selected { border-color: var(--primary); background: var(--primary-light); }
     .question-count-options input[type="radio"] { display: none; }
 
-    .schedule-options {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        align-items: center;
-    }
+    .schedule-options { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .schedule-options label {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 14px;
-        color: var(--text);
-        cursor: pointer;
+        display: flex; align-items: center; gap: 8px;
+        font-size: 14px; color: var(--text); cursor: pointer;
         padding: 6px 12px;
         border: 2px solid var(--border);
         border-radius: var(--radius-sm);
         transition: var(--transition);
     }
-    .schedule-options label:hover {
-        border-color: var(--primary);
-        background: var(--primary-light);
-    }
-    .schedule-options label.selected {
-        border-color: var(--primary);
-        background: var(--primary-light);
-    }
+    .schedule-options label:hover { border-color: var(--primary); background: var(--primary-light); }
+    .schedule-options label.selected { border-color: var(--primary); background: var(--primary-light); }
     .schedule-options input[type="radio"] { display: none; }
 
-    /* ============ ACTIVE QUIZ GUARD MODAL ============ */
+    /* ─── ACTIVE QUIZ GUARD MODAL ─── */
     .quiz-guard-overlay {
-        position: fixed;
-        inset: 0;
+        position: fixed; inset: 0;
         background: rgba(0, 0, 0, 0.6);
         backdrop-filter: blur(6px);
         -webkit-backdrop-filter: blur(6px);
         z-index: 100000;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        display: flex; align-items: center; justify-content: center;
         padding: 20px;
         animation: qgFade 0.25s ease;
     }
-    @keyframes qgFade {
-        from { opacity: 0; }
-        to { opacity: 1; }
-    }
+    @keyframes qgFade { from { opacity: 0; } to { opacity: 1; } }
     .quiz-guard-modal {
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: 20px;
         padding: 32px 28px 24px;
-        max-width: 460px;
-        width: 100%;
+        max-width: 460px; width: 100%;
         box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
         animation: qgPop 0.35s cubic-bezier(0.22, 0.61, 0.36, 1);
         text-align: center;
@@ -126,28 +149,12 @@
         from { transform: translateY(20px) scale(0.96); opacity: 0; }
         to { transform: translateY(0) scale(1); opacity: 1; }
     }
-    .quiz-guard-modal .qg-icon {
-        font-size: 56px;
-        line-height: 1;
-        margin-bottom: 12px;
-    }
-    .quiz-guard-modal h3 {
-        font-size: 20px;
-        font-weight: 700;
-        color: var(--text);
-        margin: 0 0 8px;
-    }
-    .quiz-guard-modal p {
-        font-size: 14px;
-        color: var(--text-secondary);
-        line-height: 1.55;
-        margin: 0 0 10px;
-    }
+    .quiz-guard-modal .qg-icon { font-size: 56px; line-height: 1; margin-bottom: 12px; }
+    .quiz-guard-modal h3 { font-size: 20px; font-weight: 700; color: var(--text); margin: 0 0 8px; }
+    .quiz-guard-modal p { font-size: 14px; color: var(--text-secondary); line-height: 1.55; margin: 0 0 10px; }
     .quiz-guard-modal p strong { color: var(--text); }
     .quiz-guard-modal .qg-quiz-card {
-        display: flex;
-        align-items: center;
-        gap: 12px;
+        display: flex; align-items: center; gap: 12px;
         background: var(--background);
         border: 1px solid var(--border);
         border-radius: 12px;
@@ -155,99 +162,75 @@
         margin: 16px 0 20px;
         text-align: left;
     }
-    .quiz-guard-modal .qg-quiz-card .qg-emoji {
-        font-size: 26px;
-        flex-shrink: 0;
-    }
-    .quiz-guard-modal .qg-quiz-card .qg-info {
-        flex: 1;
-        min-width: 0;
-    }
+    .quiz-guard-modal .qg-quiz-card .qg-emoji { font-size: 26px; flex-shrink: 0; }
+    .quiz-guard-modal .qg-quiz-card .qg-info { flex: 1; min-width: 0; }
     .quiz-guard-modal .qg-quiz-card .qg-info .qg-name {
-        font-size: 14px;
-        font-weight: 700;
-        color: var(--text);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        font-size: 14px; font-weight: 700; color: var(--text);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .quiz-guard-modal .qg-quiz-card .qg-info .qg-meta {
-        font-size: 12px;
-        color: var(--text-secondary);
-        margin-top: 2px;
+        font-size: 12px; color: var(--text-secondary); margin-top: 2px;
     }
-    .quiz-guard-modal .qg-actions {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
+    .quiz-guard-modal .qg-actions { display: flex; flex-direction: column; gap: 10px; }
     .quiz-guard-modal .qg-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
         padding: 12px 18px;
         border-radius: 12px;
-        font-weight: 700;
-        font-size: 14px;
+        font-weight: 700; font-size: 14px;
         cursor: pointer;
         transition: var(--transition);
-        border: none;
-        text-decoration: none;
-        font-family: inherit;
+        border: none; text-decoration: none; font-family: inherit;
     }
     .quiz-guard-modal .qg-btn.primary {
-        background: var(--primary);
-        color: #fff;
+        background: var(--primary); color: #fff;
         box-shadow: 0 4px 14px rgba(255, 49, 56, 0.28);
     }
     .quiz-guard-modal .qg-btn.primary:hover {
-        background: var(--primary-hover);
-        transform: translateY(-2px);
-        color: #fff;
-        text-decoration: none;
+        background: var(--primary-hover); transform: translateY(-2px);
+        color: #fff; text-decoration: none;
     }
     .quiz-guard-modal .qg-btn.secondary {
-        background: var(--surface);
-        color: var(--text);
+        background: var(--surface); color: var(--text);
         border: 1px solid var(--border);
     }
     .quiz-guard-modal .qg-btn.secondary:hover {
-        border-color: var(--primary);
-        color: var(--primary);
-        text-decoration: none;
+        border-color: var(--primary); color: var(--primary); text-decoration: none;
     }
     .quiz-guard-modal .qg-btn.danger {
-        background: #EF4444;
-        color: #fff;
+        background: #EF4444; color: #fff;
         box-shadow: 0 4px 14px rgba(239, 68, 68, 0.28);
     }
     .quiz-guard-modal .qg-btn.danger:hover {
-        background: #DC2626;
-        transform: translateY(-2px);
-        color: #fff;
-        text-decoration: none;
+        background: #DC2626; transform: translateY(-2px);
+        color: #fff; text-decoration: none;
     }
     .quiz-guard-modal .qg-btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-        transform: none !important;
+        opacity: 0.6; cursor: not-allowed; transform: none !important;
     }
 
+    [data-theme="dark"] .grade-pill.active {
+        border-color: #FF6B70 !important;
+        background: rgba(255, 107, 112, 0.15) !important;
+    }
+    [data-theme="dark"] .grade-pill.active .gp-code,
+    [data-theme="dark"] .grade-pill.active .gp-label {
+        color: #FF6B70 !important;
+    }
+    [data-theme="dark"] .grade-pill:hover {
+        border-color: #FF6B70 !important;
+        background: rgba(255, 107, 112, 0.1) !important;
+    }
     [data-theme="dark"] .question-count-options label.selected {
         border-color: #FF6B70 !important;
         background: rgba(255, 107, 112, 0.15) !important;
-        color: #FFFFFF !important;
     }
     [data-theme="dark"] .question-count-options label:hover {
         border-color: #FF6B70 !important;
         background: rgba(255, 107, 112, 0.1) !important;
-        color: #FFFFFF !important;
     }
     [data-theme="dark"] .privacy-option { background: var(--surface); border-color: var(--border); }
     [data-theme="dark"] .privacy-option:hover { background: var(--surface-alt); }
     [data-theme="dark"] .privacy-option.selected { border-color: var(--primary); background: var(--primary-light); }
-    [data-theme="dark"] .schedule-options label { border-color: var(--border); }
     [data-theme="dark"] .schedule-options label:hover { border-color: #FF6B70; background: rgba(255, 107, 112, 0.1); }
     [data-theme="dark"] .schedule-options label.selected { border-color: #FF6B70; background: rgba(255, 107, 112, 0.15); }
 
@@ -259,6 +242,9 @@
         .schedule-options label { font-size: 12px; padding: 4px 10px; }
         .quiz-guard-modal { padding: 24px 18px 18px; }
         .quiz-guard-modal h3 { font-size: 17px; }
+        .grade-pill { min-height: 60px; padding: 12px 6px; }
+        .grade-pill .gp-code { font-size: 16px; }
+        .grade-pill .gp-label { font-size: 10px; }
     }
 </style>
 {% endblock %}
@@ -266,10 +252,6 @@
 {% block dashboard_content %}
 <div style="max-width: 640px; margin: 0 auto;">
 
-    {# ================================================== #}
-    {# ACTIVE QUIZ GUARD MODAL                            #}
-    {# Shown when the user already has an unfinished quiz #}
-    {# ================================================== #}
     {% if active_quiz %}
     <div class="quiz-guard-overlay" id="quizGuardOverlay">
         <div class="quiz-guard-modal">
@@ -281,25 +263,23 @@
                 an unfinished live quiz. You need to finish, leave, or
                 abandon it before creating a new one.
             </p>
-
             <div class="qg-quiz-card">
                 <span class="qg-emoji">{{ active_quiz.subject_icon or '📚' }}</span>
                 <div class="qg-info">
                     <div class="qg-name">{{ active_quiz.title or 'Untitled Quiz' }}</div>
                     <div class="qg-meta">
                         {{ active_quiz.subject_name or active_quiz.subject_code }}
+                        · 🎓 {{ active_quiz.grade or 'F4' }}
                         · {{ active_quiz.status|capitalize }}
                         · {{ active_quiz.question_count }} questions
                     </div>
                 </div>
             </div>
-
             <div class="qg-actions">
                 <a href="{{ url_for('live_quiz.waiting_room', quiz_id=active_quiz.id) }}"
                    class="qg-btn primary">
                     <i class="fas fa-arrow-right"></i> Go to that quiz
                 </a>
-
                 {% if active_quiz.is_creator %}
                     <button type="button" class="qg-btn danger" id="qgAbandonBtn"
                             data-quiz-id="{{ active_quiz.id }}">
@@ -311,7 +291,6 @@
                         <i class="fas fa-sign-out-alt"></i> Leave that quiz and continue here
                     </button>
                 {% endif %}
-
                 <a href="{{ url_for('live_quiz.lobby') }}" class="qg-btn secondary">
                     <i class="fas fa-arrow-left"></i> Go back to lobby
                 </a>
@@ -332,24 +311,28 @@
             <span style="font-size: 28px;">⚠️</span>
             <div>
                 <h3 style="font-size: 18px; font-weight: 700; color: #92400E;">{{ _('live_quiz.create.not_enough_title') }}</h3>
-                <p style="color: #92400E; font-size: 14px;">{{ _('live_quiz.create.not_enough_desc', available=available, requested=requested) }}</p>
+                <p style="color: #92400E; font-size: 14px;">
+                    We don't have enough {{ effective_grade or '' }} questions for that many.
+                    Try fewer questions, or pick a different grade.
+                </p>
             </div>
         </div>
         <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
             <form method="POST" action="{{ url_for('live_quiz.create_with_available') }}" style="display: inline;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input type="hidden" name="subject_code" value="{{ subject_code }}">
+                <input type="hidden" name="grade" value="{{ effective_grade or 'F4' }}">
                 <input type="hidden" name="question_count" value="{{ available }}">
                 <input type="hidden" name="title" value="{{ title }}">
                 <input type="hidden" name="is_public" value="{{ is_public or 1 }}">
-                <button type="submit" style="padding: 8px 20px; background: #F59E0B; color: white; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: var(--transition);">
-                    {{ _('live_quiz.create.proceed_with', n=available) }}
+                <button type="submit" style="padding: 8px 20px; background: #F59E0B; color: white; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer;">
+                    Use what's available
                 </button>
             </form>
-            <a href="{{ url_for('live_quiz.create') }}" style="padding: 8px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); text-decoration: none; color: var(--text); font-weight: 500; transition: var(--transition);">
-                {{ _('live_quiz.create.select_another') }}
+            <a href="{{ url_for('live_quiz.create') }}" style="padding: 8px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); text-decoration: none; color: var(--text); font-weight: 500;">
+                Change subject or grade
             </a>
-            <a href="{{ url_for('live_quiz.lobby') }}" style="padding: 8px 20px; background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; border-radius: var(--radius-sm); text-decoration: none; font-weight: 500; transition: var(--transition);">
+            <a href="{{ url_for('live_quiz.lobby') }}" style="padding: 8px 20px; background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; border-radius: var(--radius-sm); text-decoration: none; font-weight: 500;">
                 {{ _('common.cancel') }}
             </a>
         </div>
@@ -366,11 +349,34 @@
         <form method="POST" action="{{ url_for('live_quiz.create') }}" id="createForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
+            {# ─── GRADE PILLS ─── #}
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 8px;">
+                    🎓 Grade <span style="color: var(--primary);">*</span>
+                </label>
+                <div class="grade-pills" id="gradePills">
+                    {% for g in grades %}
+                        {% set is_active = (g.code == user_grade) %}
+                        <label class="grade-pill {% if is_active %}active{% endif %}"
+                               data-grade="{{ g.code }}">
+                            <input type="radio" name="grade" value="{{ g.code }}"
+                                   {% if is_active %}checked{% endif %}>
+                            <span class="gp-code">{{ g.code }}</span>
+                            <span class="gp-label">{{ g.label }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
+                <div class="grade-hint" id="gradeHint">
+                    <i class="fas fa-circle-notch fa-spin"></i>
+                    <span>Checking what's available…</span>
+                </div>
+            </div>
+
             <div class="form-group" style="margin-bottom: 20px;">
                 <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
                     📚 {{ _('live_quiz.create.subject') }} <span style="color: var(--primary);">*</span>
                 </label>
-                <select name="subject_code" required style="width: 100%; padding: 12px 16px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: 15px; background: var(--surface); color: var(--text); transition: var(--transition);">
+                <select name="subject_code" id="subjectSelect" required style="width: 100%; padding: 12px 16px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: 15px; background: var(--surface); color: var(--text);">
                     <option value="">{{ _('live_quiz.create.select_subject') }}</option>
                     {% for subject in subjects %}
                         <option value="{{ subject.code }}" {% if subject_code == subject.code %}selected{% endif %}>
@@ -398,17 +404,12 @@
                 <label style="font-size: 14px; font-weight: 600; color: var(--text); display: block; margin-bottom: 6px;">
                     🏷️ {{ _('live_quiz.create.quiz_title') }} <span style="color: var(--primary);">*</span>
                 </label>
-                <input type="text"
-                       name="title"
-                       id="quizTitleInput"
+                <input type="text" name="title" id="quizTitleInput"
                        placeholder="{{ _('live_quiz.create.title_placeholder') }}"
                        value="{{ title or '' }}"
-                       required
-                       minlength="3"
-                       maxlength="100"
-                       style="width: 100%; padding: 12px 16px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: 15px; background: var(--surface); color: var(--text); transition: var(--transition);">
-                <div id="titleError"
-                     style="display: none; color: #EF4444; font-size: 12px; margin-top: 6px; font-weight: 500;">
+                       required minlength="3" maxlength="100"
+                       style="width: 100%; padding: 12px 16px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: 15px; background: var(--surface); color: var(--text);">
+                <div id="titleError" style="display: none; color: #EF4444; font-size: 12px; margin-top: 6px; font-weight: 500;">
                     ⚠️ {{ _('live_quiz.create.title_error') }}
                 </div>
             </div>
@@ -433,9 +434,6 @@
                         <span class="privacy-badge private">{{ _('live_quiz.create.not_in_lobby') }}</span>
                     </label>
                 </div>
-                <div style="margin-top: 8px; font-size: 12px; color: var(--text-muted); text-align: center;">
-                    💡 {{ _('live_quiz.create.public_hint') }}
-                </div>
             </div>
 
             <div class="form-group" style="margin-bottom: 20px;">
@@ -447,34 +445,18 @@
                         <input type="radio" name="schedule_minutes" value="0" checked>
                         <span>▶️ {{ _('live_quiz.create.schedule_manual') }}</span>
                     </label>
-                    <label>
-                        <input type="radio" name="schedule_minutes" value="5">
-                        <span>⏳ +5 {{ _('live_quiz.create.schedule_min') }}</span>
-                    </label>
-                    <label>
-                        <input type="radio" name="schedule_minutes" value="10">
-                        <span>⏳ +10 {{ _('live_quiz.create.schedule_min') }}</span>
-                    </label>
-                    <label>
-                        <input type="radio" name="schedule_minutes" value="15">
-                        <span>⏳ +15 {{ _('live_quiz.create.schedule_min') }}</span>
-                    </label>
-                    <label>
-                        <input type="radio" name="schedule_minutes" value="30">
-                        <span>⏳ +30 {{ _('live_quiz.create.schedule_min') }}</span>
-                    </label>
-                </div>
-                <div style="margin-top: 6px; font-size: 12px; color: var(--text-muted);">
-                    <i class="fas fa-info-circle"></i>
-                    {{ _('live_quiz.create.schedule_hint') }}
+                    <label><input type="radio" name="schedule_minutes" value="5"><span>⏳ +5</span></label>
+                    <label><input type="radio" name="schedule_minutes" value="10"><span>⏳ +10</span></label>
+                    <label><input type="radio" name="schedule_minutes" value="15"><span>⏳ +15</span></label>
+                    <label><input type="radio" name="schedule_minutes" value="30"><span>⏳ +30</span></label>
                 </div>
             </div>
 
             <div style="display: flex; gap: 12px;">
-                <button type="submit" style="flex: 1; padding: 12px; background: var(--primary); color: white; border: none; border-radius: var(--radius-sm); font-weight: 600; font-size: 16px; cursor: pointer; transition: var(--transition);">
+                <button type="submit" style="flex: 1; padding: 12px; background: var(--primary); color: white; border: none; border-radius: var(--radius-sm); font-weight: 600; font-size: 16px; cursor: pointer;">
                     <i class="fas fa-rocket"></i> {{ _('live_quiz.create.create_quiz') }}
                 </button>
-                <a href="{{ url_for('live_quiz.lobby') }}" style="flex: 1; padding: 12px; background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-sm); text-decoration: none; color: var(--text); font-weight: 500; text-align: center; transition: var(--transition);">
+                <a href="{{ url_for('live_quiz.lobby') }}" style="flex: 1; padding: 12px; background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-sm); text-decoration: none; color: var(--text); font-weight: 500; text-align: center;">
                     {{ _('common.cancel') }}
                 </a>
             </div>
@@ -498,27 +480,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!titleInput) return true;
         var v = (titleInput.value || '').trim();
         var ok = v.length >= 3 && v.length <= 100;
-
-        // Only show the error once the user has interacted with the field
-        // (or once they attempt to submit with an invalid value).
-        if (titleError) {
-            titleError.style.display = (!ok && titleTouched) ? 'block' : 'none';
-        }
+        if (titleError) titleError.style.display = (!ok && titleTouched) ? 'block' : 'none';
         titleInput.style.borderColor = (!ok && titleTouched) ? '#EF4444' : 'var(--border)';
         if (submitBtn) submitBtn.disabled = !ok;
         return ok;
     }
 
     if (titleInput) {
-        titleInput.addEventListener('input', function() {
-            titleTouched = true;
-            validateTitle();
-        });
-        titleInput.addEventListener('blur', function() {
-            titleTouched = true;
-            validateTitle();
-        });
-        // Initial call: sets submit-button state only, error stays hidden
+        titleInput.addEventListener('input', function() { titleTouched = true; validateTitle(); });
+        titleInput.addEventListener('blur', function() { titleTouched = true; validateTitle(); });
         validateTitle();
     }
 
@@ -533,6 +503,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // ─── GRADE PILLS ───
+    var gradePills = document.querySelectorAll('.grade-pill');
+    gradePills.forEach(function(pill) {
+        pill.addEventListener('click', function() {
+            gradePills.forEach(function(p) { p.classList.remove('active'); });
+            pill.classList.add('active');
+            var radio = pill.querySelector('input[type="radio"]');
+            if (radio) radio.checked = true;
+            refreshHint();
+        });
+    });
+
+    // ─── QUESTION COUNT ───
     document.querySelectorAll('.question-count-options label').forEach(function(label) {
         label.addEventListener('click', function() {
             var siblings = this.parentElement.querySelectorAll('label');
@@ -543,24 +526,20 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // ─── PRIVACY ───
     var publicLabel = document.getElementById('publicLabel');
     var privateLabel = document.getElementById('privateLabel');
     var publicRadio = document.querySelector('input[name="is_public"][value="1"]');
     var privateRadio = document.querySelector('input[name="is_public"][value="0"]');
-
     function updatePrivacySelection() {
-        if (publicRadio.checked) {
-            publicLabel.classList.add('selected');
-            privateLabel.classList.remove('selected');
-        } else {
-            privateLabel.classList.add('selected');
-            publicLabel.classList.remove('selected');
-        }
+        if (publicRadio.checked) { publicLabel.classList.add('selected'); privateLabel.classList.remove('selected'); }
+        else { privateLabel.classList.add('selected'); publicLabel.classList.remove('selected'); }
     }
     publicLabel.addEventListener('click', function() { publicRadio.checked = true; updatePrivacySelection(); });
     privateLabel.addEventListener('click', function() { privateRadio.checked = true; updatePrivacySelection(); });
     updatePrivacySelection();
 
+    // ─── SCHEDULE ───
     var scheduleLabels = document.querySelectorAll('#scheduleOptions label');
     scheduleLabels.forEach(function(label) {
         label.addEventListener('click', function() {
@@ -571,21 +550,69 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // ============================================
-    // ACTIVE QUIZ GUARD — abandon handler
-    // ============================================
+    // ─── AVAILABILITY HINT (qualitative, no numbers) ───
+    var gradeHintEl = document.getElementById('gradeHint');
+    var subjectSelect = document.getElementById('subjectSelect');
+
+    function currentGrade() {
+        var checked = document.querySelector('input[name="grade"]:checked');
+        return checked ? checked.value : 'F4';
+    }
+
+    function setHint(state, html) {
+        if (!gradeHintEl) return;
+        gradeHintEl.className = 'grade-hint ' + (state || '');
+        gradeHintEl.innerHTML = html;
+    }
+
+    var hintTimer = null;
+    function refreshHint() {
+        clearTimeout(hintTimer);
+        var subject = subjectSelect ? subjectSelect.value : '';
+        var grade = currentGrade();
+        if (!subject) {
+            setHint('', '<i class="fas fa-info-circle"></i><span>Pick a subject to continue</span>');
+            return;
+        }
+        setHint('', '<i class="fas fa-circle-notch fa-spin"></i><span>Checking…</span>');
+
+        hintTimer = setTimeout(function() {
+            var url = '/live-quiz/available-count?subject=' + encodeURIComponent(subject) + '&grade=' + encodeURIComponent(grade);
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var n = data.count || 0;
+                    if (n >= 20) {
+                        setHint('ok', '<i class="fas fa-check-circle"></i><span>Plenty of questions ready — pick your count</span>');
+                    } else if (n >= 10) {
+                        setHint('ok', '<i class="fas fa-check-circle"></i><span>Good selection ready</span>');
+                    } else if (n >= 5) {
+                        setHint('warn', '<i class="fas fa-exclamation-triangle"></i><span>Only a few available — try the other grade</span>');
+                    } else if (n > 0) {
+                        setHint('err', '<i class="fas fa-times-circle"></i><span>Not enough for a quiz — try the other grade</span>');
+                    } else {
+                        setHint('err', '<i class="fas fa-times-circle"></i><span>Nothing available for this grade</span>');
+                    }
+                })
+                .catch(function() {
+                    setHint('', '<i class="fas fa-info-circle"></i><span>Could not check availability</span>');
+                });
+        }, 200);
+    }
+
+    if (subjectSelect) subjectSelect.addEventListener('change', refreshHint);
+    refreshHint();
+
+    // ─── ACTIVE QUIZ GUARD ───
     var abandonBtn = document.getElementById('qgAbandonBtn');
     if (abandonBtn) {
         abandonBtn.addEventListener('click', function() {
             var quizId = this.getAttribute('data-quiz-id');
             if (!quizId) return;
-
             var isCreator = {{ 'true' if active_quiz and active_quiz.is_creator else 'false' }};
-            var verb = isCreator ? 'abandon' : 'leave';
             var warning = isCreator
                 ? 'This will soft-close your current quiz and mark all its participants as left.\n\nContinue?'
                 : 'This will leave the quiz you are currently in.\n\nContinue?';
-
             if (!window.confirm(warning)) return;
 
             this.disabled = true;
@@ -597,16 +624,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
             fetch('/live-quiz/abandon/' + quizId, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': token,
-                },
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
                 body: JSON.stringify({}),
             })
             .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
             .then(function(resp) {
                 if (resp.ok && resp.data && resp.data.success) {
-                    // Reload to re-render without the guard modal
                     window.location.href = resp.data.redirect || '{{ url_for("live_quiz.create") }}';
                 } else {
                     alert((resp.data && resp.data.error) || 'Could not process the request.');

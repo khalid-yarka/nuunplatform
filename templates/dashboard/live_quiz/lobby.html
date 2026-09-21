@@ -10,100 +10,57 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-lobby.css') }}" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-shared.css') }}" />
 <style>
-    /* Lobby-specific supplemental styles (page-local) */
     .lobby-filters {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        align-items: center;
+        display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: var(--radius);
-        padding: 10px 16px;
-        margin-bottom: 24px;
+        padding: 10px 16px; margin-bottom: 24px;
         box-shadow: var(--shadow-sm);
     }
-    .lobby-filters .search-wrapper {
-        flex: 1;
-        min-width: 180px;
-        position: relative;
-    }
+    .lobby-filters .search-wrapper { flex: 1; min-width: 180px; position: relative; }
     .lobby-filters .search-wrapper i {
-        position: absolute;
-        left: 12px;
-        top: 50%;
-        transform: translateY(-50%);
-        color: var(--text-muted);
-        font-size: 14px;
-        z-index: 2;
-        pointer-events: none;
+        position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+        color: var(--text-muted); font-size: 14px; z-index: 2; pointer-events: none;
     }
     .lobby-filters .search-wrapper input {
-        width: 100%;
-        padding: 8px 14px 8px 36px !important;
+        width: 100%; padding: 8px 14px 8px 36px !important;
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
-        font-size: 14px;
-        background: var(--surface);
-        color: var(--text);
-        transition: var(--transition);
-        height: 40px;
+        font-size: 14px; background: var(--surface); color: var(--text);
+        transition: var(--transition); height: 40px;
     }
     .lobby-filters .search-wrapper input:focus {
-        border-color: var(--primary);
-        outline: none;
+        border-color: var(--primary); outline: none;
         box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.1);
     }
     .lobby-filters select {
         padding: 8px 12px;
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
-        font-size: 14px;
-        background: var(--surface);
-        color: var(--text);
-        min-width: 130px;
-        cursor: pointer;
-        transition: var(--transition);
-        height: 40px;
+        font-size: 14px; background: var(--surface); color: var(--text);
+        min-width: 130px; cursor: pointer; transition: var(--transition); height: 40px;
     }
-    .lobby-filters select:focus {
-        border-color: var(--primary);
-        outline: none;
-    }
+    .lobby-filters select:focus { border-color: var(--primary); outline: none; }
     .lobby-filters .btn-clear {
         padding: 8px 14px;
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
-        font-size: 13px;
-        font-weight: 500;
-        color: var(--text-secondary);
-        cursor: pointer;
-        transition: var(--transition);
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        height: 40px;
+        font-size: 13px; font-weight: 500; color: var(--text-secondary);
+        cursor: pointer; transition: var(--transition);
+        display: inline-flex; align-items: center; gap: 4px; height: 40px;
     }
     .lobby-filters .btn-clear:hover {
-        background: var(--primary-light);
-        border-color: var(--primary);
-        color: var(--primary);
+        background: var(--primary-light); border-color: var(--primary); color: var(--primary);
     }
     .auto-sync-status {
-        font-size: 12px;
-        color: var(--text-muted);
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-left: auto;
+        font-size: 12px; color: var(--text-muted);
+        display: flex; align-items: center; gap: 6px; margin-left: auto;
     }
     .auto-sync-status .sync-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #10B981;
-        display: inline-block;
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #10B981; display: inline-block;
         animation: pulse-dot 2s ease-in-out infinite;
     }
 
@@ -111,26 +68,14 @@
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: var(--radius);
-        padding: 16px 20px;
-        margin-bottom: 14px;
-        box-shadow: var(--shadow-sm);
-        transition: var(--transition);
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        align-items: center;
+        padding: 16px 20px; margin-bottom: 14px;
+        box-shadow: var(--shadow-sm); transition: var(--transition);
+        display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
         position: relative;
     }
-    .quiz-card:hover {
-        box-shadow: var(--shadow-md);
-        transform: translateY(-2px);
-    }
+    .quiz-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
     .quiz-card .status-indicator {
-        width: 4px;
-        height: 100%;
-        position: absolute;
-        top: 0;
-        left: 0;
+        width: 4px; height: 100%; position: absolute; top: 0; left: 0;
         border-radius: var(--radius) 0 0 var(--radius);
     }
     .quiz-card .status-indicator.scheduled { background: #8B5CF6; }
@@ -138,64 +83,51 @@
     .quiz-card .status-indicator.active { background: #F59E0B; }
     .quiz-card .status-indicator.finished { background: #3B82F6; }
 
-    .quiz-card .card-body {
-        flex: 1;
-        min-width: 200px;
-        padding-left: 12px;
-    }
+    .quiz-card .card-body { flex: 1; min-width: 200px; padding-left: 12px; }
     .quiz-card .card-body .title {
-        font-size: 18px;
-        font-weight: 600;
-        color: var(--text);
+        font-size: 18px; font-weight: 600; color: var(--text);
         margin: 0 0 2px 0;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     }
     .quiz-card .card-body .title .subject-icon { font-size: 20px; }
     .quiz-card .card-body .meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px 16px;
-        font-size: 13px;
-        color: var(--text-secondary);
-        margin: 2px 0;
+        display: flex; flex-wrap: wrap; gap: 8px 16px;
+        font-size: 13px; color: var(--text-secondary); margin: 2px 0;
     }
     .quiz-card .card-body .meta span { display: flex; align-items: center; gap: 4px; }
     .quiz-card .card-body .creator { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
     .quiz-card .card-body .creator strong { color: var(--text); }
 
     .quiz-card .card-actions {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px;
-        flex-shrink: 0;
+        display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex-shrink: 0;
     }
     .quiz-card .card-actions .participant-count {
-        font-size: 13px;
-        color: var(--text-secondary);
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        margin-right: 4px;
+        font-size: 13px; color: var(--text-secondary);
+        display: flex; align-items: center; gap: 4px; margin-right: 4px;
     }
     .quiz-card .card-actions .participant-count strong { color: var(--text); }
 
+    /* Grade chip — small, pill-shaped, informative */
+    .grade-chip {
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 11px; font-weight: 800;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, rgba(99,102,241,0.14), rgba(139,92,246,0.10));
+        color: #4F46E5;
+        letter-spacing: 0.3px;
+    }
+    [data-theme="dark"] .grade-chip {
+        background: rgba(99,102,241,0.20);
+        color: #A5B4FC;
+    }
+
     .btn-sm {
-        padding: 6px 14px;
-        font-size: 13px;
+        padding: 6px 14px; font-size: 13px;
         border-radius: var(--radius-sm);
-        font-weight: 600;
-        border: none;
-        cursor: pointer;
-        transition: var(--transition);
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        height: 34px;
+        font-weight: 600; border: none; cursor: pointer;
+        transition: var(--transition); text-decoration: none;
+        display: inline-flex; align-items: center; gap: 4px; height: 34px;
     }
     .btn-sm.primary { background: var(--primary); color: white; }
     .btn-sm.primary:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(255, 49, 56, 0.3); }
@@ -213,22 +145,20 @@
         color: var(--text-muted);
         border: 1px solid var(--border);
         cursor: pointer;
-        opacity: 0.7;
+        opacity: 0.85;
     }
     .btn-sm.locked:hover {
         border-color: var(--primary);
         color: var(--primary);
         opacity: 1;
     }
+    .btn-sm.locked i.fa-lock { font-size: 11px; }
 
     .time-ago { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
     .status-tag {
-        font-size: 11px;
-        font-weight: 600;
-        padding: 2px 10px;
-        border-radius: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
+        font-size: 11px; font-weight: 600;
+        padding: 2px 10px; border-radius: 12px;
+        text-transform: uppercase; letter-spacing: 0.3px;
         display: inline-block;
     }
     .status-tag.scheduled { background: #EDE9FE; color: #6D28D9; }
@@ -238,82 +168,36 @@
     .badge-you { background: #3B82F6; color: white; font-size: 10px; padding: 1px 8px; border-radius: 10px; }
     .badge-creator { background: var(--primary); color: white; font-size: 10px; padding: 1px 8px; border-radius: 10px; }
 
-    .lobby-empty .actions {
-        display: flex;
-        gap: 12px;
-        justify-content: center;
-        flex-wrap: wrap;
-        margin-top: 16px;
-    }
-
-    .locked-btn {
-        opacity: 0.7;
-        cursor: pointer;
-        position: relative;
-    }
-    .locked-btn .lock-icon {
-        font-size: 12px;
-        margin-right: 4px;
-    }
+    .lobby-empty .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+    .locked-btn { opacity: 0.7; cursor: pointer; position: relative; }
+    .locked-btn .lock-icon { font-size: 12px; margin-right: 4px; }
 
     .lobby-pagination-wrap {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 12px;
-        margin-top: 28px;
-        padding-top: 20px;
+        display: flex; justify-content: space-between; align-items: center;
+        flex-wrap: wrap; gap: 12px;
+        margin-top: 28px; padding-top: 20px;
         border-top: 1px solid var(--border);
     }
-    .lobby-pagination-info {
-        font-size: 13px;
-        color: var(--text-secondary);
-    }
-    .lobby-pagination-info strong {
-        color: var(--text);
-    }
-    .lobby-pagination {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
+    .lobby-pagination-info { font-size: 13px; color: var(--text-secondary); }
+    .lobby-pagination-info strong { color: var(--text); }
+    .lobby-pagination { display: flex; align-items: center; gap: 10px; }
     .lobby-page-btn {
-        width: 34px;
-        height: 34px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
+        width: 34px; height: 34px;
+        display: inline-flex; align-items: center; justify-content: center;
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
-        cursor: pointer;
-        transition: var(--transition);
-        color: var(--text);
-        font-size: 13px;
+        cursor: pointer; transition: var(--transition);
+        color: var(--text); font-size: 13px;
     }
     .lobby-page-btn:hover:not(.disabled):not(:disabled) {
-        background: var(--primary);
-        border-color: var(--primary);
-        color: white;
-        transform: translateY(-1px);
+        background: var(--primary); border-color: var(--primary);
+        color: white; transform: translateY(-1px);
         box-shadow: 0 4px 12px rgba(255, 49, 56, 0.25);
     }
-    .lobby-page-btn:disabled,
-    .lobby-page-btn.disabled {
-        opacity: 0.35;
-        cursor: not-allowed;
-    }
-    .lobby-page-status {
-        font-size: 13px;
-        color: var(--text-secondary);
-        padding: 0 8px;
-        white-space: nowrap;
-    }
-    .lobby-page-status strong {
-        color: var(--primary);
-        font-weight: 700;
-    }
+    .lobby-page-btn:disabled, .lobby-page-btn.disabled { opacity: 0.35; cursor: not-allowed; }
+    .lobby-page-status { font-size: 13px; color: var(--text-secondary); padding: 0 8px; white-space: nowrap; }
+    .lobby-page-status strong { color: var(--primary); font-weight: 700; }
 
     @media (max-width: 768px) {
         .lobby-filters { flex-direction: column; align-items: stretch; }
@@ -329,14 +213,8 @@
         .quiz-card .card-body .title { font-size: 16px; }
         .quiz-card .card-body .meta { font-size: 12px; gap: 4px 12px; }
         .lobby-filters select { min-width: unset; }
-        .lobby-pagination-wrap {
-            flex-direction: column;
-            align-items: stretch;
-            text-align: center;
-        }
-        .lobby-pagination {
-            justify-content: center;
-        }
+        .lobby-pagination-wrap { flex-direction: column; align-items: stretch; text-align: center; }
+        .lobby-pagination { justify-content: center; }
     }
 </style>
 {% endblock %}
@@ -370,30 +248,12 @@
     </div>
 
     <div class="lobby-stats" id="lobbyStats">
-        <div class="lobby-stat scheduled">
-            <div class="number">{{ stats.scheduled_count or 0 }}</div>
-            <div class="label">⏳ {{ _('live_quiz.lobby.stat_scheduled') }}</div>
-        </div>
-        <div class="lobby-stat open">
-            <div class="number">{{ stats.waiting_count or 0 }}</div>
-            <div class="label">🟢 {{ _('live_quiz.lobby.stat_open') }}</div>
-        </div>
-        <div class="lobby-stat active">
-            <div class="number">{{ stats.active_count or 0 }}</div>
-            <div class="label">🟡 {{ _('live_quiz.lobby.stat_active') }}</div>
-        </div>
-        <div class="lobby-stat finished">
-            <div class="number">{{ stats.finished_count or 0 }}</div>
-            <div class="label">🔵 {{ _('live_quiz.lobby.stat_finished') }}</div>
-        </div>
-        <div class="lobby-stat total">
-            <div class="number">{{ stats.total_public or 0 }}</div>
-            <div class="label">📊 {{ _('live_quiz.lobby.stat_total') }}</div>
-        </div>
-        <div class="lobby-stat total">
-            <div class="number">{{ stats.total_participants or 0 }}</div>
-            <div class="label">👥 {{ _('live_quiz.lobby.stat_participants') }}</div>
-        </div>
+        <div class="lobby-stat scheduled"><div class="number">{{ stats.scheduled_count or 0 }}</div><div class="label">⏳ {{ _('live_quiz.lobby.stat_scheduled') }}</div></div>
+        <div class="lobby-stat open"><div class="number">{{ stats.waiting_count or 0 }}</div><div class="label">🟢 {{ _('live_quiz.lobby.stat_open') }}</div></div>
+        <div class="lobby-stat active"><div class="number">{{ stats.active_count or 0 }}</div><div class="label">🟡 {{ _('live_quiz.lobby.stat_active') }}</div></div>
+        <div class="lobby-stat finished"><div class="number">{{ stats.finished_count or 0 }}</div><div class="label">🔵 {{ _('live_quiz.lobby.stat_finished') }}</div></div>
+        <div class="lobby-stat total"><div class="number">{{ stats.total_public or 0 }}</div><div class="label">📊 {{ _('live_quiz.lobby.stat_total') }}</div></div>
+        <div class="lobby-stat total"><div class="number">{{ stats.total_participants or 0 }}</div><div class="label">👥 {{ _('live_quiz.lobby.stat_participants') }}</div></div>
     </div>
 
     <div class="lobby-filters" id="filterBar">
@@ -421,9 +281,7 @@
             {% endfor %}
         </select>
 
-        <button type="button"
-                id="clearFiltersBtn"
-                class="btn-clear"
+        <button type="button" id="clearFiltersBtn" class="btn-clear"
                 style="{% if not (search or status_filter or subject_filter) %}display: none;{% endif %}">
             <i class="fas fa-times"></i> {{ _('live_quiz.lobby.clear') }}
         </button>
@@ -464,12 +322,29 @@
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
 const I18N = {
-    joining:         "{{ _('live_quiz.lobby.joining') }}",
-    joined_ok:       "{{ _('live_quiz.lobby.joined_ok') }}",
-    join_error:      "{{ _('live_quiz.lobby.join_error') }}",
-    deleting:        "{{ _('live_quiz.lobby.deleting') }}",
-    delete_ok:       "{{ _('live_quiz.lobby.delete_ok') }}",
-    delete_error:    "{{ _('live_quiz.lobby.delete_error') }}"
+    joining:      "{{ _('live_quiz.lobby.joining') }}",
+    joined_ok:    "{{ _('live_quiz.lobby.joined_ok') }}",
+    join_error:   "{{ _('live_quiz.lobby.join_error') }}",
+    deleting:     "{{ _('live_quiz.lobby.deleting') }}",
+    delete_ok:    "{{ _('live_quiz.lobby.delete_ok') }}",
+    delete_error: "{{ _('live_quiz.lobby.delete_error') }}"
+};
+
+// ─── Grade-locked prompt: opens the platform upgrade sheet ───
+window.showGradeLocked = function(requiredGrade) {
+    var msg = requiredGrade
+        ? 'This quiz is for ' + requiredGrade + ' grade.'
+        : 'This quiz is for a different grade.';
+    if (typeof window.openUpgradeSheet === 'function') {
+        window.openUpgradeSheet({
+            feature: 'live_quiz_grade',
+            requiredTier: 'premium',
+            message: msg
+        });
+    } else {
+        // Fallback — the platform upgrade page
+        window.location.href = '/upgrade/?feature=live_quiz_grade&tier=premium';
+    }
 };
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -484,9 +359,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function applyFilters() {
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(function() {
-            refreshLobby(1);
-        }, 500);
+        debounceTimer = setTimeout(function() { refreshLobby(1); }, 500);
     }
 
     function updateClearButtonVisibility() {
@@ -503,11 +376,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const search = searchInput.value.trim();
         const status = statusFilter.value;
         const subject = subjectFilter.value;
-
         if (search) params.set('search', search);
         if (status) params.set('status', status);
         if (subject) params.set('subject', subject);
-
         const page = pageOverride || 1;
         currentPage = page;
         params.set('page', String(page));
@@ -521,48 +392,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = html;
                 const newContent = tempDiv.querySelector('#quizListContainer');
-                if (newContent) {
-                    quizListContainer.innerHTML = newContent.innerHTML;
-                } else {
-                    quizListContainer.innerHTML = tempDiv.innerHTML;
-                }
+                quizListContainer.innerHTML = newContent
+                    ? newContent.innerHTML
+                    : tempDiv.innerHTML;
             }
             updateClearButtonVisibility();
         })
         .catch(err => console.warn('Lobby refresh error:', err));
     }
 
-    if (searchInput) {
-        searchInput.addEventListener('input', function() {
-            updateClearButtonVisibility();
-            applyFilters();
-        });
-    }
-    if (statusFilter) {
-        statusFilter.addEventListener('change', function() {
-            updateClearButtonVisibility();
-            applyFilters();
-        });
-    }
-    if (subjectFilter) {
-        subjectFilter.addEventListener('change', function() {
-            updateClearButtonVisibility();
-            applyFilters();
-        });
-    }
+    if (searchInput) searchInput.addEventListener('input', function() { updateClearButtonVisibility(); applyFilters(); });
+    if (statusFilter) statusFilter.addEventListener('change', function() { updateClearButtonVisibility(); applyFilters(); });
+    if (subjectFilter) subjectFilter.addEventListener('change', function() { updateClearButtonVisibility(); applyFilters(); });
 
     document.addEventListener('click', function(e) {
         const clearBtn = e.target.closest('#clearFiltersBtn');
         if (!clearBtn) return;
         e.preventDefault();
-
         if (searchInput) searchInput.value = '';
         if (statusFilter) statusFilter.value = '';
         if (subjectFilter) subjectFilter.value = '';
-
         updateClearButtonVisibility();
         refreshLobby(1);
-
         if (searchInput) searchInput.focus();
     });
 
@@ -571,12 +422,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!btn || btn.disabled) return;
         const page = parseInt(btn.getAttribute('data-page'), 10);
         if (isNaN(page) || page < 1) return;
-
         refreshLobby(page);
         const container = document.getElementById('quizListContainer');
-        if (container) {
-            container.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        if (container) container.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
 
     function startAutoSync() {
@@ -585,9 +433,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const hasFilter = (searchInput.value.trim() !== '')
                            || (statusFilter.value !== '')
                            || (subjectFilter.value !== '');
-            if (currentPage === 1 && !hasFilter) {
-                refreshLobby(1);
-            }
+            if (currentPage === 1 && !hasFilter) refreshLobby(1);
         }, 30000);
     }
     startAutoSync();
@@ -608,8 +454,15 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             body: JSON.stringify({})
         })
-        .then(response => response.json())
-        .then(data => {
+        .then(response => response.json().then(d => ({ ok: response.ok, data: d })))
+        .then(resp => {
+            const data = resp.data || {};
+            if (data.reason === 'grade_mismatch') {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+                showGradeLocked(data.required_grade);
+                return;
+            }
             if (data.error) {
                 showToast(data.error, 'error');
                 btn.disabled = false;

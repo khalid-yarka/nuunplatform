@@ -1,11 +1,27 @@
 # blueprints/quiz_bp.py
-# Regular quiz blueprint — with grade-aware question selection.
+# Regular quiz blueprint — grade-aware, ID-based session storage.
+#
+# Session layout (small — stays under the 4KB cookie limit):
+#   session['quiz'] = {
+#       'subject_code': str,
+#       'grade': 'F4'|'F3',
+#       'question_ids': [int, int, ...],
+#       'current_index': int,
+#       'score': int,
+#       'answers': [ {question_id, answer, correct}, ... ],
+#       'ratings': [],
+#       'reactions': {'likes': [], 'saves': [], 'reports': {}},
+#   }
+#
+# Actual question rows are re-fetched from the DB on demand via
+# db.get_questions_by_ids(). This removes the 4.5KB cookie payload.
 
 import json
 import logging
 from flask import Blueprint, render_template, request, session, flash, redirect, url_for, jsonify
 from db import (
-    get_questions_by_subject, save_quiz_attempt,
+    get_questions_by_subject, get_questions_by_ids,
+    save_quiz_attempt,
     get_user_quiz_history, update_student_points, get_student_by_id,
     get_leaderboard, get_user_subject_list, execute_with_retry
 )
@@ -26,6 +42,7 @@ from services.tier_service import (
 from services.achievement_service import check_and_award_achievements
 from services.settings_service import SettingsService
 from history_logger import add_history_entry
+from question_utils import UI_GRADES, grade_label
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +70,19 @@ def _flush_reactions_safe(user_id, reactions):
 
 
 def _profile_grade(user_id):
-    """Return the student's grade, defaulting to F4 if malformed."""
-    from question_utils import VALID_GRADES, DEFAULT_GRADE
+    """
+    Return the student's grade clamped to the user-facing set (F4 / F3).
+    Anything else (G8, G7, empty, malformed) becomes F4.
+    """
     user = get_student_by_id(user_id) or {}
     g = (user.get('grade') or '').strip().upper()
-    return g if g in VALID_GRADES else DEFAULT_GRADE
+    return g if g in UI_GRADES else UI_GRADES[0]
+
+
+def _fetch_question(qid):
+    """Fetch one question by id. Returns None if it no longer exists."""
+    fetched = get_questions_by_ids([qid])
+    return fetched[0] if fetched else None
 
 
 # ============================================
@@ -71,7 +96,7 @@ def index():
         return redirect(url_for('auth.login'))
 
     quiz_data = session.get('quiz')
-    if quiz_data and quiz_data.get('questions'):
+    if quiz_data and quiz_data.get('question_ids'):
         flash('Resuming your quiz...', 'info')
         return redirect(url_for('quiz.play'))
 
@@ -91,11 +116,10 @@ def index():
     tier = get_current_user_tier()
     remaining_attempts = get_remaining_quota(user_id, 'quiz_attempt')
 
-    from question_utils import VALID_GRADES, grade_label
     user_grade = _profile_grade(user_id)
     can_change_grade = tier in ('premium', 'pro')
     grade_choices = [
-        {'code': g, 'label': grade_label(g)} for g in VALID_GRADES
+        {'code': g, 'label': grade_label(g)} for g in UI_GRADES
     ]
 
     return render_template(
@@ -156,11 +180,14 @@ def start_quiz():
         flash('You have used all your quiz attempts for today. Come back tomorrow!', 'error')
         return redirect(url_for('quiz.index'))
 
-    # ── Grade resolution ────────────────────────────────
-    from question_utils import VALID_GRADES
+    # ── Grade resolution ─────────────────────────────────
+    # The form only ever emits F4 / F3 (UI_GRADES). Anything else is
+    # rejected and the profile grade is used instead.
     profile_grade = _profile_grade(user_id)
     form_grade = (request.form.get('grade') or '').strip().upper()
-    if get_current_user_tier() in ('premium', 'pro') and form_grade in VALID_GRADES:
+    tier = get_current_user_tier()
+
+    if tier in ('premium', 'pro') and form_grade in UI_GRADES:
         effective_grade = form_grade
     else:
         effective_grade = profile_grade
@@ -178,8 +205,7 @@ def start_quiz():
     session['quiz'] = {
         'subject_code': subject_code,
         'grade': effective_grade,
-        'question_count': len(questions),
-        'questions': questions,
+        'question_ids': [q['id'] for q in questions],
         'current_index': 0,
         'score': 0,
         'answers': [],
@@ -202,7 +228,7 @@ def play():
         return redirect(url_for('auth.login'))
 
     quiz_data = session.get('quiz')
-    if not quiz_data or not quiz_data.get('questions'):
+    if not quiz_data or not quiz_data.get('question_ids'):
         flash('No quiz in progress. Start a new quiz.', 'error')
         return redirect(url_for('quiz.index'))
 
@@ -211,13 +237,23 @@ def play():
         session['quiz'] = quiz_data
         session.modified = True
 
-    questions = quiz_data['questions']
+    question_ids = quiz_data['question_ids']
     current_index = quiz_data['current_index']
-    if current_index >= len(questions):
+    if current_index >= len(question_ids):
         return redirect(url_for('quiz.results'))
 
-    question = questions[current_index]
-    total = len(questions)
+    qid = question_ids[current_index]
+    question = _fetch_question(qid)
+    if not question:
+        # Question was archived or deleted mid-quiz — advance past it
+        quiz_data['current_index'] = current_index + 1
+        session['quiz'] = quiz_data
+        session.modified = True
+        if quiz_data['current_index'] >= len(question_ids):
+            return redirect(url_for('quiz.results'))
+        return redirect(url_for('quiz.play'))
+
+    total = len(question_ids)
     score = quiz_data['score']
 
     user_id = session['user_id']
@@ -248,16 +284,20 @@ def submit_answer():
         return jsonify({'error': 'CSRF token missing or invalid'}), 403
 
     quiz_data = session.get('quiz')
-    if not quiz_data:
+    if not quiz_data or not quiz_data.get('question_ids'):
         return jsonify({'error': 'No quiz in progress'}), 400
 
-    questions = quiz_data['questions']
+    question_ids = quiz_data['question_ids']
     current_index = quiz_data['current_index']
-    if current_index >= len(questions):
+    if current_index >= len(question_ids):
         return jsonify({'error': 'Quiz already completed'}), 400
 
+    qid = question_ids[current_index]
+    question = _fetch_question(qid)
+    if not question:
+        return jsonify({'error': 'Question no longer available'}), 400
+
     answer = (request.json or {}).get('answer', '')
-    question = questions[current_index]
     is_correct = answer == question['correct_answer']
 
     answers = quiz_data['answers']
@@ -281,7 +321,7 @@ def submit_answer():
         'correct': is_correct,
         'correct_answer': question['correct_answer'],
         'current': current_index,
-        'total': len(questions),
+        'total': len(question_ids),
         'score': quiz_data['score']
     }
 
@@ -308,22 +348,22 @@ def skip_rating():
         return jsonify({'error': 'CSRF token missing or invalid'}), 403
 
     quiz_data = session.get('quiz')
-    if not quiz_data:
+    if not quiz_data or not quiz_data.get('question_ids'):
         return jsonify({'error': 'No quiz in progress'}), 400
 
-    questions = quiz_data['questions']
+    question_ids = quiz_data['question_ids']
     current_index = quiz_data['current_index']
-    if current_index >= len(questions):
+    if current_index >= len(question_ids):
         return jsonify({'error': 'Quiz already completed'}), 400
 
     quiz_data['current_index'] += 1
     session['quiz'] = quiz_data
     session.modified = True
 
-    if quiz_data['current_index'] >= len(questions):
+    if quiz_data['current_index'] >= len(question_ids):
         user_id = session['user_id']
         score = quiz_data['score']
-        total = len(questions)
+        total = len(question_ids)
         check_and_award_achievements(user_id, 'quiz_completed', {'score': score, 'total': total})
         return jsonify({'complete': True})
 
@@ -342,14 +382,14 @@ def end_quiz():
         return jsonify({'error': 'CSRF token missing or invalid'}), 403
 
     quiz_data = session.get('quiz')
-    if not quiz_data or not quiz_data.get('questions'):
+    if not quiz_data or not quiz_data.get('question_ids'):
         return jsonify({'error': 'No quiz in progress'}), 400
 
     user_id = session['user_id']
-    questions = quiz_data['questions']
+    question_ids = quiz_data['question_ids']
     answers = quiz_data.get('answers', [])
     score = quiz_data.get('score', 0)
-    total = len(questions)
+    total = len(question_ids)
     subject_code = quiz_data['subject_code']
     reactions = quiz_data.get('reactions') or _empty_reactions()
 
@@ -412,14 +452,19 @@ def results():
         return redirect(url_for('auth.login'))
 
     quiz_data = session.pop('quiz', None)
-    if not quiz_data or not quiz_data.get('questions'):
+    if not quiz_data or not quiz_data.get('question_ids'):
         flash('No quiz completed.', 'error')
         return redirect(url_for('quiz.index'))
 
-    questions = quiz_data['questions']
+    question_ids = quiz_data['question_ids']
+    fetched = get_questions_by_ids(question_ids)
+    by_id = {q['id']: q for q in fetched}
+    # Preserve original order; skip any questions that no longer exist
+    questions = [by_id[qid] for qid in question_ids if qid in by_id]
+
     answers = quiz_data['answers']
     score = quiz_data['score']
-    total = len(questions)
+    total = len(question_ids)
     subject_code = quiz_data['subject_code']
     ratings = quiz_data.get('ratings', [])
     reactions = quiz_data.get('reactions') or _empty_reactions()

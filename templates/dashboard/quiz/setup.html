@@ -23,9 +23,9 @@
         text-align: center; margin-bottom: 24px;
     }
     .form-group { margin-bottom: 20px; }
-    .form-group label {
+    .form-group > label {
         display: block; font-size: 14px; font-weight: 600;
-        color: var(--text); margin-bottom: 6px;
+        color: var(--text); margin-bottom: 8px;
     }
     .form-group select {
         width: 100%; padding: 12px 16px;
@@ -44,76 +44,113 @@
         box-shadow: 0 0 0 4px rgba(255, 49, 56, 0.08);
     }
 
-    /* ─── GRADE ROW ─── */
-    .grade-row {
-        display: flex; align-items: center; gap: 12px;
-        padding: 14px 16px;
-        background: var(--background);
+    /* ─── GRADE PILLS (F4 / F3) ─── */
+    .grade-pills {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+    .grade-pill {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 14px 8px;
         border: 2px solid var(--border);
         border-radius: var(--radius-sm);
-        margin-bottom: 20px;
+        background: var(--surface);
         cursor: pointer;
         transition: var(--transition);
+        text-align: center;
+        min-height: 68px;
         user-select: none;
+        position: relative;
     }
-    .grade-row:hover {
+    .grade-pill:hover {
         border-color: var(--primary);
         background: var(--primary-light);
+        transform: translateY(-1px);
     }
-    .grade-row__icon {
-        font-size: 22px; line-height: 1;
-        flex-shrink: 0;
-    }
-    .grade-row__value {
-        flex: 1; min-width: 0;
-        font-size: 16px; font-weight: 700;
-        color: var(--text);
-    }
-    .grade-row__lock {
-        font-size: 16px;
-        color: var(--text-muted);
-        flex-shrink: 0;
-        transition: var(--transition);
-    }
-    .grade-row:hover .grade-row__lock {
-        color: var(--primary);
-    }
-
-    /* Changeable variant — plain, no hover tint */
-    .grade-row--select {
-        cursor: default;
-        background: var(--surface);
-        padding: 12px 16px;
-    }
-    .grade-row--select:hover {
-        border-color: var(--border);
-        background: var(--surface);
-    }
-    .grade-row--select:focus-within {
+    .grade-pill.active {
         border-color: var(--primary);
-        box-shadow: 0 0 0 4px rgba(255, 49, 56, 0.08);
+        background: var(--primary-light);
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.1);
     }
-    .grade-row--select .grade-row__select {
-        flex: 1;
-        border: none;
-        background: transparent;
-        padding: 0;
-        font-size: 16px;
-        font-weight: 600;
+    .grade-pill input[type="radio"] { display: none; }
+    .grade-pill .gp-code {
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
         color: var(--text);
-        font-family: inherit;
-        cursor: pointer;
-        appearance: none;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 0 center;
-        padding-right: 26px;
+        line-height: 1.1;
     }
-    .grade-row--select .grade-row__select:focus { outline: none; }
+    .grade-pill.active .gp-code { color: var(--primary); }
+    .grade-pill .gp-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        margin-top: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+    .grade-pill.active .gp-label { color: var(--primary); opacity: 0.9; }
+
+    /* Free users: pills visible, dimmed, tapping opens upgrade sheet */
+    .grade-pills--locked .grade-pill {
+        cursor: pointer;
+        opacity: 0.7;
+    }
+    .grade-pills--locked .grade-pill:hover {
+        border-color: var(--primary);
+        background: var(--primary-light);
+        opacity: 1;
+    }
+    .grade-pill .gp-lock {
+        position: absolute;
+        top: 8px;
+        right: 10px;
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+    .grade-pill.active .gp-lock { color: var(--primary); }
+
+    /* ─── GRADE HINT (below pills) ─── */
+    .grade-hint {
+        margin-top: 10px;
+        padding: 10px 14px;
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--background);
+        color: var(--text-muted);
+        transition: var(--transition);
+        min-height: 40px;
+    }
+    .grade-hint i { font-size: 13px; }
+    .grade-hint.ok { background: #ECFDF5; color: #065F46; }
+    .grade-hint.warn { background: #FFFBEB; color: #92400E; }
+    .grade-hint.err { background: #FEF2F2; color: #991B1B; }
+
+    [data-theme="dark"] .grade-pill.active {
+        border-color: #FF6B70 !important;
+        background: rgba(255, 107, 112, 0.15) !important;
+    }
+    [data-theme="dark"] .grade-pill.active .gp-code,
+    [data-theme="dark"] .grade-pill.active .gp-label {
+        color: #FF6B70 !important;
+    }
+    [data-theme="dark"] .grade-pill:hover {
+        border-color: #FF6B70 !important;
+        background: rgba(255, 107, 112, 0.1) !important;
+    }
 
     .question-count-options {
-        display: grid; grid-template-columns: repeat(4, 1fr);
-        gap: 10px; margin: 6px 0 12px;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
     }
     .q-option {
         position: relative; display: flex; flex-direction: column;
@@ -183,6 +220,9 @@
     @media (max-width: 480px) {
         .question-count-options { grid-template-columns: repeat(2, 1fr); }
         .setup-card { padding: 20px 16px; }
+        .grade-pill { min-height: 60px; padding: 12px 6px; }
+        .grade-pill .gp-code { font-size: 16px; }
+        .grade-pill .gp-label { font-size: 10px; }
     }
 </style>
 {% endblock %}
@@ -198,32 +238,31 @@
         <form method="POST" action="{{ url_for('quiz.start_quiz') }}" id="setupForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-            {# ─── GRADE ROW ─── #}
-            {% if can_change_grade %}
-                <div class="grade-row grade-row--select">
-                    <span class="grade-row__icon">🎓</span>
-                    <select name="grade" class="grade-row__select" aria-label="Grade">
-                        {% for g in grade_choices %}
-                            <option value="{{ g.code }}"
-                                {% if user_grade == g.code %}selected{% endif %}>
-                                {{ g.label }}
-                            </option>
-                        {% endfor %}
-                    </select>
+            {# ─── GRADE PILLS ─── #}
+            <div class="form-group">
+                <label>🎓 Grade</label>
+                <div class="grade-pills {% if not can_change_grade %}grade-pills--locked{% endif %}"
+                     id="gradePills"
+                     data-can-change="{{ 'true' if can_change_grade else 'false' }}">
+                    {% for g in grade_choices %}
+                        {% set is_active = (g.code == user_grade) %}
+                        <label class="grade-pill {% if is_active %}active{% endif %}"
+                               data-grade="{{ g.code }}">
+                            <input type="radio" name="grade" value="{{ g.code }}"
+                                   {% if is_active %}checked{% endif %}>
+                            <span class="gp-code">{{ g.code }}</span>
+                            <span class="gp-label">{{ g.label }}</span>
+                            {% if not can_change_grade %}
+                                <span class="gp-lock">🔒</span>
+                            {% endif %}
+                        </label>
+                    {% endfor %}
                 </div>
-            {% else %}
-                <div class="grade-row" id="gradeLocked"
-                     role="button" tabindex="0"
-                     aria-label="Grade — upgrade to change">
-                    <span class="grade-row__icon">🎓</span>
-                    <span class="grade-row__value">
-                        {% for g in grade_choices %}
-                            {% if g.code == user_grade %}{{ g.label }}{% endif %}
-                        {% endfor %}
-                    </span>
-                    <span class="grade-row__lock">🔒</span>
+                <div class="grade-hint" id="gradeHint">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Pick a subject to continue</span>
                 </div>
-            {% endif %}
+            </div>
 
             <div class="form-group">
                 <label for="subjectSelect">📚 {{ _('quiz.setup.subject') }} <span style="color:var(--primary);">*</span></label>
@@ -307,24 +346,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const subjectSelect = document.getElementById('subjectSelect');
     const form = document.getElementById('setupForm');
     const customInput = document.getElementById('customCount');
-    const gradeLocked = document.getElementById('gradeLocked');
-
-    if (gradeLocked) {
-        const trigger = function () {
-            if (typeof window.openUpgradeSheet === 'function') {
-                window.openUpgradeSheet({
-                    feature: 'grade_filter',
-                    requiredTier: 'premium',
-                });
-            }
-        };
-        gradeLocked.addEventListener('click', trigger);
-        gradeLocked.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault(); trigger();
-            }
-        });
-    }
+    const gradePills = document.getElementById('gradePills');
+    const gradeHintEl = document.getElementById('gradeHint');
+    const canChangeGrade = gradePills && gradePills.dataset.canChange === 'true';
 
     let selectedValue = null;
 
@@ -334,6 +358,32 @@ document.addEventListener('DOMContentLoaded', function() {
         startBtn.disabled = !(subjectOk && countOk);
     }
 
+    // ─── Grade pills ───
+    if (gradePills) {
+        gradePills.querySelectorAll('.grade-pill').forEach(function(pill) {
+            pill.addEventListener('click', function(e) {
+                if (!canChangeGrade) {
+                    e.preventDefault();
+                    if (typeof window.openUpgradeSheet === 'function') {
+                        window.openUpgradeSheet({
+                            feature: 'grade_filter',
+                            requiredTier: 'premium'
+                        });
+                    }
+                    return;
+                }
+                gradePills.querySelectorAll('.grade-pill').forEach(function(p) {
+                    p.classList.remove('active');
+                });
+                pill.classList.add('active');
+                const radio = pill.querySelector('input[type="radio"]');
+                if (radio) radio.checked = true;
+                refreshHint();
+            });
+        });
+    }
+
+    // ─── Question count ───
     options.forEach(opt => {
         opt.addEventListener('click', function(e) {
             if (this.dataset.locked === 'true') {
@@ -363,7 +413,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    subjectSelect.addEventListener('change', updateStartButton);
+    subjectSelect.addEventListener('change', function() {
+        updateStartButton();
+        refreshHint();
+    });
 
     if (customInput) {
         customInput.addEventListener('input', function() {
@@ -393,6 +446,55 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // ─── Grade hint ───
+    function currentGrade() {
+        const checked = document.querySelector('input[name="grade"]:checked');
+        return checked ? checked.value : 'F4';
+    }
+
+    function setHint(state, html) {
+        if (!gradeHintEl) return;
+        gradeHintEl.className = 'grade-hint ' + (state || '');
+        gradeHintEl.innerHTML = html;
+    }
+
+    var hintTimer = null;
+    function refreshHint() {
+        clearTimeout(hintTimer);
+        var subject = subjectSelect ? subjectSelect.value : '';
+        var grade = currentGrade();
+
+        if (!subject) {
+            setHint('', '<i class="fas fa-info-circle"></i><span>Pick a subject to continue</span>');
+            return;
+        }
+        setHint('', '<i class="fas fa-circle-notch fa-spin"></i><span>Checking…</span>');
+
+        hintTimer = setTimeout(function() {
+            var url = '/live-quiz/available-count?subject=' + encodeURIComponent(subject) + '&grade=' + encodeURIComponent(grade);
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var n = data.count || 0;
+                    if (n >= 20) {
+                        setHint('ok', '<i class="fas fa-check-circle"></i><span>Plenty of questions ready — pick your count</span>');
+                    } else if (n >= 10) {
+                        setHint('ok', '<i class="fas fa-check-circle"></i><span>Good selection ready</span>');
+                    } else if (n >= 5) {
+                        setHint('warn', '<i class="fas fa-exclamation-triangle"></i><span>Only a few available — try the other grade</span>');
+                    } else if (n > 0) {
+                        setHint('err', '<i class="fas fa-times-circle"></i><span>Not enough for a quiz — try the other grade</span>');
+                    } else {
+                        setHint('err', '<i class="fas fa-times-circle"></i><span>Nothing available for this grade</span>');
+                    }
+                })
+                .catch(function() {
+                    setHint('', '<i class="fas fa-info-circle"></i><span>Could not check availability</span>');
+                });
+        }, 200);
+    }
+
+    refreshHint();
     updateStartButton();
 });
 </script>

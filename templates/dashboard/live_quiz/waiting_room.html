@@ -32,6 +32,7 @@
                 <h2 class="wr-title">{{ quiz.title or _('live_quiz.lobby.untitled_quiz') }}</h2>
                 <div class="wr-meta">
                     <span>📚 {{ quiz.subjects.name if quiz.subjects else _('live_quiz.waiting.unknown_subject') }}</span>
+                    {% if quiz.grade %}<span>🎓 {{ quiz.grade }}</span>{% endif %}
                     <span>❓ {{ _('live_quiz.waiting.questions_count', n=quiz.question_count) }}</span>
                     <span>⏱️ {{ _('live_quiz.waiting.seconds_each', n=quiz.time_per_question) }}</span>
                     {% if not quiz.is_public %}<span class="privacy-badge private">🔒 {{ _('live_quiz.create.private') }}</span>{% else %}<span class="privacy-badge public">🌐 {{ _('live_quiz.create.public') }}</span>{% endif %}

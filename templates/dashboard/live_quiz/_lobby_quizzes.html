@@ -9,6 +9,9 @@
                     <span class="subject-icon">{{ quiz.subject_icon or '📚' }}</span>
                     {{ quiz.title or _('live_quiz.lobby.untitled_quiz') }}
                     <span class="status-tag {{ quiz.status }}">{{ _('live_quiz.status.' ~ quiz.status) }}</span>
+                    {% if quiz.grade %}
+                        <span class="grade-chip">🎓 {{ quiz.grade }}</span>
+                    {% endif %}
                     {% if not quiz.is_public %}
                         <span class="status-tag" style="background:#FEF3C7;color:#92400E;">🔒 {{ _('live_quiz.lobby.private_tag') }}</span>
                     {% endif %}
@@ -44,26 +47,37 @@
                     <i class="fas fa-users"></i> <strong>{{ quiz.participant_count or 0 }}</strong> / {{ quiz.max_participants or 50 }}
                 </span>
 
-                {% if quiz.status == 'scheduled' or quiz.status == 'waiting' %}
-                    {% if quiz.is_participant %}
+                {# Grade lock takes precedence over status-based actions,
+                   except for existing participants/creators who are
+                   grandfathered in. #}
+                {% if quiz.is_participant or quiz.is_creator %}
+                    {% if quiz.status in ['scheduled', 'waiting'] %}
                         <a href="{{ url_for('live_quiz.waiting_room', quiz_id=quiz.id) }}" class="btn-sm success">
                             <i class="fas fa-door-open"></i> {{ _('live_quiz.lobby.waiting_room_btn') }}
                         </a>
-                    {% else %}
-                        <button class="btn-sm success" onclick="joinQuiz('{{ quiz.id }}')">
-                            <i class="fas fa-arrow-right"></i> {{ _('live_quiz.lobby.join_btn') }}
-                        </button>
-                    {% endif %}
-                {% elif quiz.status == 'active' %}
-                    {% if quiz.is_participant %}
+                    {% elif quiz.status == 'active' %}
                         <a href="{{ url_for('live_quiz.play', quiz_id=quiz.id) }}" class="btn-sm primary">
                             <i class="fas fa-play"></i> {{ _('live_quiz.lobby.continue_btn') }}
                         </a>
                     {% else %}
-                        <span class="btn-sm secondary" style="opacity:0.7; cursor:default;">
-                            <i class="fas fa-clock"></i> {{ _('live_quiz.lobby.in_progress_btn') }}
-                        </span>
+                        <a href="{{ url_for('live_quiz.results', quiz_id=quiz.id) }}" class="btn-sm primary">
+                            <i class="fas fa-chart-bar"></i> {{ _('live_quiz.lobby.results_btn') }}
+                        </a>
                     {% endif %}
+                {% elif quiz.grade_locked %}
+                    <button type="button" class="btn-sm locked"
+                            onclick="showGradeLocked('{{ quiz.grade }}')"
+                            title="{{ _('live_quiz.lobby.grade_locked_title') }}">
+                        <i class="fas fa-lock"></i> {{ _('live_quiz.lobby.join_btn') }}
+                    </button>
+                {% elif quiz.status in ['scheduled', 'waiting'] %}
+                    <button class="btn-sm success" onclick="joinQuiz('{{ quiz.id }}')">
+                        <i class="fas fa-arrow-right"></i> {{ _('live_quiz.lobby.join_btn') }}
+                    </button>
+                {% elif quiz.status == 'active' %}
+                    <span class="btn-sm secondary" style="opacity:0.7; cursor:default;">
+                        <i class="fas fa-clock"></i> {{ _('live_quiz.lobby.in_progress_btn') }}
+                    </span>
                 {% else %}
                     <a href="{{ url_for('live_quiz.results', quiz_id=quiz.id) }}" class="btn-sm primary">
                         <i class="fas fa-chart-bar"></i> {{ _('live_quiz.lobby.results_btn') }}
@@ -79,7 +93,6 @@
         </div>
     {% endfor %}
 
-    <!-- Pagination -->
     {% if total_pages > 1 %}
         {% set start_item = (page - 1) * 20 + 1 %}
         {% set end_item = page * 20 %}
@@ -111,7 +124,6 @@
     {% endif %}
 
 {% else %}
-    <!-- Empty State -->
     <div class="lobby-empty">
         <div class="icon">🎯</div>
         <h3>{{ _('live_quiz.lobby.empty_title') }}</h3>

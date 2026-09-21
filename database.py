@@ -44,7 +44,7 @@ REQUIRED_COLUMNS = {
     'quiz_attempts': ['id', 'student_id', 'subject_code', 'score', 'total_questions', 'answers', 'ratings', 'completed_at'],
     'groups': ['id', 'name', 'platform', 'invite_link', 'is_active', 'created_at'],
     'pdfs': ['id', 'code', 'title', 'file_url', 'view_count', 'uploaded_at', 'is_premium'],
-    'live_quizzes': ['id', 'creator_id', 'join_code', 'status', 'question_count', 'created_at'],
+    'live_quizzes': ['id', 'creator_id', 'join_code', 'status', 'question_count','grade', 'created_at'],
     'live_quiz_participants': ['id', 'quiz_id', 'student_id', 'score', 'answers', 'ratings', 'ranking'],
     'deleted_users': ['id', 'original_id', 'first_name', 'last_name', 'phone_number', 'data', 'deleted_at'],
     'quiz_ratings': ['id', 'student_id', 'question_id', 'rating', 'created_at'],

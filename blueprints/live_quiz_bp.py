@@ -1,9 +1,5 @@
 # blueprints/live_quiz_bp.py
-# Complete file with:
-#   • Active-quiz guard on create (GET + POST paths)
-#   • /abandon/<quiz_id> endpoint (soft-close or leave)
-#   • Reaction unification: no HAA/MAY, single advance primitive,
-#     memory-backed like/save, write-through report, batch flush on finalize.
+# Live quiz lifecycle — grade-aware, with join-grade gating for free users.
 
 import json
 import random
@@ -74,6 +70,9 @@ from services.tier_service import (
     get_saved_content_limit,
 )
 from services.notification_service import send_notification
+from question_utils import (
+    VALID_GRADES, UI_GRADES, DEFAULT_GRADE, grade_label, normalize_grade,
+)
 
 from live_quiz_state import get_live_quiz_state_manager
 from cache import get_cache_manager, InvalidationHelper, make_key
@@ -127,9 +126,39 @@ def invalidate_quiz_cache(quiz_id: int):
         pass
 
 
-def get_questions_for_subject(subject_code, limit):
-    questions = get_questions_by_subject(subject_code, limit)
+def get_questions_for_subject(subject_code, limit, grade=None):
+    questions = get_questions_by_subject(subject_code, limit, grade=grade)
     return questions, len(questions)
+
+
+def _profile_grade(user_id):
+    """
+    Return the user-facing grade (F4 / F3). Anything else — G8, G7,
+    empty, malformed — is treated as F4.
+    """
+    user = get_student_by_id(user_id) or {}
+    g = (user.get('grade') or '').strip().upper()
+    return g if g in UI_GRADES else UI_GRADES[0]
+
+
+def _grade_choices():
+    """User-facing pill choices: F4 and F3 only."""
+    return [{'code': g, 'label': grade_label(g)} for g in UI_GRADES]
+
+
+def _is_grade_locked_for_viewer(quiz_row, user_id, user_tier):
+    """
+    True when the viewer is free and the quiz grade doesn't match their
+    profile grade. Premium/pro always get False.
+    """
+    if user_tier in ('premium', 'pro'):
+        return False
+    quiz_grade = normalize_grade(quiz_row.get('grade') if quiz_row else None)
+    # normalize_grade defaults to F4 for anything not in VALID_GRADES;
+    # compare against the user's UI grade so G8-stored rows align with F4.
+    if quiz_grade not in UI_GRADES:
+        quiz_grade = UI_GRADES[0]
+    return quiz_grade != _profile_grade(user_id)
 
 
 def _enrich_active_quiz(active_quiz: dict, user_id: int) -> dict:
@@ -139,6 +168,8 @@ def _enrich_active_quiz(active_quiz: dict, user_id: int) -> dict:
     subj = get_subject(active_quiz.get('subject_code'))
     active_quiz['subject_name'] = subj['name'] if subj else active_quiz.get('subject_code')
     active_quiz['subject_icon'] = subj.get('icon', '📚') if subj else '📚'
+    if not active_quiz.get('grade'):
+        active_quiz['grade'] = DEFAULT_GRADE
     return active_quiz
 
 
@@ -182,7 +213,6 @@ def finalize_live_quiz(quiz_id: int) -> dict:
                     'status': pdata['status'],
                 })
 
-            # ---- Flush accumulated reactions in one batch (likes + saves) ----
             try:
                 from services.interaction_service import flush_quiz_reactions
                 flush_quiz_reactions(
@@ -202,6 +232,7 @@ def finalize_live_quiz(quiz_id: int) -> dict:
                 action='completed',
                 metadata={
                     'subject': quiz_state.metadata.get('subject_code', 'Unknown'),
+                    'grade': quiz_state.metadata.get('grade', DEFAULT_GRADE),
                     'score': pdata['score'],
                     'rank': pdata.get('rank'),
                     'total_questions': len(quiz_state.question_ids),
@@ -257,6 +288,9 @@ def lobby():
         flash('Please login first.', 'error')
         return redirect(url_for('auth.login'))
 
+    user_id = session['user_id']
+    user_tier = get_current_user_tier()
+
     status_filter = request.args.get('status', '')
     subject_filter = request.args.get('subject', '')
     search = request.args.get('search', '').strip()
@@ -277,13 +311,18 @@ def lobby():
         cache.set(subjects_key, subjects, ttl=3600)
 
     quizzes, total = get_live_quizzes_lobby(
-        user_id=session['user_id'],
+        user_id=user_id,
         status_filter=status_filter if status_filter else None,
         subject_filter=subject_code,
         search=search if search else None,
         page=page,
         per_page=per_page,
     )
+
+    # Grade-lock enrichment: per-viewer flag on each quiz.
+    for q in quizzes:
+        q['grade'] = q.get('grade') or DEFAULT_GRADE
+        q['grade_locked'] = _is_grade_locked_for_viewer(q, user_id, user_tier)
 
     stats_key = make_key('quiz', 'stats', 'global')
     stats = cache.get(stats_key)
@@ -292,8 +331,6 @@ def lobby():
         cache.set(stats_key, stats, ttl=30)
 
     total_pages = (total + per_page - 1) // per_page if total > 0 else 1
-
-    user_tier = get_current_user_tier()
     can_create = can_create_live_quiz()
 
     return render_template(
@@ -324,6 +361,16 @@ def lobby_join(quiz_id):
     quiz = get_live_quiz_by_id(quiz_id)
     if not quiz:
         return jsonify({'error': 'Quiz not found'}), 404
+
+    # ── Grade gate (only blocks free users with a mismatched profile grade)
+    if _is_grade_locked_for_viewer(quiz, user_id, get_current_user_tier()):
+        return jsonify({
+            'error': 'This quiz is for a different grade. '
+                     'Upgrade to join quizzes of any grade.',
+            'reason': 'grade_mismatch',
+            'required_tier': 'premium',
+            'required_grade': normalize_grade(quiz.get('grade')),
+        }), 403
 
     can_join, reason = can_join_live_quiz(quiz_id, user_id)
     if not can_join:
@@ -375,6 +422,38 @@ def lobby_join(quiz_id):
     })
 
 
+@live_quiz_bp.route('/available-count')
+def available_count():
+    """
+    AJAX: how many active questions exist for a subject + grade.
+    Any logged-in user can call this — it powers the qualitative hint
+    on both the quiz setup page and the live quiz create page.
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+
+    subject_code = (request.args.get('subject') or '').strip()
+    grade = (request.args.get('grade') or '').strip().upper()
+    if grade not in VALID_GRADES:
+        grade = DEFAULT_GRADE
+
+    if not subject_code:
+        return jsonify({'count': 0, 'grade': grade})
+
+    try:
+        cursor = execute_with_retry(
+            "SELECT COUNT(*) AS c FROM questions "
+            "WHERE subject_code = ? AND status = 'active' AND grade = ?",
+            (subject_code, grade),
+        )
+        row = cursor.fetchone()
+        count = int(row['c']) if row else 0
+        return jsonify({'count': count, 'grade': grade, 'subject': subject_code})
+    except Exception as e:
+        logger.warning(f"available_count failed: {e}")
+        return jsonify({'count': 0, 'grade': grade, 'subject': subject_code})
+
+
 @live_quiz_bp.route('/create', methods=['GET', 'POST'])
 def create():
     if 'user_id' not in session:
@@ -401,6 +480,9 @@ def create():
     default_max_participants = settings.get('live_quiz.default_max_participants', 50)
     default_privacy = settings.get('live_quiz.default_privacy', 1)
 
+    user_grade = _profile_grade(user_id)
+    grades = _grade_choices()
+
     active_quiz = _get_active_quiz_for_user(user_id)
 
     if request.method == 'GET':
@@ -408,6 +490,8 @@ def create():
         return render_template(
             'dashboard/live_quiz/create.html',
             subjects=user_subjects,
+            user_grade=user_grade,
+            grades=grades,
             default_time=default_time,
             default_max_participants=default_max_participants,
             default_privacy=default_privacy,
@@ -427,18 +511,30 @@ def create():
         )
         return redirect(url_for('live_quiz.create'))
 
-    subject_code = request.form.get('subject_code', '').strip()
-    allowed_codes = [s['code'] for s in user_subjects]
-    if subject_code not in allowed_codes:
-        flash('Subject not available for your location/curriculum.', 'error')
+    # ── Grade ───────────────────────────────────────────
+    form_grade = (request.form.get('grade') or '').strip().upper()
+    if form_grade not in UI_GRADES:
+        form_grade = user_grade
+    effective_grade = form_grade
+
+    def _render_error(**extra):
         return render_template(
             'dashboard/live_quiz/create.html',
             subjects=user_subjects,
+            user_grade=effective_grade,
+            grades=grades,
             default_time=default_time,
             default_max_participants=default_max_participants,
             default_privacy=default_privacy,
             active_quiz=None,
+            **extra,
         )
+
+    subject_code = request.form.get('subject_code', '').strip()
+    allowed_codes = [s['code'] for s in user_subjects]
+    if subject_code not in allowed_codes:
+        flash('Subject not available for your location/curriculum.', 'error')
+        return _render_error()
 
     try:
         question_count = int(request.form.get('question_count', 10))
@@ -446,45 +542,19 @@ def create():
         question_count = 10
     if question_count < 5 or question_count > 30:
         flash('Number of questions must be between 5 and 30.', 'error')
-        return render_template(
-            'dashboard/live_quiz/create.html',
-            subjects=user_subjects,
+        return _render_error(
             subject_code=subject_code,
             title=request.form.get('title', '').strip(),
             is_public=request.form.get('is_public', default_privacy),
-            default_time=default_time,
-            default_max_participants=default_max_participants,
-            default_privacy=default_privacy,
-            active_quiz=None,
         )
 
     title = request.form.get('title', '').strip()
     if not title:
         flash('Please give your quiz a title before creating it.', 'error')
-        return render_template(
-            'dashboard/live_quiz/create.html',
-            subjects=user_subjects,
-            subject_code=subject_code,
-            title='',
-            is_public=request.form.get('is_public', default_privacy),
-            default_time=default_time,
-            default_max_participants=default_max_participants,
-            default_privacy=default_privacy,
-            active_quiz=None,
-        )
+        return _render_error(subject_code=subject_code, title='')
     if len(title) > 100:
         flash('Title is too long (max 100 characters).', 'error')
-        return render_template(
-            'dashboard/live_quiz/create.html',
-            subjects=user_subjects,
-            subject_code=subject_code,
-            title=title,
-            is_public=request.form.get('is_public', default_privacy),
-            default_time=default_time,
-            default_max_participants=default_max_participants,
-            default_privacy=default_privacy,
-            active_quiz=None,
-        )
+        return _render_error(subject_code=subject_code, title=title)
 
     time_per_question = request.form.get('time_per_question')
     if time_per_question is None:
@@ -517,16 +587,8 @@ def create():
 
     if privacy == 0 and not can_create_private_live_quiz():
         flash('Upgrade to Premium or Pro to create private live quizzes.', 'error')
-        return render_template(
-            'dashboard/live_quiz/create.html',
-            subjects=user_subjects,
-            subject_code=subject_code,
-            title=title,
-            is_public=1,
-            default_time=default_time,
-            default_max_participants=default_max_participants,
-            default_privacy=default_privacy,
-            active_quiz=None,
+        return _render_error(
+            subject_code=subject_code, title=title, is_public=1,
         )
 
     try:
@@ -538,57 +600,39 @@ def create():
 
     if schedule_minutes > 0 and not can_schedule_live_quiz():
         flash('Upgrade to Premium or Pro to schedule live quizzes.', 'error')
-        return render_template(
-            'dashboard/live_quiz/create.html',
-            subjects=user_subjects,
-            subject_code=subject_code,
-            title=title,
-            is_public=privacy,
-            default_time=default_time,
-            default_max_participants=default_max_participants,
-            default_privacy=default_privacy,
-            active_quiz=None,
+        return _render_error(
+            subject_code=subject_code, title=title, is_public=privacy,
         )
 
     try:
-        questions, available = get_questions_for_subject(subject_code, question_count)
+        questions, available = get_questions_for_subject(
+            subject_code, question_count, grade=effective_grade,
+        )
     except Exception as e:
-        logger.error(f"Error fetching questions for subject {subject_code}: {e}", exc_info=True)
+        logger.error(f"Error fetching questions for {subject_code} grade {effective_grade}: {e}",
+                     exc_info=True)
         flash('Error fetching questions. Please try again.', 'error')
-        return render_template(
-            'dashboard/live_quiz/create.html',
-            subjects=user_subjects,
-            subject_code=subject_code,
-            title=title,
-            is_public=privacy,
-            default_time=default_time,
-            default_max_participants=default_max_participants,
-            default_privacy=default_privacy,
-            active_quiz=None,
+        return _render_error(
+            subject_code=subject_code, title=title, is_public=privacy,
         )
 
     if available == 0:
-        flash('No questions available for this subject. Please select another subject.', 'error')
-        return render_template(
-            'dashboard/live_quiz/create.html',
-            subjects=user_subjects,
-            active_quiz=None,
+        flash(
+            f'No {grade_label(effective_grade)} questions for this subject. '
+            f'Try a different grade or subject.',
+            'error',
         )
+        return _render_error(subject_code=subject_code, title=title, is_public=privacy)
 
     if available < question_count:
-        return render_template(
-            'dashboard/live_quiz/create.html',
-            subjects=user_subjects,
-            not_enough=True,
-            available=available,
-            requested=question_count,
+        return _render_error(
             subject_code=subject_code,
             title=title,
             is_public=privacy,
-            default_time=default_time,
-            default_max_participants=default_max_participants,
-            default_privacy=default_privacy,
-            active_quiz=None,
+            not_enough=True,
+            available=available,
+            requested=question_count,
+            effective_grade=effective_grade,
         )
 
     question_ids = [q['id'] for q in questions]
@@ -598,6 +642,7 @@ def create():
         'creator_id': user_id,
         'title': title,
         'subject_code': subject_code,
+        'grade': effective_grade,
         'question_count': question_count,
         'max_participants': max_participants,
         'time_per_question': time_per_question,
@@ -618,16 +663,8 @@ def create():
 
     if error or not quiz:
         flash(f'Failed to create quiz: {error or "Unknown error"}', 'error')
-        return render_template(
-            'dashboard/live_quiz/create.html',
-            subjects=user_subjects,
-            subject_code=subject_code,
-            title=title,
-            is_public=privacy,
-            default_time=default_time,
-            default_max_participants=default_max_participants,
-            default_privacy=default_privacy,
-            active_quiz=None,
+        return _render_error(
+            subject_code=subject_code, title=title, is_public=privacy,
         )
 
     if not quiz.get('id'):
@@ -680,6 +717,11 @@ def create_with_available():
         )
         return redirect(url_for('live_quiz.create'))
 
+    form_grade = (request.form.get('grade') or '').strip().upper()
+    if form_grade not in UI_GRADES:
+        form_grade = _profile_grade(user_id)
+    effective_grade = form_grade
+
     subject_code = request.form.get('subject_code', '').strip()
     try:
         question_count = int(request.form.get('question_count', 10))
@@ -714,9 +756,11 @@ def create_with_available():
         flash('Subject not available.', 'error')
         return redirect(url_for('live_quiz.create'))
 
-    questions, available = get_questions_for_subject(subject_code, question_count)
+    questions, available = get_questions_for_subject(
+        subject_code, question_count, grade=effective_grade,
+    )
     if available == 0:
-        flash('No questions available.', 'error')
+        flash('No questions available for this grade and subject.', 'error')
         return redirect(url_for('live_quiz.create'))
 
     question_ids = [q['id'] for q in questions]
@@ -726,6 +770,7 @@ def create_with_available():
         'creator_id': user_id,
         'title': title,
         'subject_code': subject_code,
+        'grade': effective_grade,
         'question_count': available,
         'max_participants': 50,
         'time_per_question': 30,
@@ -843,6 +888,7 @@ def join():
         return redirect(url_for('auth.login'))
 
     user_id = session['user_id']
+    user_tier = get_current_user_tier()
 
     if request.method == 'POST':
         if not validate_csrf():
@@ -859,6 +905,15 @@ def join():
         if not quiz:
             flash('Invalid join code or quiz has already started.', 'error')
             return render_template('dashboard/live_quiz/join.html')
+
+        # Grade gate
+        if _is_grade_locked_for_viewer(quiz, user_id, user_tier):
+            flash(
+                'This quiz is for a different grade. '
+                'Upgrade to join quizzes of any grade.',
+                'error',
+            )
+            return redirect(url_for('live_quiz.join') + '?grade_locked=1')
 
         active_quiz = get_user_active_quiz(user_id)
         if active_quiz and active_quiz != quiz['id']:
@@ -897,7 +952,7 @@ def join():
             return render_template('dashboard/live_quiz/join.html')
 
         add_live_quiz_participant(quiz['id'], user_id)
-        
+
         manager = get_state_manager()
         manager.ensure_quiz_in_memory(quiz['id'])
         quiz_state = manager.get_quiz(quiz['id'])
@@ -911,8 +966,7 @@ def join():
                 'event_type': 'JOIN',
                 'payload': json.dumps({'name': name}),
             })
-        
-        # Notify the host that a new participant joined.
+
         creator_id = quiz.get('creator_id')
         if creator_id and creator_id != user_id:
             user = get_student_by_id(user_id)
@@ -928,7 +982,7 @@ def join():
                 )
             except Exception as e:
                 logger.warning(f"participant_joined notification failed: {e}")
-        
+
         flash('You have joined the quiz!', 'success')
         return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
 
@@ -1383,12 +1437,6 @@ def advance_question():
     return jsonify({'success': True, 'completed': completed})
 
 
-# ============================================
-# DEPRECATED SHIM — one release only
-# ============================================
-# Old live quiz pages still have HAA/MAY buttons that POST here.
-# This ignores the rating payload and just advances.
-
 @live_quiz_bp.route('/submit-rating', methods=['POST'])
 def submit_rating_shim():
     if 'user_id' not in session:
@@ -1429,7 +1477,7 @@ def submit_rating_shim():
 
 
 # ============================================
-# REACTIONS (live quiz — memory only, flushed at finalization)
+# REACTIONS
 # ============================================
 
 @live_quiz_bp.route('/interaction/<quiz_id>/status', methods=['GET'])
@@ -1503,7 +1551,6 @@ def interaction_save(quiz_id):
     if not quiz_state:
         return jsonify({'error': 'Quiz not active'}), 404
 
-    # Quota check — only on adding, not removing
     limit = get_saved_content_limit(user_id)
     p = quiz_state.get_participant(user_id)
     already_saved = (p is not None and question_id in p.saves)
@@ -1558,7 +1605,6 @@ def interaction_report(quiz_id):
     if not quiz_state:
         return jsonify({'error': 'Quiz not active'}), 404
 
-    # Write-through to DB + Telegram (immediate, not batched)
     try:
         from services.interaction_service import submit_report
         result = submit_report(user_id, question_id, reason, comment)
@@ -1569,9 +1615,7 @@ def interaction_report(quiz_id):
     if not result.get('success'):
         return jsonify({'error': result.get('error', 'Report failed')}), 400
 
-    # Mirror into memory so status reads reflect it
     quiz_state.add_report(user_id, question_id, reason, comment)
-
     return jsonify({'success': True})
 
 
@@ -1680,6 +1724,13 @@ def rejoin_quiz(quiz_id):
 
     if quiz['status'] not in ['waiting', 'scheduled']:
         return jsonify({'error': 'Quiz is not open for rejoining'}), 400
+
+    # Grade gate on rejoin too
+    if _is_grade_locked_for_viewer(quiz, user_id, get_current_user_tier()):
+        return jsonify({
+            'error': 'This quiz is for a different grade.',
+            'reason': 'grade_mismatch',
+        }), 403
 
     participant = get_live_quiz_participant(quiz_id, user_id)
     if not participant or participant.get('status') != 'left':
@@ -1879,7 +1930,7 @@ def export_results(quiz_id):
 
 
 # ============================================
-# ADMIN UTILITY ENDPOINTS
+# ADMIN UTILITY
 # ============================================
 
 @live_quiz_bp.route('/flush-cache', methods=['POST'])

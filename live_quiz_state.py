@@ -735,7 +735,7 @@ class LiveQuizStateManager:
     def recover_active_quizzes(self):
         try:
             cursor = execute_with_retry(
-                "SELECT id, title, subject_code, question_count, status, join_code, "
+                "SELECT id, title, subject_code, grade, question_count, status, join_code, "
                 "max_participants, time_per_question, question_ids, started_at, ended_at, created_at "
                 "FROM live_quizzes "
                 "WHERE status IN ('waiting', 'scheduled', 'active')"

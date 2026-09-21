@@ -1548,14 +1548,15 @@ def create_live_quiz(data: dict):
     try:
         execute_with_retry("""
             INSERT INTO live_quizzes (
-                creator_id, title, subject_code, question_count, join_code,
+                creator_id, title, subject_code, grade, question_count, join_code,
                 status, max_participants, time_per_question, current_question_index,
                 question_ids, started_at, ended_at, scheduled_start, is_public, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data['creator_id'],
             data.get('title', ''),
             data['subject_code'],
+            data.get('grade', 'F4'),
             data['question_count'],
             data['join_code'],
             data.get('status', 'waiting'),
@@ -1602,14 +1603,15 @@ def create_live_quiz_with_participant(data, user_id):
             try:
                 cursor.execute("""
                     INSERT INTO live_quizzes (
-                        creator_id, title, subject_code, question_count, join_code,
+                        creator_id, title, subject_code, grade, question_count, join_code,
                         status, max_participants, time_per_question, current_question_index,
                         question_ids, started_at, ended_at, scheduled_start, is_public, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     data['creator_id'],
                     data.get('title', ''),
                     data['subject_code'],
+                    data.get('grade', 'F4'),
                     data['question_count'],
                     join_code,
                     data.get('status', 'waiting'),
@@ -2332,6 +2334,7 @@ def get_live_quizzes_lobby(
                 lq.id,
                 lq.title,
                 lq.subject_code,
+                lq.grade,
                 lq.question_count,
                 lq.status,
                 lq.max_participants,

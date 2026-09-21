@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS students (
     tier_updated_at TEXT,
     last_login_at TEXT,
     last_login_ip TEXT,
+    session_version INTEGER DEFAULT 0,
+    admin_note TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
@@ -34,6 +36,9 @@ CREATE INDEX IF NOT EXISTS idx_students_phone ON students(phone_number);
 CREATE INDEX IF NOT EXISTS idx_students_public_id ON students(public_id);
 CREATE INDEX IF NOT EXISTS idx_students_tier ON students(tier);
 CREATE INDEX IF NOT EXISTS idx_students_verified ON students(is_verified);
+CREATE INDEX IF NOT EXISTS idx_students_created ON students(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_students_points ON students(total_points DESC);
+CREATE INDEX IF NOT EXISTS idx_students_location ON students(location);
 
 -- ============================================
 -- QUESTIONS TABLE
@@ -51,6 +56,9 @@ CREATE TABLE IF NOT EXISTS questions (
     explanation TEXT DEFAULT '',
     pdf_code TEXT DEFAULT NULL,
     pdf_page INTEGER DEFAULT NULL,
+    grade TEXT NOT NULL DEFAULT 'F4' CHECK (grade IN ('F4', 'F3', 'G8', 'G7')),
+    question_text_normalized TEXT,
+    question_hash TEXT,
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'archived', 'draft')),
     version INTEGER DEFAULT 1,
     created_by INTEGER,
@@ -66,6 +74,47 @@ CREATE INDEX IF NOT EXISTS idx_questions_created_by ON questions(created_by);
 CREATE INDEX IF NOT EXISTS idx_questions_created_at ON questions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_questions_updated_at ON questions(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_questions_subject_status ON questions(subject_code, status);
+CREATE INDEX IF NOT EXISTS idx_questions_grade ON questions(grade);
+CREATE INDEX IF NOT EXISTS idx_questions_hash ON questions(question_hash);
+CREATE INDEX IF NOT EXISTS idx_questions_grade_subject ON questions(grade, subject_code, status);
+
+-- ============================================
+-- QUESTION DUPLICATE DISMISSALS
+-- ============================================
+-- A permanent record of duplicate pairs the admin has marked as
+-- "not a duplicate". Future duplicate checks skip these pairs.
+-- a_id is always the lower question id, b_id the higher.
+
+CREATE TABLE IF NOT EXISTS question_duplicate_dismissals (
+    a_id INTEGER NOT NULL,
+    b_id INTEGER NOT NULL,
+    dismissed_by INTEGER,
+    dismissed_at TEXT DEFAULT (datetime('now', 'localtime')),
+    PRIMARY KEY (a_id, b_id),
+    CHECK (a_id < b_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_qdd_b ON question_duplicate_dismissals(b_id);
+
+-- ============================================
+-- QUESTION MISS STATS (materialized)
+-- ============================================
+-- Rebuilt by refresh_question_miss_stats() from quiz_attempts.answers.
+-- Powers the "high miss rate" admin view and the miss-rate sort.
+
+CREATE TABLE IF NOT EXISTS question_miss_stats (
+    question_id     INTEGER PRIMARY KEY,
+    total_attempts  INTEGER NOT NULL DEFAULT 0,
+    total_misses    INTEGER NOT NULL DEFAULT 0,
+    miss_rate       REAL    NOT NULL DEFAULT 0.0,
+    last_attempt_at TEXT,
+    updated_at      TEXT    DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_qms_miss_rate ON question_miss_stats(miss_rate DESC);
+CREATE INDEX IF NOT EXISTS idx_qms_misses ON question_miss_stats(total_misses DESC);
+CREATE INDEX IF NOT EXISTS idx_qms_attempts ON question_miss_stats(total_attempts DESC);
 
 -- ============================================
 -- QUIZ ATTEMPTS TABLE
@@ -80,6 +129,7 @@ CREATE TABLE IF NOT EXISTS quiz_attempts (
     answers TEXT,
     ratings TEXT,
     reactions TEXT,
+    ended_early INTEGER DEFAULT 0,
     completed_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 );
@@ -165,7 +215,7 @@ CREATE INDEX IF NOT EXISTS idx_pdfs_file_unique_id ON pdfs(file_unique_id);
 -- UNVERIFIED PDFs (direct-publish review queue)
 -- ============================================
 
-CREATE TABLE IF NOT EXISTS _pdfs (
+CREATE TABLE IF NOT EXISTS unverified_pdfs (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     pdf_id        INTEGER NOT NULL UNIQUE,
     published_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -179,6 +229,44 @@ CREATE INDEX IF NOT EXISTS idx_unverified_pdfs_published
     ON unverified_pdfs(published_at DESC);
 
 -- ============================================
+-- PDF REPORTS (user-submitted issues)
+-- ============================================
+-- Distinct from question_interactions. A PDF can be reported many times,
+-- each by a different user. One report per user per PDF.
+
+CREATE TABLE IF NOT EXISTS pdf_reports (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL,
+    pdf_id       INTEGER NOT NULL,
+    reason       TEXT NOT NULL CHECK (reason IN (
+                     'wrong_file',
+                     'wrong_metadata',
+                     'broken_file',
+                     'duplicate',
+                     'inappropriate',
+                     'other'
+                 )),
+    comment      TEXT DEFAULT '',
+    status       TEXT DEFAULT 'pending' CHECK (status IN (
+                     'pending', 'resolved', 'dismissed'
+                 )),
+    admin_reply  TEXT,
+    resolved_by  INTEGER,
+    resolved_at  TEXT,
+    created_at   TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (user_id)     REFERENCES students(id) ON DELETE CASCADE,
+    FOREIGN KEY (pdf_id)      REFERENCES pdfs(id) ON DELETE CASCADE,
+    FOREIGN KEY (resolved_by) REFERENCES students(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_pdf_reports_status
+    ON pdf_reports(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pdf_reports_pdf
+    ON pdf_reports(pdf_id);
+CREATE INDEX IF NOT EXISTS idx_pdf_reports_user
+    ON pdf_reports(user_id, created_at DESC);
+
+-- ============================================
 -- LIVE QUIZZES TABLE
 -- ============================================
 
@@ -187,6 +275,7 @@ CREATE TABLE IF NOT EXISTS live_quizzes (
     creator_id INTEGER NOT NULL,
     title TEXT DEFAULT '',
     subject_code TEXT NOT NULL,
+    grade TEXT NOT NULL DEFAULT 'F4' CHECK (grade IN ('F4', 'F3', 'G8', 'G7')),
     question_count INTEGER DEFAULT 10,
     join_code TEXT UNIQUE NOT NULL,
     status TEXT DEFAULT 'waiting' CHECK (status IN ('waiting', 'scheduled', 'active', 'finished')),
@@ -209,6 +298,7 @@ CREATE INDEX IF NOT EXISTS idx_live_quizzes_subject ON live_quizzes(subject_code
 CREATE INDEX IF NOT EXISTS idx_live_quizzes_created ON live_quizzes(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_live_quizzes_scheduled ON live_quizzes(scheduled_start);
 CREATE INDEX IF NOT EXISTS idx_live_quizzes_status_created ON live_quizzes(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_live_quizzes_grade ON live_quizzes(grade);
 
 -- ============================================
 -- LIVE QUIZ PARTICIPANTS TABLE
@@ -239,6 +329,35 @@ CREATE INDEX IF NOT EXISTS idx_participants_student ON live_quiz_participants(st
 CREATE INDEX IF NOT EXISTS idx_participants_score ON live_quiz_participants(score DESC);
 CREATE INDEX IF NOT EXISTS idx_participants_ranking ON live_quiz_participants(ranking);
 CREATE INDEX IF NOT EXISTS idx_live_quiz_participants_quiz_score ON live_quiz_participants(quiz_id, score DESC);
+
+-- ============================================
+-- LIVE QUIZ EVENTS
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS live_quiz_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    quiz_id INTEGER NOT NULL,
+    user_id INTEGER,
+    event_type TEXT NOT NULL,
+    question_id INTEGER,
+    payload TEXT,
+    sequence INTEGER NOT NULL,
+    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_live_quiz_events_quiz_sequence
+    ON live_quiz_events(quiz_id, sequence);
+
+-- ============================================
+-- LIVE QUIZ CHECKPOINTS
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS live_quiz_checkpoints (
+    quiz_id INTEGER PRIMARY KEY,
+    checkpoint_data TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+);
 
 -- ============================================
 -- DELETED USERS TABLE
@@ -503,35 +622,6 @@ CREATE INDEX IF NOT EXISTS idx_error_logs_error_hash ON error_logs(error_hash);
 CREATE INDEX IF NOT EXISTS idx_error_logs_request_id ON error_logs(request_id);
 
 -- ============================================
--- LIVE QUIZ EVENTS
--- ============================================
-
-CREATE TABLE IF NOT EXISTS live_quiz_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    quiz_id INTEGER NOT NULL,
-    user_id INTEGER,
-    event_type TEXT NOT NULL,
-    question_id INTEGER,
-    payload TEXT,
-    sequence INTEGER NOT NULL,
-    created_at TEXT DEFAULT (datetime('now', 'localtime'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_live_quiz_events_quiz_sequence
-    ON live_quiz_events(quiz_id, sequence);
-
--- ============================================
--- LIVE QUIZ CHECKPOINTS
--- ============================================
-
-CREATE TABLE IF NOT EXISTS live_quiz_checkpoints (
-    quiz_id INTEGER PRIMARY KEY,
-    checkpoint_data TEXT NOT NULL,
-    version INTEGER NOT NULL,
-    created_at TEXT DEFAULT (datetime('now', 'localtime'))
-);
-
--- ============================================
 -- HISTORY ENTRIES
 -- ============================================
 
@@ -579,6 +669,9 @@ CREATE TABLE IF NOT EXISTS discount_codes (
     FOREIGN KEY (created_by) REFERENCES students(id) ON DELETE SET NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_discount_codes_code ON discount_codes(code);
+CREATE INDEX IF NOT EXISTS idx_discount_codes_expires ON discount_codes(expires_at);
+
 -- ============================================
 -- UPGRADE REQUESTS
 -- ============================================
@@ -611,8 +704,6 @@ CREATE INDEX IF NOT EXISTS idx_upgrade_requests_user ON upgrade_requests(user_id
 CREATE INDEX IF NOT EXISTS idx_upgrade_requests_status ON upgrade_requests(status);
 CREATE INDEX IF NOT EXISTS idx_upgrade_requests_created ON upgrade_requests(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_upgrade_requests_request_id ON upgrade_requests(request_id);
-CREATE INDEX IF NOT EXISTS idx_discount_codes_code ON discount_codes(code);
-CREATE INDEX IF NOT EXISTS idx_discount_codes_expires ON discount_codes(expires_at);
 
 -- ============================================
 -- ADMIN USER ACTIONS
@@ -849,10 +940,6 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_log_severity
 CREATE INDEX IF NOT EXISTS idx_admin_audit_log_created
     ON admin_audit_log(created_at DESC);
 
-
-
-
-
 -- ============================================
 -- PUSH SUBSCRIPTIONS (Web Push)
 -- ============================================
@@ -874,42 +961,3 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 
 CREATE INDEX IF NOT EXISTS idx_push_subs_user     ON push_subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_push_subs_endpoint ON push_subscriptions(endpoint);
-
-
--- ============================================
--- PDF REPORTS (user-submitted issues)
--- ============================================
--- Distinct from question_interactions. A PDF can be reported many times,
--- each by a different user. One report per user per PDF.
-
-CREATE TABLE IF NOT EXISTS pdf_reports (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id      INTEGER NOT NULL,
-    pdf_id       INTEGER NOT NULL,
-    reason       TEXT NOT NULL CHECK (reason IN (
-                     'wrong_file',
-                     'wrong_metadata',
-                     'broken_file',
-                     'duplicate',
-                     'inappropriate',
-                     'other'
-                 )),
-    comment      TEXT DEFAULT '',
-    status       TEXT DEFAULT 'pending' CHECK (status IN (
-                     'pending', 'resolved', 'dismissed'
-                 )),
-    admin_reply  TEXT,
-    resolved_by  INTEGER,
-    resolved_at  TEXT,
-    created_at   TEXT DEFAULT (datetime('now', 'localtime')),
-    FOREIGN KEY (user_id)     REFERENCES students(id) ON DELETE CASCADE,
-    FOREIGN KEY (pdf_id)      REFERENCES pdfs(id) ON DELETE CASCADE,
-    FOREIGN KEY (resolved_by) REFERENCES students(id) ON DELETE SET NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_pdf_reports_status
-    ON pdf_reports(status, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_pdf_reports_pdf
-    ON pdf_reports(pdf_id);
-CREATE INDEX IF NOT EXISTS idx_pdf_reports_user
-    ON pdf_reports(user_id, created_at DESC);
