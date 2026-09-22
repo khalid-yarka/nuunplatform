@@ -106,20 +106,20 @@
 
         if (!('Notification' in window)) {
             hideCard(notifCard);
-            toast('Browser-kaagu ma taageero notifications.');
+            toast('Chrome laso dag, si aad notifications-ka u aragto!.');
             return;
         }
 
         if (Notification.permission === 'granted') {
             subscribePush();
             hideCard(notifCard);
-            toast('✅ Notifications waa horey u daarnaa.');
+            toast('✅ Notifications waa kuu daarna.');
             return;
         }
 
         if (Notification.permission === 'denied') {
             hideCard(notifCard);
-            toast('Notifications waa la joojiyay. Waxaad ka beddeli kartaa browser-kaaga.');
+            toast('🥲 Notifications waa la joojiyay. wax update ah ood helidonta majirto iyo ogaysiis!(Adminka laxirir si lagugu so dayo)');
             return;
         }
 
@@ -127,7 +127,7 @@
             hideCard(notifCard);
             if (perm === 'granted') {
                 subscribePush();
-                toast('✅ Mahadsanid! Hadda waxaad heli doontaa notifications.');
+                toast('✅ Wad daaratay, hada kadib update ka wuu kuso gaari doona iyo notifications-ka');
             } else if (perm === 'denied') {
                 toast('Notifications waa la joojiyay. Waxaad ka beddeli kartaa browser-kaaga.');
             }
@@ -162,7 +162,7 @@
         deferredInstall.userChoice.then(function (choice) {
             if (choice && choice.outcome === 'accepted') {
                 hideCard(installCard);
-                toast('✅ NuunPlatform waa la rakibay.');
+                toast('✅ NuunPlatform Wuu kuu soo Dagay.');
             } else {
                 hideCard(installCard);
             }
