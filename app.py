@@ -931,6 +931,35 @@ except Exception:
     pass
 
 # ============================================
+# WELL-KNOWN FILES
+# ============================================
+# Android Chrome fetches /.well-known/assetlinks.json on PWA install.
+# Serving it prevents a permanent 404 in the error log and enables
+# the "enhanced" install flow on Android.
+# ============================================
+
+@app.route('/.well-known/assetlinks.json', methods=['GET'])
+def well_known_assetlinks():
+    from flask import send_from_directory, current_app
+    return send_from_directory(
+        os.path.join(current_app.root_path, 'static', '.well-known'),
+        'assetlinks.json',
+        mimetype='application/json',
+    )
+
+
+@app.route('/.well-known/security.txt', methods=['GET'])
+def well_known_security():
+    """Optional — sets a security contact. Also silences a common 404."""
+    from flask import Response
+    body = (
+        "Contact: mailto:admin@yourdomain.com\n"
+        "Preferred-Languages: en, so\n"
+        "Expires: 2027-12-31T23:59:59.000Z\n"
+    )
+    return Response(body, mimetype='text/plain')
+
+# ============================================
 # RUN APP
 # ============================================
 if __name__ == '__main__':

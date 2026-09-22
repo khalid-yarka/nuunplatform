@@ -961,3 +961,68 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 
 CREATE INDEX IF NOT EXISTS idx_push_subs_user     ON push_subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_push_subs_endpoint ON push_subscriptions(endpoint);
+
+
+-- ============================================
+-- CONTENT BATCHES (super-admin only)
+-- ============================================
+-- A batch groups questions and/or PDFs so they can be bulk-edited
+-- together later. Batches never own their items — deleting a batch
+-- or removing items from it leaves the library untouched.
+
+CREATE TABLE IF NOT EXISTS content_batches (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    kind        TEXT NOT NULL CHECK (kind IN ('questions','pdfs','mixed')),
+    admin_id    INTEGER,
+    notes       TEXT DEFAULT '',
+    pinned      INTEGER NOT NULL DEFAULT 0,
+    item_count  INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT DEFAULT (datetime('now', 'localtime')),
+    updated_at  TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (admin_id) REFERENCES students(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_batches_admin
+    ON content_batches(admin_id);
+CREATE INDEX IF NOT EXISTS idx_batches_kind
+    ON content_batches(kind);
+CREATE INDEX IF NOT EXISTS idx_batches_updated
+    ON content_batches(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_batches_pinned
+    ON content_batches(pinned DESC, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS content_batch_items (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id   INTEGER NOT NULL,
+    item_type  TEXT NOT NULL CHECK (item_type IN ('question','pdf')),
+    item_id    INTEGER NOT NULL,
+    added_at   TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(batch_id, item_type, item_id),
+    FOREIGN KEY (batch_id) REFERENCES content_batches(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_batch_items_batch
+    ON content_batch_items(batch_id);
+CREATE INDEX IF NOT EXISTS idx_batch_items_lookup
+    ON content_batch_items(item_type, item_id);
+
+CREATE TABLE IF NOT EXISTS content_batch_edits (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id     INTEGER NOT NULL,
+    admin_id     INTEGER,
+    action       TEXT NOT NULL,
+    item_type    TEXT NOT NULL,
+    item_ids     TEXT NOT NULL,
+    before_data  TEXT NOT NULL,
+    undo_until   TEXT NOT NULL,
+    undone       INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (batch_id) REFERENCES content_batches(id) ON DELETE CASCADE,
+    FOREIGN KEY (admin_id) REFERENCES students(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_batch_edits_batch
+    ON content_batch_edits(batch_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_batch_edits_undo_until
+    ON content_batch_edits(undo_until);

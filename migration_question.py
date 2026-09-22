@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # ============================================================
-# migrate_live_quiz_grade.py
+# migrate_batches.py
 # One-time migration — run from repo root:
-#     python migrate_live_quiz_grade.py
+#     python migrate_batches.py
 #
 # No arguments. No prompts. Idempotent — safe to re-run.
 # ============================================================
@@ -39,7 +39,7 @@ def _resolve_db_path():
 def _backup(db_path):
     backup_root = os.path.join(_ROOT, 'BACKUPS')
     stamp = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
-    dest = os.path.join(backup_root, f'pre_migration_live_quiz_{stamp}')
+    dest = os.path.join(backup_root, f'pre_migration_batches_{stamp}')
     try:
         os.makedirs(dest, exist_ok=True)
         for suffix in ('', '-wal', '-shm'):
@@ -56,7 +56,7 @@ def _backup(db_path):
 def main():
     start = time.time()
     log.info("=" * 60)
-    log.info("NuunPlatform — Live Quiz Grade Migration")
+    log.info("NuunPlatform — Content Batches Migration")
     log.info("=" * 60)
 
     db_path = _resolve_db_path()
@@ -74,77 +74,79 @@ def main():
     conn.execute("PRAGMA busy_timeout = 30000")
     cur = conn.cursor()
 
-    cur.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='live_quizzes'"
-    )
-    if not cur.fetchone():
-        log.error("Table 'live_quizzes' does not exist. Aborting.")
-        conn.close()
-        sys.exit(1)
+    # ─── content_batches ──────────────────────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS content_batches (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL,
+            kind        TEXT NOT NULL CHECK (kind IN ('questions','pdfs','mixed')),
+            admin_id    INTEGER,
+            notes       TEXT DEFAULT '',
+            pinned      INTEGER NOT NULL DEFAULT 0,
+            item_count  INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at  TEXT DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (admin_id) REFERENCES students(id) ON DELETE SET NULL
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_batches_admin ON content_batches(admin_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_batches_kind ON content_batches(kind)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_batches_updated ON content_batches(updated_at DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_batches_pinned ON content_batches(pinned DESC, updated_at DESC)")
+    log.info("content_batches ready.")
 
-    cur.execute("PRAGMA table_info(live_quizzes)")
-    existing_cols = {row[1] for row in cur.fetchall()}
-    log.info(f"Existing columns: {sorted(existing_cols)}")
+    # ─── content_batch_items ──────────────────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS content_batch_items (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id   INTEGER NOT NULL,
+            item_type  TEXT NOT NULL CHECK (item_type IN ('question','pdf')),
+            item_id    INTEGER NOT NULL,
+            added_at   TEXT DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(batch_id, item_type, item_id),
+            FOREIGN KEY (batch_id) REFERENCES content_batches(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_batch_items_batch ON content_batch_items(batch_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_batch_items_lookup ON content_batch_items(item_type, item_id)")
+    log.info("content_batch_items ready.")
 
-    if 'grade' not in existing_cols:
-        try:
-            cur.execute(
-                "ALTER TABLE live_quizzes ADD COLUMN grade TEXT NOT NULL DEFAULT 'F4'"
-            )
-            conn.commit()
-            log.info("Added column: live_quizzes.grade")
-        except sqlite3.OperationalError as e:
-            log.warning(f"Could not add grade column: {e}")
-    else:
-        log.info("Column 'grade' already present.")
+    # ─── content_batch_edits (undo snapshots) ─────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS content_batch_edits (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id     INTEGER NOT NULL,
+            admin_id     INTEGER,
+            action       TEXT NOT NULL,
+            item_type    TEXT NOT NULL,
+            item_ids     TEXT NOT NULL,
+            before_data  TEXT NOT NULL,
+            undo_until   TEXT NOT NULL,
+            undone       INTEGER NOT NULL DEFAULT 0,
+            created_at   TEXT DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (batch_id) REFERENCES content_batches(id) ON DELETE CASCADE,
+            FOREIGN KEY (admin_id) REFERENCES students(id) ON DELETE SET NULL
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_batch_edits_batch ON content_batch_edits(batch_id, created_at DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_batch_edits_undo_until ON content_batch_edits(undo_until)")
+    log.info("content_batch_edits ready.")
 
-    cur.execute(
-        "UPDATE live_quizzes SET grade = 'F4' WHERE grade IS NULL OR grade = ''"
-    )
-    forced = cur.rowcount
     conn.commit()
-    if forced:
-        log.info(f"Grade forced to 'F4' on {forced} row(s).")
-    else:
-        log.info("No NULL/empty grade rows to fix.")
 
-    for sql in [
-        "CREATE INDEX IF NOT EXISTS idx_live_quizzes_grade "
-        "ON live_quizzes(grade)",
-    ]:
-        try:
-            cur.execute(sql)
-        except sqlite3.OperationalError as e:
-            log.warning(f"Index skipped: {e}")
-    conn.commit()
-    log.info("Index ready.")
+    # ─── Verify ───────────────────────────────────────────
+    for t in ('content_batches', 'content_batch_items', 'content_batch_edits'):
+        cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (t,),
+        )
+        if not cur.fetchone():
+            log.error(f"VERIFY FAILED: table '{t}' missing after migration.")
+            conn.close()
+            sys.exit(1)
 
-    cur.execute("PRAGMA table_info(live_quizzes)")
-    final_cols = {row[1] for row in cur.fetchall()}
-    if 'grade' not in final_cols:
-        log.error("VERIFY FAILED: column 'grade' missing after migration.")
-        conn.close()
-        sys.exit(1)
-
-    cur.execute(
-        "SELECT COUNT(*) FROM live_quizzes WHERE grade IS NULL OR grade = ''"
-    )
-    ungraded = cur.fetchone()[0]
-    if ungraded:
-        log.error(f"VERIFY FAILED: {ungraded} rows still lack a grade.")
-        conn.close()
-        sys.exit(1)
-
-    cur.execute(
-        "SELECT grade, COUNT(*) AS c FROM live_quizzes GROUP BY grade ORDER BY grade"
-    )
-    log.info("Grade distribution:")
-    rows = cur.fetchall()
-    if rows:
-        for row in rows:
-            log.info(f"  {row['grade']}: {row['c']} quizzes")
-    else:
-        log.info("  (no live quizzes yet)")
+    cur.execute("SELECT COUNT(*) FROM content_batches")
+    log.info(f"Existing batches: {cur.fetchone()[0]}")
 
     conn.close()
 

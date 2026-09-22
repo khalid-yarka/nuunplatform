@@ -3645,3 +3645,325 @@ def get_user_reported_pdf_ids(user_id: int):
         return {row['pdf_id'] for row in cursor.fetchall()}
     except Exception:
         return set()
+
+
+
+
+# ============================================
+# CONTENT BATCHES
+# ============================================
+# A batch is a super-admin-only grouping of questions and/or PDFs.
+# Deleting a batch or removing items leaves the library untouched.
+
+def create_batch(name: str, kind: str, admin_id: int, notes: str = '') -> Optional[int]:
+    """Create a new batch. Returns batch id, or None on failure."""
+    try:
+        kind = (kind or 'mixed').strip().lower()
+        if kind not in ('questions', 'pdfs', 'mixed'):
+            kind = 'mixed'
+        cursor = execute_with_retry("""
+            INSERT INTO content_batches
+                (name, kind, admin_id, notes, pinned, item_count,
+                 created_at, updated_at)
+            VALUES (?, ?, ?, ?, 0, 0, ?, ?)
+        """, (name.strip()[:200] or 'Untitled batch', kind, admin_id,
+              notes or '', now(), now()), commit=True)
+        return cursor.lastrowid
+    except Exception as e:
+        logger.error(f"create_batch failed: {e}")
+        return None
+
+
+def get_batch(batch_id: int) -> Optional[dict]:
+    try:
+        cursor = execute_with_retry("""
+            SELECT b.*, s.first_name AS admin_first_name,
+                   s.last_name AS admin_last_name,
+                   s.public_id AS admin_public_id
+            FROM content_batches b
+            LEFT JOIN students s ON s.id = b.admin_id
+            WHERE b.id = ?
+        """, (batch_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"get_batch failed: {e}")
+        return None
+
+
+def list_batches(search: str = '', kind: str = '', page: int = 1,
+                 per_page: int = 20) -> tuple:
+    """Return (batches, total). Pinned first, then most recent."""
+    try:
+        where = ["1=1"]
+        params = []
+        if search:
+            where.append("b.name LIKE ?")
+            params.append(f"%{search}%")
+        if kind in ('questions', 'pdfs', 'mixed'):
+            where.append("b.kind = ?")
+            params.append(kind)
+        where_sql = " AND ".join(where)
+
+        count_cursor = execute_with_retry(
+            f"SELECT COUNT(*) AS c FROM content_batches b WHERE {where_sql}",
+            params,
+        )
+        total = count_cursor.fetchone()['c']
+
+        offset = max(0, (page - 1) * per_page)
+        cursor = execute_with_retry(f"""
+            SELECT b.*, s.first_name AS admin_first_name,
+                   s.last_name AS admin_last_name,
+                   s.public_id AS admin_public_id
+            FROM content_batches b
+            LEFT JOIN students s ON s.id = b.admin_id
+            WHERE {where_sql}
+            ORDER BY b.pinned DESC, b.updated_at DESC
+            LIMIT ? OFFSET ?
+        """, params + [per_page, offset])
+        return [dict(r) for r in cursor.fetchall()], total
+    except Exception as e:
+        logger.error(f"list_batches failed: {e}")
+        return [], 0
+
+
+def recent_batches(limit: int = 5) -> list:
+    try:
+        cursor = execute_with_retry("""
+            SELECT id, name, kind, item_count, updated_at
+            FROM content_batches
+            ORDER BY updated_at DESC
+            LIMIT ?
+        """, (limit,))
+        return [dict(r) for r in cursor.fetchall()]
+    except Exception as e:
+        logger.error(f"recent_batches failed: {e}")
+        return []
+
+
+def update_batch(batch_id: int, data: dict) -> bool:
+    """Allowed keys: name, notes, pinned."""
+    try:
+        fields = []
+        params = []
+        for key in ('name', 'notes', 'pinned'):
+            if key in data:
+                fields.append(f"{key} = ?")
+                params.append(data[key])
+        if not fields:
+            return False
+        fields.append("updated_at = ?")
+        params.append(now())
+        params.append(batch_id)
+        execute_with_retry(
+            f"UPDATE content_batches SET {', '.join(fields)} WHERE id = ?",
+            params, commit=True,
+        )
+        return True
+    except Exception as e:
+        logger.error(f"update_batch failed: {e}")
+        return False
+
+
+def delete_batch(batch_id: int) -> bool:
+    """
+    Delete a batch. The items it referenced are NOT deleted — only
+    the batch record and its membership rows are removed.
+    """
+    try:
+        execute_with_retry(
+            "DELETE FROM content_batch_items WHERE batch_id = ?",
+            (batch_id,), commit=True,
+        )
+        execute_with_retry(
+            "DELETE FROM content_batches WHERE id = ?",
+            (batch_id,), commit=True,
+        )
+        return True
+    except Exception as e:
+        logger.error(f"delete_batch failed: {e}")
+        return False
+
+
+def _recount_batch(batch_id: int):
+    try:
+        cursor = execute_with_retry(
+            "SELECT COUNT(*) AS c FROM content_batch_items WHERE batch_id = ?",
+            (batch_id,),
+        )
+        n = cursor.fetchone()['c'] if cursor else 0
+        execute_with_retry(
+            "UPDATE content_batches SET item_count = ?, updated_at = ? WHERE id = ?",
+            (n, now(), batch_id), commit=True,
+        )
+    except Exception:
+        pass
+
+
+def add_batch_items(batch_id: int, item_type: str, item_ids: list) -> int:
+    """Add items to a batch. Returns count of NEW additions."""
+    if item_type not in ('question', 'pdf'):
+        return 0
+    added = 0
+    try:
+        for iid in item_ids:
+            try:
+                iid = int(iid)
+            except (TypeError, ValueError):
+                continue
+            try:
+                execute_with_retry("""
+                    INSERT OR IGNORE INTO content_batch_items
+                        (batch_id, item_type, item_id, added_at)
+                    VALUES (?, ?, ?, ?)
+                """, (batch_id, item_type, iid, now()), commit=True)
+                added += 1
+            except Exception:
+                pass
+        _recount_batch(batch_id)
+        return added
+    except Exception as e:
+        logger.error(f"add_batch_items failed: {e}")
+        return 0
+
+
+def remove_batch_items(batch_id: int, item_type: str, item_ids: list) -> int:
+    """
+    Remove items from a batch. Items themselves are untouched.
+    Returns count of removals.
+    """
+    if not item_ids:
+        return 0
+    try:
+        placeholders = ','.join('?' for _ in item_ids)
+        cursor = execute_with_retry(
+            f"DELETE FROM content_batch_items "
+            f"WHERE batch_id = ? AND item_type = ? AND item_id IN ({placeholders})",
+            [batch_id, item_type] + [int(x) for x in item_ids],
+            commit=True,
+        )
+        _recount_batch(batch_id)
+        return cursor.rowcount or 0
+    except Exception as e:
+        logger.error(f"remove_batch_items failed: {e}")
+        return 0
+
+
+def get_batch_item_ids(batch_id: int, item_type: str = None) -> list:
+    try:
+        if item_type in ('question', 'pdf'):
+            cursor = execute_with_retry(
+                "SELECT item_id FROM content_batch_items "
+                "WHERE batch_id = ? AND item_type = ?",
+                (batch_id, item_type),
+            )
+        else:
+            cursor = execute_with_retry(
+                "SELECT item_id FROM content_batch_items WHERE batch_id = ?",
+                (batch_id,),
+            )
+        return [r['item_id'] for r in cursor.fetchall()]
+    except Exception as e:
+        logger.error(f"get_batch_item_ids failed: {e}")
+        return []
+
+
+def get_batches_for_item(item_type: str, item_id: int) -> list:
+    """Return all batches that contain this item."""
+    try:
+        cursor = execute_with_retry("""
+            SELECT b.id, b.name, b.kind, b.pinned
+            FROM content_batches b
+            JOIN content_batch_items i ON i.batch_id = b.id
+            WHERE i.item_type = ? AND i.item_id = ?
+            ORDER BY b.pinned DESC, b.updated_at DESC
+        """, (item_type, int(item_id)))
+        return [dict(r) for r in cursor.fetchall()]
+    except Exception as e:
+        logger.error(f"get_batches_for_item failed: {e}")
+        return []
+
+
+def batch_items_count(batch_id: int) -> dict:
+    """Return {'question': N, 'pdf': M, 'total': N+M}."""
+    out = {'question': 0, 'pdf': 0, 'total': 0}
+    try:
+        cursor = execute_with_retry("""
+            SELECT item_type, COUNT(*) AS c
+            FROM content_batch_items
+            WHERE batch_id = ?
+            GROUP BY item_type
+        """, (batch_id,))
+        for r in cursor.fetchall():
+            out[r['item_type']] = r['c']
+            out['total'] += r['c']
+    except Exception:
+        pass
+    return out
+
+
+# ─── Batch edit undo ─────────────────────────────────────
+
+def record_batch_edit(batch_id: int, admin_id: int, action: str,
+                     item_type: str, item_ids: list,
+                     before_data: dict, undo_seconds: int = 60) -> Optional[int]:
+    """Snapshot a bulk edit so it can be undone."""
+    import json as _json
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    try:
+        undo_until = (
+            _dt.now(_tz.utc) + _td(seconds=undo_seconds)
+        ).isoformat()
+        cursor = execute_with_retry("""
+            INSERT INTO content_batch_edits
+                (batch_id, admin_id, action, item_type, item_ids,
+                 before_data, undo_until, undone, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
+        """, (
+            batch_id, admin_id, action, item_type,
+            _json.dumps(item_ids),
+            _json.dumps(before_data),
+            undo_until, now(),
+        ), commit=True)
+        return cursor.lastrowid
+    except Exception as e:
+        logger.error(f"record_batch_edit failed: {e}")
+        return None
+
+
+def get_batch_edit(edit_id: int) -> Optional[dict]:
+    try:
+        cursor = execute_with_retry(
+            "SELECT * FROM content_batch_edits WHERE id = ?",
+            (edit_id,),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except Exception:
+        return None
+
+
+def mark_batch_edit_undone(edit_id: int) -> bool:
+    try:
+        execute_with_retry(
+            "UPDATE content_batch_edits SET undone = 1 WHERE id = ?",
+            (edit_id,), commit=True,
+        )
+        return True
+    except Exception:
+        return False
+
+
+def clean_expired_batch_edits() -> int:
+    """Delete undo snapshots whose window has expired."""
+    from datetime import datetime as _dt, timezone as _tz
+    try:
+        cutoff = _dt.now(_tz.utc).isoformat()
+        cursor = execute_with_retry(
+            "DELETE FROM content_batch_edits WHERE undo_until < ?",
+            (cutoff,), commit=True,
+        )
+        return cursor.rowcount or 0
+    except Exception:
+        return 0

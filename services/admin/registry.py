@@ -630,6 +630,30 @@ CAPABILITY_REGISTRY: tuple[Capability, ...] = (
         default_for_admin=False,
         reserved=True,
     ),
+    Capability(
+        key='content.batches.view',
+        group='Questions',
+        label='View content batches',
+        description='Browse super-admin batches of questions and PDFs.',
+        default_for_admin=False,
+        reserved=True,
+    ),
+    Capability(
+        key='content.batches.edit',
+        group='Questions',
+        label='Edit content batches',
+        description='Bulk-edit items inside a batch.',
+        default_for_admin=False,
+        reserved=True,
+    ),
+    Capability(
+        key='content.batches.delete',
+        group='Questions',
+        label='Delete content batches',
+        description='Delete a batch record (never its items).',
+        default_for_admin=False,
+        reserved=True,
+    ),
 )
 
 

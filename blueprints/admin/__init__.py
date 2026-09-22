@@ -34,6 +34,8 @@ from blueprints.admin.platform_bp   import admin_platform_bp
 # ── Safety shadow viewer (new) ──
 from blueprints.admin.safety_bp     import admin_safety_bp
 
+from blueprints.admin.batches_bp import admin_batches_bp
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,6 +68,8 @@ ADMIN_BLUEPRINTS = (
 
     # safety shadow viewer
     admin_safety_bp,
+
+    admin_batches_bp
 )
 
 

@@ -1,0 +1,153 @@
+{# ============================================================
+   templates/dashboard/admin/batches/index.html
+   Super-admin batch list. Pinned first, then most recently edited.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-layer-group header-icon"></i>{% endblock %}
+{% block admin_title %}Batches{% endblock %}
+{% block admin_subtitle %}
+    Grouped questions and PDFs you can bulk-edit together. Only you can see this.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Batches</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_batches.new') }}" class="admin-btn primary">
+        <i class="fas fa-plus"></i> New Batch
+    </a>
+{% endblock %}
+
+{% block admin_content %}
+
+<form method="GET" class="admin-toolbar" style="margin-bottom:16px;">
+    <div class="admin-search">
+        <i class="fas fa-search"></i>
+        <input type="text" name="search" value="{{ search or '' }}"
+               placeholder="Search batch name…"
+               autocomplete="off" spellcheck="false">
+    </div>
+    <select name="kind" class="admin-select" onchange="this.form.submit()">
+        <option value="">All kinds</option>
+        <option value="questions" {% if kind_filter == 'questions' %}selected{% endif %}>Questions</option>
+        <option value="pdfs"      {% if kind_filter == 'pdfs' %}selected{% endif %}>PDFs</option>
+        <option value="mixed"     {% if kind_filter == 'mixed' %}selected{% endif %}>Mixed</option>
+    </select>
+    <button type="submit" class="admin-btn secondary">
+        <i class="fas fa-filter"></i> Filter
+    </button>
+</form>
+
+{% if batches %}
+<section class="admin-table-wrap">
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th style="width:36px;"></th>
+                    <th>Name</th>
+                    <th>Kind</th>
+                    <th style="text-align:center;">Items</th>
+                    <th class="hide-mobile">Created by</th>
+                    <th class="hide-mobile">Updated</th>
+                    <th style="text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in batches %}
+                <tr data-batch-id="{{ b.id }}">
+                    <td style="text-align:center;">
+                        {% if b.pinned %}<i class="fas fa-thumbtack" style="color:var(--primary);"></i>{% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('admin_batches.detail', batch_id=b.id) }}"
+                           style="font-weight:600;color:var(--text);text-decoration:none;">
+                            {{ b.name }}
+                        </a>
+                        {% if b.notes %}
+                            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
+                                {{ b.notes[:80] }}{% if b.notes|length > 80 %}…{% endif %}
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if b.kind == 'questions' %}
+                            <span class="admin-chip blue">Questions</span>
+                        {% elif b.kind == 'pdfs' %}
+                            <span class="admin-chip amber">PDFs</span>
+                        {% else %}
+                            <span class="admin-chip purple">Mixed</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align:center;font-variant-numeric:tabular-nums;">
+                        <strong>{{ b.item_count or 0 }}</strong>
+                    </td>
+                    <td class="hide-mobile" style="font-size:12px;color:var(--text-secondary);">
+                        {{ b.admin_first_name or '—' }} {{ b.admin_last_name or '' }}
+                    </td>
+                    <td class="hide-mobile" style="font-size:12px;color:var(--text-muted);">
+                        {{ (b.updated_at or '')[:16] }}
+                    </td>
+                    <td style="text-align:right;white-space:nowrap;">
+                        <a href="{{ url_for('admin_batches.detail', batch_id=b.id) }}"
+                           class="admin-btn secondary sm" title="Open">
+                            <i class="fas fa-pen-to-square"></i>
+                        </a>
+                        <button type="button"
+                                class="admin-btn secondary sm"
+                                data-batch-pin="{{ b.id }}"
+                                title="{% if b.pinned %}Unpin{% else %}Pin{% endif %}">
+                            <i class="fas fa-thumbtack"
+                               {% if not b.pinned %}style="opacity:0.4;"{% endif %}></i>
+                        </button>
+                        <button type="button"
+                                class="admin-btn danger sm"
+                                data-batch-delete="{{ b.id }}"
+                                data-batch-name="{{ b.name }}"
+                                title="Delete batch">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% if total_pages > 1 %}
+<div class="admin-pagination">
+    {% set qs = 'search=' ~ (search or '') ~ '&kind=' ~ (kind_filter or '') %}
+    <a href="?page=1&{{ qs }}" class="{% if page == 1 %}disabled{% endif %}"><i class="fas fa-angle-double-left"></i></a>
+    <a href="?page={{ page - 1 }}&{{ qs }}" class="{% if page == 1 %}disabled{% endif %}"><i class="fas fa-angle-left"></i></a>
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+            <span class="active">{{ p }}</span>
+        {% elif p <= page + 2 and p >= page - 2 %}
+            <a href="?page={{ p }}&{{ qs }}">{{ p }}</a>
+        {% endif %}
+    {% endfor %}
+    <a href="?page={{ page + 1 }}&{{ qs }}" class="{% if page == total_pages %}disabled{% endif %}"><i class="fas fa-angle-right"></i></a>
+    <a href="?page={{ total_pages }}&{{ qs }}" class="{% if page == total_pages %}disabled{% endif %}"><i class="fas fa-angle-double-right"></i></a>
+</div>
+{% endif %}
+
+{% else %}
+<div class="admin-empty">
+    <span class="empty-icon">📦</span>
+    <h3>No batches yet</h3>
+    <p>Create a batch to group questions or PDFs for later bulk editing.</p>
+    <a href="{{ url_for('admin_batches.new') }}" class="admin-btn primary">
+        <i class="fas fa-plus"></i> New Batch
+    </a>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block admin_js %}
+<script src="{{ url_for('static', filename='js/admin/batches.js') }}"></script>
+{% endblock %}

@@ -253,6 +253,101 @@ def _build_active_filters(**kw):
 
 
 # ============================================================
+# BATCH AUTO-CREATION HELPERS
+# ============================================================
+
+def _auto_create_questions_batch(subject_code, grade, imported,
+                                 admin_id, before_max_id):
+    """
+    After a successful question bulk import, snapshot the newly
+    inserted rows into a content batch. Best-effort — never raises.
+
+    Returns the new batch id, or None on any failure.
+    """
+    if not imported or imported <= 0:
+        return None
+    try:
+        from db import create_batch, add_batch_items
+        from datetime import datetime as _dt
+    except Exception as e:
+        logger.warning(f"batch helpers unavailable: {e}")
+        return None
+
+    try:
+        cursor = execute_with_retry(
+            "SELECT id FROM questions "
+            "WHERE id > ? AND created_by = ? "
+            "ORDER BY id DESC LIMIT ?",
+            (before_max_id, admin_id, imported),
+        )
+        new_ids = [r['id'] for r in cursor.fetchall()]
+        if not new_ids:
+            return None
+
+        name = (
+            f"{subject_code} {grade} — "
+            f"{_dt.now().strftime('%b %d')} · {len(new_ids)} Q"
+        )
+        batch_id = create_batch(
+            name=name,
+            kind='questions',
+            admin_id=admin_id,
+            notes=(
+                f"Auto-created from bulk import on "
+                f"{_dt.now().strftime('%Y-%m-%d')}"
+            ),
+        )
+        if not batch_id:
+            return None
+
+        add_batch_items(batch_id, 'question', new_ids)
+        return batch_id
+    except Exception as e:
+        logger.warning(f"auto-batch for questions failed: {e}")
+        return None
+
+
+def _auto_create_pdfs_batch(pdf_ids, admin_id, source_label='bot bulk publish'):
+    """
+    After PDFs are published to the main library in a batch, group
+    them into a content batch. Best-effort — never raises.
+
+    Returns the new batch id, or None on any failure.
+    """
+    if not pdf_ids:
+        return None
+    try:
+        from db import create_batch, add_batch_items
+        from datetime import datetime as _dt
+    except Exception as e:
+        logger.warning(f"batch helpers unavailable: {e}")
+        return None
+
+    try:
+        name = (
+            f"PDFs — {_dt.now().strftime('%b %d')} · "
+            f"{len(pdf_ids)} file{'s' if len(pdf_ids) != 1 else ''}"
+        )
+        batch_id = create_batch(
+            name=name,
+            kind='pdfs',
+            admin_id=admin_id,
+            notes=(
+                f"Auto-created from {source_label} on "
+                f"{_dt.now().strftime('%Y-%m-%d')}"
+            ),
+        )
+        if not batch_id:
+            return None
+
+        add_batch_items(batch_id, 'pdf', pdf_ids)
+        return batch_id
+    except Exception as e:
+        logger.warning(f"auto-batch for PDFs failed: {e}")
+        return None
+
+
+# ============================================================
 # QUESTIONS — LIST
 # ============================================================
 
@@ -1151,6 +1246,15 @@ def bulk_import_apply():
         flash('No valid questions to import.', 'error')
         return redirect(url_for('admin_content.bulk_import'))
 
+    # ── Capture the current max id so we can identify the new rows
+    try:
+        cursor = execute_with_retry(
+            "SELECT COALESCE(MAX(id), 0) AS max_id FROM questions"
+        )
+        before_max_id = cursor.fetchone()['max_id']
+    except Exception:
+        before_max_id = 0
+
     try:
         result = bulk_create_questions(questions_to_import, session.get('user_id'))
     except Exception as e:
@@ -1171,7 +1275,28 @@ def bulk_import_apply():
                    'pdf_code': pdf_code},
             severity='info',
         )
+
+        # ── Auto-create a content batch so the admin can revisit these
+        batch_id = _auto_create_questions_batch(
+            subject_code=subject_code,
+            grade=grade,
+            imported=imported,
+            admin_id=session.get('user_id'),
+            before_max_id=before_max_id,
+        )
+
         flash(f'✅ {imported} questions imported successfully!', 'success')
+        if batch_id:
+            try:
+                link = url_for('admin_batches.detail', batch_id=batch_id)
+                flash(
+                    f'📦 Batch created — '
+                    f'<a href="{link}" style="font-weight:700;">'
+                    f'open it</a> to bulk-edit these questions later.',
+                    'info',
+                )
+            except Exception:
+                pass
         if warnings:
             flash(f'⚠️ {len(warnings)} warning(s) — some fields were dropped.',
                   'warning')
@@ -1948,6 +2073,7 @@ def pdf_staging_publish():
     succeeded = 0
     failed = 0
     failures = []
+    published_main_ids = []
 
     for sid in ids:
         try:
@@ -1958,6 +2084,16 @@ def pdf_staging_publish():
         ok, msg = publish_bot_pdf_to_main(sid_int)
         if ok:
             succeeded += 1
+            # Capture the main PDF id for batching (best-effort)
+            try:
+                from bot.db import get_bot_pdf_by_id
+                bpdf = get_bot_pdf_by_id(sid_int)
+                if bpdf and bpdf.get('code'):
+                    main_row = get_pdf_by_code(bpdf['code'])
+                    if main_row:
+                        published_main_ids.append(main_row['id'])
+            except Exception:
+                pass
         else:
             failed += 1
             failures.append(f'#{sid_int}: {msg}')
@@ -1968,8 +2104,27 @@ def pdf_staging_publish():
             after={'succeeded': succeeded, 'failed': failed, 'ids': ids},
             severity='warning',
         )
+
+        # ── Auto-create batch for the newly published PDFs
+        batch_id = _auto_create_pdfs_batch(
+            published_main_ids,
+            admin_id=session.get('user_id'),
+            source_label='staging publish',
+        )
+
         flash(f'{succeeded} PDF{"s" if succeeded != 1 else ""} '
               f'published to the platform.', 'success')
+        if batch_id:
+            try:
+                link = url_for('admin_batches.detail', batch_id=batch_id)
+                flash(
+                    f'📦 Batch created — '
+                    f'<a href="{link}" style="font-weight:700;">'
+                    f'open it</a> to bulk-edit these PDFs later.',
+                    'info',
+                )
+            except Exception:
+                pass
     if failed:
         first = failures[0] if failures else 'unknown error'
         flash(f'{failed} failed. First: {first}', 'error')
@@ -1994,10 +2149,19 @@ def pdf_staging_publish_all():
 
     succeeded = 0
     failed = 0
+    published_main_ids = []
+
     for p in all_pdfs:
         ok, _ = publish_bot_pdf_to_main(p['id'])
         if ok:
             succeeded += 1
+            try:
+                if p.get('code'):
+                    main_row = get_pdf_by_code(p['code'])
+                    if main_row:
+                        published_main_ids.append(main_row['id'])
+            except Exception:
+                pass
         else:
             failed += 1
 
@@ -2007,8 +2171,26 @@ def pdf_staging_publish_all():
             after={'succeeded': succeeded, 'failed': failed},
             severity='warning',
         )
+
+        batch_id = _auto_create_pdfs_batch(
+            published_main_ids,
+            admin_id=session.get('user_id'),
+            source_label='staging publish-all',
+        )
+
         flash(f'{succeeded} PDF{"s" if succeeded != 1 else ""} published.',
               'success')
+        if batch_id:
+            try:
+                link = url_for('admin_batches.detail', batch_id=batch_id)
+                flash(
+                    f'📦 Batch created — '
+                    f'<a href="{link}" style="font-weight:700;">'
+                    f'open it</a> to bulk-edit these PDFs later.',
+                    'info',
+                )
+            except Exception:
+                pass
     if failed:
         flash(f'{failed} already existed or failed to publish.', 'info')
 
@@ -2255,8 +2437,10 @@ def pdfs_bulk_workspace_commit():
 
     results = {
         'staged': 0, 'published': 0, 'failed': 0,
-        'failures': [], 'skipped': [],
+        'failures': [], 'skipped': [], 'batch_id': None,
     }
+
+    published_main_ids = []
 
     for idx, row in enumerate(rows, start=1):
         try:
@@ -2360,6 +2544,7 @@ def pdfs_bulk_workspace_commit():
                 try:
                     main_pdf = get_pdf_by_code(code)
                     if main_pdf:
+                        published_main_ids.append(main_pdf['id'])
                         execute_with_retry(
                             "INSERT OR IGNORE INTO unverified_pdfs (pdf_id) "
                             "VALUES (?)",
@@ -2375,6 +2560,16 @@ def pdfs_bulk_workspace_commit():
         except Exception as e:
             logger.warning(f"delete_pending_pdf({pending_id}) failed: {e}")
 
+    # ── Auto-create a batch for the published PDFs
+    if mode == 'publish' and published_main_ids:
+        batch_id = _auto_create_pdfs_batch(
+            published_main_ids,
+            admin_id=session.get('user_id'),
+            source_label='bot bulk workspace',
+        )
+        if batch_id:
+            results['batch_id'] = batch_id
+
     try:
         write_audit(
             action=f'pdf.bulk_workspace.{mode}',
@@ -2384,6 +2579,7 @@ def pdfs_bulk_workspace_commit():
                 'staged':    results['staged'],
                 'published': results['published'],
                 'failed':    results['failed'],
+                'batch_id':  results.get('batch_id'),
             },
             severity='info',
         )

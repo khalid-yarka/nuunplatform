@@ -1,0 +1,63 @@
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-layer-group header-icon"></i>{% endblock %}
+{% block admin_title %}New Batch{% endblock %}
+{% block admin_subtitle %}Give the batch a name. You can add items after saving.{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_batches.index') }}">Batches</a>
+    <span class="sep">/</span>
+    <span class="current">New</span>
+{% endblock %}
+
+{% block admin_content %}
+
+<div style="max-width:560px;margin:0 auto;">
+    <form method="POST" action="{{ url_for('admin_batches.create') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <section class="admin-card">
+            <div class="admin-card-body">
+
+                <div class="admin-form-group">
+                    <label>Name <span style="color:var(--primary);">*</span></label>
+                    <input type="text" name="name" class="admin-input" required
+                           maxlength="200"
+                           placeholder="e.g. Geography F4 — Sep 22">
+                </div>
+
+                <div class="admin-form-group">
+                    <label>Kind</label>
+                    <select name="kind" class="admin-select">
+                        <option value="mixed">Mixed (questions + PDFs)</option>
+                        <option value="questions">Questions only</option>
+                        <option value="pdfs">PDFs only</option>
+                    </select>
+                    <div class="hint">Cosmetic label. Items of any type can be added.</div>
+                </div>
+
+                <div class="admin-form-group" style="margin-bottom:0;">
+                    <label>Notes (optional)</label>
+                    <textarea name="notes" class="admin-textarea" rows="3"
+                              maxlength="500"
+                              placeholder="What is this batch for?"></textarea>
+                </div>
+
+            </div>
+        </section>
+
+        <div style="display:flex;gap:10px;margin-top:20px;">
+            <a href="{{ url_for('admin_batches.index') }}"
+               class="admin-btn secondary lg" style="flex:1;justify-content:center;">
+                Cancel
+            </a>
+            <button type="submit" class="admin-btn primary lg"
+                    style="flex:1;justify-content:center;">
+                <i class="fas fa-plus"></i> Create batch
+            </button>
+        </div>
+    </form>
+</div>
+
+{% endblock %}
