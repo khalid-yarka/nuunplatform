@@ -183,15 +183,48 @@
             </div>
         </section>
 
-        {# ─── PDF link + grade (batch-level metadata) ─── #}
+        {# ─── Grade + PDF link (batch-level metadata) ─── #}
         <section class="bulk-card">
             <div class="bulk-card__head">
                 <h3><i class="fas fa-file-pdf"></i> Batch Source</h3>
-                <span class="bulk-card__hint">Optional — applies to every question</span>
+                <span class="bulk-card__hint">Applies to every question</span>
             </div>
 
             <div class="bulk-card__body">
-                <label class="bulk-meta-label">PDF code (optional)</label>
+
+                {# ── Grade picker ── #}
+                <label class="bulk-meta-label" for="biGradePicker">Grade</label>
+                <div class="bulk-grade-picker" id="biGradePicker" role="radiogroup"
+                     aria-label="Grade for all imported questions">
+                    <button type="button" class="bulk-grade-opt active"
+                            data-grade="F4" role="radio" aria-checked="true">
+                        <span class="bulk-grade-opt__code">F4</span>
+                        <span class="bulk-grade-opt__label">Form 4</span>
+                    </button>
+                    <button type="button" class="bulk-grade-opt"
+                            data-grade="F3" role="radio" aria-checked="false">
+                        <span class="bulk-grade-opt__code">F3</span>
+                        <span class="bulk-grade-opt__label">Form 3</span>
+                    </button>
+                    <button type="button" class="bulk-grade-opt"
+                            data-grade="G8" role="radio" aria-checked="false">
+                        <span class="bulk-grade-opt__code">G8</span>
+                        <span class="bulk-grade-opt__label">Grade 8</span>
+                    </button>
+                    <button type="button" class="bulk-grade-opt"
+                            data-grade="G7" role="radio" aria-checked="false">
+                        <span class="bulk-grade-opt__code">G7</span>
+                        <span class="bulk-grade-opt__label">Grade 7</span>
+                    </button>
+                </div>
+                <div class="bulk-grade-status" id="biGradeStatus">
+                    <i class="fas fa-circle-check"></i>
+                    <span>Questions will be tagged <strong>Form 4</strong>.</span>
+                </div>
+
+                {# ── PDF code ── #}
+                <label class="bulk-meta-label" for="biPdfCode"
+                       style="margin-top: 18px;">PDF code (optional)</label>
                 <div class="bulk-pdf-row">
                     <input type="text" id="biPdfCode" class="admin-input"
                            placeholder="XXXX-XXXX" maxlength="9"

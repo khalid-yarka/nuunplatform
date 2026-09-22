@@ -149,6 +149,10 @@
             fileName: document.getElementById('biFileName'),
             parseError: document.getElementById('bulkParseError'),
 
+            // Grade picker (new)
+            gradePicker: document.getElementById('biGradePicker'),
+            gradeStatus: document.getElementById('biGradeStatus'),
+
             pdfCode: document.getElementById('biPdfCode'),
             pdfClearBtn: document.getElementById('biPdfClearBtn'),
             pdfStatus: document.getElementById('biPdfStatus'),
@@ -198,9 +202,20 @@
             autoExact: true,
             autoInvalid: true,
 
+            // Grade state (new)
+            grade: 'F4',
+            gradeFromMetadata: false,
+
             drawerIndex: null,
             drawerMode: null,
             edits: {},
+        };
+
+        const GRADE_LABELS = {
+            'F4': 'Form 4',
+            'F3': 'Form 3',
+            'G8': 'Grade 8',
+            'G7': 'Grade 7',
         };
 
         // ============================================================
@@ -321,7 +336,7 @@
         }
 
         // ============================================================
-        // 4d. Render sidebar item — rich card
+        // 4d. Render sidebar item
         // ============================================================
         function renderSidebarItem(item) {
             const idx = item.index;
@@ -329,7 +344,6 @@
             const hasExact = item.duplicates.some(d => d.match_type === 'exact');
             const topDup = item.duplicates[0] || null;
 
-            // Badge
             let badgeClass = 'badge-ready';
             let badgeLabel = 'Ready';
             if (item.status === 'duplicate') {
@@ -342,7 +356,6 @@
                 badgeLabel = 'Invalid';
             }
 
-            // Options preview
             let optsHtml = '';
             const opts = item.options || {};
             const correct = item.correct_answer || '';
@@ -358,7 +371,6 @@
                     '</div>';
             });
 
-            // Meta chips
             let meta = '';
             if (item.subject_code)
                 meta += '<span class="bulk-item__meta-chip is-subject">' +
@@ -382,7 +394,6 @@
                 meta += '<span class="bulk-item__meta-chip">' +
                         '<i class="fas fa-tag"></i>' + escapeHtml(item.tags) + '</span>';
 
-            // Explanation
             let explHtml = '';
             if (item.has_explanation) {
                 const short = item.explanation_short || '';
@@ -393,7 +404,6 @@
                     '</div>';
             }
 
-            // Actions
             let actions = '';
             if (item.status === 'duplicate') {
                 if (S.keepAnyway.has(idx)) {
@@ -433,14 +443,8 @@
                 html += '<div class="bulk-item__text">' + escapeHtml(item.question_short || '(empty)') + '</div>';
             }
 
-            if (optsHtml) {
-                html += '<div class="bulk-item__opts">' + optsHtml + '</div>';
-            }
-
-            if (meta) {
-                html += '<div class="bulk-item__meta">' + meta + '</div>';
-            }
-
+            if (optsHtml) html += '<div class="bulk-item__opts">' + optsHtml + '</div>';
+            if (meta) html += '<div class="bulk-item__meta">' + meta + '</div>';
             if (explHtml) html += explHtml;
 
             html += '<div class="bulk-item__actions">' + actions + '</div>';
@@ -462,7 +466,6 @@
                 setSidebarStatus('idle');
                 return;
             }
-
             if (S.parseError) {
                 body.innerHTML =
                     '<div class="bulk-sb-error">' +
@@ -473,7 +476,6 @@
                 setSidebarStatus('error');
                 return;
             }
-
             if (S.serverError) {
                 body.innerHTML =
                     '<div class="bulk-sb-error">' +
@@ -484,7 +486,6 @@
                 setSidebarStatus('error');
                 return;
             }
-
             if (!S.serverData) {
                 body.innerHTML =
                     '<div class="bulk-sb-empty">' +
@@ -559,7 +560,6 @@
                 renderSidebar();
                 return;
             }
-
             const actBtn = e.target.closest('[data-action]');
             if (actBtn) {
                 e.stopPropagation();
@@ -569,7 +569,6 @@
                 handleItemAction(action, idx);
                 return;
             }
-
             const item = e.target.closest('.bulk-item');
             if (item) {
                 const idx = parseInt(item.getAttribute('data-idx'), 10);
@@ -832,8 +831,6 @@
 
                 S.edits[item.index] = newOverrides;
 
-                // Update the local preview object so the sidebar reflects
-                // the override immediately (until the next server refresh)
                 const localItem = S.serverData && S.serverData.preview.find(p => p.index === item.index);
                 if (localItem) {
                     if (newOverrides.question_full) {
@@ -942,6 +939,7 @@
             const key = [
                 raw,
                 pdfCode,
+                S.grade,
                 S.threshold,
                 S.scope,
                 S.autoExact ? '1' : '0',
@@ -970,6 +968,7 @@
                 body: JSON.stringify({
                     json_data: raw,
                     pdf_code: pdfCode,
+                    grade: S.grade,
                     fuzzy_threshold: S.threshold / 100,
                     scope: S.scope,
                     auto_exclude_exact: S.autoExact,
@@ -994,6 +993,10 @@
                 S.serverError = null;
                 S.serverData = res.data;
                 S.lastKey = key;
+
+                // Update grade status from server (authoritative)
+                S.gradeFromMetadata = (res.data.grade_source === 'metadata');
+                renderGradeStatus(res.data.grade, S.gradeFromMetadata);
 
                 const liveIdx = new Set(res.data.preview.map(p => p.index));
                 Object.keys(S.edits).forEach(k => {
@@ -1067,7 +1070,44 @@
         }
 
         // ============================================================
-        // 4i. PDF code field
+        // 4i. Grade picker (NEW)
+        // ============================================================
+        function renderGradeStatus(effectiveGrade, fromMetadata) {
+            if (!el.gradeStatus) return;
+            const grade = effectiveGrade || S.grade || 'F4';
+            const label = GRADE_LABELS[grade] || grade;
+            if (fromMetadata) {
+                el.gradeStatus.className = 'bulk-grade-status is-metadata';
+                el.gradeStatus.innerHTML =
+                    '<i class="fas fa-triangle-exclamation"></i>' +
+                    '<span>JSON <code>metadata.grade</code> = <strong>' +
+                    escapeHtml(label) + '</strong> — overrides the picker.</span>';
+            } else {
+                el.gradeStatus.className = 'bulk-grade-status';
+                el.gradeStatus.innerHTML =
+                    '<i class="fas fa-circle-check"></i>' +
+                    '<span>Questions will be tagged <strong>' +
+                    escapeHtml(label) + '</strong>.</span>';
+            }
+        }
+
+        if (el.gradePicker) {
+            el.gradePicker.querySelectorAll('.bulk-grade-opt').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    el.gradePicker.querySelectorAll('.bulk-grade-opt').forEach(b => {
+                        b.classList.remove('active');
+                        b.setAttribute('aria-checked', 'false');
+                    });
+                    this.classList.add('active');
+                    this.setAttribute('aria-checked', 'true');
+                    S.grade = this.getAttribute('data-grade') || 'F4';
+                    scheduleCheck(true);
+                });
+            });
+        }
+
+        // ============================================================
+        // 4j. PDF code field
         // ============================================================
         if (el.pdfCode) {
             let pdfTimer = null;
@@ -1149,7 +1189,7 @@
         }
 
         // ============================================================
-        // 4j. Import button
+        // 4k. Import button
         // ============================================================
         if (el.importBtn) {
             el.importBtn.addEventListener('click', function () {
@@ -1207,6 +1247,7 @@
                     body: JSON.stringify({
                         json_data: submitRaw,
                         pdf_code: (el.pdfCode && el.pdfCode.value) || '',
+                        grade: S.grade,
                         import_indices: includeIndices,
                     }),
                 })
@@ -1244,8 +1285,9 @@
         }
 
         // ============================================================
-        // 4k. Boot
+        // 4l. Boot
         // ============================================================
+        renderGradeStatus(S.grade, false);
         renderSidebar();
         if (el.textarea && el.textarea.value.trim()) runCheck();
     }

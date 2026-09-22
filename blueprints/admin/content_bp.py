@@ -1095,14 +1095,18 @@ def bulk_import_apply():
     """
     Import only the indices the user selected.
     Accepts JSON body with:
-      { json_data, pdf_code, import_indices: [1, 3, 5, ...] }
-    Falls back to form submission without import_indices for compat.
+      { json_data, pdf_code, grade, import_indices: [1, 3, 5, ...] }
+
+    Grade resolution (identical to bulk_preview):
+      metadata.grade  >  request 'grade'  >  DEFAULT_GRADE
     """
     import_indices = None
+    request_grade_raw = ''
     if request.is_json:
         body = request.get_json(silent=True) or {}
         raw_text = (body.get('json_data') or '').strip()
         pdf_code_raw = (body.get('pdf_code') or '').strip().upper()
+        request_grade_raw = (body.get('grade') or '').strip()
         raw_indices = body.get('import_indices')
         if isinstance(raw_indices, list):
             import_indices = set()
@@ -1117,6 +1121,7 @@ def bulk_import_apply():
             return redirect(url_for('admin_content.bulk_import'))
         raw_text = (request.form.get('json_data') or '').strip()
         pdf_code_raw = (request.form.get('pdf_code') or '').strip().upper()
+        request_grade_raw = (request.form.get('grade') or '').strip()
 
     if not raw_text:
         if request.is_json:
@@ -1143,7 +1148,15 @@ def bulk_import_apply():
     metadata = data.get('metadata') or {}
     subject_code = (metadata.get('subject_code') or '').strip()
     chapter = (metadata.get('chapter') or '').strip()
-    grade = normalize_grade(metadata.get('grade') or DEFAULT_GRADE)
+
+    # ── Grade resolution ──
+    meta_grade_raw = (metadata.get('grade') or '').strip()
+    if meta_grade_raw:
+        grade = normalize_grade(meta_grade_raw)
+        grade_source = 'metadata'
+    else:
+        grade = normalize_grade(request_grade_raw or DEFAULT_GRADE)
+        grade_source = 'picker'
 
     if subject_code not in get_all_subject_codes():
         msg = f'Unknown subject_code: "{subject_code}"'
@@ -1302,6 +1315,7 @@ def bulk_import_apply():
                 'subject_code': subject_code,
                 'imported': imported,
                 'grade': grade,
+                'grade_source': grade_source,
                 'pdf_code': pdf_code,
             },
             severity='info',
@@ -1341,6 +1355,8 @@ def bulk_import_apply():
             'skipped_duplicate': len(duplicates),
             'batch_id': batch_id,
             'batch_url': batch_url,
+            'grade': grade,
+            'grade_source': grade_source,
         })
 
     if imported > 0:
@@ -1399,14 +1415,21 @@ def bulk_preview():
     """
     Live preview. Returns per-item status and full data so the sidebar
     can render a rich card for each question.
+
+    Grade resolution:
+      • metadata.grade in the JSON  → wins  (grade_source = 'metadata')
+      • else the request 'grade' field      (grade_source = 'picker')
+      • else DEFAULT_GRADE                  (grade_source = 'picker')
     """
     if not _csrf_ok():
         return jsonify({'error': 'Invalid session. Refresh the page.'}), 403
 
+    request_grade_raw = ''
     if request.is_json:
         body = request.get_json(silent=True) or {}
         raw = (body.get('json_data') or '').strip()
         pdf_code_raw = (body.get('pdf_code') or '').strip().upper()
+        request_grade_raw = (body.get('grade') or '').strip()
         try:
             fuzzy_threshold = float(body.get('fuzzy_threshold') or 0.85)
         except (TypeError, ValueError):
@@ -1417,6 +1440,7 @@ def bulk_preview():
     else:
         raw = (request.form.get('json_data') or '').strip()
         pdf_code_raw = (request.form.get('pdf_code') or '').strip().upper()
+        request_grade_raw = (request.form.get('grade') or '').strip()
         try:
             fuzzy_threshold = float(request.form.get('fuzzy_threshold') or 0.85)
         except (TypeError, ValueError):
@@ -1454,7 +1478,15 @@ def bulk_preview():
     metadata = data.get('metadata') or {}
     subject_code = (metadata.get('subject_code') or '').strip()
     chapter = (metadata.get('chapter') or '').strip()
-    grade = normalize_grade(metadata.get('grade') or DEFAULT_GRADE)
+
+    # ── Grade resolution ──
+    meta_grade_raw = (metadata.get('grade') or '').strip()
+    if meta_grade_raw:
+        grade = normalize_grade(meta_grade_raw)
+        grade_source = 'metadata'
+    else:
+        grade = normalize_grade(request_grade_raw or DEFAULT_GRADE)
+        grade_source = 'picker'
 
     if not subject_code:
         return jsonify({'error': 'metadata.subject_code is required', 'error_type': 'structure'}), 400
@@ -1592,7 +1624,6 @@ def bulk_preview():
 
         preview.append(entry)
 
-    # ── Batch duplicate detection ──
     try:
         from services.question_validity import find_duplicates_batch
 
@@ -1645,6 +1676,7 @@ def bulk_preview():
         'subject_code': subject_code,
         'chapter': chapter,
         'grade': grade,
+        'grade_source': grade_source,
         'pdf_code': pdf_code or '',
         'pdf_code_valid': pdf_code_valid,
         'pdf_info': pdf_info_payload,

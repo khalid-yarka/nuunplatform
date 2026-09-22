@@ -1057,3 +1057,110 @@
     .bulk-detect-row { flex-direction: column; gap: 6px; }
     .bulk-detect-row > label { flex: none; padding-top: 0; }
 }
+
+/* ============================================================
+   Grade picker (Batch Source card)
+   ============================================================ */
+
+.bulk-grade-picker {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.bulk-grade-opt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 10px 6px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    background: var(--background);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    text-align: center;
+}
+.bulk-grade-opt:hover {
+    border-color: var(--primary);
+    color: var(--text);
+    transform: translateY(-1px);
+}
+.bulk-grade-opt.active {
+    border-color: var(--primary);
+    background: var(--primary-light);
+    color: var(--primary);
+    box-shadow: 0 2px 8px rgba(var(--primary-rgb, 255 49 56), 0.18);
+}
+.bulk-grade-opt__code {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    line-height: 1.1;
+}
+.bulk-grade-opt__label {
+    font-size: 10px;
+    font-weight: 600;
+    opacity: 0.75;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+.bulk-grade-opt.active .bulk-grade-opt__label { opacity: 1; }
+
+.bulk-grade-status {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.45;
+    background: #ECFDF5;
+    color: #065F46;
+    border: 1px solid #A7F3D0;
+}
+.bulk-grade-status i {
+    font-size: 12px;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+.bulk-grade-status strong { font-weight: 800; }
+.bulk-grade-status code {
+    background: rgba(0, 0, 0, 0.06);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px;
+}
+.bulk-grade-status.is-metadata {
+    background: #FFFBEB;
+    color: #92400E;
+    border-color: #FDE68A;
+}
+
+[data-theme="dark"] .bulk-grade-opt.active {
+    box-shadow: 0 2px 8px rgba(255, 107, 112, 0.22);
+}
+[data-theme="dark"] .bulk-grade-status {
+    background: #1A3A2E;
+    color: #6EE7B7;
+    border-color: #166534;
+}
+[data-theme="dark"] .bulk-grade-status.is-metadata {
+    background: #3A2E1A;
+    color: #FCD34D;
+    border-color: #854D0E;
+}
+[data-theme="dark"] .bulk-grade-status code {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 480px) {
+    .bulk-grade-picker {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
