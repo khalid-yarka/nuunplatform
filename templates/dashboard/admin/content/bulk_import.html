@@ -1,13 +1,13 @@
 {# ============================================================
    templates/dashboard/admin/content/bulk_import.html
-   Paste/upload JSON, live preview, PDF code check, grade picker.
+   Advanced bulk import: live duplicate detection + sidebar.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
 {% block admin_title_icon %}<i class="fas fa-file-import header-icon"></i>{% endblock %}
 {% block admin_title %}Bulk Import{% endblock %}
 {% block admin_subtitle %}
-    Paste or upload JSON. A live preview shows what will be inserted.
+    Paste JSON. Duplicates are detected live. Nothing is imported until you click Import.
 {% endblock %}
 
 {% block admin_breadcrumb %}
@@ -26,62 +26,70 @@
     </a>
 {% endblock %}
 
+{% block admin_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/bulk-import.css') }}" />
+{% endblock %}
+
 {% block admin_content %}
 
-{# ─────── VALIDATION / DUPLICATE ERRORS ─────── #}
-{% if errors or duplicates %}
-<section class="admin-card" style="border-left:4px solid #DC2626;">
-    <div class="admin-card-head" style="background:#FEF2F2;">
-        <h3 style="color:#991B1B;">
-            <i class="fas fa-exclamation-triangle"></i> Import blocked
-        </h3>
-        <span class="hint" style="color:#991B1B;">
-            {{ (errors|length) + (duplicates|length) }} issue{{ '' if (errors|length + duplicates|length) == 1 else 's' }}
-        </span>
-    </div>
-    <div class="admin-card-body">
-        {% for e in errors %}
-            <div style="padding:6px 0;border-bottom:1px solid var(--border-light);font-size:13px;">
-                <strong>#{{ e.index }}:</strong>
-                <span style="color:var(--text-secondary);">{{ e.question }}</span>
-                <span style="color:#991B1B;"> — {{ e.error }}</span>
+<div class="bulk-shell" id="bulkShell"
+     data-import-url="{{ url_for('admin_content.bulk_import') }}"
+     data-preview-url="{{ url_for('admin_content.bulk_preview') }}">
+
+    {# ═══════════════════════════════════════════════════════
+       SIDEBAR — Summary + Items
+       ═══════════════════════════════════════════════════════ #}
+    <aside class="bulk-sidebar" aria-label="Import sidebar">
+        <div class="bulk-sidebar__head">
+            <div class="bulk-sidebar__title">
+                <i class="fas fa-clipboard-check"></i>
+                <span>Detection</span>
             </div>
-        {% endfor %}
-        {% for d in duplicates %}
-            <div style="padding:6px 0;border-bottom:1px solid var(--border-light);font-size:13px;">
-                <strong>#{{ d.index }}:</strong>
-                <span style="color:var(--text-secondary);">{{ d.question[:60] }}…</span>
-                <span style="color:#92400E;"> — {{ d.error }}</span>
+            <span class="bulk-sidebar__status" id="bulkSidebarStatus">idle</span>
+        </div>
+
+        <div class="bulk-sidebar__body" id="bulkSidebarBody">
+            <div class="bulk-sb-empty">
+                <i class="fas fa-magnifying-glass"></i>
+                <p>Paste JSON to begin. Valid questions, duplicates, and errors will appear here.</p>
             </div>
-        {% endfor %}
-    </div>
-</section>
-{% endif %}
+        </div>
 
-<form method="POST" id="bulkForm" enctype="multipart/form-data"
-      action="{{ url_for('admin_content.bulk_import') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="bulk-sidebar__foot" id="bulkSidebarFoot" hidden>
+            <button type="button" class="bulk-sidebar__import" id="bulkImportBtn" disabled>
+                <i class="fas fa-check"></i>
+                <span id="bulkImportBtnLabel">Import 0 questions</span>
+            </button>
+        </div>
+    </aside>
 
-    <div class="bi-layout">
+    {# ═══════════════════════════════════════════════════════
+       MAIN COLUMN
+       ═══════════════════════════════════════════════════════ #}
+    <div class="bulk-main">
 
-        {# ─────── LEFT: INPUT ─────── #}
-        <div>
-            <section class="admin-card">
-                <div class="admin-card-head">
-                    <h3><i class="fas fa-code"></i> JSON Input</h3>
+        {# ─── JSON input card ─── #}
+        <section class="bulk-card">
+            <div class="bulk-card__head">
+                <h3><i class="fas fa-code"></i> JSON Input</h3>
+                <div class="bulk-tabs">
+                    <button type="button" class="bulk-tab active" data-mode="paste">
+                        <i class="fas fa-keyboard"></i> Paste
+                    </button>
+                    <button type="button" class="bulk-tab" data-mode="file">
+                        <i class="fas fa-folder-open"></i> Upload
+                    </button>
                 </div>
-                <div class="admin-card-body">
+            </div>
 
-                    <div class="bi-tabs">
-                        <button type="button" class="bi-tab active" data-mode="paste">📝 Paste</button>
-                        <button type="button" class="bi-tab" data-mode="file">📁 Upload</button>
-                    </div>
+            <input type="hidden" name="input_method" id="biInputMethod" value="paste">
 
-                    <input type="hidden" name="input_method" id="biInputMethod" value="paste">
-
-                    <div id="biPasteArea">
-                        <textarea id="biJsonData" name="json_data" class="bi-textarea"
-                                  placeholder='{
+            <div class="bulk-card__body">
+                <div id="biPasteArea">
+                    <textarea id="biJsonData" class="bulk-textarea"
+                              spellcheck="false" autocomplete="off"
+                              placeholder='{
   "metadata": {
     "subject_code": "geography",
     "chapter": "Chapter 1",
@@ -93,106 +101,142 @@
       "options": ["Mogadishu", "Hargeisa", "Kismayo"],
       "correct": 1,
       "difficulty": 2,
-      "explanation": "..."
+      "explanation": "...",
+      "tags": ["capitals"]
     }
   ]
 }'></textarea>
+                </div>
+
+                <div id="biFileArea" hidden>
+                    <div class="bulk-drop" id="biDropZone">
+                        <span class="bulk-drop__icon">📤</span>
+                        <p class="bulk-drop__text">Drop a .json file here, or</p>
+                        <button type="button" class="admin-btn secondary sm"
+                                onclick="document.getElementById('biJsonFile').click()">
+                            Browse files
+                        </button>
+                        <input type="file" id="biJsonFile" name="json_file"
+                               accept=".json,.txt" hidden>
+                        <div id="biFileName" class="bulk-drop__file" hidden></div>
                     </div>
-
-                    <div id="biFileArea" style="display:none;">
-                        <div class="bi-drop" id="biDropZone">
-                            <span class="drop-icon">📤</span>
-                            <p class="drop-text">Drop a .json file here, or</p>
-                            <button type="button"
-                                    onclick="document.getElementById('biJsonFile').click()"
-                                    class="admin-btn secondary sm">
-                                Browse files
-                            </button>
-                            <input type="file" id="biJsonFile" name="json_file"
-                                   accept=".json,.txt" style="display:none;">
-                            <div id="biFileName"
-                                 style="margin-top:10px;font-size:12px;color:var(--primary);display:none;"></div>
-                        </div>
-                    </div>
-
                 </div>
-            </section>
 
-            {# ─────── PDF CODE FIELD ─────── #}
-            <section class="admin-card" style="margin-top:16px;">
-                <div class="admin-card-head">
-                    <h3><i class="fas fa-file-pdf"></i> Source PDF (optional)</h3>
-                    <span class="hint">Applies to every question in this batch</span>
-                </div>
-                <div class="admin-card-body">
-                    <div class="bi-pdf-code-panel">
-                        <div class="row">
-                            <input type="text" id="biPdfCode" name="pdf_code"
-                                   placeholder="XXXX-XXXX"
-                                   maxlength="9"
-                                   autocomplete="off" spellcheck="false">
-                            <button type="button" id="biPdfClearBtn" class="admin-btn secondary sm">
-                                Clear
-                            </button>
-                        </div>
-                    </div>
-                    <div class="bi-pdf-status hidden" id="biPdfStatus"></div>
-                    <p class="admin-muted-sm" style="margin:10px 0 0 0;">
-                        Leave empty to import without source links. Set it here, or add
-                        <code>pdf_code</code> per question in the JSON.
-                    </p>
-                </div>
-            </section>
-
-            {# ─────── GRADE FIELD ─────── #}
-            <section class="admin-card" style="margin-top:16px;">
-                <div class="admin-card-head">
-                    <h3><i class="fas fa-graduation-cap"></i> Grade</h3>
-                    <span class="hint">Applies to every question in this batch</span>
-                </div>
-                <div class="admin-card-body">
-                    <select name="grade" id="biGrade" class="admin-select">
-                        {% set current_grade = grade if grade else 'F4' %}
-                        <option value="F4" {% if current_grade == 'F4' %}selected{% endif %}>Form 4 (F4)</option>
-                        <option value="F3" {% if current_grade == 'F3' %}selected{% endif %}>Form 3 (F3)</option>
-                        <option value="G8" {% if current_grade == 'G8' %}selected{% endif %}>Grade 8 (G8)</option>
-                        <option value="G7" {% if current_grade == 'G7' %}selected{% endif %}>Grade 7 (G7)</option>
-                    </select>
-                    <p class="admin-muted-sm" style="margin:10px 0 0 0;">
-                        The metadata key <code>grade</code> in your JSON overrides this.
-                    </p>
-                </div>
-            </section>
-
-            <div style="display:flex;gap:10px;margin-top:16px;">
-                <button type="submit" class="admin-btn primary lg" id="biSubmitBtn"
-                        style="flex:1;justify-content:center;">
-                    <i class="fas fa-check"></i> Import Questions
-                </button>
+                <div class="bulk-parse-error" id="bulkParseError" hidden></div>
             </div>
-        </div>
+        </section>
 
-        {# ─────── RIGHT: PREVIEW ─────── #}
-        <div>
-            <section class="admin-card bi-preview">
-                <div class="bi-preview-head">
-                    <h3><i class="fas fa-eye"></i> Live preview</h3>
-                    <span class="status" id="biPreviewStatus">idle</span>
-                </div>
-                <div class="bi-preview-body" id="biPreviewContent">
-                    <div class="bi-pv-empty">
-                        <i class="fas fa-file-code"></i>
-                        Paste JSON to see a live preview here.
+        {# ─── Detection controls ─── #}
+        <section class="bulk-card">
+            <div class="bulk-card__head">
+                <h3><i class="fas fa-radar"></i> Duplicate Detection</h3>
+                <span class="bulk-card__hint">Tune how strict the matching is</span>
+            </div>
+
+            <div class="bulk-card__body">
+                <div class="bulk-detect-row">
+                    <label for="bulkThreshold">Match threshold</label>
+                    <div class="bulk-thresh">
+                        <input type="range" id="bulkThreshold"
+                               min="60" max="100" step="1" value="85">
+                        <span class="bulk-thresh-value" id="bulkThresholdValue">85%</span>
                     </div>
                 </div>
-            </section>
-        </div>
+
+                <div class="bulk-detect-row">
+                    <label>Compare against</label>
+                    <div class="bulk-scope" id="bulkScope">
+                        <button type="button" class="bulk-scope-opt active"
+                                data-scope="same_grade">
+                            <i class="fas fa-graduation-cap"></i> Same subject + grade
+                        </button>
+                        <button type="button" class="bulk-scope-opt"
+                                data-scope="same_subject">
+                            <i class="fas fa-book"></i> Same subject
+                        </button>
+                        <button type="button" class="bulk-scope-opt"
+                                data-scope="any">
+                            <i class="fas fa-globe"></i> All questions
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bulk-detect-row">
+                    <label>Auto-exclude</label>
+                    <div class="bulk-detect-checks">
+                        <label class="bulk-check-row">
+                            <input type="checkbox" id="bulkAutoExact" checked>
+                            <span>Exact matches (100%)</span>
+                        </label>
+                        <label class="bulk-check-row">
+                            <input type="checkbox" id="bulkAutoInvalid" checked>
+                            <span>Invalid entries</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="bulk-detect-actions">
+                    <button type="button" class="admin-btn secondary" id="bulkRecheckBtn">
+                        <i class="fas fa-rotate"></i> Recheck
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        {# ─── PDF link + grade (batch-level metadata) ─── #}
+        <section class="bulk-card">
+            <div class="bulk-card__head">
+                <h3><i class="fas fa-file-pdf"></i> Batch Source</h3>
+                <span class="bulk-card__hint">Optional — applies to every question</span>
+            </div>
+
+            <div class="bulk-card__body">
+                <label class="bulk-meta-label">PDF code (optional)</label>
+                <div class="bulk-pdf-row">
+                    <input type="text" id="biPdfCode" class="admin-input"
+                           placeholder="XXXX-XXXX" maxlength="9"
+                           spellcheck="false" autocomplete="off">
+                    <button type="button" class="admin-btn secondary" id="biPdfClearBtn">
+                        Clear
+                    </button>
+                </div>
+                <div class="bulk-pdf-status hidden" id="biPdfStatus"></div>
+            </div>
+        </section>
 
     </div>
-</form>
+</div>
+
+{# ═══════════════════════════════════════════════════════════
+   DRAWER — Resolve / Edit
+   ═══════════════════════════════════════════════════════════ #}
+<div class="bulk-drawer-backdrop" id="bulkDrawerBackdrop" hidden></div>
+<aside class="bulk-drawer" id="bulkDrawer" hidden
+       role="dialog" aria-modal="true" aria-labelledby="bulkDrawerTitle">
+    <div class="bulk-drawer__head">
+        <button type="button" class="bulk-drawer__close" id="bulkDrawerClose" aria-label="Close">
+            <i class="fas fa-times"></i>
+        </button>
+        <div>
+            <h3 class="bulk-drawer__title" id="bulkDrawerTitle">Item</h3>
+            <p class="bulk-drawer__sub" id="bulkDrawerSub">—</p>
+        </div>
+    </div>
+    <div class="bulk-drawer__body" id="bulkDrawerBody"></div>
+    <div class="bulk-drawer__foot" id="bulkDrawerFoot"></div>
+</aside>
+
+{# ═══════════════════════════════════════════════════════════
+   UNDO TOAST
+   ═══════════════════════════════════════════════════════════ #}
+<div class="bulk-undo-toast" id="bulkUndoToast" hidden>
+    <span id="bulkUndoText">—</span>
+    <button type="button" id="bulkUndoBtn">Undo</button>
+</div>
 
 {% endblock %}
 
 {% block admin_js %}
+{{ super() }}
 <script src="{{ url_for('static', filename='js/admin/content.js') }}"></script>
 {% endblock %}

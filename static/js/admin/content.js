@@ -8,24 +8,46 @@
 
     const CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
 
-    // ------------------------------------------------------------
-    // QUESTION EDITOR
-    // ------------------------------------------------------------
+    // ============================================================
+    // 1. HELPERS
+    // ============================================================
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+    function escapeAttr(s) { return escapeHtml(s); }
+
+    function toast(msg, kind) {
+        if (typeof window.showToast === 'function') {
+            try { window.showToast(msg, kind || 'info'); return; } catch (e) {}
+        }
+        const el = document.createElement('div');
+        el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1A1A2E;color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,0.24);';
+        el.textContent = msg;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 3200);
+    }
+
+    // ============================================================
+    // 2. QUESTION EDITOR (single)
+    // ============================================================
     function initQuestionEditor() {
         const form = document.getElementById('questionForm');
         if (!form) return;
 
         const radios = form.querySelectorAll('input[name="correct_answer"]');
         const rows = form.querySelectorAll('.q-opt-row');
-
         function sync() {
             const checked = form.querySelector('input[name="correct_answer"]:checked');
             const value = checked ? checked.value : null;
-            rows.forEach(function (row) {
-                row.classList.toggle('selected', row.dataset.letter === value);
-            });
+            rows.forEach(row => row.classList.toggle('selected', row.dataset.letter === value));
         }
-        radios.forEach(function (r) { r.addEventListener('change', sync); });
+        radios.forEach(r => r.addEventListener('change', sync));
         sync();
 
         const codeInput = document.getElementById('pdfCodeInput');
@@ -70,8 +92,8 @@
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
                 body: JSON.stringify({ code: code }),
             })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
+            .then(r => r.json())
+            .then(data => {
                 if (!data || !data.valid) {
                     preview.className = 'q-pdf-preview err';
                     preview.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Invalid code format.';
@@ -90,295 +112,1152 @@
                     '<span>' + escapeHtml(data.title || code) + premium + '</span>' +
                     '<span class="src-tag">' + srcTag + '</span>';
             })
-            .catch(function () {
+            .catch(() => {
                 preview.className = 'q-pdf-preview err';
                 preview.innerHTML = '<i class="fas fa-times-circle"></i> Could not verify.';
             });
         }
     }
 
-    // ------------------------------------------------------------
-    // BULK IMPORT
-    // ------------------------------------------------------------
+    // ============================================================
+    // 3. DUPLICATE SIDEBAR (single editor)
+    // ============================================================
+    function initDuplicateSidebar() {
+        const bar = document.getElementById('dupBar');
+        if (!bar) return;
+    }
+
+    // ============================================================
+    // 4. BULK IMPORT (advanced)
+    // ============================================================
     function initBulkImport() {
-        const form = document.getElementById('bulkForm');
-        if (!form) return;
+        const shell = document.getElementById('bulkShell');
+        if (!shell) return;
 
-        const tabs = form.querySelectorAll('.bi-tab');
-        const pasteArea = document.getElementById('biPasteArea');
-        const fileArea = document.getElementById('biFileArea');
+        const IMPORT_URL = shell.getAttribute('data-import-url') || '/admin/bulk-import';
+        const PREVIEW_URL = shell.getAttribute('data-preview-url') || '/admin/bulk-preview';
 
-        tabs.forEach(function (tab) {
+        const el = {
+            tabs: shell.querySelectorAll('.bulk-tab'),
+            pasteArea: document.getElementById('biPasteArea'),
+            fileArea: document.getElementById('biFileArea'),
+            inputMethod: document.getElementById('biInputMethod'),
+
+            textarea: document.getElementById('biJsonData'),
+            fileInput: document.getElementById('biJsonFile'),
+            dropZone: document.getElementById('biDropZone'),
+            fileName: document.getElementById('biFileName'),
+            parseError: document.getElementById('bulkParseError'),
+
+            pdfCode: document.getElementById('biPdfCode'),
+            pdfClearBtn: document.getElementById('biPdfClearBtn'),
+            pdfStatus: document.getElementById('biPdfStatus'),
+
+            threshold: document.getElementById('bulkThreshold'),
+            thresholdValue: document.getElementById('bulkThresholdValue'),
+            scope: document.getElementById('bulkScope'),
+            autoExact: document.getElementById('bulkAutoExact'),
+            autoInvalid: document.getElementById('bulkAutoInvalid'),
+            recheckBtn: document.getElementById('bulkRecheckBtn'),
+
+            sidebarBody: document.getElementById('bulkSidebarBody'),
+            sidebarFoot: document.getElementById('bulkSidebarFoot'),
+            sidebarStatus: document.getElementById('bulkSidebarStatus'),
+            importBtn: document.getElementById('bulkImportBtn'),
+            importBtnLabel: document.getElementById('bulkImportBtnLabel'),
+
+            drawer: document.getElementById('bulkDrawer'),
+            drawerBackdrop: document.getElementById('bulkDrawerBackdrop'),
+            drawerTitle: document.getElementById('bulkDrawerTitle'),
+            drawerSub: document.getElementById('bulkDrawerSub'),
+            drawerBody: document.getElementById('bulkDrawerBody'),
+            drawerFoot: document.getElementById('bulkDrawerFoot'),
+            drawerClose: document.getElementById('bulkDrawerClose'),
+
+            undoToast: document.getElementById('bulkUndoToast'),
+            undoText: document.getElementById('bulkUndoText'),
+            undoBtn: document.getElementById('bulkUndoBtn'),
+        };
+
+        const S = {
+            raw: '',
+            parseError: null,
+            serverError: null,
+            serverData: null,
+            inflight: false,
+            retryAfterInflight: false,
+            checkTimer: null,
+            lastKey: '',
+
+            filter: 'all',
+            excluded: new Set(),
+            keepAnyway: new Set(),
+
+            threshold: 85,
+            scope: 'same_grade',
+            autoExact: true,
+            autoInvalid: true,
+
+            drawerIndex: null,
+            drawerMode: null,
+            edits: {},
+        };
+
+        // ============================================================
+        // 4a. Tab switching
+        // ============================================================
+        el.tabs.forEach(tab => {
             tab.addEventListener('click', function () {
-                tabs.forEach(function (t) { t.classList.remove('active'); });
+                el.tabs.forEach(t => t.classList.remove('active'));
                 this.classList.add('active');
                 const mode = this.getAttribute('data-mode');
                 if (mode === 'paste') {
-                    if (pasteArea) pasteArea.style.display = '';
-                    if (fileArea) fileArea.style.display = 'none';
+                    el.pasteArea.hidden = false;
+                    el.fileArea.hidden = true;
+                    if (el.inputMethod) el.inputMethod.value = 'paste';
                 } else {
-                    if (pasteArea) pasteArea.style.display = 'none';
-                    if (fileArea) fileArea.style.display = '';
+                    el.pasteArea.hidden = true;
+                    el.fileArea.hidden = false;
+                    if (el.inputMethod) el.inputMethod.value = 'file';
                 }
             });
         });
 
-        const textarea = document.getElementById('biJsonData');
-        const fileInput = document.getElementById('biJsonFile');
-        const dropZone = document.getElementById('biDropZone');
-        const fileName = document.getElementById('biFileName');
-
-        if (fileInput) {
-            fileInput.addEventListener('change', function () {
+        // ============================================================
+        // 4b. File upload
+        // ============================================================
+        if (el.fileInput) {
+            el.fileInput.addEventListener('change', function () {
                 const f = this.files[0];
                 if (f) handleFile(f);
             });
         }
-
-        if (dropZone) {
-            ['dragenter', 'dragover'].forEach(function (evt) {
-                dropZone.addEventListener(evt, function (e) {
+        if (el.dropZone) {
+            ['dragenter', 'dragover'].forEach(evt => {
+                el.dropZone.addEventListener(evt, e => {
                     e.preventDefault();
-                    dropZone.classList.add('dragover');
+                    el.dropZone.classList.add('dragover');
                 });
             });
-            ['dragleave', 'drop'].forEach(function (evt) {
-                dropZone.addEventListener(evt, function (e) {
+            ['dragleave', 'drop'].forEach(evt => {
+                el.dropZone.addEventListener(evt, e => {
                     e.preventDefault();
-                    dropZone.classList.remove('dragover');
+                    el.dropZone.classList.remove('dragover');
                 });
             });
-            dropZone.addEventListener('drop', function (e) {
+            el.dropZone.addEventListener('drop', e => {
                 const f = e.dataTransfer.files[0];
                 if (f && f.name.toLowerCase().endsWith('.json')) {
                     handleFile(f);
-                    if (fileInput) fileInput.files = e.dataTransfer.files;
+                    if (el.fileInput) el.fileInput.files = e.dataTransfer.files;
                 } else {
-                    if (window.AdminCore) window.AdminCore.toast('Only .json files are accepted.', 'warning');
+                    toast('Only .json files are accepted.', 'warning');
                 }
             });
         }
-
         function handleFile(file) {
-            if (!textarea) return;
-            if (fileName) {
-                fileName.textContent = '📄 ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
-                fileName.style.display = 'block';
+            if (!el.textarea) return;
+            if (el.fileName) {
+                el.fileName.textContent = '📄 ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+                el.fileName.hidden = false;
             }
             const reader = new FileReader();
-            reader.onload = function (e) {
-                textarea.value = e.target.result;
-                schedulePreview(true);
+            reader.onload = e => {
+                el.textarea.value = e.target.result;
+                scheduleCheck(true);
             };
             reader.readAsText(file);
         }
 
-        const pdfCodeInput = document.getElementById('biPdfCode');
-        const pdfStatus = document.getElementById('biPdfStatus');
+        // ============================================================
+        // 4c. Sidebar state
+        // ============================================================
+        function setSidebarStatus(state) {
+            const st = el.sidebarStatus;
+            if (!st) return;
+            st.className = 'bulk-sidebar__status';
+            if (state === 'checking') {
+                st.classList.add('is-checking');
+                st.textContent = 'checking';
+            } else if (state === 'error') {
+                st.classList.add('is-error');
+                st.textContent = 'error';
+            } else if (state === 'ready') {
+                st.classList.add('is-ready');
+                st.textContent = 'ready';
+            } else {
+                st.textContent = 'idle';
+            }
+        }
 
-        if (pdfCodeInput) {
+        function isIncluded(item) {
+            const idx = item.index;
+            if (S.keepAnyway.has(idx)) return true;
+            if (S.excluded.has(idx)) return false;
+            if (S.autoExact && item.duplicates.some(d => d.match_type === 'exact')) {
+                return false;
+            }
+            if (S.autoInvalid && item.status === 'invalid') {
+                return false;
+            }
+            return true;
+        }
+
+        function countImported() {
+            if (!S.serverData) return 0;
+            let n = 0;
+            for (const item of S.serverData.preview) {
+                if (isIncluded(item)) n++;
+            }
+            return n;
+        }
+
+        function filterItems() {
+            if (!S.serverData) return [];
+            return S.serverData.preview.filter(item => {
+                if (S.filter === 'all') return true;
+                return item.status === S.filter;
+            });
+        }
+
+        // ============================================================
+        // 4d. Render sidebar item — rich card
+        // ============================================================
+        function renderSidebarItem(item) {
+            const idx = item.index;
+            const included = isIncluded(item);
+            const hasExact = item.duplicates.some(d => d.match_type === 'exact');
+            const topDup = item.duplicates[0] || null;
+
+            // Badge
+            let badgeClass = 'badge-ready';
+            let badgeLabel = 'Ready';
+            if (item.status === 'duplicate') {
+                badgeClass = hasExact ? 'badge-exact' : 'badge-duplicate';
+                badgeLabel = hasExact
+                    ? 'Identical'
+                    : (topDup ? topDup.similarity_pct + '% match' : 'Duplicate');
+            } else if (item.status === 'invalid') {
+                badgeClass = 'badge-invalid';
+                badgeLabel = 'Invalid';
+            }
+
+            // Options preview
+            let optsHtml = '';
+            const opts = item.options || {};
+            const correct = item.correct_answer || '';
+            ['A', 'B', 'C', 'D', 'E', 'F'].forEach(function (k) {
+                const v = opts[k];
+                if (!v) return;
+                const cls = 'bulk-item__opt' + (k === correct ? ' is-correct' : '');
+                optsHtml +=
+                    '<div class="' + cls + '">' +
+                      '<span class="bulk-item__opt-letter">' + k + '</span>' +
+                      '<span class="bulk-item__opt-text">' + escapeHtml(v) + '</span>' +
+                      (k === correct ? '<i class="fas fa-check"></i>' : '') +
+                    '</div>';
+            });
+
+            // Meta chips
+            let meta = '';
+            if (item.subject_code)
+                meta += '<span class="bulk-item__meta-chip is-subject">' +
+                        '<i class="fas fa-book"></i>' + escapeHtml(item.subject_code) + '</span>';
+            if (item.grade)
+                meta += '<span class="bulk-item__meta-chip is-grade">' +
+                        '🎓 ' + escapeHtml(item.grade) + '</span>';
+            if (item.difficulty)
+                meta += '<span class="bulk-item__meta-chip is-diff">' +
+                        ('⭐'.repeat(item.difficulty)) + '</span>';
+            if (item.chapter)
+                meta += '<span class="bulk-item__meta-chip">' +
+                        '<i class="fas fa-bookmark"></i>' + escapeHtml(item.chapter) + '</span>';
+            if (item.pdf_code) {
+                const cls = item.pdf_exists ? 'is-pdf' : 'is-pdf is-missing';
+                const icon = item.pdf_exists ? 'fas fa-paperclip' : 'fas fa-unlink';
+                meta += '<span class="bulk-item__meta-chip ' + cls + '">' +
+                        '<i class="' + icon + '"></i>' + escapeHtml(item.pdf_code) + '</span>';
+            }
+            if (item.tags)
+                meta += '<span class="bulk-item__meta-chip">' +
+                        '<i class="fas fa-tag"></i>' + escapeHtml(item.tags) + '</span>';
+
+            // Explanation
+            let explHtml = '';
+            if (item.has_explanation) {
+                const short = item.explanation_short || '';
+                explHtml =
+                    '<div class="bulk-item__expl">' +
+                      '<i class="fas fa-lightbulb"></i>' +
+                      '<span>' + escapeHtml(short || 'Has explanation') + '</span>' +
+                    '</div>';
+            }
+
+            // Actions
+            let actions = '';
+            if (item.status === 'duplicate') {
+                if (S.keepAnyway.has(idx)) {
+                    actions += '<button type="button" class="bulk-item__action bulk-item__action--danger" data-action="unkeep" data-idx="' + idx + '">' +
+                        '<i class="fas fa-xmark"></i> Re-skip</button>';
+                } else {
+                    actions += '<button type="button" class="bulk-item__action" data-action="keep" data-idx="' + idx + '">' +
+                        '<i class="fas fa-check"></i> Keep</button>';
+                }
+                actions += '<button type="button" class="bulk-item__action" data-action="resolve" data-idx="' + idx + '">' +
+                    '<i class="fas fa-code-compare"></i> Resolve</button>';
+            } else if (item.status === 'invalid') {
+                actions += '<button type="button" class="bulk-item__action" data-action="edit" data-idx="' + idx + '">' +
+                    '<i class="fas fa-pen"></i> Fix</button>';
+            } else {
+                actions += '<button type="button" class="bulk-item__action" data-action="edit" data-idx="' + idx + '">' +
+                    '<i class="fas fa-pen"></i> Edit</button>';
+                if (S.excluded.has(idx)) {
+                    actions += '<button type="button" class="bulk-item__action" data-action="include" data-idx="' + idx + '">' +
+                        '<i class="fas fa-check"></i> Include</button>';
+                } else {
+                    actions += '<button type="button" class="bulk-item__action bulk-item__action--danger" data-action="exclude" data-idx="' + idx + '">' +
+                        '<i class="fas fa-ban"></i> Skip</button>';
+                }
+            }
+
+            let html = '<div class="bulk-item status-' + item.status +
+                       (included ? '' : ' excluded') + '" data-idx="' + idx + '">';
+            html += '<div class="bulk-item__head">';
+            html += '  <span class="bulk-item__idx">#' + idx + '</span>';
+            html += '  <span class="bulk-item__badge ' + badgeClass + '">' + escapeHtml(badgeLabel) + '</span>';
+            html += '</div>';
+
+            if (item.status === 'invalid' && item.invalid_reason) {
+                html += '<div class="bulk-item__text is-error">' + escapeHtml(item.invalid_reason) + '</div>';
+            } else {
+                html += '<div class="bulk-item__text">' + escapeHtml(item.question_short || '(empty)') + '</div>';
+            }
+
+            if (optsHtml) {
+                html += '<div class="bulk-item__opts">' + optsHtml + '</div>';
+            }
+
+            if (meta) {
+                html += '<div class="bulk-item__meta">' + meta + '</div>';
+            }
+
+            if (explHtml) html += explHtml;
+
+            html += '<div class="bulk-item__actions">' + actions + '</div>';
+            html += '</div>';
+            return html;
+        }
+
+        function renderSidebar() {
+            const body = el.sidebarBody;
+            if (!body) return;
+
+            if (!S.raw) {
+                body.innerHTML =
+                    '<div class="bulk-sb-empty">' +
+                        '<i class="fas fa-magnifying-glass"></i>' +
+                        '<p>Paste JSON to begin. Valid questions, duplicates, and errors will appear here.</p>' +
+                    '</div>';
+                el.sidebarFoot.hidden = true;
+                setSidebarStatus('idle');
+                return;
+            }
+
+            if (S.parseError) {
+                body.innerHTML =
+                    '<div class="bulk-sb-error">' +
+                        '<i class="fas fa-circle-exclamation"></i>' +
+                        '<p>Fix the JSON syntax above to continue.</p>' +
+                    '</div>';
+                el.sidebarFoot.hidden = true;
+                setSidebarStatus('error');
+                return;
+            }
+
+            if (S.serverError) {
+                body.innerHTML =
+                    '<div class="bulk-sb-error">' +
+                        '<i class="fas fa-triangle-exclamation"></i>' +
+                        '<p>' + escapeHtml(S.serverError) + '</p>' +
+                    '</div>';
+                el.sidebarFoot.hidden = true;
+                setSidebarStatus('error');
+                return;
+            }
+
+            if (!S.serverData) {
+                body.innerHTML =
+                    '<div class="bulk-sb-empty">' +
+                        '<i class="fas fa-circle-notch fa-spin"></i>' +
+                        '<p>Checking…</p>' +
+                    '</div>';
+                el.sidebarFoot.hidden = true;
+                return;
+            }
+
+            const data = S.serverData;
+            const filtered = filterItems();
+            const importedCount = countImported();
+
+            let html = '';
+
+            html += '<div class="bulk-stat-grid">';
+            html += '<div class="bulk-stat"><div class="bulk-stat-num">' + data.total + '</div><div class="bulk-stat-label">Total</div></div>';
+            html += '<div class="bulk-stat tone-ok"><div class="bulk-stat-num">' + data.ready_count + '</div><div class="bulk-stat-label">Ready</div></div>';
+            if (data.duplicate_count) {
+                html += '<div class="bulk-stat tone-warn"><div class="bulk-stat-num">' + data.duplicate_count + '</div><div class="bulk-stat-label">Duplicate</div></div>';
+            }
+            if (data.invalid_count) {
+                html += '<div class="bulk-stat tone-err"><div class="bulk-stat-num">' + data.invalid_count + '</div><div class="bulk-stat-label">Invalid</div></div>';
+            }
+            html += '</div>';
+
+            html += '<div class="bulk-filters">';
+            const filterDefs = [
+                { key: 'all', label: 'All', count: data.total },
+                { key: 'ready', label: 'Ready', count: data.ready_count },
+                { key: 'duplicate', label: 'Duplicate', count: data.duplicate_count },
+                { key: 'invalid', label: 'Invalid', count: data.invalid_count },
+            ];
+            for (const f of filterDefs) {
+                if (f.key !== 'all' && f.count === 0) continue;
+                html += '<button type="button" class="bulk-filter' +
+                        (S.filter === f.key ? ' active' : '') +
+                        '" data-filter="' + f.key + '">' +
+                        escapeHtml(f.label) +
+                        '<span class="bulk-filter-count">' + f.count + '</span>' +
+                        '</button>';
+            }
+            html += '</div>';
+
+            if (!filtered.length) {
+                html += '<div class="bulk-sb-empty"><p>No items match this filter.</p></div>';
+            } else {
+                html += '<div class="bulk-items">';
+                for (const item of filtered) {
+                    html += renderSidebarItem(item);
+                }
+                html += '</div>';
+            }
+
+            body.innerHTML = html;
+
+            el.sidebarFoot.hidden = false;
+            el.importBtnLabel.textContent = 'Import ' + importedCount +
+                ' question' + (importedCount === 1 ? '' : 's');
+            el.importBtn.disabled = importedCount === 0 || S.inflight;
+            setSidebarStatus('ready');
+        }
+
+        // ============================================================
+        // 4e. Sidebar event delegation
+        // ============================================================
+        el.sidebarBody.addEventListener('click', function (e) {
+            const filterBtn = e.target.closest('.bulk-filter');
+            if (filterBtn) {
+                S.filter = filterBtn.getAttribute('data-filter') || 'all';
+                renderSidebar();
+                return;
+            }
+
+            const actBtn = e.target.closest('[data-action]');
+            if (actBtn) {
+                e.stopPropagation();
+                const action = actBtn.getAttribute('data-action');
+                const idx = parseInt(actBtn.getAttribute('data-idx'), 10);
+                if (isNaN(idx)) return;
+                handleItemAction(action, idx);
+                return;
+            }
+
+            const item = e.target.closest('.bulk-item');
+            if (item) {
+                const idx = parseInt(item.getAttribute('data-idx'), 10);
+                if (!isNaN(idx)) openDrawer(idx, 'edit');
+            }
+        });
+
+        function handleItemAction(action, idx) {
+            switch (action) {
+                case 'exclude':
+                    S.excluded.add(idx);
+                    S.keepAnyway.delete(idx);
+                    renderSidebar();
+                    break;
+                case 'include':
+                    S.excluded.delete(idx);
+                    renderSidebar();
+                    break;
+                case 'keep':
+                    S.keepAnyway.add(idx);
+                    S.excluded.delete(idx);
+                    renderSidebar();
+                    break;
+                case 'unkeep':
+                    S.keepAnyway.delete(idx);
+                    renderSidebar();
+                    break;
+                case 'resolve':
+                    openDrawer(idx, 'resolve');
+                    break;
+                case 'edit':
+                    openDrawer(idx, 'edit');
+                    break;
+            }
+        }
+
+        // ============================================================
+        // 4f. Drawer
+        // ============================================================
+        function openDrawer(idx, mode) {
+            if (!S.serverData) return;
+            const item = S.serverData.preview.find(p => p.index === idx);
+            if (!item) return;
+            S.drawerIndex = idx;
+            S.drawerMode = mode;
+            el.drawerBackdrop.hidden = false;
+            el.drawer.hidden = false;
+            renderDrawer(item, mode);
+        }
+
+        function closeDrawer() {
+            el.drawer.hidden = true;
+            el.drawerBackdrop.hidden = true;
+            S.drawerIndex = null;
+            S.drawerMode = null;
+        }
+
+        el.drawerClose.addEventListener('click', closeDrawer);
+        el.drawerBackdrop.addEventListener('click', closeDrawer);
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !el.drawer.hidden) closeDrawer();
+        });
+
+        function renderDrawer(item, mode) {
+            el.drawerTitle.textContent = mode === 'resolve'
+                ? 'Resolve duplicate · #' + item.index
+                : 'Edit · #' + item.index;
+            el.drawerSub.textContent = (item.subject_code || '') +
+                (item.grade ? ' · ' + item.grade : '') +
+                (item.status === 'invalid' ? ' · Invalid' : '');
+
+            if (mode === 'resolve') {
+                renderResolveView(item);
+            } else {
+                renderEditView(item);
+            }
+        }
+
+        function renderResolveView(item) {
+            const dupes = item.duplicates || [];
+            if (!dupes.length) {
+                el.drawerBody.innerHTML = '<p>No duplicates to compare.</p>';
+                el.drawerFoot.innerHTML = '';
+                return;
+            }
+            const top = dupes[0];
+
+            let html = '';
+            html += '<div class="bulk-sim-badge ' + (top.match_type === 'exact' ? 'exact' : 'fuzzy') + '">' +
+                    (top.match_type === 'exact'
+                        ? '🎯 Identical — 100% match'
+                        : '🔎 ' + top.similarity_pct + '% similar') +
+                    '</div>';
+
+            html += '<div class="bulk-compare">';
+            html += '  <div class="bulk-compare__col">';
+            html += '    <div class="bulk-compare__label"><i class="fas fa-plus-circle"></i> New (import)</div>';
+            html += '    <div class="bulk-compare__q">' + escapeHtml(item.question_full) + '</div>';
+            html += '    <div class="bulk-compare__opts">';
+            ['A', 'B', 'C', 'D', 'E', 'F'].forEach(function (k) {
+                if (!item.options[k]) return;
+                const isCorrect = item.correct_answer === k;
+                html += '<div class="bulk-compare__opt' + (isCorrect ? ' correct' : '') + '">' +
+                        '<span class="l">' + k + '.</span>' +
+                        '<span>' + escapeHtml(item.options[k]) + '</span>' +
+                        (isCorrect ? '<i class="fas fa-check"></i>' : '') +
+                        '</div>';
+            });
+            html += '    </div>';
+            html += '    <div class="bulk-compare__meta">' +
+                    '<span>🎓 ' + escapeHtml(item.grade || '—') + '</span>' +
+                    '<span>' + ('⭐'.repeat(item.difficulty || 1)) + '</span>' +
+                    '</div>';
+            html += '  </div>';
+
+            html += '  <div class="bulk-compare__col">';
+            html += '    <div class="bulk-compare__label"><i class="fas fa-database"></i> Existing · #' + top.id + '</div>';
+            html += '    <div class="bulk-compare__q">' + escapeHtml(top.text) + '</div>';
+            html += '    <div class="bulk-compare__opts">';
+            ['A', 'B', 'C', 'D', 'E', 'F'].forEach(function (k) {
+                if (!top.options || !top.options[k]) return;
+                const isCorrect = top.correct_answer === k;
+                html += '<div class="bulk-compare__opt' + (isCorrect ? ' correct' : '') + '">' +
+                        '<span class="l">' + k + '.</span>' +
+                        '<span>' + escapeHtml(top.options[k]) + '</span>' +
+                        (isCorrect ? '<i class="fas fa-check"></i>' : '') +
+                        '</div>';
+            });
+            html += '    </div>';
+            html += '    <div class="bulk-compare__meta">' +
+                    '<span>🎓 ' + escapeHtml(top.grade || '—') + '</span>' +
+                    '<span>' + ('⭐'.repeat(top.difficulty || 1)) + '</span>' +
+                    (top.chapter ? '<span>📖 ' + escapeHtml(top.chapter) + '</span>' : '') +
+                    '</div>';
+            html += '  </div>';
+            html += '</div>';
+
+            if (dupes.length > 1) {
+                html += '<div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;">' +
+                        '+' + (dupes.length - 1) + ' more similar question' +
+                        (dupes.length - 1 === 1 ? '' : 's') + ' found</div>';
+            }
+
+            el.drawerBody.innerHTML = html;
+
+            el.drawerFoot.innerHTML = '';
+            const btnSkip = document.createElement('button');
+            btnSkip.type = 'button';
+            btnSkip.className = 'bulk-drawer__btn danger';
+            btnSkip.innerHTML = '<i class="fas fa-ban"></i> Skip this one';
+            btnSkip.addEventListener('click', function () {
+                S.excluded.add(item.index);
+                S.keepAnyway.delete(item.index);
+                closeDrawer();
+                renderSidebar();
+            });
+
+            const btnKeep = document.createElement('button');
+            btnKeep.type = 'button';
+            btnKeep.className = 'bulk-drawer__btn primary';
+            btnKeep.innerHTML = '<i class="fas fa-check"></i> Import anyway';
+            btnKeep.addEventListener('click', function () {
+                S.keepAnyway.add(item.index);
+                S.excluded.delete(item.index);
+                closeDrawer();
+                renderSidebar();
+            });
+
+            el.drawerFoot.appendChild(btnSkip);
+            el.drawerFoot.appendChild(btnKeep);
+        }
+
+        function renderEditView(item) {
+            const overrides = S.edits[item.index] || {};
+
+            const getOpts = () => overrides.options || item.options || {};
+            const getCorrect = () => overrides.correct_answer || item.correct_answer || 'A';
+            const getDifficulty = () => overrides.difficulty || item.difficulty || 1;
+            const getText = () => overrides.question_full || item.question_full || '';
+            const getExplanation = () => {
+                if (overrides.explanation !== undefined) return overrides.explanation;
+                return item.explanation || '';
+            };
+
+            let html = '';
+            html += '<div class="bulk-edit-field">';
+            html += '  <label>Question</label>';
+            html += '  <textarea data-edit="question_full" rows="3">' + escapeHtml(getText()) + '</textarea>';
+            html += '</div>';
+
+            html += '<div class="bulk-edit-field">';
+            html += '  <label>Options</label>';
+            ['A', 'B', 'C', 'D', 'E', 'F'].forEach(function (k) {
+                const opts = getOpts();
+                const required = ['A', 'B', 'C'].indexOf(k) !== -1;
+                if (!opts[k] && !required) return;
+                const isCorrect = getCorrect() === k;
+                html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">';
+                html += '  <input type="radio" name="bulk-correct" value="' + k + '"' + (isCorrect ? ' checked' : '') + '>';
+                html += '  <span style="font-weight:700;min-width:16px;">' + k + '.</span>';
+                html += '  <input type="text" data-edit-opt="' + k + '" value="' + escapeAttr(opts[k] || '') + '" style="flex:1;" maxlength="300">';
+                html += '</div>';
+            });
+            html += '</div>';
+
+            html += '<div class="bulk-edit-field">';
+            html += '  <label>Difficulty</label>';
+            html += '  <select data-edit="difficulty">';
+            [1, 2, 3, 4, 5].forEach(n => {
+                html += '<option value="' + n + '"' + (getDifficulty() === n ? ' selected' : '') + '>' + '⭐'.repeat(n) + '</option>';
+            });
+            html += '  </select>';
+            html += '</div>';
+
+            html += '<div class="bulk-edit-field">';
+            html += '  <label>Explanation (optional)</label>';
+            html += '  <textarea data-edit="explanation" rows="3">' + escapeHtml(getExplanation()) + '</textarea>';
+            html += '</div>';
+
+            el.drawerBody.innerHTML = html;
+
+            el.drawerFoot.innerHTML = '';
+            const btnCancel = document.createElement('button');
+            btnCancel.type = 'button';
+            btnCancel.className = 'bulk-drawer__btn secondary';
+            btnCancel.innerHTML = 'Cancel';
+            btnCancel.addEventListener('click', closeDrawer);
+
+            const btnSave = document.createElement('button');
+            btnSave.type = 'button';
+            btnSave.className = 'bulk-drawer__btn primary';
+            btnSave.innerHTML = '<i class="fas fa-check"></i> Apply';
+            btnSave.addEventListener('click', function () {
+                const newOverrides = {};
+
+                const textarea = el.drawerBody.querySelector('[data-edit="question_full"]');
+                if (textarea) {
+                    const v = textarea.value.trim();
+                    if (v) newOverrides.question_full = v;
+                }
+
+                const opts = {};
+                el.drawerBody.querySelectorAll('[data-edit-opt]').forEach(inp => {
+                    const k = inp.getAttribute('data-edit-opt');
+                    const v = inp.value.trim();
+                    if (v) opts[k] = v;
+                });
+                if (opts.A && opts.B && opts.C) {
+                    newOverrides.options = opts;
+                }
+
+                const correctRadio = el.drawerBody.querySelector('input[name="bulk-correct"]:checked');
+                if (correctRadio) newOverrides.correct_answer = correctRadio.value;
+
+                const diffSel = el.drawerBody.querySelector('[data-edit="difficulty"]');
+                if (diffSel) newOverrides.difficulty = parseInt(diffSel.value, 10) || 1;
+
+                const expl = el.drawerBody.querySelector('[data-edit="explanation"]');
+                if (expl) newOverrides.explanation = expl.value.trim();
+
+                S.edits[item.index] = newOverrides;
+
+                // Update the local preview object so the sidebar reflects
+                // the override immediately (until the next server refresh)
+                const localItem = S.serverData && S.serverData.preview.find(p => p.index === item.index);
+                if (localItem) {
+                    if (newOverrides.question_full) {
+                        localItem.question_full = newOverrides.question_full;
+                        localItem.question_short = newOverrides.question_full.slice(0, 70) +
+                            (newOverrides.question_full.length > 70 ? '…' : '');
+                    }
+                    if (newOverrides.options) localItem.options = newOverrides.options;
+                    if (newOverrides.correct_answer) {
+                        localItem.correct_answer = newOverrides.correct_answer;
+                        localItem.correct_answer_text =
+                            (localItem.options || {})[newOverrides.correct_answer] || '';
+                    }
+                    if (newOverrides.difficulty) localItem.difficulty = newOverrides.difficulty;
+                    if (newOverrides.explanation !== undefined) {
+                        localItem.explanation = newOverrides.explanation;
+                        localItem.has_explanation = !!newOverrides.explanation;
+                        localItem.explanation_short =
+                            newOverrides.explanation.slice(0, 140) +
+                            (newOverrides.explanation.length > 140 ? '…' : '');
+                    }
+                }
+
+                S.excluded.delete(item.index);
+                S.keepAnyway.delete(item.index);
+
+                closeDrawer();
+                renderSidebar();
+                toast('Changes applied to preview', 'success');
+            });
+
+            el.drawerFoot.appendChild(btnCancel);
+            el.drawerFoot.appendChild(btnSave);
+        }
+
+        // ============================================================
+        // 4g. JSON validation + check scheduling
+        // ============================================================
+        function clientParse(raw) {
+            if (!raw || !raw.trim()) {
+                return { ok: false, empty: true, error: null };
+            }
+            try {
+                const data = JSON.parse(raw);
+                if (!data || typeof data !== 'object' || Array.isArray(data)) {
+                    return { ok: false, empty: false, error: 'JSON root must be an object' };
+                }
+                if (!data.metadata || typeof data.metadata !== 'object') {
+                    return { ok: false, empty: false, error: 'Missing "metadata" section' };
+                }
+                if (!Array.isArray(data.questions) || !data.questions.length) {
+                    return { ok: false, empty: false, error: '"questions" must be a non-empty array' };
+                }
+                return { ok: true, data };
+            } catch (e) {
+                return { ok: false, empty: false, error: e.message };
+            }
+        }
+
+        function showParseError(msg) {
+            if (!el.parseError) return;
+            if (!msg) {
+                el.parseError.hidden = true;
+                el.parseError.innerHTML = '';
+                if (el.textarea) el.textarea.classList.remove('has-error');
+                return;
+            }
+            el.parseError.hidden = false;
+            el.parseError.innerHTML = '<i class="fas fa-circle-exclamation"></i><div>' +
+                escapeHtml(msg) + '</div>';
+            if (el.textarea) el.textarea.classList.add('has-error');
+        }
+
+        function scheduleCheck(immediate) {
+            clearTimeout(S.checkTimer);
+            S.checkTimer = setTimeout(runCheck, immediate ? 60 : 350);
+        }
+
+        function runCheck() {
+            const raw = (el.textarea && el.textarea.value) || '';
+            S.raw = raw;
+
+            if (!raw.trim()) {
+                S.parseError = null;
+                S.serverData = null;
+                S.serverError = null;
+                showParseError(null);
+                renderSidebar();
+                return;
+            }
+
+            const parsed = clientParse(raw);
+            if (!parsed.ok) {
+                S.parseError = parsed.empty ? null : parsed.error;
+                S.serverData = null;
+                S.serverError = null;
+                showParseError(parsed.empty ? null : parsed.error);
+                renderSidebar();
+                return;
+            }
+
+            S.parseError = null;
+            showParseError(null);
+
+            const pdfCode = (el.pdfCode && el.pdfCode.value) || '';
+            const key = [
+                raw,
+                pdfCode,
+                S.threshold,
+                S.scope,
+                S.autoExact ? '1' : '0',
+                S.autoInvalid ? '1' : '0',
+            ].join('||');
+
+            if (key === S.lastKey && S.serverData) {
+                renderSidebar();
+                return;
+            }
+
+            if (S.inflight) {
+                S.retryAfterInflight = true;
+                return;
+            }
+
+            S.inflight = true;
+            setSidebarStatus('checking');
+
+            fetch(PREVIEW_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': CSRF,
+                },
+                body: JSON.stringify({
+                    json_data: raw,
+                    pdf_code: pdfCode,
+                    fuzzy_threshold: S.threshold / 100,
+                    scope: S.scope,
+                    auto_exclude_exact: S.autoExact,
+                    auto_exclude_invalid: S.autoInvalid,
+                }),
+            })
+            .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+            .then(res => {
+                S.inflight = false;
+
+                if (!res.ok || !res.data || !res.data.ok) {
+                    S.serverError = (res.data && res.data.error) || 'Server could not parse the JSON';
+                    S.serverData = null;
+                    renderSidebar();
+                    if (S.retryAfterInflight) {
+                        S.retryAfterInflight = false;
+                        scheduleCheck(true);
+                    }
+                    return;
+                }
+
+                S.serverError = null;
+                S.serverData = res.data;
+                S.lastKey = key;
+
+                const liveIdx = new Set(res.data.preview.map(p => p.index));
+                Object.keys(S.edits).forEach(k => {
+                    if (!liveIdx.has(parseInt(k, 10))) delete S.edits[k];
+                });
+
+                renderSidebar();
+
+                if (S.retryAfterInflight) {
+                    S.retryAfterInflight = false;
+                    scheduleCheck(true);
+                }
+            })
+            .catch(() => {
+                S.inflight = false;
+                S.serverError = 'Network error — could not reach the server';
+                S.serverData = null;
+                renderSidebar();
+                if (S.retryAfterInflight) {
+                    S.retryAfterInflight = false;
+                    scheduleCheck(true);
+                }
+            });
+        }
+
+        if (el.textarea) {
+            el.textarea.addEventListener('input', () => scheduleCheck(false));
+            el.textarea.addEventListener('paste', () => setTimeout(() => scheduleCheck(true), 20));
+        }
+
+        // ============================================================
+        // 4h. Detection controls
+        // ============================================================
+        if (el.threshold) {
+            el.threshold.addEventListener('input', function () {
+                S.threshold = parseInt(this.value, 10) || 85;
+                if (el.thresholdValue) el.thresholdValue.textContent = S.threshold + '%';
+            });
+            el.threshold.addEventListener('change', () => scheduleCheck(true));
+        }
+
+        if (el.scope) {
+            el.scope.querySelectorAll('.bulk-scope-opt').forEach(opt => {
+                opt.addEventListener('click', function () {
+                    el.scope.querySelectorAll('.bulk-scope-opt').forEach(o => o.classList.remove('active'));
+                    this.classList.add('active');
+                    S.scope = this.getAttribute('data-scope') || 'same_grade';
+                    scheduleCheck(true);
+                });
+            });
+        }
+
+        if (el.autoExact) {
+            el.autoExact.addEventListener('change', function () {
+                S.autoExact = this.checked;
+                renderSidebar();
+            });
+        }
+        if (el.autoInvalid) {
+            el.autoInvalid.addEventListener('change', function () {
+                S.autoInvalid = this.checked;
+                renderSidebar();
+            });
+        }
+
+        if (el.recheckBtn) {
+            el.recheckBtn.addEventListener('click', function () {
+                S.lastKey = '';
+                scheduleCheck(true);
+            });
+        }
+
+        // ============================================================
+        // 4i. PDF code field
+        // ============================================================
+        if (el.pdfCode) {
             let pdfTimer = null;
-            pdfCodeInput.addEventListener('input', function () {
+            el.pdfCode.addEventListener('input', function () {
                 let v = this.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
                 if (v.length > 4 && v.charAt(4) !== '-') v = v.slice(0, 4) + '-' + v.slice(4);
                 this.value = v.slice(0, 9);
                 clearTimeout(pdfTimer);
                 pdfTimer = setTimeout(runPdfCheck, 450);
-                schedulePreview(false);
+                scheduleCheck(false);
             });
-            if (pdfCodeInput.value.trim()) runPdfCheck();
+            if (el.pdfCode.value.trim()) runPdfCheck();
+        }
+
+        if (el.pdfClearBtn) {
+            el.pdfClearBtn.addEventListener('click', function () {
+                if (el.pdfCode) el.pdfCode.value = '';
+                if (el.pdfStatus) {
+                    el.pdfStatus.className = 'bulk-pdf-status hidden';
+                    el.pdfStatus.innerHTML = '';
+                }
+                scheduleCheck(true);
+            });
         }
 
         function runPdfCheck() {
-            if (!pdfCodeInput || !pdfStatus) return;
-            const code = (pdfCodeInput.value || '').trim();
-            pdfCodeInput.classList.remove('ok', 'warn', 'err');
+            if (!el.pdfCode || !el.pdfStatus) return;
+            const code = (el.pdfCode.value || '').trim();
+            el.pdfCode.classList.remove('ok', 'warn', 'err');
+
             if (!code) {
-                pdfStatus.className = 'bi-pdf-status hidden';
-                pdfStatus.innerHTML = '';
+                el.pdfStatus.className = 'bulk-pdf-status hidden';
+                el.pdfStatus.innerHTML = '';
                 return;
             }
             if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) {
-                pdfCodeInput.classList.add('err');
-                pdfStatus.className = 'bi-pdf-status err';
-                pdfStatus.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Invalid format. Expected XXXX-XXXX.';
+                el.pdfCode.classList.add('err');
+                el.pdfStatus.className = 'bulk-pdf-status err';
+                el.pdfStatus.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Invalid format. Expected XXXX-XXXX.';
                 return;
             }
-            pdfStatus.className = 'bi-pdf-status';
-            pdfStatus.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking PDF…';
+            el.pdfStatus.className = 'bulk-pdf-status';
+            el.pdfStatus.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking PDF…';
 
             fetch('/admin/questions/pdf-info', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
                 body: JSON.stringify({ code: code }),
             })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                pdfCodeInput.classList.remove('ok', 'warn', 'err');
+            .then(r => r.json())
+            .then(data => {
+                el.pdfCode.classList.remove('ok', 'warn', 'err');
                 if (!data || !data.valid) {
-                    pdfCodeInput.classList.add('err');
-                    pdfStatus.className = 'bi-pdf-status err';
-                    pdfStatus.innerHTML = '<i class="fas fa-times-circle"></i> Invalid code.';
+                    el.pdfCode.classList.add('err');
+                    el.pdfStatus.className = 'bulk-pdf-status err';
+                    el.pdfStatus.innerHTML = '<i class="fas fa-times-circle"></i> Invalid code.';
                     return;
                 }
                 if (!data.exists) {
-                    pdfCodeInput.classList.add('warn');
-                    pdfStatus.className = 'bi-pdf-status warn';
-                    pdfStatus.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Not found in the library — you can still import.';
+                    el.pdfCode.classList.add('warn');
+                    el.pdfStatus.className = 'bulk-pdf-status warn';
+                    el.pdfStatus.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Not found in the library — you can still import.';
                     return;
                 }
-                pdfCodeInput.classList.add('ok');
+                el.pdfCode.classList.add('ok');
                 const srcTag = data.source === 'main' ? 'published' : 'bot';
                 const premium = data.is_premium ? ' 💎' : '';
-                pdfStatus.className = 'bi-pdf-status ok';
-                pdfStatus.innerHTML =
+                el.pdfStatus.className = 'bulk-pdf-status ok';
+                el.pdfStatus.innerHTML =
                     '<i class="fas fa-check-circle"></i>' +
                     '<span>' + escapeHtml(data.title || code) + premium + '</span>' +
                     '<span class="tag">' + srcTag + '</span>';
             })
-            .catch(function () {
-                pdfCodeInput.classList.add('warn');
-                pdfStatus.className = 'bi-pdf-status warn';
-                pdfStatus.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Could not verify.';
+            .catch(() => {
+                el.pdfCode.classList.add('warn');
+                el.pdfStatus.className = 'bulk-pdf-status warn';
+                el.pdfStatus.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Could not verify.';
             });
         }
 
-        const previewBox = document.getElementById('biPreviewContent');
-        const previewStatus = document.getElementById('biPreviewStatus');
-        let previewTimer = null;
-        let previewKey = '';
-        let inflight = false;
+        // ============================================================
+        // 4j. Import button
+        // ============================================================
+        if (el.importBtn) {
+            el.importBtn.addEventListener('click', function () {
+                if (!S.serverData) return;
+                const raw = (el.textarea && el.textarea.value) || '';
+                if (!raw.trim()) return;
 
-        function schedulePreview(immediate) {
-            clearTimeout(previewTimer);
-            previewTimer = setTimeout(runPreview, immediate ? 50 : 500);
-        }
-
-        if (textarea) {
-            textarea.addEventListener('input', function () { schedulePreview(false); });
-            textarea.addEventListener('paste', function () { setTimeout(function () { schedulePreview(true); }, 20); });
-        }
-
-        function setPreviewStatus(text, tone) {
-            if (!previewStatus) return;
-            previewStatus.textContent = text;
-            previewStatus.style.color =
-                tone === 'err'  ? '#DC2626' :
-                tone === 'warn' ? '#D97706' :
-                tone === 'ok'   ? '#10B981' :
-                'var(--text-muted)';
-        }
-
-        function runPreview() {
-            if (!textarea || !previewBox) return;
-            const raw = (textarea.value || '').trim();
-            const code = pdfCodeInput ? (pdfCodeInput.value || '').trim() : '';
-            if (!raw) {
-                previewBox.innerHTML = '<div class="bi-pv-empty"><i class="fas fa-file-code"></i>Paste JSON to see a live preview here.</div>';
-                setPreviewStatus('idle', '');
-                return;
-            }
-            const key = raw + '||' + code;
-            if (key === previewKey || inflight) return;
-            inflight = true;
-            setPreviewStatus('checking…', '');
-
-            fetch('/admin/bulk-preview', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-CSRF-Token': CSRF,
-                },
-                body: 'json_data=' + encodeURIComponent(raw) + '&pdf_code=' + encodeURIComponent(code),
-            })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                inflight = false;
-                if (!data || data.error) {
-                    setPreviewStatus('error', 'err');
-                    previewBox.innerHTML =
-                        '<div class="bi-pv-empty" style="color:#DC2626;">' +
-                        '<i class="fas fa-exclamation-triangle" style="color:#DC2626;"></i>' +
-                        escapeHtml((data && data.error) || 'Invalid data') + '</div>';
+                const includeIndices = [];
+                for (const item of S.serverData.preview) {
+                    if (isIncluded(item)) includeIndices.push(item.index);
+                }
+                if (!includeIndices.length) {
+                    toast('Nothing to import.', 'warning');
                     return;
                 }
-                previewKey = key;
-                setPreviewStatus('up to date', 'ok');
-                renderPreview(data);
-            })
-            .catch(function () {
-                inflight = false;
-                setPreviewStatus('network error', 'err');
-            });
-        }
 
-        function renderPreview(data) {
-            const total = data.total || 0;
-            const linked = data.linked_count || 0;
-            const unlinked = total - linked;
-
-            let html = '';
-            html += '<div class="bi-pv-stats">';
-            html += '<div class="bi-pv-stat"><div class="n">' + total + '</div><div class="l">Total</div></div>';
-            html += '<div class="bi-pv-stat green"><div class="n">' + linked + '</div><div class="l">Linked</div></div>';
-            html += '<div class="bi-pv-stat amber"><div class="n">' + unlinked + '</div><div class="l">Unlinked</div></div>';
-            html += '</div>';
-
-            if (data.subject_code) {
-                html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;">';
-                html += '<div><strong>Subject:</strong> ' + escapeHtml(data.subject_code) + '</div>';
-                if (data.chapter) html += '<div><strong>Chapter:</strong> ' + escapeHtml(data.chapter) + '</div>';
-                html += '</div>';
-            }
-
-            if ((data.unknown_codes || []).length) {
-                html += '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#92400E;">';
-                html += '<div style="font-weight:700;margin-bottom:4px;">⚠ PDF code not found</div>';
-                data.unknown_codes.forEach(function (c) {
-                    html += '<div>• <code>' + escapeHtml(c) + '</code></div>';
-                });
-                html += '</div>';
-            }
-
-            html += '<div class="bi-pv-list">';
-            (data.preview || []).forEach(function (q) {
-                let cls = 'bi-pv-item';
-                if (q.orphan || q.invalid_code) cls += ' warn';
-                let pdfChip = '';
-                if (q.pdf_code) {
-                    if (q.pdf_exists) {
-                        pdfChip = '<span class="qc ok">📄 ' + escapeHtml(q.pdf_code) + (q.pdf_page ? ' · p.' + q.pdf_page : '') + '</span>';
-                    } else if (q.invalid_code) {
-                        pdfChip = '<span class="qc warn">⚠ invalid format</span>';
-                    } else {
-                        pdfChip = '<span class="qc warn">⚠ ' + escapeHtml(q.pdf_code) + ' not found</span>';
+                let submitRaw = raw;
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed.questions)) {
+                        parsed.questions = parsed.questions.map((q, i) => {
+                            const idx = i + 1;
+                            const override = S.edits[idx];
+                            if (!override) return q;
+                            const merged = Object.assign({}, q);
+                            if (override.question_full) merged.question = override.question_full;
+                            if (override.options) {
+                                merged.options = ['A', 'B', 'C', 'D', 'E', 'F']
+                                    .filter(k => override.options[k])
+                                    .map(k => override.options[k]);
+                                const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
+                                const correct = override.correct_answer || 'A';
+                                merged.correct = labels.indexOf(correct) + 1;
+                            }
+                            if (override.difficulty) merged.difficulty = override.difficulty;
+                            if (override.explanation != null) merged.explanation = override.explanation;
+                            return merged;
+                        });
+                        submitRaw = JSON.stringify(parsed);
                     }
-                } else {
-                    pdfChip = '<span class="qc none">no source</span>';
+                } catch (e) {
+                    submitRaw = raw;
                 }
-                html += '<div class="' + cls + '">';
-                html += '<div><span class="qi">' + q.index + '.</span> <span class="qt">' + escapeHtml(q.question) + '</span></div>';
-                html += '<div class="qm">' + pdfChip + '<span>' + ('⭐'.repeat(q.difficulty || 1)) + '</span><span>· ' + (q.options_count || 0) + ' options</span></div></div>';
+
+                el.importBtn.disabled = true;
+                const origLabel = el.importBtnLabel.textContent;
+                el.importBtnLabel.textContent = 'Importing…';
+
+                fetch(IMPORT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': CSRF,
+                    },
+                    body: JSON.stringify({
+                        json_data: submitRaw,
+                        pdf_code: (el.pdfCode && el.pdfCode.value) || '',
+                        import_indices: includeIndices,
+                    }),
+                })
+                .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+                .then(res => {
+                    el.importBtn.disabled = false;
+                    el.importBtnLabel.textContent = origLabel;
+
+                    if (!res.ok || !res.data || res.data.error) {
+                        toast((res.data && res.data.error) || 'Import failed', 'error');
+                        return;
+                    }
+
+                    const imported = res.data.imported || 0;
+                    toast('Imported ' + imported + ' question' + (imported === 1 ? '' : 's'), 'success');
+
+                    if (res.data.batch_url) {
+                        setTimeout(() => {
+                            if (confirm('Batch created for this import.\nOpen it now to bulk-edit these questions?')) {
+                                window.location.href = res.data.batch_url;
+                            } else {
+                                window.location.href = '/admin/questions';
+                            }
+                        }, 400);
+                    } else {
+                        setTimeout(() => { window.location.href = '/admin/questions'; }, 700);
+                    }
+                })
+                .catch(() => {
+                    el.importBtn.disabled = false;
+                    el.importBtnLabel.textContent = origLabel;
+                    toast('Network error', 'error');
+                });
             });
-            html += '</div>';
-            if (data.truncated) {
-                html += '<div style="text-align:center;font-size:11px;color:var(--text-muted);padding:8px 0;">Showing first 30 of ' + total + '</div>';
-            }
-            previewBox.innerHTML = html;
         }
 
-        if (textarea && textarea.value.trim()) runPreview();
+        // ============================================================
+        // 4k. Boot
+        // ============================================================
+        renderSidebar();
+        if (el.textarea && el.textarea.value.trim()) runCheck();
     }
 
-    // ------------------------------------------------------------
-    // PDF STAGING — bulk publish selector
-    // ------------------------------------------------------------
+    // ============================================================
+    // 5. PDF STAGING
+    // ============================================================
     function initPdfStaging() {
         const master = document.getElementById('stagingSelectAll');
         const rows = document.querySelectorAll('.pdf-staging-checkbox');
         const countEl = document.getElementById('stagingCount');
         const publishBtn = document.getElementById('stagingPublishBtn');
-
         if (!rows.length || !publishBtn) return;
 
         function update() {
@@ -393,16 +1272,16 @@
         }
         if (master) {
             master.addEventListener('change', function () {
-                rows.forEach(function (cb) { cb.checked = master.checked; });
+                rows.forEach(cb => { cb.checked = master.checked; });
                 update();
             });
         }
-        rows.forEach(function (cb) { cb.addEventListener('change', update); });
+        rows.forEach(cb => cb.addEventListener('change', update));
 
         publishBtn.addEventListener('click', function (e) {
             const n = document.querySelectorAll('.pdf-staging-checkbox:checked').length;
             if (!n) { e.preventDefault(); return; }
-            if (!confirm('Publish ' + n + ' PDF' + (n === 1 ? '' : 's') + ' to the platform? This makes them visible to all students.')) {
+            if (!confirm('Publish ' + n + ' PDF' + (n === 1 ? '' : 's') + ' to the platform?')) {
                 e.preventDefault();
             }
         });
@@ -410,27 +1289,26 @@
     }
 
     function initStagingDelete() {
-        document.querySelectorAll('[data-staging-delete]').forEach(function (btn) {
+        document.querySelectorAll('[data-staging-delete]').forEach(btn => {
             btn.addEventListener('click', function () {
                 const id = this.getAttribute('data-staging-delete');
                 const title = this.getAttribute('data-staging-title') || 'this PDF';
-                if (!confirm('Delete staging PDF "' + title + '"? This cannot be undone.')) return;
+                if (!confirm('Delete staging PDF "' + title + '"?')) return;
                 const form = document.getElementById('staging-delete-' + id);
                 if (form) form.submit();
             });
         });
     }
 
-    // ------------------------------------------------------------
-    // INTAKE — bulk select + row-click preview
-    // ------------------------------------------------------------
+    // ============================================================
+    // 6. INTAKE TAB
+    // ============================================================
     function initIntakeTab() {
         const master = document.getElementById('intakeSelectAll');
         const checkboxes = document.querySelectorAll('.pdf-intake-checkbox-input');
         const countEl = document.getElementById('intakeCount');
         const publishBtn = document.getElementById('intakeSuperPublishBtn');
 
-        // --- Bulk select ---
         if (master && checkboxes.length && publishBtn) {
             function update() {
                 const checked = document.querySelectorAll('.pdf-intake-checkbox-input:checked');
@@ -441,25 +1319,21 @@
                 master.indeterminate = n > 0 && n < checkboxes.length;
             }
             master.addEventListener('change', function () {
-                checkboxes.forEach(function (cb) { cb.checked = master.checked; });
+                checkboxes.forEach(cb => { cb.checked = master.checked; });
                 update();
             });
-            checkboxes.forEach(function (cb) { cb.addEventListener('change', update); });
+            checkboxes.forEach(cb => cb.addEventListener('change', update));
             update();
         }
 
-        // --- Row-click preview ---
-        document.querySelectorAll('.pdf-intake-row--clickable').forEach(function (row) {
+        document.querySelectorAll('.pdf-intake-row--clickable').forEach(row => {
             function openPreview(e) {
-                if (e && e.target && e.target.closest('[data-stop-row-click], a, button, label, input')) {
-                    return;
-                }
+                if (e && e.target && e.target.closest('[data-stop-row-click], a, button, label, input')) return;
                 const url = row.getAttribute('data-preview-url');
-                if (!url) return;
-                window.open(url, '_blank', 'noopener');
+                if (url) window.open(url, '_blank', 'noopener');
             }
             row.addEventListener('click', openPreview);
-            row.addEventListener('keydown', function (e) {
+            row.addEventListener('keydown', e => {
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
                     openPreview(e);
@@ -468,16 +1342,15 @@
         });
     }
 
-    // ------------------------------------------------------------
-    // UNVERIFIED TAB
-    // ------------------------------------------------------------
+    // ============================================================
+    // 7. UNVERIFIED TAB
+    // ============================================================
     function initUnverifiedTab() {
         const master = document.getElementById('unverifiedSelectAll');
         const checkboxes = document.querySelectorAll('.pdf-unverified-checkbox');
         const countEl = document.getElementById('unverifiedCount');
         const confirmBtn = document.getElementById('unverifiedConfirmBtn');
         const deleteBtn = document.getElementById('unverifiedDeleteBtn');
-
         if (!master || !checkboxes.length) return;
 
         function update() {
@@ -490,16 +1363,16 @@
             master.indeterminate = n > 0 && n < checkboxes.length;
         }
         master.addEventListener('change', function () {
-            checkboxes.forEach(function (cb) { cb.checked = master.checked; });
+            checkboxes.forEach(cb => { cb.checked = master.checked; });
             update();
         });
-        checkboxes.forEach(function (cb) { cb.addEventListener('change', update); });
+        checkboxes.forEach(cb => cb.addEventListener('change', update));
         update();
     }
 
-    // ------------------------------------------------------------
-    // BULK DIRECT PUBLISH — editable table
-    // ------------------------------------------------------------
+    // ============================================================
+    // 8. INTAKE BULK EDITOR
+    // ============================================================
     function initIntakeBulkEditor() {
         const tbody = document.getElementById('bulkTableBody');
         if (!tbody) return;
@@ -512,42 +1385,34 @@
         const intakeUrl = window.NUUN_BULK_INTAKE_URL || '/admin/pdfs?tab=intake';
 
         if (!state.length) return;
-
-        state.forEach(function (r) { r.included = true; });
+        state.forEach(r => { r.included = true; });
 
         const PAGE_SIZE = 50;
         let page = 0;
         const totalPages = Math.max(1, Math.ceil(state.length / PAGE_SIZE));
 
-        // ---- Render helpers ----
         function renderSubjectOptions(selected) {
             let html = '<option value="">— select —</option>';
-            subjects.forEach(function (s) {
-                const v = (s.code || '');
-                const n = (s.name || v);
-                html += '<option value="' + escapeAttr(v) + '"' +
-                        (v === selected ? ' selected' : '') + '>' +
-                        escapeHtml(n) + '</option>';
+            subjects.forEach(s => {
+                const v = s.code || '';
+                const n = s.name || v;
+                html += '<option value="' + escapeAttr(v) + '"' + (v === selected ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
             });
             return html;
         }
         function renderCurriculumOptions(selected) {
             let html = '';
-            curricula.forEach(function (c) {
+            curricula.forEach(c => {
                 const v = Array.isArray(c) ? c[0] : c;
                 const n = Array.isArray(c) ? c[1] : c;
-                html += '<option value="' + escapeAttr(v) + '"' +
-                        (v === selected ? ' selected' : '') + '>' +
-                        escapeHtml(n) + '</option>';
+                html += '<option value="' + escapeAttr(v) + '"' + (v === selected ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
             });
             return html;
         }
         function renderClassOptions(selected) {
             let html = '<option value="">— none —</option>';
-            classes.forEach(function (c) {
-                html += '<option value="' + escapeAttr(c) + '"' +
-                        (c === selected ? ' selected' : '') + '>' +
-                        escapeHtml(c) + '</option>';
+            classes.forEach(c => {
+                html += '<option value="' + escapeAttr(c) + '"' + (c === selected ? ' selected' : '') + '>' + escapeHtml(c) + '</option>';
             });
             return html;
         }
@@ -556,64 +1421,22 @@
             const start = page * PAGE_SIZE;
             const end = Math.min(start + PAGE_SIZE, state.length);
             const slice = state.slice(start, end);
-
             let html = '';
-            slice.forEach(function (r, localIdx) {
+            slice.forEach((r, localIdx) => {
                 const globalIdx = start + localIdx;
                 const previewUrl = previewBase.replace('__PID__', r.pending_id);
-
-                html += '<tr data-row-index="' + globalIdx + '" class="pdf-bulk-row' +
-                        (r.included ? '' : ' excluded') + '">';
-
-                // Included checkbox
-                html += '<td class="pdf-bulk-td-center">' +
-                        '<input type="checkbox" class="bulk-row-include" ' +
-                        (r.included ? 'checked' : '') + '>' +
-                        '</td>';
-
-                // Row number
+                html += '<tr data-row-index="' + globalIdx + '" class="pdf-bulk-row' + (r.included ? '' : ' excluded') + '">';
+                html += '<td class="pdf-bulk-td-center"><input type="checkbox" class="bulk-row-include" ' + (r.included ? 'checked' : '') + '></td>';
                 html += '<td class="pdf-bulk-td-num">' + (globalIdx + 1) + '</td>';
-
-                // Preview
-                html += '<td class="pdf-bulk-td-center">' +
-                        '<a href="' + escapeAttr(previewUrl) + '" target="_blank" rel="noopener" ' +
-                        'class="pdf-bulk-preview" title="Preview">' +
-                        '<i class="fas fa-eye"></i></a>' +
-                        '</td>';
-
-                // Code
-                html += '<td><input type="text" class="pdf-bulk-input pdf-bulk-code" ' +
-                        'value="' + escapeAttr(r.code) + '" maxlength="9" spellcheck="false"></td>';
-
-                // Title
-                html += '<td><input type="text" class="pdf-bulk-input" ' +
-                        'value="' + escapeAttr(r.title) + '" maxlength="200"></td>';
-
-                // Subject
-                html += '<td><select class="pdf-bulk-input pdf-bulk-subject">' +
-                        renderSubjectOptions(r.subject) + '</select></td>';
-
-                // Curriculum
-                html += '<td><select class="pdf-bulk-input pdf-bulk-curriculum">' +
-                        renderCurriculumOptions(r.curriculum) + '</select></td>';
-
-                // Class
-                html += '<td><select class="pdf-bulk-input pdf-bulk-class">' +
-                        renderClassOptions(r.class) + '</select></td>';
-
-                // Chapter
-                html += '<td><input type="text" class="pdf-bulk-input" ' +
-                        'value="' + escapeAttr(r.chapter || '') + '" maxlength="100"></td>';
-
-                // Tags
-                html += '<td><input type="text" class="pdf-bulk-input" ' +
-                        'value="' + escapeAttr(r.tags || '') + '" maxlength="200"></td>';
-
-                // Premium
-                html += '<td class="pdf-bulk-td-center">' +
-                        '<input type="checkbox" class="pdf-bulk-premium" ' +
-                        (r.is_premium ? 'checked' : '') + '></td>';
-
+                html += '<td class="pdf-bulk-td-center"><a href="' + escapeAttr(previewUrl) + '" target="_blank" rel="noopener" class="pdf-bulk-preview" title="Preview"><i class="fas fa-eye"></i></a></td>';
+                html += '<td><input type="text" class="pdf-bulk-input pdf-bulk-code" value="' + escapeAttr(r.code) + '" maxlength="9" spellcheck="false"></td>';
+                html += '<td><input type="text" class="pdf-bulk-input" value="' + escapeAttr(r.title) + '" maxlength="200"></td>';
+                html += '<td><select class="pdf-bulk-input pdf-bulk-subject">' + renderSubjectOptions(r.subject) + '</select></td>';
+                html += '<td><select class="pdf-bulk-input pdf-bulk-curriculum">' + renderCurriculumOptions(r.curriculum) + '</select></td>';
+                html += '<td><select class="pdf-bulk-input pdf-bulk-class">' + renderClassOptions(r.class) + '</select></td>';
+                html += '<td><input type="text" class="pdf-bulk-input" value="' + escapeAttr(r.chapter || '') + '" maxlength="100"></td>';
+                html += '<td><input type="text" class="pdf-bulk-input" value="' + escapeAttr(r.tags || '') + '" maxlength="200"></td>';
+                html += '<td class="pdf-bulk-td-center"><input type="checkbox" class="pdf-bulk-premium" ' + (r.is_premium ? 'checked' : '') + '></td>';
                 html += '</tr>';
             });
             tbody.innerHTML = html;
@@ -627,7 +1450,7 @@
         }
 
         function bindRowEvents() {
-            tbody.querySelectorAll('tr.pdf-bulk-row').forEach(function (tr) {
+            tbody.querySelectorAll('tr.pdf-bulk-row').forEach(tr => {
                 const idx = parseInt(tr.getAttribute('data-row-index'), 10);
                 if (isNaN(idx) || !state[idx]) return;
 
@@ -639,7 +1462,6 @@
                         updateCounts();
                     });
                 }
-
                 const codeIn = tr.querySelector('.pdf-bulk-code');
                 if (codeIn) {
                     codeIn.addEventListener('input', function () {
@@ -649,28 +1471,23 @@
                         state[idx].code = codeIn.value;
                     });
                 }
-
                 const titleIn = tr.querySelector('td:nth-child(5) input');
-                if (titleIn) {
-                    titleIn.addEventListener('input', function () {
-                        state[idx].title = titleIn.value;
-                    });
-                }
+                if (titleIn) titleIn.addEventListener('input', () => { state[idx].title = titleIn.value; });
 
                 const subjSel = tr.querySelector('.pdf-bulk-subject');
-                if (subjSel) subjSel.addEventListener('change', function () { state[idx].subject = subjSel.value; });
+                if (subjSel) subjSel.addEventListener('change', () => { state[idx].subject = subjSel.value; });
 
                 const currSel = tr.querySelector('.pdf-bulk-curriculum');
-                if (currSel) currSel.addEventListener('change', function () { state[idx].curriculum = currSel.value; });
+                if (currSel) currSel.addEventListener('change', () => { state[idx].curriculum = currSel.value; });
 
                 const classSel = tr.querySelector('.pdf-bulk-class');
-                if (classSel) classSel.addEventListener('change', function () { state[idx].class = classSel.value; });
+                if (classSel) classSel.addEventListener('change', () => { state[idx].class = classSel.value; });
 
                 const chapterIn = tr.querySelector('td:nth-child(9) input');
-                if (chapterIn) chapterIn.addEventListener('input', function () { state[idx].chapter = chapterIn.value; });
+                if (chapterIn) chapterIn.addEventListener('input', () => { state[idx].chapter = chapterIn.value; });
 
                 const tagsIn = tr.querySelector('td:nth-child(10) input');
-                if (tagsIn) tagsIn.addEventListener('input', function () { state[idx].tags = tagsIn.value; });
+                if (tagsIn) tagsIn.addEventListener('input', () => { state[idx].tags = tagsIn.value; });
 
                 const premiumBox = tr.querySelector('.pdf-bulk-premium');
                 if (premiumBox) {
@@ -682,612 +1499,79 @@
         }
 
         function updateCounts() {
-            const n = state.filter(function (r) { return r.included; }).length;
-            ['bulkCountTop', 'bulkCountBottom', 'bulkIncludedCount'].forEach(function (id) {
+            const n = state.filter(r => r.included).length;
+            ['bulkCountTop', 'bulkCountBottom', 'bulkIncludedCount'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.textContent = n;
             });
         }
 
         function submitAll() {
-            const included = state.filter(function (r) { return r.included; });
+            const included = state.filter(r => r.included);
             if (!included.length) {
                 alert('No rows selected for publishing.');
                 return;
             }
-
-            // Validation
             const problems = [];
-            included.forEach(function (r, i) {
-                if (!r.code || !/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(r.code)) {
-                    problems.push('Row ' + (i + 1) + ': invalid code');
-                }
-                if (!r.title || !r.title.trim()) {
-                    problems.push('Row ' + (i + 1) + ': title required');
-                }
-                if (!r.subject) {
-                    problems.push('Row ' + (i + 1) + ': subject required');
-                }
+            included.forEach((r, i) => {
+                if (!r.code || !/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(r.code)) problems.push('Row ' + (i + 1) + ': invalid code');
+                if (!r.title || !r.title.trim()) problems.push('Row ' + (i + 1) + ': title required');
+                if (!r.subject) problems.push('Row ' + (i + 1) + ': subject required');
             });
             if (problems.length) {
-                alert('Fix the following before publishing:\n\n' + problems.slice(0, 8).join('\n') +
+                alert('Fix the following:\n\n' + problems.slice(0, 8).join('\n') +
                       (problems.length > 8 ? '\n… and ' + (problems.length - 8) + ' more' : ''));
                 return;
             }
-
-            const summary = 'Publish ' + included.length + ' PDF' +
-                           (included.length === 1 ? '' : 's') +
-                           ' directly to the library?\n\n' +
-                           'Auto-generated metadata will be used as-is. ' +
-                           'You can edit any PDF later from the Unverified tab.';
-            if (!confirm(summary)) return;
+            if (!confirm('Publish ' + included.length + ' PDF' +
+                         (included.length === 1 ? '' : 's') + '?')) return;
 
             document.getElementById('bulkRowsJson').value = JSON.stringify(included);
             document.getElementById('bulkCommitForm').submit();
         }
 
-        // ---- Wire buttons ----
-        document.getElementById('bulkSelectAll').addEventListener('change', function (e) {
-            const on = e.target.checked;
-            state.forEach(function (r) { r.included = on; });
-            renderPage();
-            bindRowEvents();
-            updateCounts();
-        });
-
-        document.getElementById('bulkPrevPage').addEventListener('click', function () {
+        const selectAll = document.getElementById('bulkSelectAll');
+        if (selectAll) {
+            selectAll.addEventListener('change', function (e) {
+                const on = e.target.checked;
+                state.forEach(r => { r.included = on; });
+                renderPage();
+                bindRowEvents();
+                updateCounts();
+            });
+        }
+        const prevBtn = document.getElementById('bulkPrevPage');
+        if (prevBtn) prevBtn.addEventListener('click', function () {
             if (page > 0) { page--; renderPage(); bindRowEvents(); }
         });
-        document.getElementById('bulkNextPage').addEventListener('click', function () {
+        const nextBtn = document.getElementById('bulkNextPage');
+        if (nextBtn) nextBtn.addEventListener('click', function () {
             if (page < totalPages - 1) { page++; renderPage(); bindRowEvents(); }
         });
 
-        ['bulkPublishTop', 'bulkPublishBottom'].forEach(function (id) {
+        ['bulkPublishTop', 'bulkPublishBottom'].forEach(id => {
             const btn = document.getElementById(id);
             if (btn) btn.addEventListener('click', submitAll);
         });
 
-        ['bulkCancelBtn', 'bulkCancelBtn2'].forEach(function (id) {
+        ['bulkCancelBtn', 'bulkCancelBtn2'].forEach(id => {
             const btn = document.getElementById(id);
-            if (btn) {
-                btn.addEventListener('click', function () {
-                    if (confirm('Discard edits and return to intake?')) {
-                        window.location.href = intakeUrl;
-                    }
-                });
-            }
+            if (btn) btn.addEventListener('click', function () {
+                if (confirm('Discard edits and return to intake?')) window.location.href = intakeUrl;
+            });
         });
 
-        // ---- Initial render ----
         renderPage();
         bindRowEvents();
         updateCounts();
     }
 
-    // ------------------------------------------------------------
-    // HELPERS
-    // ------------------------------------------------------------
-    function escapeHtml(s) {
-        if (s == null) return '';
-        return String(s)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
-    function escapeAttr(s) {
-        return escapeHtml(s);
-    }
-    // ------------------------------------------------------------
-    // QUESTION DUPLICATE SIDEBAR
-    // ------------------------------------------------------------
-    function initDuplicateSidebar() {
-        const bar = document.getElementById('dupBar');
-        const list = document.getElementById('dupList');
-        const empty = document.getElementById('dupEmpty');
-        const countEl = document.getElementById('dupCount');
-        const bulkBar = document.getElementById('dupBulk');
-        const bulkCountEl = document.getElementById('dupSelectedCount');
-        const bulkArchive = document.getElementById('dupBulkArchive');
-        const bulkClear = document.getElementById('dupBulkClear');
-        const toggle = document.getElementById('dupBarToggle');
-        const form = document.getElementById('questionForm');
-    
-        if (!bar || !list || !form) return;
-    
-        const initial = document.getElementById('dupInitialData');
-        let state = [];
-        try {
-            state = initial ? JSON.parse(initial.textContent || '[]') : [];
-        } catch (e) { state = []; }
-    
-        const excludeId = form.dataset.questionId || '';
-        const LAYOUT = document.getElementById('qEditLayout');
-        const STORAGE_KEY = 'nuun.questions.dupbar-collapsed';
-    
-        // ---- Collapse persistence ----
-        function applyCollapsed(collapsed) {
-            bar.classList.toggle('q-dupbar--collapsed', collapsed);
-            if (LAYOUT) LAYOUT.classList.toggle('q-edit-layout--collapsed', collapsed);
-            if (toggle) {
-                toggle.innerHTML = collapsed
-                    ? '<i class="fas fa-chevron-right"></i>'
-                    : '<i class="fas fa-chevron-left"></i>';
-                toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-            }
-        }
-        let collapsed = false;
-        try { collapsed = localStorage.getItem(STORAGE_KEY) === '1'; } catch (e) {}
-        applyCollapsed(collapsed);
-    
-        if (toggle) {
-            toggle.addEventListener('click', function () {
-                collapsed = !collapsed;
-                applyCollapsed(collapsed);
-                try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); } catch (e) {}
-            });
-        }
-    
-        // ---- Render ----
-        function render() {
-            if (countEl) countEl.textContent = state.length;
-            if (!state.length) {
-                empty.style.display = 'flex';
-                list.innerHTML = '';
-                updateBulkBar();
-                return;
-            }
-            empty.style.display = 'none';
-            let html = '';
-            state.forEach(function (d) {
-                const tone = d.match_type === 'exact' ? 'exact' : 'fuzzy';
-                const badge = d.match_type === 'exact'
-                    ? '<span class="q-dupcard__badge badge-exact">Identical</span>'
-                    : '<span class="q-dupcard__badge badge-fuzzy">' + d.similarity_pct + '%</span>';
-                html += ''
-                    + '<div class="q-dupcard" data-id="' + d.id + '" data-tone="' + tone + '">'
-                    +   '<div class="q-dupcard__head">'
-                    +     '<input type="checkbox" class="q-dupcard__cb" data-id="' + d.id + '">'
-                    +     '<span class="q-dupcard__id">#' + d.id + '</span>'
-                    +     badge
-                    +   '</div>'
-                    +   '<div class="q-dupcard__body">'
-                    +     '<div class="q-dupcard__text">' + escapeHtml(d.text) + '</div>'
-                    +     '<div class="q-dupcard__meta">'
-                    +       (d.grade ? '<span>' + escapeHtml(d.grade) + '</span>' : '')
-                    +       (d.subject_code ? '<span>' + escapeHtml(d.subject_code) + '</span>' : '')
-                    +       '<span>' + escapeHtml(d.created_at || '') + '</span>'
-                    +     '</div>'
-                    +   '</div>'
-                    +   '<div class="q-dupcard__actions">'
-                    +     '<button type="button" data-act="view" title="View"><i class="fas fa-eye"></i></button>'
-                    +     '<button type="button" data-act="edit" title="Edit"><i class="fas fa-pen"></i></button>'
-                    +     '<button type="button" data-act="archive" title="Archive"><i class="fas fa-box-archive"></i></button>'
-                    +     '<button type="button" data-act="dismiss" title="Not a duplicate"><i class="fas fa-check"></i></button>'
-                    +   '</div>'
-                    + '</div>';
-            });
-            list.innerHTML = html;
-            bind();
-            updateBulkBar();
-        }
-    
-        // ---- Card interactions ----
-        function bind() {
-            list.querySelectorAll('.q-dupcard').forEach(function (card) {
-                const id = parseInt(card.dataset.id, 10);
-    
-                card.querySelectorAll('[data-act]').forEach(function (btn) {
-                    btn.addEventListener('click', function (e) {
-                        e.stopPropagation();
-                        const act = btn.dataset.act;
-                        if (act === 'view')   expandView(card, id);
-                        if (act === 'edit')   expandEdit(card, id);
-                        if (act === 'archive') archiveCard(card, id);
-                        if (act === 'dismiss') dismissCard(card, id);
-                    });
-                });
-    
-                const cb = card.querySelector('.q-dupcard__cb');
-                if (cb) cb.addEventListener('change', updateBulkBar);
-            });
-        }
-    
-        function cardData(id) {
-            return state.find(function (x) { return x.id === id; });
-        }
-    
-        function collapseCard(card) {
-            const d = cardData(parseInt(card.dataset.id, 10));
-            if (!d) return;
-            const tone = d.match_type === 'exact' ? 'exact' : 'fuzzy';
-            const badge = d.match_type === 'exact'
-                ? '<span class="q-dupcard__badge badge-exact">Identical</span>'
-                : '<span class="q-dupcard__badge badge-fuzzy">' + d.similarity_pct + '%</span>';
-            card.innerHTML = ''
-                + '<div class="q-dupcard__head">'
-                +   '<input type="checkbox" class="q-dupcard__cb" data-id="' + d.id + '">'
-                +   '<span class="q-dupcard__id">#' + d.id + '</span>'
-                +   badge
-                + '</div>'
-                + '<div class="q-dupcard__body">'
-                +   '<div class="q-dupcard__text">' + escapeHtml(d.text) + '</div>'
-                +   '<div class="q-dupcard__meta">'
-                +     (d.grade ? '<span>' + escapeHtml(d.grade) + '</span>' : '')
-                +     (d.subject_code ? '<span>' + escapeHtml(d.subject_code) + '</span>' : '')
-                +     '<span>' + escapeHtml(d.created_at || '') + '</span>'
-                +   '</div>'
-                + '</div>'
-                + '<div class="q-dupcard__actions">'
-                +   '<button type="button" data-act="view" title="View"><i class="fas fa-eye"></i></button>'
-                +   '<button type="button" data-act="edit" title="Edit"><i class="fas fa-pen"></i></button>'
-                +   '<button type="button" data-act="archive" title="Archive"><i class="fas fa-box-archive"></i></button>'
-                +   '<button type="button" data-act="dismiss" title="Not a duplicate"><i class="fas fa-check"></i></button>'
-                + '</div>';
-            bind();
-        }
-    
-        function expandView(card, id) {
-            const d = cardData(id);
-            if (!d) return;
-            let optHtml = '';
-            ['A','B','C','D','E','F'].forEach(function (k) {
-                if (d.options && d.options[k]) {
-                    const isCorrect = d.correct_answer === k;
-                    optHtml += '<div class="q-dupview__opt' + (isCorrect ? ' correct' : '') + '">'
-                             +   '<span class="l">' + k + '.</span>'
-                             +   '<span>' + escapeHtml(d.options[k]) + '</span>'
-                             + (isCorrect ? '<i class="fas fa-check"></i>' : '')
-                             + '</div>';
-                }
-            });
-            card.innerHTML = ''
-                + '<div class="q-dupcard__head">'
-                +   '<span class="q-dupcard__id">#' + d.id + '</span>'
-                +   (d.match_type === 'exact'
-                        ? '<span class="q-dupcard__badge badge-exact">Identical</span>'
-                        : '<span class="q-dupcard__badge badge-fuzzy">' + d.similarity_pct + '%</span>')
-                +   '<button type="button" class="q-dupcard__close" data-close="1"><i class="fas fa-times"></i></button>'
-                + '</div>'
-                + '<div class="q-dupview">'
-                +   '<div class="q-dupview__q">' + escapeHtml(d.full_text) + '</div>'
-                +   '<div class="q-dupview__opts">' + optHtml + '</div>'
-                +   (d.explanation ? '<div class="q-dupview__expl">💡 ' + escapeHtml(d.explanation) + '</div>' : '')
-                +   '<div class="q-dupcard__meta">'
-                +     (d.grade ? '<span>' + escapeHtml(d.grade) + '</span>' : '')
-                +     (d.subject_code ? '<span>' + escapeHtml(d.subject_code) + '</span>' : '')
-                +     (d.chapter ? '<span>' + escapeHtml(d.chapter) + '</span>' : '')
-                +     '<span>⭐'.concat(String(d.difficulty || 1)).concat('</span>')
-                +   '</div>'
-                + '</div>'
-                + '<div class="q-dupcard__actions">'
-                +   '<button type="button" data-act="edit"><i class="fas fa-pen"></i> Edit</button>'
-                +   '<button type="button" data-act="archive"><i class="fas fa-box-archive"></i> Archive</button>'
-                + '</div>';
-            card.querySelector('[data-close]').addEventListener('click', function (e) {
-                e.stopPropagation();
-                collapseCard(card);
-            });
-            card.querySelector('[data-act="edit"]').addEventListener('click', function (e) {
-                e.stopPropagation(); expandEdit(card, id);
-            });
-            card.querySelector('[data-act="archive"]').addEventListener('click', function (e) {
-                e.stopPropagation(); archiveCard(card, id);
-            });
-        }
-    
-        function expandEdit(card, id) {
-            const d = cardData(id);
-            if (!d) return;
-            const opts = d.options || {};
-            function optRow(k, required) {
-                return ''
-                    + '<div class="q-dupedit__row">'
-                    +   '<label>' + k + (required ? ' *' : '') + '</label>'
-                    +   '<input type="text" data-opt="' + k + '" value="'
-                    +   escapeAttr(opts[k] || '') + '" maxlength="300">'
-                    + '</div>';
-            }
-            card.innerHTML = ''
-                + '<div class="q-dupcard__head">'
-                +   '<span class="q-dupcard__id">#' + d.id + '</span>'
-                +   '<span class="q-dupcard__badge badge-edit">Editing</span>'
-                + '</div>'
-                + '<div class="q-dupedit">'
-                +   '<div class="q-dupedit__row"><label>Subject</label>'
-                +     '<input type="text" data-field="subject_code" value="'
-                +     escapeAttr(d.subject_code) + '"></div>'
-                +   '<div class="q-dupedit__row"><label>Grade</label>'
-                +     '<input type="text" data-field="grade" value="'
-                +     escapeAttr(d.grade) + '" maxlength="4"></div>'
-                +   '<div class="q-dupedit__row"><label>Question *</label>'
-                +     '<textarea data-field="question_text" rows="4">'
-                +     escapeHtml(d.full_text) + '</textarea></div>'
-                +   optRow('A', true) + optRow('B', true) + optRow('C', true)
-                +   optRow('D', false) + optRow('E', false) + optRow('F', false)
-                +   '<div class="q-dupedit__row"><label>Correct</label>'
-                +     '<select data-field="correct_answer">'
-                +       ['A','B','C','D','E','F'].map(function (k) {
-                            return '<option value="' + k + '"'
-                                 + (d.correct_answer === k ? ' selected' : '') + '>'
-                                 + k + '</option>';
-                        }).join('')
-                +     '</select></div>'
-                +   '<div class="q-dupedit__row"><label>Difficulty</label>'
-                +     '<select data-field="difficulty">'
-                +       [1,2,3,4,5].map(function (n) {
-                            return '<option value="' + n + '"'
-                                 + (d.difficulty === n ? ' selected' : '') + '>'
-                                 + '⭐'.repeat(n) + '</option>';
-                        }).join('')
-                +     '</select></div>'
-                +   '<div class="q-dupedit__row"><label>Chapter</label>'
-                +     '<input type="text" data-field="chapter" value="'
-                +     escapeAttr(d.chapter || '') + '"></div>'
-                +   '<div class="q-dupedit__row"><label>Tags</label>'
-                +     '<input type="text" data-field="tags" value="'
-                +     escapeAttr(d.tags || '') + '"></div>'
-                +   '<div class="q-dupedit__row"><label>Explanation</label>'
-                +     '<textarea data-field="explanation" rows="3">'
-                +     escapeHtml(d.explanation || '') + '</textarea></div>'
-                + '</div>'
-                + '<div class="q-dupcard__actions q-dupcard__actions--edit">'
-                +   '<button type="button" class="btn-cancel" data-cancel="1">Cancel</button>'
-                +   '<button type="button" class="btn-save" data-save="1">Save</button>'
-                + '</div>';
-    
-            card.querySelector('[data-cancel]').addEventListener('click', function (e) {
-                e.stopPropagation();
-                collapseCard(card);
-            });
-            card.querySelector('[data-save]').addEventListener('click', function (e) {
-                e.stopPropagation();
-                saveInline(card, id);
-            });
-        }
-    
-        function saveInline(card, id) {
-            const getVal = function (sel) {
-                const el = card.querySelector(sel);
-                return el ? el.value : '';
-            };
-            const opts = {};
-            card.querySelectorAll('[data-opt]').forEach(function (inp) {
-                opts[inp.dataset.opt] = inp.value;
-            });
-            const payload = {
-                subject_code:   getVal('[data-field="subject_code"]'),
-                grade:          getVal('[data-field="grade"]'),
-                question_text:  getVal('[data-field="question_text"]'),
-                correct_answer: getVal('[data-field="correct_answer"]'),
-                difficulty:     getVal('[data-field="difficulty"]'),
-                chapter:        getVal('[data-field="chapter"]'),
-                tags:           getVal('[data-field="tags"]'),
-                explanation:    getVal('[data-field="explanation"]'),
-                options:        opts,
-            };
-    
-            const saveBtn = card.querySelector('[data-save]');
-            saveBtn.disabled = true;
-            saveBtn.textContent = 'Saving…';
-    
-            fetch('/admin/questions/' + id + '/inline-update', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': CSRF,
-                },
-                body: JSON.stringify(payload),
-            })
-            .then(function (r) { return r.json(); })
-            .then(function (res) {
-                if (!res || !res.success) {
-                    saveBtn.disabled = false;
-                    saveBtn.textContent = 'Save';
-                    if (window.AdminCore) {
-                        window.AdminCore.toast((res && res.error) || 'Save failed', 'error');
-                    }
-                    return;
-                }
-                if (window.AdminCore) window.AdminCore.toast('Question #' + id + ' updated', 'success');
-                runCheck();
-            })
-            .catch(function () {
-                saveBtn.disabled = false;
-                saveBtn.textContent = 'Save';
-                if (window.AdminCore) window.AdminCore.toast('Network error', 'error');
-            });
-        }
-    
-        function archiveCard(card, id) {
-            if (!confirm('Archive question #' + id + '?\n\nIt will be removed from quizzes but kept in the database.')) {
-                return;
-            }
-            fetch('/admin/questions/' + id + '/delete', {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-Token': CSRF,
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-            })
-            .then(function (r) { return r.json(); })
-            .then(function (res) {
-                if (!res || !res.success) {
-                    if (window.AdminCore) window.AdminCore.toast('Archive failed', 'error');
-                    return;
-                }
-                removeCard(id);
-                showUndo(id);
-                runCheck();
-            })
-            .catch(function () {
-                if (window.AdminCore) window.AdminCore.toast('Network error', 'error');
-            });
-        }
-    
-        function dismissCard(card, id) {
-            const currentId = parseInt(form.dataset.questionId || '0', 10);
-            if (!currentId) {
-                if (window.AdminCore) window.AdminCore.toast('Save this question first.', 'warning');
-                return;
-            }
-            fetch('/admin/questions/dismiss-duplicate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': CSRF,
-                },
-                body: JSON.stringify({ a_id: currentId, b_id: id }),
-            })
-            .then(function (r) { return r.json(); })
-            .then(function (res) {
-                if (!res || !res.success) {
-                    if (window.AdminCore) window.AdminCore.toast('Could not dismiss', 'error');
-                    return;
-                }
-                removeCard(id);
-                if (window.AdminCore) {
-                    window.AdminCore.toast('Marked as not a duplicate', 'success');
-                }
-            });
-        }
-    
-        function removeCard(id) {
-            state = state.filter(function (d) { return d.id !== id; });
-            render();
-        }
-    
-        function showUndo(id) {
-            const t = document.createElement('div');
-            t.className = 'dup-undo-toast';
-            t.innerHTML = '<span>Archived #' + id + '</span>' +
-                          '<button type="button">Undo</button>';
-            document.body.appendChild(t);
-            const timer = setTimeout(function () { t.remove(); }, 8000);
-            t.querySelector('button').addEventListener('click', function () {
-                clearTimeout(timer);
-                fetch('/admin/questions/' + id + '/unarchive', {
-                    method: 'POST',
-                    headers: { 'X-CSRF-Token': CSRF },
-                }).then(function () {
-                    t.remove();
-                    runCheck();
-                });
-            });
-        }
-    
-        // ---- Bulk ----
-        function updateBulkBar() {
-            const checked = list.querySelectorAll('.q-dupcard__cb:checked').length;
-            if (bulkCountEl) bulkCountEl.textContent = checked;
-            if (bulkBar) bulkBar.hidden = checked === 0;
-        }
-    
-        if (bulkClear) {
-            bulkClear.addEventListener('click', function () {
-                list.querySelectorAll('.q-dupcard__cb').forEach(function (cb) {
-                    cb.checked = false;
-                });
-                updateBulkBar();
-            });
-        }
-    
-        if (bulkArchive) {
-            bulkArchive.addEventListener('click', function () {
-                const ids = [];
-                list.querySelectorAll('.q-dupcard__cb:checked').forEach(function (cb) {
-                    ids.push(parseInt(cb.dataset.id, 10));
-                });
-                if (!ids.length) return;
-                if (!confirm('Archive ' + ids.length + ' question(s)?')) return;
-    
-                fetch('/admin/questions/bulk-archive', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-Token': CSRF,
-                    },
-                    body: JSON.stringify({ ids: ids }),
-                })
-                .then(function (r) { return r.json(); })
-                .then(function (res) {
-                    if (!res || !res.success) {
-                        if (window.AdminCore) window.AdminCore.toast('Bulk archive failed', 'error');
-                        return;
-                    }
-                    res.archived.forEach(removeCard);
-                    if (window.AdminCore) {
-                        window.AdminCore.toast(res.archived.length + ' archived', 'success');
-                    }
-                    runCheck();
-                });
-            });
-        }
-    
-        // ---- Auto check ----
-        const textarea = form.querySelector('textarea[name="question_text"]');
-        const subjectSel = form.querySelector('select[name="subject_code"]');
-        const gradeSel = form.querySelector('select[name="grade"]');
-        let timer = null;
-        let lastKey = '';
-    
-        function runCheck() {
-            const text = textarea ? (textarea.value || '').trim() : '';
-            const subj = subjectSel ? subjectSel.value : '';
-            const grade = gradeSel ? gradeSel.value : '';
-            if (text.length < 15) {
-                state = [];
-                render();
-                return;
-            }
-            const key = text + '||' + subj + '||' + grade;
-            if (key === lastKey) return;
-    
-            fetch('/admin/questions/check-duplicate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': CSRF,
-                },
-                body: JSON.stringify({
-                    question_text: text,
-                    subject_code: subj,
-                    grade: grade,
-                    exclude_id: excludeId,
-                }),
-            })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                lastKey = key;
-                state = (data && data.duplicates) || [];
-                render();
-            })
-            .catch(function () { /* silent */ });
-        }
-    
-        function schedule() {
-            clearTimeout(timer);
-            timer = setTimeout(runCheck, 700);
-        }
-    
-        if (textarea) {
-            textarea.addEventListener('input', schedule);
-            textarea.addEventListener('paste', function () { setTimeout(schedule, 30); });
-        }
-        if (subjectSel) subjectSel.addEventListener('change', schedule);
-        if (gradeSel) gradeSel.addEventListener('change', schedule);
-    
-        render();
-        // On a fresh "new" form: don't auto-check until user types.
-        // On edit: check immediately against existing values.
-        if (excludeId) schedule();
-    }
-    // ------------------------------------------------------------
-    // BOOT
-    // ------------------------------------------------------------
+    // ============================================================
+    // 9. BOOT
+    // ============================================================
     function boot() {
         initQuestionEditor();
+        initDuplicateSidebar();
         initBulkImport();
         initPdfStaging();
         initStagingDelete();

@@ -10,6 +10,7 @@ from flask import (
 import io
 import json
 import logging
+import os
 import re
 import secrets
 import string
@@ -258,12 +259,6 @@ def _build_active_filters(**kw):
 
 def _auto_create_questions_batch(subject_code, grade, imported,
                                  admin_id, before_max_id):
-    """
-    After a successful question bulk import, snapshot the newly
-    inserted rows into a content batch. Best-effort — never raises.
-
-    Returns the new batch id, or None on any failure.
-    """
     if not imported or imported <= 0:
         return None
     try:
@@ -308,12 +303,6 @@ def _auto_create_questions_batch(subject_code, grade, imported,
 
 
 def _auto_create_pdfs_batch(pdf_ids, admin_id, source_label='bot bulk publish'):
-    """
-    After PDFs are published to the main library in a batch, group
-    them into a content batch. Best-effort — never raises.
-
-    Returns the new batch id, or None on any failure.
-    """
     if not pdf_ids:
         return None
     try:
@@ -796,7 +785,7 @@ def questions_bulk_archive():
 
 
 # ============================================================
-# QUESTIONS — INLINE UPDATE (from duplicate sidebar)
+# QUESTIONS — INLINE UPDATE
 # ============================================================
 
 @admin_content_bp.route('/questions/<int:question_id>/inline-update',
@@ -873,7 +862,7 @@ def question_inline_update(question_id):
 
 
 # ============================================================
-# QUESTIONS — DUPLICATE CHECK + DISMISS (AJAX)
+# QUESTIONS — DUPLICATE CHECK + DISMISS
 # ============================================================
 
 @admin_content_bp.route('/questions/check-duplicate', methods=['POST'],
@@ -1103,62 +1092,80 @@ def bulk_import():
                         endpoint='bulk_import_apply')
 @admin_can('questions.bulk_import')
 def bulk_import_apply():
-    if not validate_csrf():
-        flash('Invalid session. Please refresh and try again.', 'error')
-        return redirect(url_for('admin_content.bulk_import'))
-
-    input_method = request.form.get('input_method', 'paste')
-    if input_method == 'file':
-        file_data = request.files.get('json_file')
-        if not file_data or not file_data.filename:
-            flash('Please upload a JSON file.', 'error')
-            return redirect(url_for('admin_content.bulk_import'))
-        try:
-            raw_text = file_data.read().decode('utf-8')
-        except Exception as e:
-            flash(f'Error reading file: {e}', 'error')
-            return redirect(url_for('admin_content.bulk_import'))
+    """
+    Import only the indices the user selected.
+    Accepts JSON body with:
+      { json_data, pdf_code, import_indices: [1, 3, 5, ...] }
+    Falls back to form submission without import_indices for compat.
+    """
+    import_indices = None
+    if request.is_json:
+        body = request.get_json(silent=True) or {}
+        raw_text = (body.get('json_data') or '').strip()
+        pdf_code_raw = (body.get('pdf_code') or '').strip().upper()
+        raw_indices = body.get('import_indices')
+        if isinstance(raw_indices, list):
+            import_indices = set()
+            for i in raw_indices:
+                try:
+                    import_indices.add(int(i))
+                except (TypeError, ValueError):
+                    continue
     else:
+        if not validate_csrf():
+            flash('Invalid session. Please refresh and try again.', 'error')
+            return redirect(url_for('admin_content.bulk_import'))
         raw_text = (request.form.get('json_data') or '').strip()
+        pdf_code_raw = (request.form.get('pdf_code') or '').strip().upper()
 
     if not raw_text:
+        if request.is_json:
+            return jsonify({'error': 'No JSON data provided'}), 400
         flash('Please paste JSON or upload a file.', 'error')
         return redirect(url_for('admin_content.bulk_import'))
 
     try:
         data = json.loads(raw_text)
     except json.JSONDecodeError as e:
-        flash(f'Invalid JSON: {e}', 'error')
+        msg = f'Invalid JSON: {e.msg} (line {e.lineno}, col {e.colno})'
+        if request.is_json:
+            return jsonify({'error': msg}), 400
+        flash(msg, 'error')
         return redirect(url_for('admin_content.bulk_import'))
 
     if not isinstance(data, dict):
-        flash('JSON root must be an object.', 'error')
+        msg = 'JSON root must be an object.'
+        if request.is_json:
+            return jsonify({'error': msg}), 400
+        flash(msg, 'error')
         return redirect(url_for('admin_content.bulk_import'))
 
     metadata = data.get('metadata') or {}
     subject_code = (metadata.get('subject_code') or '').strip()
     chapter = (metadata.get('chapter') or '').strip()
-    grade = normalize_grade(
-        metadata.get('grade') or request.form.get('grade') or DEFAULT_GRADE
-    )
+    grade = normalize_grade(metadata.get('grade') or DEFAULT_GRADE)
 
-    all_subject_codes = get_all_subject_codes()
-    if not subject_code:
-        flash('subject_code is required in metadata.', 'error')
-        return redirect(url_for('admin_content.bulk_import'))
-    if subject_code not in all_subject_codes:
-        flash(f'Unknown subject code: "{subject_code}"', 'error')
+    if subject_code not in get_all_subject_codes():
+        msg = f'Unknown subject_code: "{subject_code}"'
+        if request.is_json:
+            return jsonify({'error': msg}), 400
+        flash(msg, 'error')
         return redirect(url_for('admin_content.bulk_import'))
 
     questions_raw = data.get('questions') or []
     if not isinstance(questions_raw, list) or not questions_raw:
-        flash('"questions" must be a non-empty array.', 'error')
+        msg = '"questions" must be a non-empty array.'
+        if request.is_json:
+            return jsonify({'error': msg}), 400
+        flash(msg, 'error')
         return redirect(url_for('admin_content.bulk_import'))
 
-    pdf_code_raw = (request.form.get('pdf_code') or '').strip().upper()
     pdf_code = pdf_code_raw or None
     if pdf_code and not _validate_pdf_code_format(pdf_code):
-        flash(f'Invalid PDF code format: "{pdf_code}"', 'error')
+        msg = f'Invalid PDF code format: "{pdf_code}"'
+        if request.is_json:
+            return jsonify({'error': msg}), 400
+        flash(msg, 'error')
         return redirect(url_for('admin_content.bulk_import'))
 
     questions_to_import = []
@@ -1166,26 +1173,35 @@ def bulk_import_apply():
     duplicates = []
     warnings = []
 
+    labels = ['A', 'B', 'C', 'D', 'E', 'F']
+
     for idx, q in enumerate(questions_raw, 1):
+        if import_indices is not None and idx not in import_indices:
+            continue
+
         if not isinstance(q, dict):
             errors.append({'index': idx, 'question': '—',
                            'error': 'Question must be an object'})
             continue
+
         q_text = (q.get('question') or '').strip()
         if not q_text:
             errors.append({'index': idx, 'question': '—',
                            'error': 'Question text is required'})
             continue
+
         opts = q.get('options')
         if not isinstance(opts, list) or len(opts) < 3 or len(opts) > 6:
             errors.append({'index': idx, 'question': q_text[:50],
                            'error': '3–6 options required'})
             continue
+
         correct_idx = q.get('correct')
         if not isinstance(correct_idx, int) or not (1 <= correct_idx <= len(opts)):
             errors.append({'index': idx, 'question': q_text[:50],
                            'error': 'Invalid "correct" index'})
             continue
+
         try:
             difficulty = int(q.get('difficulty', 1))
         except (ValueError, TypeError):
@@ -1211,7 +1227,6 @@ def bulk_import_apply():
                              'message': f'Q{idx}: pdf_page set but no PDF code — dropped'})
             pdf_page = None
 
-        labels = ['A', 'B', 'C', 'D', 'E', 'F']
         options_dict = {labels[i]: str(opts[i]).strip() for i in range(len(opts))}
 
         questions_to_import.append({
@@ -1231,22 +1246,33 @@ def bulk_import_apply():
             'updated_by': session.get('user_id'),
         })
 
-    if errors or duplicates:
-        return render_template(
-            'dashboard/admin/content/bulk_import.html',
-            preview=True,
-            valid_questions=questions_to_import,
-            errors=errors, duplicates=duplicates, warnings=warnings,
-            subject_code=subject_code, chapter=chapter,
-            grade=grade,
-            pdf_code=pdf_code, total_questions=len(questions_raw),
-        )
+    if not request.is_json:
+        if errors or duplicates:
+            return render_template(
+                'dashboard/admin/content/bulk_import.html',
+                preview=True,
+                valid_questions=questions_to_import,
+                errors=errors, duplicates=duplicates, warnings=warnings,
+                subject_code=subject_code, chapter=chapter,
+                grade=grade, pdf_code=pdf_code,
+                total_questions=len(questions_raw),
+            )
 
     if not questions_to_import:
-        flash('No valid questions to import.', 'error')
+        msg = 'No valid questions to import.'
+        if request.is_json:
+            return jsonify({
+                'error': msg,
+                'errors': errors,
+                'duplicates': duplicates,
+                'warnings': warnings,
+                'imported': 0,
+                'skipped_invalid': len(errors),
+                'skipped_duplicate': len(duplicates),
+            }), 400
+        flash(msg, 'error')
         return redirect(url_for('admin_content.bulk_import'))
 
-    # ── Capture the current max id so we can identify the new rows
     try:
         cursor = execute_with_retry(
             "SELECT COALESCE(MAX(id), 0) AS max_id FROM questions"
@@ -1259,24 +1285,27 @@ def bulk_import_apply():
         result = bulk_create_questions(questions_to_import, session.get('user_id'))
     except Exception as e:
         logger.error(f"bulk_create_questions raised: {e}", exc_info=True)
+        if request.is_json:
+            return jsonify({'error': f'Import crashed: {e}'}), 500
         flash(f'Import crashed: {e}', 'error')
         return redirect(url_for('admin_content.bulk_import'))
 
     imported = result.get('imported', 0)
     failed = result.get('errors') or []
 
+    batch_id = None
     if imported > 0:
         write_audit(
-            action='question.bulk_import',
-            target_type='question', before=None,
-            after={'subject_code': subject_code,
-                   'imported': imported,
-                   'grade': grade,
-                   'pdf_code': pdf_code},
+            action='question.bulk_import', target_type='question',
+            before=None,
+            after={
+                'subject_code': subject_code,
+                'imported': imported,
+                'grade': grade,
+                'pdf_code': pdf_code,
+            },
             severity='info',
         )
-
-        # ── Auto-create a content batch so the admin can revisit these
         batch_id = _auto_create_questions_batch(
             subject_code=subject_code,
             grade=grade,
@@ -1285,6 +1314,36 @@ def bulk_import_apply():
             before_max_id=before_max_id,
         )
 
+    if request.is_json:
+        if imported == 0:
+            detail = failed[0].get('error') if failed else 'unknown error'
+            return jsonify({
+                'error': f'Nothing inserted: {detail}',
+                'imported': 0,
+                'failed': failed,
+                'skipped_invalid': len(errors),
+                'skipped_duplicate': len(duplicates),
+            }), 500
+
+        batch_url = None
+        if batch_id:
+            try:
+                batch_url = url_for('admin_batches.detail', batch_id=batch_id)
+            except Exception:
+                pass
+
+        return jsonify({
+            'success': True,
+            'imported': imported,
+            'failed': failed,
+            'warnings': warnings,
+            'skipped_invalid': len(errors),
+            'skipped_duplicate': len(duplicates),
+            'batch_id': batch_id,
+            'batch_url': batch_url,
+        })
+
+    if imported > 0:
         flash(f'✅ {imported} questions imported successfully!', 'success')
         if batch_id:
             try:
@@ -1298,14 +1357,13 @@ def bulk_import_apply():
             except Exception:
                 pass
         if warnings:
-            flash(f'⚠️ {len(warnings)} warning(s) — some fields were dropped.',
-                  'warning')
+            flash(f'⚠️ {len(warnings)} warning(s).', 'warning')
         if failed:
-            flash(f'⚠️ {len(failed)} question(s) failed to insert.', 'error')
+            flash(f'⚠️ {len(failed)} question(s) failed.', 'error')
         return redirect(url_for('admin_content.questions'))
 
     detail = failed[0].get('error') if failed else 'unknown error'
-    flash(f'❌ Import failed — nothing inserted. Reason: {detail}', 'error')
+    flash(f'❌ Import failed. Reason: {detail}', 'error')
     return redirect(url_for('admin_content.bulk_import'))
 
 
@@ -1338,36 +1396,74 @@ def bulk_template():
 @admin_content_bp.route('/bulk-preview', methods=['POST'], endpoint='bulk_preview')
 @admin_can('questions.bulk_import')
 def bulk_preview():
+    """
+    Live preview. Returns per-item status and full data so the sidebar
+    can render a rich card for each question.
+    """
     if not _csrf_ok():
         return jsonify({'error': 'Invalid session. Refresh the page.'}), 403
 
-    raw = (request.form.get('json_data') or '').strip()
+    if request.is_json:
+        body = request.get_json(silent=True) or {}
+        raw = (body.get('json_data') or '').strip()
+        pdf_code_raw = (body.get('pdf_code') or '').strip().upper()
+        try:
+            fuzzy_threshold = float(body.get('fuzzy_threshold') or 0.85)
+        except (TypeError, ValueError):
+            fuzzy_threshold = 0.85
+        scope = (body.get('scope') or 'same_grade').strip()
+        auto_exact = bool(body.get('auto_exclude_exact', True))
+        auto_invalid = bool(body.get('auto_exclude_invalid', True))
+    else:
+        raw = (request.form.get('json_data') or '').strip()
+        pdf_code_raw = (request.form.get('pdf_code') or '').strip().upper()
+        try:
+            fuzzy_threshold = float(request.form.get('fuzzy_threshold') or 0.85)
+        except (TypeError, ValueError):
+            fuzzy_threshold = 0.85
+        scope = (request.form.get('scope') or 'same_grade').strip()
+        auto_exact = True
+        auto_invalid = True
+
+    if fuzzy_threshold < 0.5:
+        fuzzy_threshold = 0.5
+    if fuzzy_threshold > 1.0:
+        fuzzy_threshold = 1.0
+
+    if scope not in ('same_grade', 'same_subject', 'any'):
+        scope = 'same_grade'
+
     if not raw:
         return jsonify({'error': 'No JSON data provided'}), 400
 
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
-        return jsonify({'error': f'Invalid JSON: {e}'}), 400
+        return jsonify({
+            'error': f'Invalid JSON: {e.msg} (line {e.lineno}, col {e.colno})',
+            'error_type': 'json',
+        }), 400
 
     if not isinstance(data, dict):
-        return jsonify({'error': 'JSON root must be an object'}), 400
-    if 'metadata' not in data:
-        return jsonify({'error': 'Missing metadata section'}), 400
-    if 'questions' not in data or not isinstance(data['questions'], list) or not data['questions']:
-        return jsonify({'error': 'Missing or empty questions array'}), 400
+        return jsonify({'error': 'JSON root must be an object', 'error_type': 'structure'}), 400
+    if 'metadata' not in data or not isinstance(data.get('metadata'), dict):
+        return jsonify({'error': 'Missing or invalid "metadata" section', 'error_type': 'structure'}), 400
+    if 'questions' not in data or not isinstance(data.get('questions'), list) or not data['questions']:
+        return jsonify({'error': '"questions" must be a non-empty array', 'error_type': 'structure'}), 400
 
     metadata = data.get('metadata') or {}
     subject_code = (metadata.get('subject_code') or '').strip()
     chapter = (metadata.get('chapter') or '').strip()
-    grade = normalize_grade(
-        metadata.get('grade') or request.form.get('grade') or DEFAULT_GRADE
-    )
+    grade = normalize_grade(metadata.get('grade') or DEFAULT_GRADE)
 
-    if not subject_code or subject_code not in get_all_subject_codes():
-        return jsonify({'error': 'Unknown or missing subject_code'}), 400
+    if not subject_code:
+        return jsonify({'error': 'metadata.subject_code is required', 'error_type': 'structure'}), 400
+    if subject_code not in get_all_subject_codes():
+        return jsonify({
+            'error': f'Unknown subject_code: "{subject_code}"',
+            'error_type': 'structure',
+        }), 400
 
-    pdf_code_raw = (request.form.get('pdf_code') or '').strip().upper()
     pdf_code = pdf_code_raw or None
     pdf_code_valid = True
     pdf_info_payload = None
@@ -1388,85 +1484,201 @@ def bulk_preview():
             pdf_info_payload = {'code': pdf_code, 'valid': False,
                                 'exists': False, 'reason': 'invalid_format'}
 
-    preview = []
-    unknown_codes = set()
-    linked_count = 0
-    total = len(data['questions'])
+    questions_raw = data['questions']
+    total = len(questions_raw)
+    labels = ['A', 'B', 'C', 'D', 'E', 'F']
 
-    for idx, q in enumerate(data['questions'], 1):
+    preview = []
+    for idx, q in enumerate(questions_raw, 1):
+        entry = {
+            'index': idx,
+            'status': 'ready',
+            'invalid_reason': '',
+            'question_short': '',
+            'question_full': '',
+            'options': {},
+            'correct_answer': 'A',
+            'correct_answer_text': '',
+            'options_count': 0,
+            'difficulty': 1,
+            'has_explanation': False,
+            'explanation': '',
+            'explanation_short': '',
+            'tags': '',
+            'grade': grade,
+            'subject_code': subject_code,
+            'chapter': chapter,
+            'pdf_code': pdf_code or '',
+            'pdf_page': None,
+            'pdf_exists': False,
+            'pdf_title': '',
+            'pdf_source': None,
+            'orphan': False,
+            'invalid_code': not pdf_code_valid,
+            'duplicates': [],
+        }
+
         if not isinstance(q, dict):
-            preview.append({'index': idx, 'question': '(invalid entry)',
-                            'difficulty': 1, 'options_count': 0,
-                            'has_explanation': False, 'tags': '',
-                            'grade': grade,
-                            'pdf_code': '', 'pdf_page': None,
-                            'pdf_exists': False, 'pdf_title': '',
-                            'pdf_source': None,
-                            'orphan': False, 'invalid_code': False})
+            entry['status'] = 'invalid'
+            entry['invalid_reason'] = 'Entry must be an object'
+            preview.append(entry)
             continue
 
-        q_text = (q.get('question') or '') or ''
-        q_short = q_text[:70] + ('…' if len(q_text) > 70 else '')
-        page = _normalize_pdf_page(q.get('pdf_page'))
-        orphan = bool(page and not pdf_code)
-        if orphan:
-            page = None
+        q_text = (q.get('question') or '').strip()
+        entry['question_full'] = q_text
+        entry['question_short'] = q_text[:70] + ('…' if len(q_text) > 70 else '')
 
-        entry = {
-            'index': idx, 'question': q_short,
-            'difficulty': int(q.get('difficulty', 1) or 1)
-                          if str(q.get('difficulty', 1)).isdigit() else 1,
-            'options_count': len(q.get('options', []) or []),
-            'has_explanation': bool((q.get('explanation') or '').strip()),
-            'tags': ', '.join(q.get('tags', []))[:40]
-                    if isinstance(q.get('tags'), list)
-                    else str(q.get('tags', ''))[:40],
-            'grade': grade,
-            'pdf_code': pdf_code or '',
-            'pdf_page': page,
-            'pdf_exists': False, 'pdf_title': '', 'pdf_source': None,
-            'orphan': orphan, 'invalid_code': not pdf_code_valid,
-        }
+        if not q_text:
+            entry['status'] = 'invalid'
+            entry['invalid_reason'] = 'Question text is required'
+            preview.append(entry)
+            continue
+
+        opts = q.get('options')
+        if not isinstance(opts, list) or len(opts) < 3:
+            entry['status'] = 'invalid'
+            entry['invalid_reason'] = f'At least 3 options required (got {len(opts) if isinstance(opts, list) else 0})'
+            preview.append(entry)
+            continue
+        if len(opts) > 6:
+            entry['status'] = 'invalid'
+            entry['invalid_reason'] = f'Maximum 6 options (got {len(opts)})'
+            preview.append(entry)
+            continue
+
+        correct_idx = q.get('correct')
+        if not isinstance(correct_idx, int) or not (1 <= correct_idx <= len(opts)):
+            entry['status'] = 'invalid'
+            entry['invalid_reason'] = 'Invalid "correct" index'
+            preview.append(entry)
+            continue
+
+        options_dict = {labels[i]: str(opts[i]).strip() for i in range(len(opts))}
+        entry['options'] = options_dict
+        entry['options_count'] = len(options_dict)
+        entry['correct_answer'] = labels[correct_idx - 1]
+        entry['correct_answer_text'] = options_dict.get(entry['correct_answer'], '')
+
+        try:
+            difficulty = int(q.get('difficulty', 1))
+            if not (1 <= difficulty <= 5):
+                difficulty = 3
+        except (ValueError, TypeError):
+            difficulty = 1
+        entry['difficulty'] = difficulty
+
+        expl_text = (q.get('explanation') or '').strip()
+        entry['has_explanation'] = bool(expl_text)
+        entry['explanation'] = expl_text
+        entry['explanation_short'] = (
+            expl_text[:140] + ('…' if len(expl_text) > 140 else '')
+        )
+
+        if isinstance(q.get('tags'), list):
+            entry['tags'] = ', '.join(str(t) for t in q['tags'])[:60]
+        else:
+            entry['tags'] = str(q.get('tags', '') or '')[:60]
+
+        pdf_page = _normalize_pdf_page(q.get('pdf_page'))
+        if pdf_page and not pdf_code:
+            entry['orphan'] = True
+            pdf_page = None
+        entry['pdf_page'] = pdf_page
 
         if pdf_code and pdf_info_payload:
             entry['pdf_exists'] = pdf_info_payload.get('exists', False)
             entry['pdf_title'] = pdf_info_payload.get('title', '')
             entry['pdf_source'] = pdf_info_payload.get('source')
-            if not entry['pdf_exists']:
-                unknown_codes.add(pdf_code)
-            linked_count += 1
 
         preview.append(entry)
 
+    # ── Batch duplicate detection ──
+    try:
+        from services.question_validity import find_duplicates_batch
+
+        batch_input = [{
+            'text': e.get('question_full') or '',
+            'subject_code': subject_code,
+            'grade': grade,
+        } for e in preview]
+
+        all_dupes = find_duplicates_batch(
+            batch_input,
+            fuzzy_threshold=fuzzy_threshold,
+            scope=scope,
+        )
+
+        for e, dupes in zip(preview, all_dupes):
+            if not dupes:
+                continue
+            payload = []
+            for d in dupes:
+                full = d.get('question_text') or ''
+                payload.append({
+                    'id': d['id'],
+                    'match_type': d['match_type'],
+                    'similarity_pct': int(round((d.get('similarity') or 0) * 100)),
+                    'text': full,
+                    'options': d.get('options') or {},
+                    'correct_answer': d.get('correct_answer') or 'A',
+                    'difficulty': d.get('difficulty') or 1,
+                    'grade': d.get('grade') or '',
+                    'subject_code': d.get('subject_code') or '',
+                    'chapter': d.get('chapter') or '',
+                })
+            e['duplicates'] = payload
+            if e['status'] == 'ready':
+                e['status'] = 'duplicate'
+    except Exception as e:
+        logger.warning(f"batch duplicate check failed (non-fatal): {e}")
+
+    ready_count = sum(1 for e in preview if e['status'] == 'ready')
+    dup_count   = sum(1 for e in preview if e['status'] == 'duplicate')
+    inv_count   = sum(1 for e in preview if e['status'] == 'invalid')
+
+    unknown_codes = set()
+    if pdf_code and pdf_info_payload and not pdf_info_payload.get('exists'):
+        unknown_codes.add(pdf_code)
+
     return jsonify({
-        'subject_code': subject_code, 'chapter': chapter,
+        'ok': True,
+        'subject_code': subject_code,
+        'chapter': chapter,
         'grade': grade,
         'pdf_code': pdf_code or '',
         'pdf_code_valid': pdf_code_valid,
         'pdf_info': pdf_info_payload,
-        'total': total, 'linked_count': linked_count,
+        'total': total,
+        'ready_count': ready_count,
+        'duplicate_count': dup_count,
+        'invalid_count': inv_count,
         'unknown_codes': sorted(unknown_codes),
-        'preview': preview[:30], 'truncated': total > 30,
+        'preview': preview,
+        'fuzzy_threshold': fuzzy_threshold,
+        'scope': scope,
+        'auto_exclude_exact': auto_exact,
+        'auto_exclude_invalid': auto_invalid,
     })
 
 
 # ============================================================
-# PDFs — WORKSPACE
+# PDFs — LIBRARY (LIST)
 # ============================================================
 
 @admin_content_bp.route('/pdfs', methods=['GET'], endpoint='pdfs')
 @admin_can('pdfs.view')
 def pdfs():
-    can_intake  = admin_can('pdfs.intake')
-    can_publish = admin_can('pdfs.publish')
-    can_edit    = admin_can('pdfs.edit')
-    can_delete  = admin_can('pdfs.delete')
-
     PER_PAGE = 100
 
     tab = (request.args.get('tab') or 'library').strip().lower()
     if tab not in ('library', 'intake', 'staging', 'unverified'):
         tab = 'library'
+
+    can_intake  = admin_can('pdfs.intake')
+    can_publish = admin_can('pdfs.publish')
+    can_edit    = admin_can('pdfs.edit')
+    can_delete  = admin_can('pdfs.delete')
+
     if tab == 'intake' and not can_intake:
         tab = 'library'
     if tab == 'staging' and not (can_intake or can_publish):
@@ -1474,143 +1686,212 @@ def pdfs():
     if tab == 'unverified' and not can_intake:
         tab = 'library'
 
-    def _page_param(name='page'):
+    try:
+        lib_total = get_main_pdf_count()
+    except Exception as e:
+        logger.warning(f"pdfs(): library count failed: {e}")
+        lib_total = 0
+
+    try:
+        from bot.db import count_pending_pdfs
+        pending_count = count_pending_pdfs()
+    except Exception as e:
+        logger.warning(f"pdfs(): pending count failed: {e}")
+        pending_count = 0
+
+    try:
+        from bot.db import count_bot_pdfs
+        staging_count = count_bot_pdfs(published_filter=False)
+    except Exception as e:
+        logger.warning(f"pdfs(): staging count failed: {e}")
+        staging_count = 0
+
+    try:
+        unverified_count = _count_unverified_pdfs(show_confirmed=False)
+    except Exception as e:
+        logger.warning(f"pdfs(): unverified count failed: {e}")
+        unverified_count = 0
+
+    ctx = {
+        'tab': tab,
+        'can_intake':  can_intake,
+        'can_publish': can_publish,
+        'can_edit':    can_edit,
+        'can_delete':  can_delete,
+        'lib_total':        lib_total,
+        'pending_count':    pending_count,
+        'staging_count':    staging_count,
+        'unverified_count': unverified_count,
+        'subjects':  get_all_subjects(),
+        'curricula': get_pdf_distinct_curricula(),
+        'classes':   get_pdf_distinct_classes(),
+        'csrf_token': session.get('csrf_token'),
+    }
+
+    if tab == 'library':
+        search            = (request.args.get('search') or '').strip()
+        subject_filter    = (request.args.get('subject') or '').strip()
+        curriculum_filter = (request.args.get('curriculum') or '').strip()
+        class_filter      = (request.args.get('class') or '').strip()
+        sort              = (request.args.get('sort') or 'newest').strip()
         try:
-            p = int(request.args.get(name) or 1)
-        except (ValueError, TypeError):
-            p = 1
-        return max(1, p)
+            lib_page = max(1, int(request.args.get('page') or 1))
+        except (TypeError, ValueError):
+            lib_page = 1
 
-    search = (request.args.get('search') or '').strip()
-    subject_filter = (request.args.get('subject') or '').strip()
-    curriculum_filter = (request.args.get('curriculum') or '').strip()
-    class_filter = (request.args.get('class') or '').strip()
+        offset = (lib_page - 1) * PER_PAGE
 
-    lib_page = _page_param()
-    lib_offset = (lib_page - 1) * PER_PAGE
-    lib_total = get_main_pdf_count(
-        search=search, subject=subject_filter,
-        curriculum=curriculum_filter, class_filter=class_filter,
-    )
-    lib_total_pages = max(1, (lib_total + PER_PAGE - 1) // PER_PAGE)
-    if lib_page > lib_total_pages:
-        lib_page = lib_total_pages
-        lib_offset = (lib_page - 1) * PER_PAGE
-
-    pdf_list = get_all_pdfs(
-        limit=PER_PAGE, offset=lib_offset,
-        search=search, subject=subject_filter,
-        curriculum=curriculum_filter, class_filter=class_filter,
-    )
-
-    q = (request.args.get('q') or '').strip()
-    intake_page = _page_param()
-    intake_offset = (intake_page - 1) * PER_PAGE
-
-    pending_list = []
-    pending_count = 0
-    intake_filtered_count = 0
-    intake_total_pages = 1
-
-    if can_intake:
         try:
-            from bot.db import get_pending_pdf_list, count_pending_pdfs
-            pending_count = count_pending_pdfs()
-            intake_filtered_count = count_pending_pdfs(search=q) if q else pending_count
-            intake_total_pages = max(1, (intake_filtered_count + PER_PAGE - 1) // PER_PAGE)
-            if intake_page > intake_total_pages:
-                intake_page = intake_total_pages
-                intake_offset = (intake_page - 1) * PER_PAGE
+            pdf_list = get_all_pdfs(
+                limit=PER_PAGE, offset=offset,
+                search=search,
+                subject=subject_filter,
+                curriculum=curriculum_filter,
+                class_filter=class_filter,
+                sort=sort,
+            )
+        except Exception as e:
+            logger.error(f"pdfs(): library fetch failed: {e}", exc_info=True)
+            pdf_list = []
+
+        try:
+            filtered_total = get_main_pdf_count(
+                search=search,
+                subject=subject_filter,
+                curriculum=curriculum_filter,
+                class_filter=class_filter,
+            )
+        except Exception as e:
+            logger.warning(f"pdfs(): filtered count failed: {e}")
+            filtered_total = len(pdf_list)
+
+        lib_total_pages = (
+            (filtered_total + PER_PAGE - 1) // PER_PAGE
+            if filtered_total > 0 else 1
+        )
+
+        ctx.update({
+            'pdfs':              pdf_list,
+            'lib_page':          lib_page,
+            'lib_total_pages':   lib_total_pages,
+            'lib_total':         filtered_total,
+            'search':            search,
+            'subject_filter':    subject_filter,
+            'curriculum_filter': curriculum_filter,
+            'class_filter':      class_filter,
+        })
+
+    elif tab == 'intake':
+        q = (request.args.get('q') or '').strip()
+        try:
+            intake_page = max(1, int(request.args.get('page') or 1))
+        except (TypeError, ValueError):
+            intake_page = 1
+        offset = (intake_page - 1) * PER_PAGE
+
+        try:
+            from bot.db import get_pending_pdf_list
             pending_list = get_pending_pdf_list(
-                limit=PER_PAGE, offset=intake_offset, search=q
+                limit=PER_PAGE, offset=offset, search=q or ''
             )
         except Exception as e:
-            logger.warning(f"pending list load failed: {e}")
+            logger.error(f"pdfs(): intake fetch failed: {e}", exc_info=True)
+            pending_list = []
 
-    show_published = (request.args.get('show_published') == '1')
-    staging_page = _page_param()
-    staging_offset = (staging_page - 1) * PER_PAGE
-
-    staging_list = []
-    staging_count = 0
-    staging_published_count = 0
-    staging_filtered_count = 0
-    staging_total_pages = 1
-
-    if can_intake or can_publish:
         try:
-            from bot.db import get_bot_pdfs, count_bot_pdfs
-            staging_count = count_bot_pdfs(published_filter=False)
-            staging_published_count = count_bot_pdfs(published_filter=True)
-            view_filter = None if show_published else False
-            staging_filtered_count = (
-                staging_count + staging_published_count
-                if show_published else staging_count
-            )
-            staging_total_pages = max(1, (staging_filtered_count + PER_PAGE - 1) // PER_PAGE)
-            if staging_page > staging_total_pages:
-                staging_page = staging_total_pages
-                staging_offset = (staging_page - 1) * PER_PAGE
+            from bot.db import count_pending_pdfs
+            intake_total = count_pending_pdfs(q or '')
+        except Exception:
+            intake_total = len(pending_list)
+
+        intake_total_pages = (
+            (intake_total + PER_PAGE - 1) // PER_PAGE
+            if intake_total > 0 else 1
+        )
+
+        ctx.update({
+            'pending_list':       pending_list,
+            'q':                  q,
+            'intake_page':        intake_page,
+            'intake_total_pages': intake_total_pages,
+        })
+
+    elif tab == 'staging':
+        show_published = (request.args.get('show_published') == '1')
+        try:
+            staging_page = max(1, int(request.args.get('page') or 1))
+        except (TypeError, ValueError):
+            staging_page = 1
+        offset = (staging_page - 1) * PER_PAGE
+
+        try:
+            from bot.db import get_bot_pdfs
             staging_list = get_bot_pdfs(
-                limit=PER_PAGE, offset=staging_offset,
-                published_filter=view_filter,
+                limit=PER_PAGE, offset=offset,
+                published_filter=None if show_published else False,
             )
         except Exception as e:
-            logger.warning(f"staging list load failed: {e}")
+            logger.error(f"pdfs(): staging fetch failed: {e}", exc_info=True)
+            staging_list = []
 
-    show_confirmed = (request.args.get('show_confirmed') == '1')
-    unverified_page = _page_param()
-    unverified_offset = (unverified_page - 1) * PER_PAGE
-
-    unverified_list = []
-    unverified_count = 0
-    unverified_filtered_count = 0
-    unverified_total_pages = 1
-
-    if can_intake:
         try:
-            unverified_count = _count_unverified_pdfs()
-            unverified_filtered_count = _count_unverified_pdfs(
-                show_confirmed=show_confirmed
-            ) if show_confirmed else unverified_count
-            unverified_total_pages = max(1, (unverified_filtered_count + PER_PAGE - 1) // PER_PAGE)
-            if unverified_page > unverified_total_pages:
-                unverified_page = unverified_total_pages
-                unverified_offset = (unverified_page - 1) * PER_PAGE
-            unverified_list = _load_unverified_pdfs(
-                show_confirmed=show_confirmed,
-                limit=PER_PAGE, offset=unverified_offset,
+            from bot.db import count_bot_pdfs
+            staging_filtered_total = count_bot_pdfs(
+                published_filter=None if show_published else False
             )
-        except Exception as e:
-            logger.warning(f"unverified list load failed: {e}")
+            staging_published_count = count_bot_pdfs(published_filter=True)
+        except Exception:
+            staging_filtered_total = len(staging_list)
+            staging_published_count = 0
+
+        staging_total_pages = (
+            (staging_filtered_total + PER_PAGE - 1) // PER_PAGE
+            if staging_filtered_total > 0 else 1
+        )
+
+        ctx.update({
+            'staging_list':            staging_list,
+            'staging_page':            staging_page,
+            'staging_total_pages':     staging_total_pages,
+            'show_published':          show_published,
+            'staging_published_count': staging_published_count,
+            'staging_filtered_count':  staging_filtered_total,
+        })
+
+    elif tab == 'unverified':
+        show_confirmed = (request.args.get('show_confirmed') == '1')
+        try:
+            unverified_page = max(1, int(request.args.get('page') or 1))
+        except (TypeError, ValueError):
+            unverified_page = 1
+        offset = (unverified_page - 1) * PER_PAGE
+
+        unverified_list = _load_unverified_pdfs(
+            show_confirmed=show_confirmed,
+            limit=PER_PAGE, offset=offset,
+        )
+
+        if show_confirmed:
+            unverified_filtered_count = _count_unverified_pdfs(show_confirmed=True)
+        else:
+            unverified_filtered_count = _count_unverified_pdfs(show_confirmed=False)
+
+        unverified_total_pages = (
+            (unverified_filtered_count + PER_PAGE - 1) // PER_PAGE
+            if unverified_filtered_count > 0 else 1
+        )
+
+        ctx.update({
+            'unverified_list':           unverified_list,
+            'unverified_page':           unverified_page,
+            'unverified_total_pages':    unverified_total_pages,
+            'show_confirmed':            show_confirmed,
+            'unverified_filtered_count': unverified_filtered_count,
+        })
 
     return render_template(
         'dashboard/admin/content/pdfs.html',
-        tab=tab,
-        can_intake=can_intake, can_publish=can_publish,
-        can_edit=can_edit, can_delete=can_delete,
-        pdfs=pdf_list,
-        subjects=get_all_subjects(),
-        curricula=get_pdf_distinct_curricula(),
-        classes=get_pdf_distinct_classes(),
-        search=search, subject_filter=subject_filter,
-        curriculum_filter=curriculum_filter, class_filter=class_filter,
-        lib_page=lib_page, lib_total=lib_total,
-        lib_total_pages=lib_total_pages,
-        pending_list=pending_list, pending_count=pending_count,
-        intake_filtered_count=intake_filtered_count,
-        intake_page=intake_page, intake_total_pages=intake_total_pages,
-        q=q,
-        staging_list=staging_list, staging_count=staging_count,
-        staging_published_count=staging_published_count,
-        staging_filtered_count=staging_filtered_count,
-        staging_page=staging_page, staging_total_pages=staging_total_pages,
-        show_published=show_published,
-        unverified_list=unverified_list, unverified_count=unverified_count,
-        unverified_filtered_count=unverified_filtered_count,
-        unverified_page=unverified_page,
-        unverified_total_pages=unverified_total_pages,
-        show_confirmed=show_confirmed,
+        **ctx,
     )
 
 
@@ -1932,7 +2213,7 @@ def pdf_intake_preview(pending_id):
 
 
 # ============================================================
-# PDFs — LEGACY REDIRECT (intake → bulk workspace)
+# PDFs — LEGACY REDIRECT
 # ============================================================
 
 @admin_content_bp.route('/pdfs/intake/publish-direct', methods=['POST'],
@@ -2084,7 +2365,6 @@ def pdf_staging_publish():
         ok, msg = publish_bot_pdf_to_main(sid_int)
         if ok:
             succeeded += 1
-            # Capture the main PDF id for batching (best-effort)
             try:
                 from bot.db import get_bot_pdf_by_id
                 bpdf = get_bot_pdf_by_id(sid_int)
@@ -2105,7 +2385,6 @@ def pdf_staging_publish():
             severity='warning',
         )
 
-        # ── Auto-create batch for the newly published PDFs
         batch_id = _auto_create_pdfs_batch(
             published_main_ids,
             admin_id=session.get('user_id'),
@@ -2560,7 +2839,6 @@ def pdfs_bulk_workspace_commit():
         except Exception as e:
             logger.warning(f"delete_pending_pdf({pending_id}) failed: {e}")
 
-    # ── Auto-create a batch for the published PDFs
     if mode == 'publish' and published_main_ids:
         batch_id = _auto_create_pdfs_batch(
             published_main_ids,

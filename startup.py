@@ -13,8 +13,10 @@
 import os
 import sys
 import json
+import time
 import sqlite3
 import logging
+from datetime import datetime
 from typing import Dict, Tuple, List
 
 from config import Config
@@ -27,6 +29,7 @@ from database import (
     create_database_schema,
     enable_wal_mode,
     ensure_question_interactions_table,
+    ensure_push_tables,
     _get_connection,
 )
 
@@ -46,7 +49,7 @@ def initialize_database_startup_fast() -> Tuple[bool, List[str]]:
       - verifies the DB is openable
       - verifies required tables exist
       - ensures WAL mode
-      - ensures the question_interactions table exists
+      - ensures the question_interactions and push_subscriptions tables exist
 
     What it does NOT do (by design):
       - the full PRAGMA integrity_check (O(DB size))
@@ -82,14 +85,13 @@ def initialize_database_startup_fast() -> Tuple[bool, List[str]]:
     # 3. Required tables must exist
     try:
         conn = _get_connection(timeout=5)
-        ensure_question_interactions_table(conn)
-        ensure_push_tables(conn)
-        tables_ok, missing = verify_tables_exist(conn)
-        conn.close()
+        try:
+            ensure_question_interactions_table(conn)
+            ensure_push_tables(conn)
+            tables_ok, missing = verify_tables_exist(conn)
+        finally:
+            conn.close()
         if not tables_ok:
-            # If this is a fresh install with no tables, try creating schema
-            if not verify_database_exists():
-                pass
             errors.append(f"Missing tables: {', '.join(missing)}")
             return False, errors
     except Exception as e:
@@ -475,11 +477,12 @@ def verify_startup() -> bool:
         error_message = "\n".join(errors)
         logger.critical(f"Startup verification FAILED:\n{error_message}")
 
+        # Best-effort: notify super admins. Never fatal.
         try:
-            from errors import send_error_email
-            send_error_email({
+            from errors import send_error_telegram
+            send_error_telegram({
                 'request_id': 'startup',
-                'timestamp': datetime.now().isoformat() if 'datetime' in dir() else '',
+                'timestamp': datetime.now().isoformat(),
                 'severity': 'CRITICAL',
                 'status_code': 500,
                 'url': 'STARTUP',
@@ -491,10 +494,10 @@ def verify_startup() -> bool:
                 'stack_trace': error_message,
                 'user_description': 'Application startup failed',
                 'occurrence_count': 1,
-                'error_hash': 'startup_' + str(int(__import__('time').time()))
+                'error_hash': 'startup_' + str(int(time.time())),
             })
         except Exception as e:
-            logger.error(f"Failed to send startup error email: {e}")
+            logger.error(f"Failed to dispatch startup error notification: {e}")
 
         return False
 
