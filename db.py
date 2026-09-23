@@ -3992,6 +3992,280 @@ def mark_batch_edit_undone(edit_id: int) -> bool:
     except Exception:
         return False
 
+# ─── Batch purge ─────────────────────────────────────────
+#
+# purge_batch_items(batch_id, dry_run=True)   → preview only
+# purge_batch_items(batch_id, dry_run=False)  → delete in one transaction
+#
+# item_ids + item_type restrict the operation to a subset of the
+# batch's items — used by the bulk bar. If both are None, the whole
+# batch is purged.
+
+def _batch_item_ids(conn_or_cursor, batch_id: int) -> dict:
+    """Return {'question': [ids], 'pdf': [ids]} for a batch."""
+    result = {'question': [], 'pdf': []}
+    try:
+        cur = conn_or_cursor
+        rows = cur.execute(
+            "SELECT item_type, item_id FROM content_batch_items "
+            "WHERE batch_id = ?",
+            (batch_id,),
+        ).fetchall()
+        for row in rows:
+            itype = row['item_type'] if hasattr(row, 'keys') else row[0]
+            iid = row['item_id'] if hasattr(row, 'keys') else row[1]
+            if itype in result:
+                result[itype].append(iid)
+    except Exception as e:
+        logger.warning(f"_batch_item_ids failed for batch {batch_id}: {e}")
+    return result
+
+
+def _count_related(cur, question_ids, pdf_ids) -> dict:
+    """Count every related row that would be deleted."""
+    counts = {
+        'questions': 0, 'pdfs': 0,
+        'quiz_ratings': 0,
+        'question_interactions': 0,
+        'question_miss_stats': 0,
+        'question_duplicate_dismissals': 0,
+        'pdf_reports': 0, 'saved_content': 0,
+        'unverified_pdfs': 0,
+        'content_batch_items': 0,
+    }
+
+    if question_ids:
+        ph = ','.join('?' * len(question_ids))
+        try:
+            counts['questions'] = cur.execute(
+                f"SELECT COUNT(*) FROM questions WHERE id IN ({ph})",
+                question_ids).fetchone()[0]
+        except Exception:
+            pass
+        for tbl in ('quiz_ratings', 'question_interactions', 'question_miss_stats'):
+            try:
+                counts[tbl] = cur.execute(
+                    f"SELECT COUNT(*) FROM {tbl} WHERE question_id IN ({ph})",
+                    question_ids).fetchone()[0]
+            except Exception:
+                pass
+        try:
+            counts['question_duplicate_dismissals'] = cur.execute(
+                f"SELECT COUNT(*) FROM question_duplicate_dismissals "
+                f"WHERE a_id IN ({ph}) OR b_id IN ({ph})",
+                question_ids + question_ids).fetchone()[0]
+        except Exception:
+            pass
+
+    if pdf_ids:
+        ph = ','.join('?' * len(pdf_ids))
+        try:
+            counts['pdfs'] = cur.execute(
+                f"SELECT COUNT(*) FROM pdfs WHERE id IN ({ph})",
+                pdf_ids).fetchone()[0]
+        except Exception:
+            pass
+        try:
+            counts['pdf_reports'] = cur.execute(
+                f"SELECT COUNT(*) FROM pdf_reports WHERE pdf_id IN ({ph})",
+                pdf_ids).fetchone()[0]
+        except Exception:
+            pass
+        try:
+            counts['saved_content'] = cur.execute(
+                f"SELECT COUNT(*) FROM saved_content "
+                f"WHERE content_type = 'pdf' AND content_id IN ({ph})",
+                pdf_ids).fetchone()[0]
+        except Exception:
+            pass
+        try:
+            counts['unverified_pdfs'] = cur.execute(
+                f"SELECT COUNT(*) FROM unverified_pdfs WHERE pdf_id IN ({ph})",
+                pdf_ids).fetchone()[0]
+        except Exception:
+            pass
+
+    if question_ids or pdf_ids:
+        clauses, params = [], []
+        if question_ids:
+            ph = ','.join('?' * len(question_ids))
+            clauses.append(f"(item_type='question' AND item_id IN ({ph}))")
+            params.extend(question_ids)
+        if pdf_ids:
+            ph = ','.join('?' * len(pdf_ids))
+            clauses.append(f"(item_type='pdf' AND item_id IN ({ph}))")
+            params.extend(pdf_ids)
+        if clauses:
+            try:
+                counts['content_batch_items'] = cur.execute(
+                    "SELECT COUNT(*) FROM content_batch_items WHERE "
+                    + " OR ".join(clauses),
+                    params).fetchone()[0]
+            except Exception:
+                pass
+
+    return counts
+
+
+def purge_batch_items(batch_id, dry_run=True, item_ids=None, item_type=None) -> dict:
+    """
+    Permanently delete items in a batch.
+
+    dry_run=True  → return a preview dict, no writes.
+    dry_run=False → delete in one transaction, rollback on any error.
+
+    item_ids + item_type restrict the purge to a subset of the batch's
+    items. Both must be provided together, or neither.
+
+    Returns:
+        {
+          'batch_id':    int,
+          'batch_name':  str,
+          'dry_run':     bool,
+          'item_type':   str | None,
+          'batch_items': {'question': [...], 'pdf': [...]},
+          'counts':      {table: N},
+          'total':       int,
+          'deleted':     {table: N},   # only when dry_run=False
+          'error':       str | None,
+        }
+    """
+    out = {
+        'batch_id': batch_id, 'batch_name': '', 'dry_run': bool(dry_run),
+        'item_type': item_type,
+        'batch_items': {'question': [], 'pdf': []},
+        'counts': {}, 'total': 0, 'deleted': {}, 'error': None,
+    }
+
+    batch = get_batch(batch_id)
+    if not batch:
+        out['error'] = f'Batch {batch_id} not found'
+        return out
+    out['batch_name'] = batch.get('name') or f'Batch #{batch_id}'
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Collect ids — scope if subset requested
+    all_items = _batch_item_ids(cur, batch_id)
+
+    if item_ids is not None:
+        if item_type not in ('question', 'pdf'):
+            out['error'] = 'item_type required when item_ids is provided'
+            return out
+        allowed = set(all_items[item_type])
+        scoped = [int(i) for i in item_ids if int(i) in allowed]
+        scoped_items = {'question': [], 'pdf': []}
+        scoped_items[item_type] = scoped
+        out['batch_items'] = scoped_items
+    else:
+        out['batch_items'] = all_items
+
+    qids = out['batch_items']['question']
+    pids = out['batch_items']['pdf']
+
+    # Count related rows that exist
+    try:
+        out['counts'] = _count_related(cur, qids, pids)
+    except Exception as e:
+        out['error'] = f'Could not count items: {e}'
+        return out
+    out['total'] = out['counts'].get('questions', 0) + out['counts'].get('pdfs', 0)
+
+    if dry_run:
+        return out
+
+    # Actually delete — one transaction
+    deleted = {}
+    try:
+        if qids:
+            ph = ','.join('?' * len(qids))
+            cur.execute(
+                f"DELETE FROM question_duplicate_dismissals "
+                f"WHERE a_id IN ({ph}) OR b_id IN ({ph})",
+                qids + qids)
+            deleted['question_duplicate_dismissals'] = cur.rowcount
+            cur.execute(
+                f"DELETE FROM question_miss_stats WHERE question_id IN ({ph})",
+                qids)
+            deleted['question_miss_stats'] = cur.rowcount
+            cur.execute(
+                f"DELETE FROM quiz_ratings WHERE question_id IN ({ph})",
+                qids)
+            deleted['quiz_ratings'] = cur.rowcount
+            cur.execute(
+                f"DELETE FROM question_interactions WHERE question_id IN ({ph})",
+                qids)
+            deleted['question_interactions'] = cur.rowcount
+            cur.execute(
+                f"DELETE FROM questions WHERE id IN ({ph})",
+                qids)
+            deleted['questions'] = cur.rowcount
+
+        if pids:
+            ph = ','.join('?' * len(pids))
+            cur.execute(
+                f"DELETE FROM pdf_reports WHERE pdf_id IN ({ph})",
+                pids)
+            deleted['pdf_reports'] = cur.rowcount
+            cur.execute(
+                f"DELETE FROM saved_content "
+                f"WHERE content_type='pdf' AND content_id IN ({ph})",
+                pids)
+            deleted['saved_content'] = cur.rowcount
+            cur.execute(
+                f"DELETE FROM unverified_pdfs WHERE pdf_id IN ({ph})",
+                pids)
+            deleted['unverified_pdfs'] = cur.rowcount
+            cur.execute(
+                f"DELETE FROM pdfs WHERE id IN ({ph})",
+                pids)
+            deleted['pdfs'] = cur.rowcount
+
+        if qids or pids:
+            clauses, params = [], []
+            if qids:
+                ph = ','.join('?' * len(qids))
+                clauses.append(f"(item_type='question' AND item_id IN ({ph}))")
+                params.extend(qids)
+            if pids:
+                ph = ','.join('?' * len(pids))
+                clauses.append(f"(item_type='pdf' AND item_id IN ({ph}))")
+                params.extend(pids)
+            if clauses:
+                cur.execute(
+                    "DELETE FROM content_batch_items WHERE "
+                    + " OR ".join(clauses),
+                    params)
+                deleted['content_batch_items'] = cur.rowcount
+
+        # Refresh item_count on every batch that lost items
+        try:
+            cur.execute("""
+                UPDATE content_batches
+                SET item_count = (
+                    SELECT COUNT(*) FROM content_batch_items
+                    WHERE batch_id = content_batches.id
+                ),
+                updated_at = datetime('now', 'localtime')
+            """)
+        except Exception:
+            pass
+
+        conn.commit()
+        out['deleted'] = deleted
+        return out
+
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logger.error(
+            f"purge_batch_items failed for batch {batch_id}: {e}",
+            exc_info=True)
+        out['error'] = str(e)
+        return out
 
 def clean_expired_batch_edits() -> int:
     """Delete undo snapshots whose window has expired."""

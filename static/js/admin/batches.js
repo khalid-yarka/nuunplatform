@@ -2,16 +2,13 @@
    static/js/admin/batches.js
    Batch list actions + batch detail editor.
 
-   Bulk edits are STAGED:
-     • Clicking a bulk action records a pending change, does not save.
-     • Staged changes are shown with a red badge on the bar and
-       amber chips on affected rows.
-     • A single Save button commits all staged changes at once.
-     • Discard clears the staging without saving.
-     • Leaving the page with pending changes prompts a warning.
+   Bulk edits are STAGED. Single-item edits save immediately.
+   Permanent delete is destructive, confirm-gated, and offers an
+   optional pre-purge database backup (default: on).
 
-   Single-item edit (row drawer) saves immediately — one change
-   at a time, separate flow.
+   The confirm input uses letter-by-letter progress. The button
+   is enabled only when (a) the preview loaded, (b) the input
+   equals DELETE, and (c) no request is in flight.
    ============================================================ */
 
 (function () {
@@ -19,7 +16,6 @@
 
     var CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
 
-    // ─── Toast ───
     function toast(msg, kind) {
         if (typeof window.showToast === 'function') {
             window.showToast(msg, kind || 'info');
@@ -90,7 +86,6 @@
 
         var BATCH_ID = parseInt(shell.getAttribute('data-batch-id'), 10);
 
-        // ─── Subject catalog ───
         var SUBJECTS = [];
         try {
             var subjEl = document.getElementById('batchSubjectsData');
@@ -102,7 +97,6 @@
             items: [],
             selected: new Set(),
             totalInBatch: { question: 0, pdf: 0 },
-            // Staged changes per tab: [{action, value, item_ids: [..]}, ...]
             pendingChanges: { question: [], pdf: [] },
             undoTimeout: null,
         };
@@ -156,20 +150,26 @@
             deleteBtn: document.getElementById('batchDeleteBtn'),
             deleteConfirm: document.getElementById('deleteConfirmBtn'),
 
+            purgeModal: document.getElementById('purgeModal'),
+            purgeStats: document.getElementById('purgeStats'),
+            purgeConfirmInput: document.getElementById('purgeConfirmInput'),
+            purgeConfirmBtn: document.getElementById('purgeConfirmBtn'),
+            purgeBackupCheck: document.getElementById('purgeBackupCheck'),
+            purgeBackupHint: document.getElementById('purgeBackupHint'),
+            purgeProgress: document.getElementById('purgeProgress'),
+            purgeConfirmStatus: document.getElementById('purgeConfirmStatus'),
+
             pinBtn: document.getElementById('batchPinBtn'),
             pinLabel: document.getElementById('pinLabel'),
         };
 
         // ─── Pending-changes helpers ───
         function getPending() { return state.pendingChanges[state.type]; }
-
         function pendingCount() { return getPending().length; }
-
         function hasAnyPending() {
             return state.pendingChanges.question.length > 0
                 || state.pendingChanges.pdf.length > 0;
         }
-
         function pendingForField(action) {
             var list = getPending();
             for (var i = 0; i < list.length; i++) {
@@ -186,7 +186,6 @@
             }
             var list = getPending();
 
-            // Tag actions: allow multiple, but skip exact dupes
             if (action === 'add_tag' || action === 'remove_tag') {
                 var tagVal = (value || '').trim();
                 if (!tagVal) return false;
@@ -198,13 +197,11 @@
                 }
                 list.push({ action: action, value: tagVal, item_ids: ids });
             } else if (action === 'clear_tags') {
-                // Remove any staged tag ops and add clear_tags
                 state.pendingChanges[state.type] = list.filter(function (p) {
                     return p.action !== 'add_tag' && p.action !== 'remove_tag';
                 });
                 getPending().push({ action: action, value: null, item_ids: ids });
             } else {
-                // set_* / toggle_*: replace any existing entry for that action
                 state.pendingChanges[state.type] = list.filter(function (p) {
                     return p.action !== action;
                 });
@@ -225,7 +222,6 @@
             }
         }
 
-        // ─── Load items ───
         function buildQuery() {
             var p = new URLSearchParams();
             p.set('type', state.type);
@@ -257,7 +253,6 @@
             }, 200);
         }
 
-        // ─── Escaping ───
         function escapeHtml(s) {
             if (s == null) return '';
             return String(s)
@@ -266,7 +261,6 @@
                 .replace(/'/g, '&#39;');
         }
 
-        // ─── Determine if a row has any pending change ───
         function rowHasPending(itemId) {
             var list = getPending();
             for (var i = 0; i < list.length; i++) {
@@ -282,9 +276,7 @@
                 var p = list[i];
                 if (p.item_ids.indexOf(itemId) === -1) continue;
                 var label = pendingChipLabel(p);
-                if (label) {
-                    chips.push('<span class="batch-pending-chip">' + label + '</span>');
-                }
+                if (label) chips.push('<span class="batch-pending-chip">' + label + '</span>');
             }
             return chips.join('');
         }
@@ -309,7 +301,6 @@
             return '';
         }
 
-        // ─── Render table ───
         function renderTable() {
             if (!state.items.length) {
                 el.tableBody.innerHTML =
@@ -415,22 +406,15 @@
             }
         }
 
-        // ─── Bulk bar ───
         function updateBulkBar() {
             var n = state.selected.size;
             var pcount = pendingCount();
             var anyPending = hasAnyPending();
 
-            // Show bar if there's a selection OR staged changes
-            if (n === 0 && pcount === 0) {
-                el.bulkBar.hidden = true;
-                return;
-            }
+            if (n === 0 && pcount === 0) { el.bulkBar.hidden = true; return; }
             el.bulkBar.hidden = false;
-
             el.bbSelected.textContent = n;
 
-            // Pending indicator
             if (pcount > 0) {
                 el.bbPending.hidden = false;
                 el.bbPendingCount.textContent = pcount;
@@ -439,10 +423,8 @@
                 el.bbPending.hidden = true;
             }
 
-            // Save cluster
             el.bbSaveCluster.hidden = !anyPending;
 
-            // "Select all in batch" — only when all visible are selected
             var visibleIds = state.items.map(function (x) { return x.id; });
             var visibleSelected = visibleIds.filter(function (id) { return state.selected.has(id); }).length;
             var totalBatch = state.totalInBatch[state.type === 'question' ? 'question' : 'pdf'];
@@ -450,9 +432,7 @@
                                           && visibleSelected > 0
                                           && totalBatch > visibleIds.length);
 
-            // Actions hidden when nothing is selected
             el.bbActions.style.display = (n === 0) ? 'none' : '';
-
             renderBulkActions();
         }
 
@@ -475,10 +455,13 @@
                 html += bulkAction('premium', '💎', 'Premium');
             }
             html += '<button type="button" class="bb-action bb-action--danger" data-bulk="remove">'
-                  + '<i class="fas fa-trash"></i> Remove from batch</button>';
+                  + '<i class="fas fa-unlink"></i> Remove from batch</button>';
+
+            html += '<button type="button" class="bb-action bb-action--purge" data-bulk="purge">'
+                  + '<i class="fas fa-skull-crossbones"></i> Permanently delete</button>';
+
             el.bbActions.innerHTML = html;
 
-            // Mark actions that already have a pending value
             var stagedActions = {};
             getPending().forEach(function (p) { stagedActions[p.action] = true; });
 
@@ -486,9 +469,7 @@
                 var key = btn.getAttribute('data-bulk');
                 if (!key) return;
                 var mapped = mapBulkKeyToAction(key);
-                if (mapped && stagedActions[mapped]) {
-                    btn.classList.add('has-pending');
-                }
+                if (mapped && stagedActions[mapped]) btn.classList.add('has-pending');
                 if (key === 'tags' && (stagedActions['add_tag']
                                       || stagedActions['remove_tag']
                                       || stagedActions['clear_tags'])) {
@@ -518,14 +499,12 @@
                  + '</button>';
         }
 
-        // ─── Selection handlers ───
         el.tableBody.addEventListener('change', function (e) {
             var cb = e.target.closest('.batch-checkbox');
             if (!cb) return;
             var row = cb.closest('tr');
             var id = parseInt(row.getAttribute('data-id'), 10);
             if (cb.checked) state.selected.add(id); else state.selected.delete(id);
-            // Re-render the whole table so pending chips stay in sync
             renderTable();
         });
 
@@ -558,7 +537,6 @@
             });
         });
 
-        // ─── Save / Discard ───
         el.bbDiscard.addEventListener('click', function () {
             if (!hasAnyPending()) return;
             if (!confirm('Discard all staged changes?')) return;
@@ -568,12 +546,8 @@
 
         el.bbSave.addEventListener('click', function () {
             var pending = getPending();
-            if (!pending.length) {
-                toast('Nothing to save.', 'info');
-                return;
-            }
+            if (!pending.length) { toast('Nothing to save.', 'info'); return; }
 
-            // Confirm for large batches
             var totalIds = {};
             pending.forEach(function (p) {
                 p.item_ids.forEach(function (id) { totalIds[id] = true; });
@@ -587,11 +561,7 @@
             }
 
             var changes = pending.map(function (p) {
-                return {
-                    action: p.action,
-                    value: p.value,
-                    item_ids: p.item_ids.slice(),
-                };
+                return { action: p.action, value: p.value, item_ids: p.item_ids.slice() };
             });
 
             el.bbSave.disabled = true;
@@ -605,10 +575,7 @@
                     'X-CSRF-Token': CSRF,
                     'X-Requested-With': 'XMLHttpRequest'
                 },
-                body: JSON.stringify({
-                    item_type: state.type,
-                    changes: changes,
-                })
+                body: JSON.stringify({ item_type: state.type, changes: changes })
             })
             .then(function (r) { return r.json(); })
             .then(function (d) {
@@ -631,7 +598,6 @@
             });
         });
 
-        // ─── Filters ───
         ['search', 'grade', 'subject', 'status'].forEach(function (k) {
             var inp = el[k];
             if (!inp) return;
@@ -669,7 +635,6 @@
             reloadItems();
         });
 
-        // ─── Tabs ───
         el.tabs.forEach(function (tab) {
             tab.addEventListener('click', function () {
                 var type = tab.getAttribute('data-type');
@@ -693,14 +658,12 @@
             });
         });
 
-        // ─── Row edit button ───
         el.tableBody.addEventListener('click', function (e) {
             var btn = e.target.closest('[data-edit-item]');
             if (!btn) return;
             openDrawer(parseInt(btn.getAttribute('data-edit-item'), 10));
         });
 
-        // ─── Drawer (single-item, saves immediately) ───
         function openDrawer(itemId) {
             el.drawerBackdrop.hidden = false;
             el.drawer.hidden = false;
@@ -748,89 +711,36 @@
                 var options = item.options || {};
                 var correct = item.correct_answer || 'A';
                 html += ''
-                    + '<div class="admin-form-group"><label>Subject</label>'
-                    +   '<select data-field="subject_code">'
-                    +     subjectOptionsHtml(item.subject_code || '')
-                    +   '</select></div>'
-                    + '<div class="admin-form-group"><label>Grade</label>'
-                    +   '<select data-field="grade">'
-                    +     ['F4','F3','G8','G7'].map(function(g){
-                            return '<option value="' + g + '"' + (item.grade === g ? ' selected' : '') + '>' + g + '</option>';
-                          }).join('')
-                    +   '</select></div>'
-                    + '<div class="admin-form-group"><label>Question</label>'
-                    +   '<textarea data-field="question_text" rows="4">' + escapeHtml(item.question_text || '') + '</textarea></div>'
-                    + '<div class="admin-form-group"><label>Option A</label>'
-                    +   '<input type="text" data-opt="A" value="' + escapeHtml(options.A || '') + '"></div>'
-                    + '<div class="admin-form-group"><label>Option B</label>'
-                    +   '<input type="text" data-opt="B" value="' + escapeHtml(options.B || '') + '"></div>'
-                    + '<div class="admin-form-group"><label>Option C</label>'
-                    +   '<input type="text" data-opt="C" value="' + escapeHtml(options.C || '') + '"></div>'
-                    + '<div class="admin-form-group"><label>Option D (optional)</label>'
-                    +   '<input type="text" data-opt="D" value="' + escapeHtml(options.D || '') + '"></div>'
-                    + '<div class="admin-form-group"><label>Option E (optional)</label>'
-                    +   '<input type="text" data-opt="E" value="' + escapeHtml(options.E || '') + '"></div>'
-                    + '<div class="admin-form-group"><label>Option F (optional)</label>'
-                    +   '<input type="text" data-opt="F" value="' + escapeHtml(options.F || '') + '"></div>'
-                    + '<div class="admin-form-group"><label>Correct answer</label>'
-                    +   '<select data-field="correct_answer">'
-                    +     ['A','B','C','D','E','F'].map(function(k){
-                            return '<option value="' + k + '"' + (correct === k ? ' selected' : '') + '>' + k + '</option>';
-                          }).join('')
-                    +   '</select></div>'
-                    + '<div class="admin-form-group"><label>Difficulty</label>'
-                    +   '<select data-field="difficulty">'
-                    +     [1,2,3,4,5].map(function(n){
-                            return '<option value="' + n + '"' + (item.difficulty === n ? ' selected' : '') + '>' + '⭐'.repeat(n) + '</option>';
-                          }).join('')
-                    +   '</select></div>'
-                    + '<div class="admin-form-group"><label>Chapter</label>'
-                    +   '<input type="text" data-field="chapter" value="' + escapeHtml(item.chapter || '') + '"></div>'
-                    + '<div class="admin-form-group"><label>Tags (comma-separated)</label>'
-                    +   '<input type="text" data-field="tags" value="' + escapeHtml(item.tags || '') + '"></div>'
-                    + '<div class="admin-form-group"><label>Explanation</label>'
-                    +   '<textarea data-field="explanation" rows="3">' + escapeHtml(item.explanation || '') + '</textarea></div>'
-                    + '<div class="admin-form-group"><label>PDF code (optional)</label>'
-                    +   '<input type="text" data-field="pdf_code" value="' + escapeHtml(item.pdf_code || '') + '"></div>'
-                    + '<div class="admin-form-group"><label>PDF page (optional)</label>'
-                    +   '<input type="number" data-field="pdf_page" value="' + (item.pdf_page || '') + '" min="1"></div>'
-                    + '<div class="admin-form-group"><label>Status</label>'
-                    +   '<select data-field="status">'
-                    +     ['active','archived','draft'].map(function(s){
-                            return '<option value="' + s + '"' + (item.status === s ? ' selected' : '') + '>' + s + '</option>';
-                          }).join('')
-                    +   '</select></div>';
+                    + '<div class="admin-form-group"><label>Subject</label><select data-field="subject_code">' + subjectOptionsHtml(item.subject_code || '') + '</select></div>'
+                    + '<div class="admin-form-group"><label>Grade</label><select data-field="grade">' + ['F4','F3','G8','G7'].map(function(g){ return '<option value="' + g + '"' + (item.grade === g ? ' selected' : '') + '>' + g + '</option>'; }).join('') + '</select></div>'
+                    + '<div class="admin-form-group"><label>Question</label><textarea data-field="question_text" rows="4">' + escapeHtml(item.question_text || '') + '</textarea></div>'
+                    + '<div class="admin-form-group"><label>Option A</label><input type="text" data-opt="A" value="' + escapeHtml(options.A || '') + '"></div>'
+                    + '<div class="admin-form-group"><label>Option B</label><input type="text" data-opt="B" value="' + escapeHtml(options.B || '') + '"></div>'
+                    + '<div class="admin-form-group"><label>Option C</label><input type="text" data-opt="C" value="' + escapeHtml(options.C || '') + '"></div>'
+                    + '<div class="admin-form-group"><label>Option D (optional)</label><input type="text" data-opt="D" value="' + escapeHtml(options.D || '') + '"></div>'
+                    + '<div class="admin-form-group"><label>Option E (optional)</label><input type="text" data-opt="E" value="' + escapeHtml(options.E || '') + '"></div>'
+                    + '<div class="admin-form-group"><label>Option F (optional)</label><input type="text" data-opt="F" value="' + escapeHtml(options.F || '') + '"></div>'
+                    + '<div class="admin-form-group"><label>Correct answer</label><select data-field="correct_answer">' + ['A','B','C','D','E','F'].map(function(k){ return '<option value="' + k + '"' + (correct === k ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></div>'
+                    + '<div class="admin-form-group"><label>Difficulty</label><select data-field="difficulty">' + [1,2,3,4,5].map(function(n){ return '<option value="' + n + '"' + (item.difficulty === n ? ' selected' : '') + '>' + '⭐'.repeat(n) + '</option>'; }).join('') + '</select></div>'
+                    + '<div class="admin-form-group"><label>Chapter</label><input type="text" data-field="chapter" value="' + escapeHtml(item.chapter || '') + '"></div>'
+                    + '<div class="admin-form-group"><label>Tags (comma-separated)</label><input type="text" data-field="tags" value="' + escapeHtml(item.tags || '') + '"></div>'
+                    + '<div class="admin-form-group"><label>Explanation</label><textarea data-field="explanation" rows="3">' + escapeHtml(item.explanation || '') + '</textarea></div>'
+                    + '<div class="admin-form-group"><label>PDF code (optional)</label><input type="text" data-field="pdf_code" value="' + escapeHtml(item.pdf_code || '') + '"></div>'
+                    + '<div class="admin-form-group"><label>PDF page (optional)</label><input type="number" data-field="pdf_page" value="' + (item.pdf_page || '') + '" min="1"></div>'
+                    + '<div class="admin-form-group"><label>Status</label><select data-field="status">' + ['active','archived','draft'].map(function(s){ return '<option value="' + s + '"' + (item.status === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select></div>';
             } else {
                 html += ''
-                    + '<div class="admin-form-group"><label>Title</label>'
-                    +   '<input type="text" data-field="title" value="' + escapeHtml(item.title || '') + '"></div>'
-                    + '<div class="admin-form-group"><label>Subject</label>'
-                    +   '<select data-field="subject">'
-                    +     subjectOptionsHtml(item.subject || '')
-                    +   '</select></div>'
-                    + '<div class="admin-form-group"><label>Class</label>'
-                    +   '<select data-field="class">'
-                    +     ['F4','F3','G8','G7'].map(function(c){
-                            return '<option value="' + c + '"' + (item.class === c ? ' selected' : '') + '>' + c + '</option>';
-                          }).join('')
-                    +   '</select></div>'
-                    + '<div class="admin-form-group"><label>Curriculum</label>'
-                    +   '<select data-field="curriculum">'
-                    +     ['PL','SO','SL'].map(function(c){
-                            return '<option value="' + c + '"' + (item.curriculum === c ? ' selected' : '') + '>' + c + '</option>';
-                          }).join('')
-                    +   '</select></div>'
-                    + '<div class="admin-form-group"><label>Chapter</label>'
-                    +   '<input type="text" data-field="chapter" value="' + escapeHtml(item.chapter || '') + '"></div>'
-                    + '<div class="admin-form-group"><label>Tags (comma-separated)</label>'
-                    +   '<input type="text" data-field="tags" value="' + escapeHtml(item.tags || '') + '"></div>'
-                    + '<div class="admin-form-group"><label>Premium</label>'
-                    +   '<select data-field="is_premium">'
-                    +     '<option value="0"' + (!item.is_premium ? ' selected' : '') + '>No</option>'
-                    +     '<option value="1"' + (item.is_premium ? ' selected' : '') + '>Yes</option>'
-                    +   '</select></div>'
-                    + '<div class="admin-form-group"><label>Description</label>'
-                    +   '<textarea data-field="description" rows="3">' + escapeHtml(item.description || '') + '</textarea></div>';
+                    + '<div class="admin-form-group"><label>Title</label><input type="text" data-field="title" value="' + escapeHtml(item.title || '') + '"></div>'
+                    + '<div class="admin-form-group"><label>Subject</label><select data-field="subject">' + subjectOptionsHtml(item.subject || '') + '</select></div>'
+                    + '<div class="admin-form-group"><label>Class</label><select data-field="class">' + ['F4','F3','G8','G7'].map(function(c){ return '<option value="' + c + '"' + (item.class === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></div>'
+                    + '<div class="admin-form-group"><label>Curriculum</label><select data-field="curriculum">' + ['PL','SO','SL'].map(function(c){ return '<option value="' + c + '"' + (item.curriculum === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></div>'
+                    + '<div class="admin-form-group"><label>Chapter</label><input type="text" data-field="chapter" value="' + escapeHtml(item.chapter || '') + '"></div>'
+                    + '<div class="admin-form-group"><label>Tags (comma-separated)</label><input type="text" data-field="tags" value="' + escapeHtml(item.tags || '') + '"></div>'
+                    + '<div class="admin-form-group"><label>Premium</label><select data-field="is_premium">'
+                    +   '<option value="0"' + (!item.is_premium ? ' selected' : '') + '>No</option>'
+                    +   '<option value="1"' + (item.is_premium ? ' selected' : '') + '>Yes</option>'
+                    + '</select></div>'
+                    + '<div class="admin-form-group"><label>Description</label><textarea data-field="description" rows="3">' + escapeHtml(item.description || '') + '</textarea></div>';
             }
             el.drawerBody.innerHTML = html;
         }
@@ -892,13 +802,10 @@
             });
         });
 
-        // ─── Bulk action popovers (stage instead of fire) ───
         var activePopover = null;
-
         function closePopover() {
             if (activePopover) { activePopover.remove(); activePopover = null; }
         }
-
         document.addEventListener('click', function (e) {
             if (activePopover && !activePopover.contains(e.target)
                 && !e.target.closest('[data-bulk]')) {
@@ -910,10 +817,8 @@
             var btn = e.target.closest('[data-bulk]');
             if (!btn) return;
             var key = btn.getAttribute('data-bulk');
-            if (key === 'remove') {
-                doRemoveSelected();
-                return;
-            }
+            if (key === 'remove') { doRemoveSelected(); return; }
+            if (key === 'purge') { openPurgeModal(); return; }
             openPopover(btn, key);
         });
 
@@ -928,8 +833,6 @@
 
             var html = '';
             html += '<div class="bb-popover__title">' + key + '</div>';
-
-            // Existing staged value for this action (to show as selected)
             var actionKey = mapBulkKeyToAction(key);
             var staged = actionKey ? pendingForField(actionKey) : null;
             var stagedValue = staged ? staged.value : null;
@@ -940,21 +843,17 @@
                            return '<button type="button" class="bb-grade-opt'
                              + (stagedValue === g ? ' active' : '')
                              + '" data-val="' + g + '">' + g + '</button>';
-                       }).join('')
-                     + '</div>'
+                       }).join('') + '</div>'
                      + '<button type="button" class="bb-popover__apply" disabled>Stage change</button>';
             } else if (key === 'subject') {
                 html += '<div class="bb-popover__row">'
                      + '<select data-input>'
                      +   '<option value="">— Pick a subject —</option>'
                      +   SUBJECTS.map(function(s){
-                             var code = s.code || '';
-                             var icon = s.icon || '📚';
-                             var name = s.name || code;
+                             var code = s.code || ''; var icon = s.icon || '📚'; var name = s.name || code;
                              return '<option value="' + escapeHtml(code) + '"'
                                   + (stagedValue === code ? ' selected' : '') + '>'
-                                  + icon + ' ' + escapeHtml(name)
-                                  + '</option>';
+                                  + icon + ' ' + escapeHtml(name) + '</option>';
                          }).join('')
                      + '</select></div>'
                      + '<button type="button" class="bb-popover__apply">Stage change</button>';
@@ -970,8 +869,7 @@
                            return '<option value="' + n + '"'
                              + (String(stagedValue) === String(n) ? ' selected' : '') + '>'
                              + '⭐'.repeat(n) + '</option>';
-                       }).join('')
-                     + '</select></div>'
+                       }).join('') + '</select></div>'
                      + '<button type="button" class="bb-popover__apply">Stage change</button>';
             } else if (key === 'status') {
                 html += '<div class="bb-popover__row">'
@@ -980,8 +878,7 @@
                            return '<option value="' + s + '"'
                              + (stagedValue === s ? ' selected' : '') + '>'
                              + s + '</option>';
-                       }).join('')
-                     + '</select></div>'
+                       }).join('') + '</select></div>'
                      + '<button type="button" class="bb-popover__apply">Stage change</button>';
             } else if (key === 'curriculum') {
                 html += '<div class="bb-popover__row">'
@@ -990,8 +887,7 @@
                            return '<option value="' + c + '"'
                              + (stagedValue === c ? ' selected' : '') + '>'
                              + c + '</option>';
-                       }).join('')
-                     + '</select></div>'
+                       }).join('') + '</select></div>'
                      + '<button type="button" class="bb-popover__apply">Stage change</button>';
             } else if (key === 'class') {
                 html += '<div class="bb-popover__row">'
@@ -999,8 +895,7 @@
                            return '<button type="button" class="bb-grade-opt'
                              + (stagedValue === c ? ' active' : '')
                              + '" data-val="' + c + '">' + c + '</button>';
-                       }).join('')
-                     + '</div>'
+                       }).join('') + '</div>'
                      + '<button type="button" class="bb-popover__apply" disabled>Stage change</button>';
             } else if (key === 'tags') {
                 html += '<div class="bb-popover__row">'
@@ -1052,8 +947,7 @@
                 if (!realAction) return;
                 closePopover();
                 if (stageChange(realAction, val)) {
-                    var label = extraKey || key;
-                    toast('Staged: ' + label, 'info');
+                    toast('Staged: ' + (extraKey || key), 'info');
                 }
             }
 
@@ -1074,16 +968,12 @@
                 });
             }
 
-            // Tag staged adds / removes / clear
             pop.querySelectorAll('[data-tag-mode]').forEach(function (b) {
                 b.addEventListener('click', function () {
                     var mode = b.getAttribute('data-tag-mode');
                     if (mode === 'clear') {
-                        if (stageChange('clear_tags', null)) {
-                            toast('Staged: clear all tags', 'info');
-                        }
-                        closePopover();
-                        return;
+                        if (stageChange('clear_tags', null)) toast('Staged: clear all tags', 'info');
+                        closePopover(); return;
                     }
                     var input = pop.querySelector('[data-input]');
                     var tag = input ? input.value.trim() : '';
@@ -1114,9 +1004,7 @@
                 if (d && d.success) {
                     toast(d.removed + ' items removed from batch', 'success');
                     state.selected.clear();
-                    state.totalInBatch[state.type] = Math.max(
-                        0, state.totalInBatch[state.type] - d.removed
-                    );
+                    state.totalInBatch[state.type] = Math.max(0, state.totalInBatch[state.type] - d.removed);
                     document.getElementById(
                         state.type === 'question' ? 'tabCountQuestion' : 'tabCountPdf'
                     ).textContent = state.totalInBatch[state.type];
@@ -1128,13 +1016,325 @@
             .catch(function () { toast('Network error', 'error'); });
         }
 
-        // ─── Undo toast ───
+        // ─── PERMANENT DELETE ───
+        var purgeState = {
+            preview: null,
+            loading: false,
+        };
+
+        function updatePurgeButton() {
+            if (!el.purgeConfirmInput || !el.purgeConfirmBtn) return;
+            var upper = (el.purgeConfirmInput.value || '').trim().toUpperCase();
+            el.purgeConfirmBtn.disabled =
+                (upper !== 'DELETE')
+                || purgeState.loading
+                || !purgeState.preview;
+        }
+
+        function updatePurgeConfirmProgress() {
+            if (!el.purgeConfirmInput || !el.purgeProgress || !el.purgeConfirmStatus) return;
+
+            var value = (el.purgeConfirmInput.value || '').toUpperCase();
+            var target = 'DELETE';
+
+            var slots = el.purgeProgress.querySelectorAll('.bm-confirm__slot');
+            slots.forEach(function (slot, i) {
+                var letter = target.charAt(i);
+                var typed = value.charAt(i);
+                if (typed && typed === letter) {
+                    slot.classList.add('is-filled');
+                } else {
+                    slot.classList.remove('is-filled');
+                }
+            });
+
+            var isReady = (value === target);
+
+            if (isReady) {
+                el.purgeConfirmStatus.className = 'bm-confirm__status is-ready';
+                el.purgeConfirmStatus.innerHTML =
+                    '<i class="fas fa-check-circle"></i>' +
+                    '<span>Ready to delete</span>';
+            } else if (value.length > 0) {
+                var remaining = Math.max(0, target.length - value.length);
+                el.purgeConfirmStatus.className = 'bm-confirm__status is-typing';
+                el.purgeConfirmStatus.innerHTML =
+                    '<i class="fas fa-circle-notch fa-spin"></i>' +
+                    '<span>Keep typing… ' + remaining +
+                    ' letter' + (remaining === 1 ? '' : 's') + ' left</span>';
+            } else {
+                el.purgeConfirmStatus.className = 'bm-confirm__status';
+                el.purgeConfirmStatus.innerHTML =
+                    '<i class="fas fa-circle-info"></i>' +
+                    '<span>Confirmation required</span>';
+            }
+
+            updatePurgeButton();
+        }
+
+        function updateBackupHint() {
+            if (!el.purgeBackupHint || !el.purgeBackupCheck) return;
+            if (el.purgeBackupCheck.checked) {
+                el.purgeBackupHint.className = 'bm-backup__hint is-on';
+                el.purgeBackupHint.innerHTML =
+                    '<i class="fas fa-shield-alt"></i>' +
+                    '<span>A full database backup will be saved to ' +
+                    '<code>BACKUPS/</code> before any rows are deleted.</span>';
+            } else {
+                el.purgeBackupHint.className = 'bm-backup__hint is-off';
+                el.purgeBackupHint.innerHTML =
+                    '<i class="fas fa-exclamation-triangle"></i>' +
+                    '<span>No backup will be created. The deletion is ' +
+                    'permanent and cannot be undone.</span>';
+            }
+        }
+
+        function openPurgeModal() {
+            if (!el.purgeModal) {
+                toast('Purge modal missing from detail.html.', 'error');
+                return;
+            }
+            var ids = Array.from(state.selected);
+            if (!ids.length) { toast('Select items first.', 'warning'); return; }
+
+            purgeState.preview = null;
+            purgeState.loading = true;
+
+            el.purgeConfirmInput.value = '';
+            el.purgeConfirmInput.setAttribute('autocapitalize', 'characters');
+
+            // Reset progress
+            if (el.purgeProgress) {
+                el.purgeProgress.querySelectorAll('.bm-confirm__slot').forEach(function (s) {
+                    s.classList.remove('is-filled');
+                });
+            }
+            if (el.purgeConfirmStatus) {
+                el.purgeConfirmStatus.className = 'bm-confirm__status';
+                el.purgeConfirmStatus.innerHTML =
+                    '<i class="fas fa-circle-info"></i>' +
+                    '<span>Confirmation required</span>';
+            }
+            updatePurgeButton();
+
+            el.purgeStats.innerHTML =
+                '<div class="bm-impact-loading">' +
+                '<i class="fas fa-spinner fa-spin"></i>' +
+                '<span>Computing impact…</span>' +
+                '</div>';
+
+            if (el.purgeBackupCheck) el.purgeBackupCheck.checked = true;
+            updateBackupHint();
+
+            el.purgeModal.hidden = false;
+
+            fetch('/admin/batches/' + BATCH_ID + '/purge-preview', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': CSRF,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    item_ids: ids,
+                    item_type: state.type,
+                })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                purgeState.loading = false;
+                if (!d || d.error) {
+                    el.purgeStats.innerHTML =
+                        '<div class="bm-impact-error">' +
+                        '<i class="fas fa-exclamation-circle"></i>' +
+                        '<span>' + escapeHtml((d && d.error) || 'Could not load preview.') + '</span>' +
+                        '</div>';
+                    updatePurgeButton();
+                    return;
+                }
+                purgeState.preview = d;
+                renderPurgeStats(d);
+                updatePurgeButton();
+            })
+            .catch(function () {
+                purgeState.loading = false;
+                el.purgeStats.innerHTML =
+                    '<div class="bm-impact-error">' +
+                    '<i class="fas fa-exclamation-circle"></i>' +
+                    '<span>Network error — could not reach the server.</span>' +
+                    '</div>';
+                updatePurgeButton();
+            });
+        }
+
+        function renderPurgeStats(d) {
+            var c = d.counts || {};
+            var qCount = c.questions || 0;
+            var pCount = c.pdfs || 0;
+
+            var html = '';
+
+            html += '<div class="bm-impact-grid">';
+            if (qCount > 0) {
+                html += '<div class="bm-impact-stat bm-impact-stat--q">' +
+                        '<div class="bm-impact-stat__icon">📝</div>' +
+                        '<div class="bm-impact-stat__body">' +
+                        '<div class="bm-impact-stat__num">' + qCount + '</div>' +
+                        '<div class="bm-impact-stat__label">Question' + (qCount === 1 ? '' : 's') + '</div>' +
+                        '</div>' +
+                        '</div>';
+            }
+            if (pCount > 0) {
+                html += '<div class="bm-impact-stat bm-impact-stat--p">' +
+                        '<div class="bm-impact-stat__icon">📄</div>' +
+                        '<div class="bm-impact-stat__body">' +
+                        '<div class="bm-impact-stat__num">' + pCount + '</div>' +
+                        '<div class="bm-impact-stat__label">PDF' + (pCount === 1 ? '' : 's') + '</div>' +
+                        '</div>' +
+                        '</div>';
+            }
+            html += '</div>';
+
+            var related = [];
+            var relLabels = {
+                quiz_ratings: 'Quiz ratings',
+                question_interactions: 'Likes, saves & reports',
+                question_miss_stats: 'Miss-rate statistics',
+                question_duplicate_dismissals: 'Duplicate dismissals',
+                pdf_reports: 'PDF reports',
+                saved_content: 'User bookmarks',
+                unverified_pdfs: 'Unverified queue entries',
+                content_batch_items: 'Batch memberships (across all batches)',
+            };
+            Object.keys(relLabels).forEach(function (k) {
+                var n = c[k] || 0;
+                if (n > 0) related.push({ label: relLabels[k], count: n });
+            });
+
+            if (related.length) {
+                html += '<div class="bm-impact-related">';
+                html += '<div class="bm-impact-related__head">';
+                html += '<i class="fas fa-link"></i>';
+                html += '<span>Also removed</span>';
+                html += '</div>';
+                html += '<ul class="bm-impact-related__list">';
+                related.forEach(function (r) {
+                    html += '<li>';
+                    html += '<span class="bm-impact-related__count">' + r.count + '</span>';
+                    html += '<span class="bm-impact-related__label">' + escapeHtml(r.label) + '</span>';
+                    html += '</li>';
+                });
+                html += '</ul>';
+                html += '</div>';
+            }
+
+            el.purgeStats.innerHTML = html;
+        }
+
+        if (el.purgeConfirmInput && el.purgeConfirmBtn && el.purgeModal) {
+
+            if (el.purgeBackupCheck) {
+                el.purgeBackupCheck.addEventListener('change', updateBackupHint);
+                updateBackupHint();
+            }
+
+            // Input handler — normalises case, updates slots, updates status,
+            // and enables/disables the confirm button via updatePurgeButton().
+            el.purgeConfirmInput.addEventListener('input', function () {
+                var raw = el.purgeConfirmInput.value;
+                var upper = (raw || '').toUpperCase();
+                if (upper !== raw) el.purgeConfirmInput.value = upper;
+                updatePurgeConfirmProgress();
+            });
+
+            el.purgeConfirmInput.addEventListener('paste', function () {
+                setTimeout(updatePurgeConfirmProgress, 0);
+            });
+            el.purgeConfirmInput.addEventListener('change', updatePurgeConfirmProgress);
+            el.purgeConfirmInput.addEventListener('keyup', updatePurgeConfirmProgress);
+
+            el.purgeConfirmBtn.addEventListener('click', function () {
+                if (!purgeState.preview) return;
+                var ids = Array.from(state.selected);
+                if (!ids.length) { toast('Selection is empty.', 'warning'); return; }
+
+                var wantBackup = el.purgeBackupCheck ? el.purgeBackupCheck.checked : true;
+
+                var origHTML = el.purgeConfirmBtn.innerHTML;
+                el.purgeConfirmBtn.disabled = true;
+                el.purgeConfirmBtn.innerHTML =
+                    '<i class="fas fa-spinner fa-spin"></i> Deleting…';
+
+                fetch('/admin/batches/' + BATCH_ID + '/purge', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': CSRF,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        confirm: 'DELETE',
+                        item_ids: ids,
+                        item_type: state.type,
+                        backup: wantBackup,
+                    })
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    el.purgeConfirmBtn.disabled = false;
+                    el.purgeConfirmBtn.innerHTML = origHTML;
+
+                    if (!d || !d.success) {
+                        toast((d && d.error) || 'Purge failed', 'error');
+                        return;
+                    }
+
+                    var n = d.total_deleted || 0;
+                    var msg = n + ' item' + (n === 1 ? '' : 's') + ' permanently deleted';
+                    if (d.backup_path) msg += ' (backup saved)';
+                    toast(msg, 'success');
+
+                    el.purgeModal.hidden = true;
+                    state.selected.clear();
+
+                    var pq = (d.purged && d.purged.questions) || 0;
+                    var pp = (d.purged && d.purged.pdfs) || 0;
+                    if (pq > 0) {
+                        state.totalInBatch.question = Math.max(0, state.totalInBatch.question - pq);
+                        document.getElementById('tabCountQuestion').textContent = state.totalInBatch.question;
+                    }
+                    if (pp > 0) {
+                        state.totalInBatch.pdf = Math.max(0, state.totalInBatch.pdf - pp);
+                        document.getElementById('tabCountPdf').textContent = state.totalInBatch.pdf;
+                    }
+
+                    reloadItems();
+                })
+                .catch(function () {
+                    el.purgeConfirmBtn.disabled = false;
+                    el.purgeConfirmBtn.innerHTML = origHTML;
+                    toast('Network error', 'error');
+                });
+            });
+
+            el.purgeModal.addEventListener('click', function (e) {
+                if (e.target === el.purgeModal || e.target.hasAttribute('data-close-modal')) {
+                    el.purgeModal.hidden = true;
+                }
+            });
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && el.purgeModal && !el.purgeModal.hidden) {
+                    el.purgeModal.hidden = true;
+                }
+            });
+        }
+
         function showUndoToast(count, editId, seconds) {
             if (!editId) return;
             el.undoText.textContent = count + ' items updated';
             el.undoToast.hidden = false;
             el.undoBtn.dataset.editId = editId;
-
             clearTimeout(state.undoTimeout);
             state.undoTimeout = setTimeout(function () {
                 el.undoToast.hidden = true;
@@ -1169,18 +1369,15 @@
             });
         });
 
-        // ─── Rename ───
         el.renameBtn.addEventListener('click', function () {
             el.renameModal.hidden = false;
             setTimeout(function () { el.renameInput.focus(); el.renameInput.select(); }, 20);
         });
-
         el.renameModal.addEventListener('click', function (e) {
             if (e.target === el.renameModal || e.target.hasAttribute('data-close-modal')) {
                 el.renameModal.hidden = true;
             }
         });
-
         el.renameConfirm.addEventListener('click', function () {
             var name = el.renameInput.value.trim();
             if (!name) return;
@@ -1205,7 +1402,6 @@
             });
         });
 
-        // ─── Pin ───
         el.pinBtn.addEventListener('click', function () {
             fetch('/admin/batches/' + BATCH_ID + '/pin', {
                 method: 'POST',
@@ -1222,17 +1418,12 @@
             });
         });
 
-        // ─── Delete ───
-        el.deleteBtn.addEventListener('click', function () {
-            el.deleteModal.hidden = false;
-        });
-
+        el.deleteBtn.addEventListener('click', function () { el.deleteModal.hidden = false; });
         el.deleteModal.addEventListener('click', function (e) {
             if (e.target === el.deleteModal || e.target.hasAttribute('data-close-modal')) {
                 el.deleteModal.hidden = true;
             }
         });
-
         el.deleteConfirm.addEventListener('click', function () {
             fetch('/admin/batches/' + BATCH_ID + '/delete', {
                 method: 'POST',
@@ -1248,7 +1439,6 @@
             });
         });
 
-        // ─── beforeunload — warn when staged changes exist ───
         window.addEventListener('beforeunload', function (e) {
             if (hasAnyPending()) {
                 e.preventDefault();
@@ -1257,14 +1447,10 @@
             }
         });
 
-        // ─── Boot ───
         updateClearFilters();
         reloadItems();
     }
 
-    // ============================================================
-    // BOOT
-    // ============================================================
     function boot() {
         if (document.querySelector('.batch-shell')) {
             initDetailPage();

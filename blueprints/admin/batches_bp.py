@@ -2,11 +2,17 @@
 # blueprints/admin/batches_bp.py
 # Super-admin only. Content batches: group questions/PDFs for
 # later bulk editing. Deleting a batch or removing items never
-# deletes the underlying content.
+# deletes the underlying content — but /purge does.
 #
 # Bulk edits come in two flavors:
 #   • /bulk-edit         — one change at a time (kept for compat)
 #   • /bulk-edit-batch   — many staged changes, committed together
+#
+# Permanent delete:
+#   • /purge-preview     — dry-run, returns counts + related rows
+#   • /purge             — deletes selected items; backup is
+#                          opt-in via the 'backup' body flag
+#   • /purge-status      — lightweight check
 # ============================================================
 
 from flask import (
@@ -15,6 +21,8 @@ from flask import (
 )
 import json
 import logging
+import os
+import shutil
 from datetime import datetime, timezone
 
 from db import (
@@ -27,6 +35,7 @@ from db import (
     get_question_by_id, update_question,
     get_pdf_by_id, get_all_pdfs, get_questions_paginated,
     execute_with_retry,
+    purge_batch_items,
 )
 from subjects_config import get_all_subjects, get_subject
 from question_utils import VALID_GRADES, grade_label
@@ -446,16 +455,6 @@ def bulk_edit(batch_id):
 def bulk_edit_batch(batch_id):
     """
     Stage many changes and commit them in one shot.
-
-    Body:
-      {
-        "item_type": "question" | "pdf",
-        "changes": [
-          {"action": "set_grade", "value": "F3", "item_ids": [1,2,3]},
-          {"action": "set_subject", "value": "geography", "item_ids": [1,2,3]},
-          {"action": "add_tag", "value": "algebra", "item_ids": [1,2,3]}
-        ]
-      }
     """
     if not _csrf_ok():
         return jsonify({'error': 'Invalid session.'}), 403
@@ -477,7 +476,6 @@ def bulk_edit_batch(batch_id):
     if not owned:
         return jsonify({'error': 'Batch is empty'}), 400
 
-    # Filter and validate
     clean_changes = []
     total_ids = set()
     for ch in raw_changes:
@@ -533,17 +531,9 @@ def bulk_edit_batch(batch_id):
         return jsonify({'error': 'Bulk edit failed'}), 500
 
 
-# ─── Core: apply a list of changes atomically-ish ─────────
+# ─── Core: apply a list of changes ────────────────────────
 
 def _apply_batch_changes(item_type, changes, owned_set):
-    """
-    changes: list of {action, value, item_ids}
-    Returns (before_snapshot, applied_count).
-
-    Snapshotting: for every column touched by any change, we capture
-    the pre-change value across every affected id — one query per
-    change. Snapshot values are only captured once per (item, column).
-    """
     table = 'questions' if item_type == 'question' else 'pdfs'
     col_map = _QUESTION_ACTION_COLUMN if item_type == 'question' else _PDF_ACTION_COLUMN
 
@@ -559,14 +549,12 @@ def _apply_batch_changes(item_type, changes, owned_set):
 
         placeholders = ','.join('?' for _ in ids)
 
-        # ── Tag operations ───────────────────────────────
         if action in _TAG_ACTIONS:
             ok = _apply_tag_op(table, action, value, ids, before_snapshot)
             if ok:
                 applied += 1
             continue
 
-        # ── Column updates ───────────────────────────────
         column = col_map.get(action)
         if not column:
             continue
@@ -575,7 +563,6 @@ def _apply_batch_changes(item_type, changes, owned_set):
         if cast_value is _INVALID:
             continue
 
-        # Snapshot the pre-change value for this column on these ids
         try:
             cursor = execute_with_retry(
                 f"SELECT id, {column} AS v FROM {table} "
@@ -590,7 +577,6 @@ def _apply_batch_changes(item_type, changes, owned_set):
         except Exception as e:
             logger.warning(f"snapshot {table}.{column} failed: {e}")
 
-        # Apply the update
         try:
             extra_set = ", updated_at = ?" if table == 'questions' else ""
             params = [cast_value]
@@ -616,7 +602,6 @@ _INVALID = _InvalidType()
 
 
 def _cast_column_value(action, value):
-    """Return the properly typed value for a given action, or _INVALID."""
     if action == 'set_difficulty':
         try:
             return max(1, min(5, int(value)))
@@ -644,14 +629,12 @@ def _cast_column_value(action, value):
         return v if v in ('F4', 'F3', 'G8', 'G7') else _INVALID
     if action == 'toggle_premium':
         return 1 if value else 0
-    # set_subject, set_chapter, set_pdf_code — string
     if value is None:
         return _INVALID
     return str(value).strip()
 
 
 def _apply_tag_op(table, action, value, ids, before_snapshot):
-    """Add / remove / clear tags. Returns True on success."""
     placeholders = ','.join('?' for _ in ids)
 
     try:
@@ -664,7 +647,6 @@ def _apply_tag_op(table, action, value, ids, before_snapshot):
         logger.error(f"tag read failed: {e}")
         return False
 
-    # Snapshot existing tags
     for row in rows:
         iid_str = str(row['id'])
         bucket = before_snapshot['items'].setdefault(iid_str, {})
@@ -694,7 +676,7 @@ def _apply_tag_op(table, action, value, ids, before_snapshot):
         if action == 'add_tag':
             if tag not in lowered:
                 existing.append(tag)
-        else:  # remove_tag
+        else:
             existing = [t for t in existing if t.lower() != tag]
 
         new_tags = ','.join(existing)
@@ -865,6 +847,199 @@ def add_items(batch_id):
 
     added = add_batch_items(batch_id, item_type, item_ids)
     return jsonify({'success': True, 'added': added})
+
+
+# ============================================================
+# PURGE (PERMANENT DELETE)
+# ============================================================
+# Deletes items from the platform entirely. The pre-purge backup
+# is opt-in: pass `backup: true` in the request body to snapshot
+# the DB first. Default (missing key) is TRUE for safety — the
+# frontend explicitly sends false when the checkbox is unchecked.
+# ============================================================
+
+_ROOT_FOR_BACKUP = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)
+)))
+
+
+def _make_pre_purge_backup():
+    """
+    Copy the main DB (plus WAL/SHM) into BACKUPS/pre_batch_purge_<utc>/.
+    Returns the destination path, or None on failure.
+    """
+    try:
+        from config import Config
+        db_path = Config.DATABASE_PATH
+    except Exception as e:
+        logger.warning(f"could not resolve DB path for backup: {e}")
+        return None
+
+    if not os.path.exists(db_path):
+        return None
+
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    dest = os.path.join(_ROOT_FOR_BACKUP, 'BACKUPS', f'pre_batch_purge_{stamp}')
+
+    try:
+        os.makedirs(dest, exist_ok=True)
+        for suffix in ('', '-wal', '-shm'):
+            src = db_path + suffix
+            if os.path.exists(src):
+                shutil.copy2(src, os.path.join(dest, os.path.basename(src)))
+        return dest
+    except Exception as e:
+        logger.warning(f"pre_purge backup failed: {e}")
+        return None
+
+
+@admin_batches_bp.route('/<int:batch_id>/purge-preview', methods=['POST'],
+                        endpoint='purge_preview')
+@super_admin_required
+def purge_preview(batch_id):
+    """
+    Return what a purge would delete. Body (optional):
+        { 'item_ids': [...], 'item_type': 'question' | 'pdf' }
+    """
+    if not _csrf_ok():
+        return jsonify({'error': 'Invalid session.'}), 403
+
+    batch = get_batch(batch_id)
+    if not batch:
+        return jsonify({'error': 'Batch not found'}), 404
+
+    payload = request.get_json(silent=True) or {}
+    raw_ids = payload.get('item_ids') or []
+    item_type = (payload.get('item_type') or '').strip()
+
+    if raw_ids and item_type in ('question', 'pdf'):
+        result = purge_batch_items(
+            batch_id, dry_run=True,
+            item_ids=_int_list(raw_ids), item_type=item_type,
+        )
+    else:
+        result = purge_batch_items(batch_id, dry_run=True)
+
+    if result.get('error'):
+        return jsonify(result), 500
+    return jsonify(result)
+
+
+@admin_batches_bp.route('/<int:batch_id>/purge', methods=['POST'],
+                        endpoint='purge')
+@super_admin_required
+def purge(batch_id):
+    """
+    Permanently delete items from a batch. Requires typing DELETE
+    back as confirmation.
+
+    Body:
+      {
+        'confirm':   'DELETE',
+        'item_ids':  [...],              # optional — subset
+        'item_type': 'question' | 'pdf', # required when item_ids is set
+        'backup':    true | false        # optional, default true
+      }
+    """
+    if not _csrf_ok():
+        return jsonify({'error': 'Invalid session.'}), 403
+
+    batch = get_batch(batch_id)
+    if not batch:
+        return jsonify({'error': 'Batch not found'}), 404
+
+    payload = request.get_json(silent=True) or {}
+    confirm = (payload.get('confirm') or '').strip()
+    if confirm != 'DELETE':
+        return jsonify({'error': 'Type DELETE to confirm.'}), 400
+
+    # Backup is opt-in. Default: True (safe).
+    want_backup = payload.get('backup', True)
+    if not isinstance(want_backup, bool):
+        # Accept only strict booleans; anything else falls back to True.
+        want_backup = True
+
+    raw_ids = payload.get('item_ids') or []
+    item_type = (payload.get('item_type') or '').strip()
+
+    # Preview first — need the counts for the audit entry
+    if raw_ids and item_type in ('question', 'pdf'):
+        preview = purge_batch_items(
+            batch_id, dry_run=True,
+            item_ids=_int_list(raw_ids), item_type=item_type,
+        )
+    else:
+        preview = purge_batch_items(batch_id, dry_run=True)
+
+    if preview.get('error'):
+        return jsonify(preview), 500
+
+    # Backup (only if requested)
+    backup_path = None
+    if want_backup:
+        backup_path = _make_pre_purge_backup()
+        if backup_path:
+            logger.info(f"pre_purge backup created: {backup_path}")
+        else:
+            logger.warning(
+                f"pre_purge backup was requested but failed for batch {batch_id}"
+            )
+
+    # Purge
+    if raw_ids and item_type in ('question', 'pdf'):
+        result = purge_batch_items(
+            batch_id, dry_run=False,
+            item_ids=_int_list(raw_ids), item_type=item_type,
+        )
+    else:
+        result = purge_batch_items(batch_id, dry_run=False)
+
+    if result.get('error'):
+        return jsonify({'error': result['error'], 'rollback': True}), 500
+
+    write_audit(
+        action='batch.purge',
+        target_type='batch',
+        target_id=batch_id,
+        before={
+            'name': batch.get('name'),
+            'kind': batch.get('kind'),
+            'preview_counts': preview.get('counts'),
+        },
+        after={
+            'deleted': result.get('deleted'),
+            'backup_requested': want_backup,
+            'backup_path': backup_path,
+            'batch_items_question': result['batch_items'].get('question'),
+            'batch_items_pdf': result['batch_items'].get('pdf'),
+            'scoped': bool(raw_ids and item_type),
+        },
+        severity='critical',
+    )
+
+    return jsonify({
+        'success': True,
+        'purged': result.get('deleted') or {},
+        'total_deleted': (
+            (result.get('deleted') or {}).get('questions', 0)
+            + (result.get('deleted') or {}).get('pdfs', 0)
+        ),
+        'backup_requested': want_backup,
+        'backup_path': backup_path,
+    })
+
+
+@admin_batches_bp.route('/<int:batch_id>/purge-status', methods=['GET'],
+                        endpoint='purge_status')
+@super_admin_required
+def purge_status(batch_id):
+    """Quick check: does this batch still have items?"""
+    counts = batch_items_count(batch_id)
+    return jsonify({
+        'batch_id': batch_id,
+        'counts': counts,
+        'empty': counts.get('total', 0) == 0,
+    })
 
 
 # ─── Recent batches (topbar dropdown) ─────────────────────

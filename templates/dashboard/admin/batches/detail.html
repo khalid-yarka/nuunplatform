@@ -36,19 +36,17 @@
 {% endblock %}
 
 {% block admin_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/batches.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/batches.css') }}?v=3" />
 {% endblock %}
 
 {% block admin_content %}
 
-{# ─── Subject catalog for the bulk-edit popover (JSON, read by batches.js) ─── #}
 <script type="application/json" id="batchSubjectsData">{{ subjects|tojson|safe }}</script>
 
 <div class="batch-shell"
      data-batch-id="{{ batch.id }}"
      data-batch-kind="{{ batch.kind }}">
 
-    {# ─── Stats strip ─── #}
     <div class="batch-stats">
         <div class="bs-item">
             <span class="bs-num">{{ counts.question }}</span>
@@ -64,7 +62,6 @@
         </div>
     </div>
 
-    {# ─── Tabs ─── #}
     <div class="batch-tabs" role="tablist">
         <button type="button" class="batch-tab active" data-type="question"
                 role="tab" aria-selected="true">
@@ -76,7 +73,6 @@
         </button>
     </div>
 
-    {# ─── Filter bar ─── #}
     <div class="batch-filters">
         <div class="bf-search">
             <i class="fas fa-search"></i>
@@ -85,7 +81,6 @@
                    autocomplete="off" spellcheck="false">
         </div>
 
-        {# Question-only filters #}
         <select class="bf-select" id="batchGradeFilter" data-scope="question">
             <option value="">All grades</option>
             {% for g in grades %}
@@ -112,7 +107,6 @@
         </button>
     </div>
 
-    {# ─── Bulk action bar ─── #}
     <div class="batch-bulkbar" id="batchBulkBar" hidden>
         <div class="bb-left">
             <span class="bb-count"><strong id="bbSelectedCount">0</strong> selected</span>
@@ -125,11 +119,9 @@
             <button type="button" class="bb-link" id="bbSelectAllTotal" hidden>Select all in batch</button>
             <button type="button" class="bb-link" id="bbClearSelection">Clear selection</button>
         </div>
-    
-        <div class="bb-actions" id="bbActions">
-            {# Populated by JS depending on current tab #}
-        </div>
-    
+
+        <div class="bb-actions" id="bbActions"></div>
+
         <div class="bb-save-cluster" id="bbSaveCluster" hidden>
             <button type="button" class="bb-discard-btn" id="bbDiscard">
                 <i class="fas fa-times"></i> Discard
@@ -140,7 +132,6 @@
         </div>
     </div>
 
-    {# ─── Table ─── #}
     <div class="batch-table-wrap">
         <div class="batch-table-scroll">
             <table class="batch-table">
@@ -206,7 +197,7 @@
     </div>
 </div>
 
-{# ─── Delete modal ─── #}
+{# ─── Delete modal (unbatch) ─── #}
 <div class="batch-modal-backdrop" id="deleteModal" hidden>
     <div class="batch-modal">
         <h3>Delete this batch?</h3>
@@ -222,8 +213,119 @@
     </div>
 </div>
 
+{# ══════════════════════════════════════════════════════════
+   PURGE MODAL — redesigned
+   ══════════════════════════════════════════════════════════ #}
+<div class="batch-modal-backdrop" id="purgeModal" hidden>
+    <div class="bm-modal" role="dialog" aria-modal="true" aria-labelledby="bmTitle">
+
+        {# ─── Header ─── #}
+        <header class="bm-header">
+            <div class="bm-header__icon">
+                <i class="fas fa-skull-crossbones"></i>
+            </div>
+            <div class="bm-header__body">
+                <div class="bm-header__title" id="bmTitle">Permanently delete items?</div>
+                <p class="bm-header__sub">
+                    This removes the selected items and every record that
+                    references them. It cannot be undone from the app.
+                </p>
+            </div>
+            <button type="button" class="bm-header__close"
+                    data-close-modal aria-label="Close">
+                <i class="fas fa-times"></i>
+            </button>
+        </header>
+
+        {# ─── Body ─── #}
+        <div class="bm-body">
+
+            {# Impact preview #}
+            <section class="bm-section">
+                <div class="bm-section__label">
+                    <i class="fas fa-bullseye"></i> Impact
+                </div>
+                <div class="bm-impact" id="purgeStats">
+                    <div class="bm-impact-loading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Computing impact…</span>
+                    </div>
+                </div>
+            </section>
+
+            {# Backup toggle #}
+            <section class="bm-section">
+                <div class="bm-section__label">
+                    <i class="fas fa-shield-alt"></i> Safety
+                </div>
+                <label class="bm-backup">
+                    <input type="checkbox" id="purgeBackupCheck" checked>
+                    <span class="bm-backup__check"></span>
+                    <span class="bm-backup__body">
+                        <span class="bm-backup__title">Create a database backup first</span>
+                        <span class="bm-backup__desc">
+                            Recommended. Snapshots the entire database to
+                            <code>BACKUPS/</code> so you can recover if you
+                            purge the wrong batch.
+                        </span>
+                    </span>
+                </label>
+                <p class="bm-backup__hint is-on" id="purgeBackupHint"></p>
+            </section>
+
+            {# Confirmation #}
+            <section class="bm-section">
+                <div class="bm-section__label">
+                    <i class="fas fa-key"></i> Confirmation
+                </div>
+                <p class="bm-confirm__hint">
+                    Type <strong>DELETE</strong> to unlock the button below.
+                </p>
+                <div class="bm-confirm">
+                    <input type="text"
+                           id="purgeConfirmInput"
+                           class="bm-confirm__input"
+                           placeholder="Type here…"
+                           maxlength="6"
+                           autocomplete="off"
+                           spellcheck="false"
+                           autocapitalize="characters"
+                           inputmode="text">
+                    <div class="bm-confirm__slots" id="purgeProgress" aria-hidden="true">
+                        <span class="bm-confirm__slot" data-letter="D">D</span>
+                        <span class="bm-confirm__slot" data-letter="E">E</span>
+                        <span class="bm-confirm__slot" data-letter="L">L</span>
+                        <span class="bm-confirm__slot" data-letter="E">E</span>
+                        <span class="bm-confirm__slot" data-letter="T">T</span>
+                        <span class="bm-confirm__slot" data-letter="E">E</span>
+                    </div>
+                    <p class="bm-confirm__status" id="purgeConfirmStatus">
+                        <i class="fas fa-circle-info"></i>
+                        <span>Confirmation required</span>
+                    </p>
+                </div>
+            </section>
+
+        </div>
+
+        {# ─── Footer ─── #}
+        <footer class="bm-footer">
+            <button type="button" class="bm-footer__btn bm-footer__btn--secondary"
+                    data-close-modal>
+                Cancel
+            </button>
+            <button type="button" class="bm-footer__btn bm-footer__btn--danger"
+                    id="purgeConfirmBtn" disabled>
+                <i class="fas fa-skull-crossbones"></i>
+                <span>Permanently delete</span>
+            </button>
+        </footer>
+
+    </div>
+</div>
+
 {% endblock %}
 
 {% block admin_js %}
-<script src="{{ url_for('static', filename='js/admin/batches.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/batches.js') }}?v=3"></script>
 {% endblock %}

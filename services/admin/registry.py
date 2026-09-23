@@ -654,6 +654,14 @@ CAPABILITY_REGISTRY: tuple[Capability, ...] = (
         default_for_admin=False,
         reserved=True,
     ),
+    Capability(
+        key='content.batches.purge',
+        group='Questions',
+        label='Permanently delete items in a batch',
+        description='Delete questions and PDFs from the library, not just unlink them.',
+        default_for_admin=False,
+        reserved=True,
+    ),
 )
 
 
