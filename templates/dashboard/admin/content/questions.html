@@ -1,15 +1,821 @@
 {# ============================================================
    templates/dashboard/admin/content/questions.html
-   Question list with grade filter, PDF filter, miss-rate filter.
+   Advanced question admin — subject cards, stats, filters,
+   drawer, bulk archive with undo, density toggle, shortcuts.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
+
+{% block admin_css %}
+{{ super() }}
+<style>
+/* ============================================================
+   Question Admin — scoped under .qa- prefix
+   ============================================================ */
+
+[hidden] { display: none !important; }
+
+.qa-page { --qa-radius: 12px; --qa-row-pad: 14px 16px; }
+
+/* ── Stats ── */
+.qa-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.qa-stat {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--qa-radius);
+    transition: var(--transition);
+}
+.qa-stat:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+.qa-stat__icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+}
+.qa-stat__icon--neutral { background: var(--background); color: var(--text-secondary); }
+.qa-stat__icon--ok      { background: #ECFDF5; color: #059669; }
+.qa-stat__icon--warn    { background: #FFFBEB; color: #D97706; }
+.qa-stat__icon--info    { background: #EFF6FF; color: #2563EB; }
+.qa-stat__icon--muted   { background: var(--background); color: var(--text-muted); }
+.qa-stat__body { min-width: 0; }
+.qa-stat__num {
+    font-size: 22px; font-weight: 800; line-height: 1;
+    color: var(--text); font-variant-numeric: tabular-nums;
+}
+.qa-stat__label {
+    font-size: 11px; color: var(--text-muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.4px; margin-top: 4px;
+}
+
+/* ── Subject cards ── */
+.qa-subjects-wrap {
+    margin-bottom: 16px;
+}
+.qa-subjects-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 8px;
+}
+.qa-subjects-head h2 {
+    font-size: 13px; font-weight: 700; color: var(--text);
+    margin: 0; display: flex; align-items: center; gap: 8px;
+    text-transform: uppercase; letter-spacing: 0.4px;
+}
+.qa-subjects-head h2 i { color: var(--primary); font-size: 12px; }
+.qa-subjects-head .hint {
+    font-size: 11.5px; color: var(--text-muted); font-weight: 500;
+}
+.qa-subjects {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    scrollbar-width: thin;
+    scroll-behavior: smooth;
+}
+.qa-subjects::-webkit-scrollbar { height: 6px; }
+.qa-subjects::-webkit-scrollbar-thumb {
+    background: var(--border); border-radius: 3px;
+}
+.qa-subjects::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+.qa-subject {
+    flex: 0 0 auto;
+    width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--qa-radius);
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.15s ease;
+    position: relative;
+    overflow: hidden;
+}
+.qa-subject:hover {
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+    text-decoration: none;
+    color: inherit;
+}
+.qa-subject:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+.qa-subject.is-active {
+    border-color: var(--primary);
+    background: linear-gradient(180deg, var(--primary-light), var(--surface) 70%);
+    box-shadow: 0 0 0 3px rgba(255,49,56,0.12);
+}
+.qa-subject.is-empty {
+    opacity: 0.6;
+}
+.qa-subject.is-empty:hover { opacity: 1; }
+
+.qa-subject__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.qa-subject__icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: var(--background);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+    transition: var(--transition);
+}
+.qa-subject.is-active .qa-subject__icon {
+    background: var(--primary);
+    color: #fff;
+}
+.qa-subject__meta { flex: 1; min-width: 0; }
+.qa-subject__name {
+    font-size: 12.5px; font-weight: 700; color: var(--text);
+    line-height: 1.2;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.qa-subject__code {
+    font-size: 10px; color: var(--text-muted);
+    font-family: ui-monospace, Menlo, monospace;
+    font-weight: 600; letter-spacing: 0.3px;
+    margin-top: 2px;
+}
+.qa-subject__count {
+    font-size: 26px; font-weight: 800; color: var(--text);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    margin-top: 2px;
+    letter-spacing: -0.02em;
+}
+.qa-subject.is-active .qa-subject__count { color: var(--primary); }
+.qa-subject__count.zero { color: var(--text-muted); opacity: 0.5; }
+
+.qa-subject__breakdown {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    min-height: 20px;
+    margin-top: auto;
+}
+.qa-subject__pill {
+    padding: 2px 7px;
+    border-radius: 6px;
+    background: var(--background);
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 700;
+    font-family: ui-monospace, Menlo, monospace;
+    letter-spacing: 0.2px;
+    border: 1px solid var(--border);
+}
+.qa-subject__pill--F4 { background: #EFF6FF; color: #2563EB; border-color: #BFDBFE; }
+.qa-subject__pill--F3 { background: #F0FDF4; color: #16A34A; border-color: #BBF7D0; }
+.qa-subject__pill--G8 { background: #FEF3C7; color: #92400E; border-color: #FDE68A; }
+.qa-subject__pill--G7 { background: #FCE7F3; color: #BE185D; border-color: #FBCFE8; }
+
+.qa-subject__all {
+    background: linear-gradient(135deg, var(--primary-light) 0%, var(--surface) 80%);
+    border-color: var(--primary);
+    border-width: 1.5px;
+}
+.qa-subject__all .qa-subject__icon {
+    background: var(--primary); color: #fff;
+}
+
+/* ── Toolbar ── */
+.qa-toolbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--qa-radius);
+    margin-bottom: 12px;
+    position: sticky; top: 8px; z-index: 30;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.qa-search { position: relative; flex: 1; min-width: 220px; }
+.qa-search input {
+    width: 100%;
+    padding: 10px 40px 10px 38px;
+    font-size: 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--background);
+    color: var(--text);
+    font-family: inherit;
+    transition: var(--transition);
+}
+.qa-search input:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--surface);
+    box-shadow: 0 0 0 3px rgba(255,49,56,0.08);
+}
+.qa-search__icon {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--text-muted); font-size: 13px; pointer-events: none;
+}
+.qa-search__kbd {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    font-size: 10.5px; padding: 2px 6px; border-radius: 5px;
+    background: var(--background); border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-family: ui-monospace, Menlo, monospace;
+    pointer-events: none;
+}
+.qa-search input:focus ~ .qa-search__kbd { display: none; }
+
+.qa-select {
+    padding: 10px 12px; font-size: 13px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--background); color: var(--text);
+    font-family: inherit; cursor: pointer;
+    min-width: 120px; max-width: 180px;
+    transition: var(--transition);
+}
+.qa-select:focus { outline: none; border-color: var(--primary); background: var(--surface); }
+
+.qa-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 14px; font-size: 13px; font-weight: 600;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--background); color: var(--text-secondary);
+    cursor: pointer; font-family: inherit; text-decoration: none;
+    white-space: nowrap; transition: var(--transition);
+}
+.qa-btn:hover { border-color: var(--primary); color: var(--primary); text-decoration: none; }
+.qa-btn.open { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+.qa-btn--icon { padding: 10px 12px; }
+
+.qa-count {
+    margin-left: auto;
+    font-size: 12px; color: var(--text-muted); font-weight: 600;
+    padding: 6px 12px; background: var(--background);
+    border-radius: 8px; white-space: nowrap;
+}
+.qa-count strong { color: var(--text); font-weight: 800; }
+
+/* ── Advanced panel ── */
+.qa-advanced {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--qa-radius);
+    padding: 16px;
+    margin-bottom: 12px;
+    animation: qaFade 0.2s ease;
+}
+@keyframes qaFade { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+.qa-advanced__header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--border);
+}
+.qa-advanced__header h3 {
+    font-size: 13.5px; font-weight: 700; color: var(--text); margin: 0;
+    display: flex; align-items: center; gap: 8px;
+}
+.qa-advanced__header h3 i { color: var(--primary); }
+.qa-advanced__sections {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 18px 24px;
+}
+.qa-section__label {
+    font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.6px; color: var(--text-muted);
+    margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
+}
+.qa-section__label i { font-size: 10px; color: var(--primary); }
+.qa-section__grid { display: flex; flex-direction: column; gap: 10px; }
+.qa-field { display: flex; flex-direction: column; gap: 4px; }
+.qa-field label {
+    font-size: 11.5px; font-weight: 600; color: var(--text-secondary);
+}
+.qa-field input, .qa-field select {
+    width: 100%; padding: 8px 12px; font-size: 13px;
+    border: 1px solid var(--border); border-radius: 7px;
+    background: var(--background); color: var(--text);
+    font-family: inherit; transition: var(--transition);
+}
+.qa-field input:focus, .qa-field select:focus {
+    outline: none; border-color: var(--primary); background: var(--surface);
+}
+.qa-field input.mono { font-family: ui-monospace, Menlo, monospace; letter-spacing: 1px; }
+.qa-advanced__footer {
+    display: flex; justify-content: flex-end; gap: 8px;
+    margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border);
+}
+
+/* ── Active filter chips ── */
+.qa-chips {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    padding: 10px 14px;
+    background: linear-gradient(90deg, var(--primary-light), transparent 80%);
+    border: 1px solid var(--border);
+    border-radius: var(--qa-radius);
+    margin-bottom: 12px; font-size: 12px;
+}
+.qa-chips__label {
+    color: var(--text-secondary); font-weight: 700;
+    display: inline-flex; align-items: center; gap: 6px; margin-right: 4px;
+}
+.qa-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-weight: 600;
+    transition: var(--transition);
+    max-width: 220px;
+}
+.qa-chip:hover {
+    background: var(--primary); color: #fff;
+    border-color: var(--primary); text-decoration: none;
+}
+.qa-chip__key { opacity: 0.75; }
+.qa-chip__value {
+    max-width: 120px; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; color: var(--text);
+}
+.qa-chip:hover .qa-chip__value { color: #fff; }
+.qa-chip__close { font-size: 10px; opacity: 0.7; }
+.qa-chip:hover .qa-chip__close { opacity: 1; }
+.qa-chips__clear {
+    margin-left: auto;
+    padding: 6px 12px; border-radius: 20px;
+    color: var(--text-muted); text-decoration: none;
+    font-weight: 600;
+}
+.qa-chips__clear:hover { color: var(--primary); background: var(--surface); text-decoration: none; }
+
+/* ── Bulk bar ── */
+.qa-bulk {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px;
+    background: var(--primary-light);
+    border: 1px solid var(--primary);
+    border-radius: var(--qa-radius);
+    margin-bottom: 12px;
+    animation: qaFade 0.2s ease;
+}
+.qa-bulk__count { font-size: 13px; font-weight: 700; color: var(--primary); }
+.qa-bulk__count strong { font-size: 15px; }
+.qa-bulk__actions { display: flex; gap: 8px; margin-left: auto; }
+.qa-bulk__btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; font-size: 12px; font-weight: 700;
+    background: var(--surface); color: var(--text-secondary);
+    border: 1px solid var(--border); border-radius: 8px;
+    cursor: pointer; font-family: inherit; transition: var(--transition);
+}
+.qa-bulk__btn:hover { color: var(--primary); border-color: var(--primary); }
+.qa-bulk__btn--danger:hover { color: #DC2626; border-color: #DC2626; background: #FEF2F2; }
+
+/* ── List ── */
+.qa-list {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--qa-radius);
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    transition: padding 0.15s ease;
+}
+.qa-row {
+    display: grid;
+    grid-template-columns: 28px 48px 1fr auto;
+    gap: 14px;
+    padding: var(--qa-row-pad);
+    border-bottom: 1px solid var(--border);
+    align-items: flex-start;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    position: relative;
+    outline: none;
+}
+.qa-row:last-child { border-bottom: none; }
+.qa-row:hover { background: var(--background); }
+.qa-row:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); }
+.qa-row.is-selected { background: var(--primary-light); }
+.qa-row.is-archiving {
+    opacity: 0;
+    transform: translateX(-16px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+/* Compact density */
+.qa-list[data-density="compact"] .qa-row { --qa-row-pad: 8px 12px; gap: 10px; }
+.qa-list[data-density="compact"] .qa-row__icon {
+    width: 34px; height: 34px; font-size: 16px; border-radius: 9px;
+}
+.qa-list[data-density="compact"] .qa-row__text {
+    font-size: 13px; -webkit-line-clamp: 1; margin-bottom: 5px;
+}
+.qa-list[data-density="compact"] .qa-tag { padding: 2px 7px; font-size: 10.5px; }
+
+.qa-row__check { display: flex; align-items: flex-start; padding-top: 6px; }
+.qa-row__check input {
+    width: 16px; height: 16px;
+    accent-color: var(--primary); cursor: pointer;
+}
+
+.qa-row__icon {
+    width: 44px; height: 44px; border-radius: 11px;
+    background: linear-gradient(135deg, var(--background), var(--surface));
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+}
+
+.qa-row__body { min-width: 0; }
+.qa-row__text {
+    font-size: 14.5px; font-weight: 600; color: var(--text);
+    line-height: 1.4; margin-bottom: 8px;
+    overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    word-break: break-word;
+}
+.qa-row__meta { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+
+.qa-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 20px;
+    font-size: 11px; font-weight: 700;
+    background: var(--background); color: var(--text-secondary);
+    white-space: nowrap; max-width: 220px;
+    overflow: hidden; text-overflow: ellipsis;
+}
+.qa-tag--subject { background: var(--primary-light); color: var(--primary); }
+.qa-tag--grade {
+    background: linear-gradient(135deg, rgba(99,102,241,0.14), rgba(139,92,246,0.10));
+    color: #4F46E5;
+}
+.qa-tag--chapter { background: #EFF6FF; color: #2563EB; }
+.qa-tag--pdf { background: #F5F3FF; color: #7C3AED; font-family: ui-monospace, Menlo, monospace; }
+.qa-tag--pdf-warn { background: #FEF3C7; color: #92400E; font-family: ui-monospace, Menlo, monospace; }
+.qa-tag--none { background: var(--background); color: var(--text-muted); font-style: italic; font-weight: 500; }
+.qa-tag--active { background: #ECFDF5; color: #059669; }
+.qa-tag--archived { background: #F3F4F6; color: #6B7280; }
+.qa-tag--draft { background: #FFFBEB; color: #92400E; }
+.qa-tag--miss-high { background: #FEF2F2; color: #DC2626; }
+.qa-tag--miss-med { background: #FFFBEB; color: #D97706; }
+.qa-tag--miss-low { background: #ECFDF5; color: #059669; }
+.qa-tag--miss-none { background: var(--background); color: var(--text-muted); font-style: italic; font-weight: 500; }
+.qa-tag--id {
+    font-family: ui-monospace, Menlo, monospace; font-size: 10.5px;
+    background: transparent; color: var(--text-muted);
+    border: 1px dashed var(--border);
+}
+.qa-tag--stars { background: transparent; padding: 0 2px; letter-spacing: 1px; }
+
+.qa-row__actions { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
+.qa-icon-btn {
+    width: 32px; height: 32px; border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; cursor: pointer; text-decoration: none;
+    transition: var(--transition);
+    font-family: inherit;
+}
+.qa-icon-btn:hover {
+    border-color: var(--primary); color: var(--primary);
+    background: var(--primary-light); text-decoration: none;
+}
+.qa-icon-btn--danger:hover {
+    border-color: #DC2626; color: #DC2626; background: #FEF2F2;
+}
+
+/* ── Empty state ── */
+.qa-empty {
+    text-align: center; padding: 64px 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--qa-radius);
+}
+.qa-empty__icon { font-size: 56px; display: block; margin-bottom: 12px; opacity: 0.5; }
+.qa-empty h3 { font-size: 17px; font-weight: 700; color: var(--text); margin: 0 0 6px; }
+.qa-empty p {
+    color: var(--text-secondary); font-size: 13.5px;
+    margin: 0 0 20px; line-height: 1.5;
+}
+
+/* ── Pagination ── */
+.qa-pager {
+    display: flex; align-items: center; justify-content: center;
+    gap: 4px; margin-top: 16px; flex-wrap: wrap;
+}
+.qa-pager__btn {
+    min-width: 36px; height: 36px; padding: 0 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); color: var(--text-secondary);
+    font-size: 13px; font-weight: 600;
+    text-decoration: none;
+    transition: var(--transition); cursor: pointer;
+}
+.qa-pager__btn:hover:not(.is-disabled):not(.is-active) {
+    border-color: var(--primary); color: var(--primary); text-decoration: none;
+}
+.qa-pager__btn.is-active {
+    background: var(--primary); border-color: var(--primary); color: #fff;
+}
+.qa-pager__btn.is-disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+.qa-pager__info {
+    font-size: 12.5px; color: var(--text-muted); padding: 0 8px; font-weight: 600;
+}
+.qa-pager__info strong { color: var(--text); }
+
+/* ── Drawer ── */
+.qa-drawer-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(15,23,42,0.32);
+    z-index: 9000;
+    animation: qaFade 0.2s ease;
+}
+.qa-drawer {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: 560px; max-width: 100vw;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 9100;
+    display: flex; flex-direction: column;
+    box-shadow: -16px 0 48px rgba(0,0,0,0.18);
+    animation: qaSlide 0.26s cubic-bezier(0.22,0.61,0.36,1);
+}
+@keyframes qaSlide {
+    from { transform: translateX(24px); opacity: 0; }
+    to   { transform: translateX(0); opacity: 1; }
+}
+.qa-drawer__head {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid var(--border);
+    position: relative; flex-shrink: 0;
+}
+.qa-drawer__title { font-size: 15px; font-weight: 700; color: var(--text); margin: 0 0 4px; }
+.qa-drawer__sub { font-size: 12px; color: var(--text-muted); margin: 0; }
+.qa-drawer__close {
+    position: absolute; top: 12px; right: 12px;
+    width: 30px; height: 30px; border-radius: 8px;
+    border: none; background: transparent; color: var(--text-muted);
+    cursor: pointer; font-family: inherit; font-size: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: var(--transition);
+}
+.qa-drawer__close:hover { background: var(--background); color: var(--text); }
+.qa-drawer__body { flex: 1; overflow-y: auto; padding: 20px 22px; }
+.qa-drawer__section { margin-bottom: 20px; }
+.qa-drawer__section:last-child { margin-bottom: 0; }
+.qa-drawer__label {
+    font-size: 10.5px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--text-muted); margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+}
+.qa-drawer__label i { font-size: 10px; color: var(--primary); }
+.qa-drawer__question {
+    font-size: 15px; line-height: 1.5; font-weight: 600;
+    color: var(--text); padding: 14px 16px;
+    background: var(--background); border-radius: 10px;
+    border-left: 3px solid var(--primary);
+}
+.qa-drawer__opts { display: flex; flex-direction: column; gap: 6px; }
+.qa-drawer__opt {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 14px;
+    background: var(--background); border: 1px solid var(--border);
+    border-radius: 8px; font-size: 13.5px; line-height: 1.45;
+}
+.qa-drawer__opt.is-correct {
+    background: #ECFDF5; border-color: #10B981;
+    color: #065F46; font-weight: 600;
+}
+.qa-drawer__opt__l {
+    font-weight: 800; color: var(--text-muted);
+    min-width: 20px; flex-shrink: 0;
+}
+.qa-drawer__opt.is-correct .qa-drawer__opt__l { color: #059669; }
+.qa-drawer__opt__check { margin-left: auto; color: #059669; font-size: 14px; }
+.qa-drawer__expl {
+    padding: 12px 14px;
+    background: #FFFBEB; border-left: 3px solid #F59E0B;
+    border-radius: 8px; font-size: 13px; line-height: 1.5; color: #78350F;
+}
+.qa-drawer__meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.qa-drawer__meta-item {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 8px 10px; background: var(--background); border-radius: 8px;
+}
+.qa-drawer__meta-item__k {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px;
+    font-weight: 700; color: var(--text-muted);
+}
+.qa-drawer__meta-item__v {
+    font-size: 13px; color: var(--text); font-weight: 600; word-break: break-word;
+}
+.qa-drawer__foot {
+    padding: 14px 22px;
+    border-top: 1px solid var(--border);
+    background: var(--background);
+    display: flex; gap: 8px; justify-content: flex-end;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+.qa-btn-primary {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 16px; font-size: 13px; font-weight: 700;
+    background: var(--primary); color: #fff;
+    border: 1px solid var(--primary); border-radius: 8px;
+    cursor: pointer; font-family: inherit; text-decoration: none;
+    transition: var(--transition);
+}
+.qa-btn-primary:hover { filter: brightness(0.94); text-decoration: none; color: #fff; }
+.qa-btn-secondary {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 16px; font-size: 13px; font-weight: 700;
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    cursor: pointer; font-family: inherit; text-decoration: none;
+    transition: var(--transition);
+}
+.qa-btn-secondary:hover { border-color: var(--primary); color: var(--primary); text-decoration: none; }
+
+/* Duplicate check results inside drawer */
+.qa-dup-list {
+    display: flex; flex-direction: column; gap: 6px;
+    margin-top: 10px;
+}
+.qa-dup-item {
+    padding: 10px 12px;
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-left: 3px solid #F59E0B;
+    border-radius: 8px;
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+.qa-dup-item.is-exact {
+    border-left-color: #DC2626;
+    background: #FEF2F2;
+}
+.qa-dup-item__head {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 4px; font-size: 11px;
+    font-weight: 700; color: var(--text-muted);
+}
+.qa-dup-item__badge {
+    padding: 1px 6px; border-radius: 5px;
+    font-size: 10px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.3px;
+}
+.qa-dup-item__badge.exact { background: #DC2626; color: #fff; }
+.qa-dup-item__badge.fuzzy { background: #F59E0B; color: #fff; }
+.qa-dup-item__text {
+    color: var(--text); font-weight: 500;
+}
+.qa-dup-empty {
+    padding: 12px; text-align: center;
+    font-size: 12.5px; color: var(--text-muted);
+    background: var(--background); border-radius: 8px;
+}
+
+/* ── Undo toast ── */
+.qa-toast {
+    position: fixed;
+    bottom: 28px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--text);
+    color: var(--surface);
+    padding: 12px 16px 12px 20px;
+    border-radius: 12px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.28);
+    z-index: 9500;
+    font-size: 13px; font-weight: 600;
+    max-width: calc(100vw - 32px);
+    animation: qaToastIn 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes qaToastIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.qa-toast button {
+    background: rgba(255,255,255,0.16);
+    color: inherit; border: none;
+    padding: 6px 12px; border-radius: 8px;
+    font-family: inherit; font-size: 12px;
+    font-weight: 700; cursor: pointer;
+}
+.qa-toast button:hover { background: rgba(255,255,255,0.26); }
+
+/* ── Keyboard help overlay ── */
+.qa-keys-overlay {
+    position: fixed; inset: 0;
+    background: rgba(15,23,42,0.55);
+    z-index: 9200;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+    animation: qaFade 0.18s ease;
+}
+.qa-keys-modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 22px 24px;
+    width: 100%; max-width: 400px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.32);
+}
+.qa-keys-modal h3 {
+    font-size: 15px; font-weight: 700; color: var(--text);
+    margin: 0 0 14px; display: flex; align-items: center; gap: 8px;
+}
+.qa-keys-modal h3 i { color: var(--primary); }
+.qa-keys-modal table {
+    width: 100%; border-collapse: collapse;
+}
+.qa-keys-modal td {
+    padding: 8px 6px;
+    font-size: 13px; color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+}
+.qa-keys-modal td:first-child {
+    width: 80px;
+}
+.qa-keys-modal tr:last-child td { border-bottom: none; }
+.qa-keys-modal kbd {
+    display: inline-block;
+    padding: 2px 8px; border-radius: 6px;
+    background: var(--background); border: 1px solid var(--border);
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 12px; font-weight: 700; color: var(--text);
+    min-width: 24px; text-align: center;
+}
+.qa-keys-modal .close {
+    margin-top: 14px;
+    display: block; width: 100%;
+    padding: 10px; border-radius: 8px;
+    background: var(--primary); color: #fff;
+    border: none; font-family: inherit;
+    font-weight: 700; font-size: 13px; cursor: pointer;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+    .qa-row { grid-template-columns: 28px 40px 1fr; }
+    .qa-row__actions {
+        grid-column: 1 / -1;
+        justify-content: flex-end;
+        margin-top: 4px;
+    }
+    .qa-drawer { width: 100vw; }
+    .qa-drawer__meta { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+    .qa-stats { grid-template-columns: repeat(2, 1fr); }
+    .qa-toolbar { flex-direction: column; align-items: stretch; }
+    .qa-select { max-width: none; }
+    .qa-count { margin-left: 0; text-align: center; }
+    .qa-advanced__sections { grid-template-columns: 1fr; }
+    .qa-subject { width: 160px; }
+}
+
+/* ── Dark mode ── */
+[data-theme="dark"] .qa-tag--grade { background: rgba(99,102,241,0.20); color: #A5B4FC; }
+[data-theme="dark"] .qa-tag--chapter { background: #1A2A4A; color: #93C5FD; }
+[data-theme="dark"] .qa-tag--pdf { background: #2A1A4A; color: #C4B5FD; }
+[data-theme="dark"] .qa-tag--pdf-warn { background: #3A2E1A; color: #FCD34D; }
+[data-theme="dark"] .qa-tag--archived { background: #2A2A3A; color: #9CA3AF; }
+[data-theme="dark"] .qa-drawer__expl { background: #3A2E1A; color: #FCD34D; border-left-color: #F59E0B; }
+[data-theme="dark"] .qa-drawer__opt.is-correct { background: #1A3A2E; color: #6EE7B7; border-color: #10B981; }
+[data-theme="dark"] .qa-bulk__btn--danger:hover,
+[data-theme="dark"] .qa-icon-btn--danger:hover { background: #3A1A1A; }
+[data-theme="dark"] .qa-subject__pill--F4 { background: #1A2A4A; color: #93C5FD; border-color: #1E40AF; }
+[data-theme="dark"] .qa-subject__pill--F3 { background: #1A3A2E; color: #6EE7B7; border-color: #166534; }
+[data-theme="dark"] .qa-subject__pill--G8 { background: #3A2E1A; color: #FCD34D; border-color: #854D0E; }
+[data-theme="dark"] .qa-subject__pill--G7 { background: #3A1A2E; color: #F9A8D4; border-color: #9D174D; }
+[data-theme="dark"] .qa-dup-item.is-exact { background: #3A1A1A; }
+</style>
+{% endblock %}
 
 {% block admin_title_icon %}<i class="fas fa-question-circle header-icon"></i>{% endblock %}
 {% block admin_title %}Questions{% endblock %}
 {% block admin_subtitle %}
-    Browse and manage the question bank. Miss-rate filters use the
-    materialized stats table; run <code>refresh_question_miss_stats()</code>
-    from the daily task runner to keep them fresh.
+    Browse, filter, and manage the question bank. Click a subject card to
+    focus it. Press <kbd style="font-family:monospace;padding:1px 5px;border-radius:4px;background:var(--background);border:1px solid var(--border);font-size:11px;">?</kbd>
+    for keyboard shortcuts.
 {% endblock %}
 
 {% block admin_breadcrumb %}
@@ -18,6 +824,14 @@
 {% endblock %}
 
 {% block admin_actions %}
+    {% if admin_can('questions.view') %}
+        <a href="{{ url_for('admin_content.questions_broken') }}" class="admin-btn secondary">
+            <i class="fas fa-unlink"></i> Broken PDFs
+        </a>
+        <a href="{{ url_for('admin_content.questions_hard') }}" class="admin-btn secondary">
+            <i class="fas fa-fire"></i> High Miss
+        </a>
+    {% endif %}
     {% if admin_can('questions.bulk_import') %}
         <a href="{{ url_for('admin_content.bulk_import') }}" class="admin-btn secondary">
             <i class="fas fa-file-import"></i> Bulk Import
@@ -32,512 +846,1241 @@
 
 {% block admin_content %}
 
-{# ─────── MINI STATS ─────── #}
-<div class="q-list-header-stats">
-    <div class="q-stat-mini">
-        <div class="num primary">{{ stats.total }}</div>
-        <div class="lbl">Total</div>
-    </div>
-    <div class="q-stat-mini">
-        <div class="num green">{{ stats.active }}</div>
-        <div class="lbl">Active</div>
-    </div>
-    <div class="q-stat-mini">
-        <div class="num amber">{{ stats.archived }}</div>
-        <div class="lbl">Archived</div>
-    </div>
-    <div class="q-stat-mini">
-        <div class="num">{{ stats.linked }}</div>
-        <div class="lbl">PDF-linked</div>
-    </div>
-    <div class="q-stat-mini">
-        <div class="num">{{ stats.unlinked }}</div>
-        <div class="lbl">Unlinked</div>
-    </div>
-</div>
+<div class="qa-page" id="qaPage"
+     data-bulk-url="{{ url_for('admin_content.questions_bulk_archive') }}"
+     data-archive-url-template="{{ url_for('admin_content.question_archive', question_id=0) }}"
+     data-unarchive-url-template="{{ url_for('admin_content.question_unarchive', question_id=0) }}"
+     data-dup-url="{{ url_for('admin_content.question_check_duplicate') }}">
 
-{# ─────── MAIN FORM ─────── #}
-{% set advanced_open = (
-    pdf_filter or pdf_code or status_filter or chapter or
-    interactions or miss_filter or
-    difficulty_min or difficulty_max or
-    date_from or date_to
-) %}
+    {# ══════════════════════════════════════════════════════════
+       1. STATS
+       ══════════════════════════════════════════════════════════ #}
+    <section class="qa-stats" aria-label="Question bank summary">
+        <div class="qa-stat">
+            <div class="qa-stat__icon qa-stat__icon--neutral"><i class="fas fa-database"></i></div>
+            <div class="qa-stat__body">
+                <div class="qa-stat__num">{{ stats.total }}</div>
+                <div class="qa-stat__label">Total</div>
+            </div>
+        </div>
+        <div class="qa-stat">
+            <div class="qa-stat__icon qa-stat__icon--ok"><i class="fas fa-check-circle"></i></div>
+            <div class="qa-stat__body">
+                <div class="qa-stat__num">{{ stats.active }}</div>
+                <div class="qa-stat__label">Active</div>
+            </div>
+        </div>
+        <div class="qa-stat">
+            <div class="qa-stat__icon qa-stat__icon--warn"><i class="fas fa-box-archive"></i></div>
+            <div class="qa-stat__body">
+                <div class="qa-stat__num">{{ stats.archived }}</div>
+                <div class="qa-stat__label">Archived</div>
+            </div>
+        </div>
+        <div class="qa-stat">
+            <div class="qa-stat__icon qa-stat__icon--info"><i class="fas fa-file-pdf"></i></div>
+            <div class="qa-stat__body">
+                <div class="qa-stat__num">{{ stats.linked }}</div>
+                <div class="qa-stat__label">PDF-linked</div>
+            </div>
+        </div>
+        <div class="qa-stat">
+            <div class="qa-stat__icon qa-stat__icon--muted"><i class="fas fa-unlink"></i></div>
+            <div class="qa-stat__body">
+                <div class="qa-stat__num">{{ stats.unlinked }}</div>
+                <div class="qa-stat__label">Unlinked</div>
+            </div>
+        </div>
+    </section>
 
-<form method="GET" id="questionsFilterForm" action="{{ url_for('admin_content.questions') }}">
+    {# ══════════════════════════════════════════════════════════
+       2. SUBJECT CARDS
+       ══════════════════════════════════════════════════════════ #}
+    <section class="qa-subjects-wrap" aria-label="Browse by subject">
+        <div class="qa-subjects-head">
+            <h2><i class="fas fa-layer-group"></i> Browse by subject</h2>
+            <span class="hint">Click a card to filter the list</span>
+        </div>
+        <div class="qa-subjects">
 
-    {# ─────── QUICK TOOLBAR ─────── #}
-    <div class="q-list-toolbar">
-        <div class="admin-search">
-            <i class="fas fa-search"></i>
-            <input type="text" name="search" value="{{ search }}"
-                   placeholder="Search question text, chapter, tags…"
-                   autocomplete="off" spellcheck="false">
+            {# ── All card ── #}
+            {% set all_active = (not subject_code) %}
+            <a href="{{ url_for('admin_content.questions') }}"
+               class="qa-subject qa-subject__all {% if all_active %}is-active{% endif %}"
+               aria-label="All subjects">
+                <div class="qa-subject__head">
+                    <div class="qa-subject__icon">📚</div>
+                    <div class="qa-subject__meta">
+                        <div class="qa-subject__name">All subjects</div>
+                        <div class="qa-subject__code">any</div>
+                    </div>
+                </div>
+                <div class="qa-subject__count">{{ stats.total }}</div>
+                <div class="qa-subject__breakdown">
+                    <span class="qa-subject__pill">{{ stats.active }} active</span>
+                </div>
+            </a>
+
+            {# ── Per-subject cards ── #}
+            {% for s in subjects %}
+                {% set c = subject_counts.get(s.code, {'total': 0, 'active': 0, 'grades': {}}) %}
+                {% set is_active = (subject_code == s.code) %}
+                {% set is_empty = (c.total == 0) %}
+                <a href="{{ url_for('admin_content.questions', subject=s.code) }}"
+                   class="qa-subject {% if is_active %}is-active{% endif %} {% if is_empty %}is-empty{% endif %}"
+                   aria-label="{{ s.name }} — {{ c.total }} questions">
+                    <div class="qa-subject__head">
+                        <div class="qa-subject__icon">{{ s.icon or '📚' }}</div>
+                        <div class="qa-subject__meta">
+                            <div class="qa-subject__name" title="{{ s.name }}">{{ s.name }}</div>
+                            <div class="qa-subject__code">{{ s.code }}</div>
+                        </div>
+                    </div>
+                    <div class="qa-subject__count {% if c.total == 0 %}zero{% endif %}">{{ c.total }}</div>
+                    <div class="qa-subject__breakdown">
+                        {% for g in ['F4', 'F3', 'G8', 'G7'] %}
+                            {% set gn = c.grades.get(g, 0) %}
+                            {% if gn > 0 %}
+                                <span class="qa-subject__pill qa-subject__pill--{{ g }}">{{ g }} · {{ gn }}</span>
+                            {% endif %}
+                        {% endfor %}
+                        {% if c.total > 0 and not c.grades %}
+                            <span class="qa-subject__pill">{{ c.active }} active</span>
+                        {% endif %}
+                    </div>
+                </a>
+            {% endfor %}
+        </div>
+    </section>
+
+    {# ══════════════════════════════════════════════════════════
+       3. FILTER FORM
+       ══════════════════════════════════════════════════════════ #}
+    {% set advanced_open = (
+        pdf_filter or pdf_code or status_filter or chapter or
+        interactions or miss_filter or
+        difficulty_min or difficulty_max or
+        date_from or date_to
+    ) %}
+
+    <form method="GET" id="qaFilterForm" action="{{ url_for('admin_content.questions') }}">
+        {% if subject_code %}<input type="hidden" name="subject" value="{{ subject_code }}">{% endif %}
+
+        <div class="qa-toolbar">
+            <div class="qa-search">
+                <i class="fas fa-search qa-search__icon"></i>
+                <input type="text" name="search" id="qaSearch"
+                       value="{{ search }}"
+                       placeholder="Search question text, chapter, tags…"
+                       autocomplete="off" spellcheck="false">
+                <kbd class="qa-search__kbd">/</kbd>
+            </div>
+
+            <select name="grade" class="qa-select" data-autofilter>
+                <option value="">All grades</option>
+                {% for g in filter_options.grades %}
+                    <option value="{{ g }}" {% if grade_filter == g %}selected{% endif %}>
+                        {% if g == 'F4' %}Form 4
+                        {% elif g == 'F3' %}Form 3
+                        {% elif g == 'G8' %}Grade 8
+                        {% elif g == 'G7' %}Grade 7
+                        {% else %}{{ g }}{% endif %}
+                    </option>
+                {% endfor %}
+            </select>
+
+            <select name="sort" class="qa-select" data-autofilter>
+                <optgroup label="Date">
+                    <option value="newest"          {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
+                    <option value="oldest"          {% if sort == 'oldest' %}selected{% endif %}>Oldest first</option>
+                </optgroup>
+                <optgroup label="Difficulty">
+                    <option value="difficulty_high" {% if sort == 'difficulty_high' %}selected{% endif %}>Hardest first</option>
+                    <option value="difficulty_low"  {% if sort == 'difficulty_low' %}selected{% endif %}>Easiest first</option>
+                </optgroup>
+                <optgroup label="Miss rate">
+                    <option value="miss_high"       {% if sort == 'miss_high' %}selected{% endif %}>Highest miss rate</option>
+                    <option value="miss_low"        {% if sort == 'miss_low' %}selected{% endif %}>Lowest miss rate</option>
+                    <option value="most_missed"     {% if sort == 'most_missed' %}selected{% endif %}>Most misses</option>
+                </optgroup>
+                <optgroup label="Attempts">
+                    <option value="most_attempted"  {% if sort == 'most_attempted' %}selected{% endif %}>Most attempted</option>
+                    <option value="least_attempted" {% if sort == 'least_attempted' %}selected{% endif %}>Least attempted</option>
+                </optgroup>
+            </select>
+
+            <button type="button"
+                    class="qa-btn {% if advanced_open %}open{% endif %}"
+                    id="qaToggleAdvanced"
+                    aria-expanded="{{ 'true' if advanced_open else 'false' }}">
+                <i class="fas fa-sliders-h"></i>
+                Filters
+                <i class="fas fa-chevron-{% if advanced_open %}up{% else %}down{% endif %}"
+                   id="qaToggleIcon" style="font-size:10px;margin-left:2px;"></i>
+            </button>
+
+            <button type="button" class="qa-btn qa-btn--icon"
+                    id="qaDensityToggle"
+                    title="Toggle density (compact / comfortable)"
+                    aria-label="Toggle density">
+                <i class="fas fa-bars" id="qaDensityIcon"></i>
+            </button>
+
+            <span class="qa-count">
+                <strong>{{ total }}</strong> result{{ '' if total == 1 else 's' }}
+            </span>
         </div>
 
-        <select name="subject" class="q-filter" data-autofilter>
-            <option value="">All subjects</option>
-            {% for s in subjects %}
-                <option value="{{ s.code }}" {% if subject_code == s.code %}selected{% endif %}>
-                    {{ s.icon or '📚' }} {{ s.name }}
-                </option>
+        <div class="qa-advanced" id="qaAdvanced" {% if not advanced_open %}hidden{% endif %}>
+            <div class="qa-advanced__header">
+                <h3><i class="fas fa-sliders-h"></i> Advanced filters</h3>
+                <a href="{{ url_for('admin_content.questions') }}" class="qa-btn">
+                    <i class="fas fa-times"></i> Reset all
+                </a>
+            </div>
+
+            <div class="qa-advanced__sections">
+
+                <div class="qa-section">
+                    <div class="qa-section__label"><i class="fas fa-file-pdf"></i> Source</div>
+                    <div class="qa-section__grid">
+                        <div class="qa-field">
+                            <label>PDF linkage</label>
+                            <select name="pdf" data-autofilter>
+                                <option value="">Any</option>
+                                <option value="linked"   {% if pdf_filter == 'linked' %}selected{% endif %}>Linked to a PDF</option>
+                                <option value="unlinked" {% if pdf_filter == 'unlinked' %}selected{% endif %}>Unlinked</option>
+                            </select>
+                        </div>
+                        <div class="qa-field">
+                            <label>Exact PDF code</label>
+                            <input type="text" name="pdf_code"
+                                   class="mono"
+                                   value="{{ pdf_code }}"
+                                   placeholder="XXXX-XXXX"
+                                   maxlength="9"
+                                   autocomplete="off" spellcheck="false">
+                            {% if filter_options.pdf_codes %}
+                                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
+                                    Top:
+                                    {% for pc in filter_options.pdf_codes[:3] %}
+                                        <a href="?pdf_code={{ pc.code }}"
+                                           style="font-family:ui-monospace,Menlo,monospace;">{{ pc.code }}</a>{% if not loop.last %}, {% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="qa-section">
+                    <div class="qa-section__label"><i class="fas fa-flag"></i> State &amp; chapter</div>
+                    <div class="qa-section__grid">
+                        <div class="qa-field">
+                            <label>Status</label>
+                            <select name="status" data-autofilter>
+                                <option value="">Any state</option>
+                                <option value="active"   {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+                                <option value="archived" {% if status_filter == 'archived' %}selected{% endif %}>Archived</option>
+                                <option value="draft"    {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+                            </select>
+                        </div>
+                        <div class="qa-field">
+                            <label>Chapter</label>
+                            <input type="text" name="chapter"
+                                   value="{{ chapter }}"
+                                   list="qa-chapter-list"
+                                   placeholder="e.g. Chapter 5"
+                                   maxlength="100">
+                            <datalist id="qa-chapter-list">
+                                {% for c in filter_options.chapters %}
+                                    <option value="{{ c }}"></option>
+                                {% endfor %}
+                            </datalist>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="qa-section">
+                    <div class="qa-section__label"><i class="fas fa-chart-line"></i> Performance</div>
+                    <div class="qa-section__grid">
+                        <div class="qa-field">
+                            <label>Miss rate</label>
+                            <select name="miss" data-autofilter>
+                                <option value="">Any</option>
+                                <option value="high"   {% if miss_filter == 'high' %}selected{% endif %}>High (≥70%, ≥3 attempts)</option>
+                                <option value="medium" {% if miss_filter == 'medium' %}selected{% endif %}>Medium (40–69%)</option>
+                                <option value="low"    {% if miss_filter == 'low' %}selected{% endif %}>Low (&lt;40%, ≥3 attempts)</option>
+                                <option value="any"    {% if miss_filter == 'any' %}selected{% endif %}>Has any miss</option>
+                                <option value="never"  {% if miss_filter == 'never' %}selected{% endif %}>Never attempted</option>
+                            </select>
+                        </div>
+                        <div class="qa-field">
+                            <label>Interactions</label>
+                            <select name="interactions" data-autofilter>
+                                <option value="">Any</option>
+                                <option value="has_reports" {% if interactions == 'has_reports' %}selected{% endif %}>🚩 Has reports</option>
+                                <option value="has_saves"   {% if interactions == 'has_saves' %}selected{% endif %}>🔖 Has saves</option>
+                                <option value="has_likes"   {% if interactions == 'has_likes' %}selected{% endif %}>❤️ Has likes</option>
+                                <option value="clean"       {% if interactions == 'clean' %}selected{% endif %}>✨ No interactions</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="qa-section">
+                    <div class="qa-section__label"><i class="fas fa-calendar-alt"></i> Ranges</div>
+                    <div class="qa-section__grid">
+                        <div class="qa-field" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                            <div>
+                                <label>Difficulty min</label>
+                                <select name="difficulty_min" data-autofilter>
+                                    <option value="">Any</option>
+                                    {% for i in range(1, 6) %}
+                                        <option value="{{ i }}" {% if difficulty_min == i %}selected{% endif %}>
+                                            {{ '⭐' * i }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label>Max</label>
+                                <select name="difficulty_max" data-autofilter>
+                                    <option value="">Any</option>
+                                    {% for i in range(1, 6) %}
+                                        <option value="{{ i }}" {% if difficulty_max == i %}selected{% endif %}>
+                                            {{ '⭐' * i }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="qa-field" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                            <div>
+                                <label>Created from</label>
+                                <input type="date" name="from" value="{{ date_from }}">
+                            </div>
+                            <div>
+                                <label>to</label>
+                                <input type="date" name="to" value="{{ date_to }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="qa-advanced__footer">
+                <button type="submit" class="qa-btn-primary">
+                    <i class="fas fa-filter"></i> Apply filters
+                </button>
+            </div>
+        </div>
+
+    </form>
+
+    {# ══════════════════════════════════════════════════════════
+       4. ACTIVE FILTER CHIPS
+       ══════════════════════════════════════════════════════════ #}
+    {% if active_filters and active_filters|length > 0 %}
+        <div class="qa-chips">
+            <span class="qa-chips__label">
+                <i class="fas fa-filter"></i> Active:
+            </span>
+            {% for chip in active_filters %}
+                <a href="{{ chip.clear_url }}" class="qa-chip" title="Remove this filter">
+                    <span class="qa-chip__key">{{ chip.label }}:</span>
+                    <span class="qa-chip__value">{{ chip.value }}</span>
+                    <i class="fas fa-times qa-chip__close"></i>
+                </a>
             {% endfor %}
-        </select>
-
-        <select name="grade" class="q-filter" data-autofilter>
-            <option value="">All grades</option>
-            {% for g in filter_options.grades %}
-                <option value="{{ g }}" {% if grade_filter == g %}selected{% endif %}>
-                    {% if g == 'F4' %}Form 4
-                    {% elif g == 'F3' %}Form 3
-                    {% elif g == 'G8' %}Grade 8
-                    {% elif g == 'G7' %}Grade 7
-                    {% else %}{{ g }}{% endif %}
-                </option>
-            {% endfor %}
-        </select>
-
-        <select name="sort" class="q-filter" data-autofilter>
-            <optgroup label="Date">
-                <option value="newest"          {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
-                <option value="oldest"          {% if sort == 'oldest' %}selected{% endif %}>Oldest first</option>
-            </optgroup>
-            <optgroup label="Difficulty">
-                <option value="difficulty_high" {% if sort == 'difficulty_high' %}selected{% endif %}>Hardest first</option>
-                <option value="difficulty_low"  {% if sort == 'difficulty_low' %}selected{% endif %}>Easiest first</option>
-            </optgroup>
-            <optgroup label="Miss rate">
-                <option value="miss_high"       {% if sort == 'miss_high' %}selected{% endif %}>Highest miss rate</option>
-                <option value="miss_low"        {% if sort == 'miss_low' %}selected{% endif %}>Lowest miss rate</option>
-                <option value="most_missed"     {% if sort == 'most_missed' %}selected{% endif %}>Most misses (count)</option>
-            </optgroup>
-            <optgroup label="Attempts">
-                <option value="most_attempted"  {% if sort == 'most_attempted' %}selected{% endif %}>Most attempted</option>
-                <option value="least_attempted" {% if sort == 'least_attempted' %}selected{% endif %}>Least attempted</option>
-            </optgroup>
-        </select>
-
-        <button type="button" class="admin-btn secondary" id="toggleAdvanced">
-            <i class="fas fa-sliders-h"></i>
-            Advanced
-            <i class="fas fa-chevron-{% if advanced_open %}up{% else %}down{% endif %}"
-               id="toggleAdvancedIcon" style="font-size:10px;margin-left:4px;"></i>
-        </button>
-
-        <span class="toolbar-meta">
-            <strong>{{ total }}</strong> result{{ '' if total == 1 else 's' }}
-        </span>
-    </div>
-
-    {# ─────── ADVANCED FILTERS ─────── #}
-    <div id="advancedPanel"
-         class="admin-card"
-         style="margin-top:12px;{% if not advanced_open %}display:none;{% endif %}">
-        <div class="admin-card-head">
-            <h3><i class="fas fa-sliders-h"></i> Advanced filters</h3>
-            <a href="{{ url_for('admin_content.questions') }}"
-               class="admin-btn ghost sm" style="margin-left:auto;">
-                <i class="fas fa-times"></i> Reset all
+            <a href="{{ url_for('admin_content.questions') }}" class="qa-chips__clear">
+                Clear all
             </a>
         </div>
-        <div class="admin-card-body">
+    {% endif %}
 
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
-
-                <div class="admin-form-group" style="margin-bottom:0;">
-                    <label>PDF linkage</label>
-                    <select name="pdf" class="admin-select" data-autofilter>
-                        <option value="">Any</option>
-                        <option value="linked"   {% if pdf_filter == 'linked' %}selected{% endif %}>Linked to a PDF</option>
-                        <option value="unlinked" {% if pdf_filter == 'unlinked' %}selected{% endif %}>Unlinked</option>
-                    </select>
-                </div>
-
-                <div class="admin-form-group" style="margin-bottom:0;">
-                    <label>Exact PDF code</label>
-                    <input type="text" name="pdf_code"
-                           class="admin-input"
-                           value="{{ pdf_code }}"
-                           placeholder="e.g. XXXX-XXXX"
-                           maxlength="9"
-                           autocomplete="off" spellcheck="false"
-                           style="font-family:monospace;letter-spacing:1px;">
-                    {% if filter_options.pdf_codes %}
-                        <div class="hint">
-                            Top codes:
-                            {% for pc in filter_options.pdf_codes[:3] %}
-                                <a href="?pdf_code={{ pc.code }}"
-                                   style="font-family:monospace;">{{ pc.code }}</a>{% if not loop.last %}, {% endif %}
-                            {% endfor %}
-                        </div>
-                    {% endif %}
-                </div>
-
-                <div class="admin-form-group" style="margin-bottom:0;">
-                    <label>Status</label>
-                    <select name="status" class="admin-select" data-autofilter>
-                        <option value="">Any state</option>
-                        <option value="active"   {% if status_filter == 'active' %}selected{% endif %}>Active</option>
-                        <option value="archived" {% if status_filter == 'archived' %}selected{% endif %}>Archived</option>
-                        <option value="draft"    {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
-                    </select>
-                </div>
-
-                <div class="admin-form-group" style="margin-bottom:0;">
-                    <label>Chapter</label>
-                    <input type="text" name="chapter"
-                           class="admin-input"
-                           value="{{ chapter }}"
-                           list="chapter-list"
-                           placeholder="e.g. Chapter 5"
-                           maxlength="100">
-                    <datalist id="chapter-list">
-                        {% for c in filter_options.chapters %}
-                            <option value="{{ c }}"></option>
-                        {% endfor %}
-                    </datalist>
-                </div>
-
-            </div>
-
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px;">
-
-                <div class="admin-form-group" style="margin-bottom:0;">
-                    <label>Miss rate</label>
-                    <select name="miss" class="admin-select" data-autofilter>
-                        <option value="">Any</option>
-                        <option value="high"   {% if miss_filter == 'high' %}selected{% endif %}>High (≥70%, ≥3 attempts)</option>
-                        <option value="medium" {% if miss_filter == 'medium' %}selected{% endif %}>Medium (40–69%)</option>
-                        <option value="low"    {% if miss_filter == 'low' %}selected{% endif %}>Low (&lt;40%, ≥3 attempts)</option>
-                        <option value="any"    {% if miss_filter == 'any' %}selected{% endif %}>Has any miss</option>
-                        <option value="never"  {% if miss_filter == 'never' %}selected{% endif %}>Never attempted</option>
-                    </select>
-                </div>
-
-                <div class="admin-form-group" style="margin-bottom:0;">
-                    <label>Interactions</label>
-                    <select name="interactions" class="admin-select" data-autofilter>
-                        <option value="">Any</option>
-                        <option value="has_reports" {% if interactions == 'has_reports' %}selected{% endif %}>🚩 Has reports</option>
-                        <option value="has_saves"   {% if interactions == 'has_saves' %}selected{% endif %}>🔖 Has saves</option>
-                        <option value="has_likes"   {% if interactions == 'has_likes' %}selected{% endif %}>❤️ Has likes</option>
-                        <option value="clean"       {% if interactions == 'clean' %}selected{% endif %}>✨ No interactions</option>
-                    </select>
-                </div>
-
-                <div class="admin-form-group" style="margin-bottom:0;">
-                    <label>Min difficulty</label>
-                    <select name="difficulty_min" class="admin-select" data-autofilter>
-                        <option value="">Any</option>
-                        {% for i in range(1, 6) %}
-                            <option value="{{ i }}" {% if difficulty_min == i %}selected{% endif %}>
-                                {{ '⭐' * i }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="admin-form-group" style="margin-bottom:0;">
-                    <label>Max difficulty</label>
-                    <select name="difficulty_max" class="admin-select" data-autofilter>
-                        <option value="">Any</option>
-                        {% for i in range(1, 6) %}
-                            <option value="{{ i }}" {% if difficulty_max == i %}selected{% endif %}>
-                                {{ '⭐' * i }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-            </div>
-
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px;">
-
-                <div class="admin-form-group" style="margin-bottom:0;">
-                    <label>Created from</label>
-                    <input type="date" name="from"
-                           class="admin-input"
-                           value="{{ date_from }}">
-                </div>
-
-                <div class="admin-form-group" style="margin-bottom:0;">
-                    <label>Created to</label>
-                    <input type="date" name="to"
-                           class="admin-input"
-                           value="{{ date_to }}">
-                </div>
-
-                <div style="display:flex;align-items:flex-end;">
-                    <button type="submit" class="admin-btn primary"
-                            style="width:100%;justify-content:center;">
-                        <i class="fas fa-filter"></i> Apply filters
-                    </button>
-                </div>
-
-            </div>
-
+    {# ══════════════════════════════════════════════════════════
+       5. BULK BAR
+       ══════════════════════════════════════════════════════════ #}
+    <div class="qa-bulk" id="qaBulkBar" hidden>
+        <span class="qa-bulk__count">
+            <strong id="qaBulkCount">0</strong> selected
+        </span>
+        <div class="qa-bulk__actions">
+            <button type="button" class="qa-bulk__btn qa-bulk__btn--danger" id="qaBulkArchive">
+                <i class="fas fa-box-archive"></i> Archive selected
+            </button>
+            <button type="button" class="qa-bulk__btn" id="qaBulkClear">
+                <i class="fas fa-times"></i> Clear
+            </button>
         </div>
     </div>
 
-</form>
+    {# ══════════════════════════════════════════════════════════
+       6. LIST
+       ══════════════════════════════════════════════════════════ #}
+    {% if questions %}
+        <div class="qa-list" id="qaList" data-density="comfortable">
+            {% for q in questions %}
+                {% set pdf = pdf_map.get(q.pdf_code) if q.pdf_code else None %}
+                {% set m_rate = q.miss_rate|round(0)|int if q.miss_rate else 0 %}
+                {% set m_attempts = q.total_attempts or 0 %}
+                {% set m_misses = q.total_misses or 0 %}
 
-{# ─────── ACTIVE FILTER CHIPS ─────── #}
-{% if active_filters and active_filters|length > 0 %}
-<div class="active-filters-bar">
-    <span class="af-label"><i class="fas fa-filter"></i> Active:</span>
-    {% for chip in active_filters %}
-        <a href="{{ chip.clear_url }}" class="af-chip" title="Clear this filter">
-            <span class="af-chip-label">{{ chip.label }}:</span>
-            <span class="af-chip-value">{{ chip.value }}</span>
-            <i class="fas fa-times af-chip-close"></i>
-        </a>
-    {% endfor %}
-    <a href="{{ url_for('admin_content.questions') }}" class="af-clear">
-        Clear all
-    </a>
-</div>
-{% endif %}
+                <div class="qa-row"
+                     tabindex="0"
+                     data-qid="{{ q.id }}"
+                     role="button"
+                     aria-label="Preview question #{{ q.id }}">
 
-{# ─────── QUESTION LIST ─────── #}
-{% if questions %}
-<section class="admin-table-wrap">
-    {% for q in questions %}
-        {% set pdf = pdf_map.get(q.pdf_code) if q.pdf_code else None %}
+                    <div class="qa-row__check">
+                        <input type="checkbox"
+                               class="qa-row__check-input"
+                               data-qid="{{ q.id }}"
+                               aria-label="Select question #{{ q.id }}">
+                    </div>
 
-        {% set m_rate = q.miss_rate|round(0)|int if q.miss_rate else 0 %}
-        {% set m_attempts = q.total_attempts or 0 %}
-        {% set m_misses = q.total_misses or 0 %}
+                    <div class="qa-row__icon">
+                        {% set subj = subjects | selectattr('code', 'equalto', q.subject_code) | first %}
+                        {{ subj.icon if subj else '📚' }}
+                    </div>
 
-        <div class="q-row">
-            <div class="q-icon">
-                {% set subj = subjects | selectattr('code', 'equalto', q.subject_code) | first %}
-                {{ subj.icon if subj else '📚' }}
-            </div>
+                    <div class="qa-row__body">
+                        <div class="qa-row__text">{{ q.question_text }}</div>
+                        <div class="qa-row__meta">
+                            <span class="qa-tag qa-tag--subject">{{ q.subject_name or q.subject_code }}</span>
 
-            <div class="q-body">
-                <div class="q-text">{{ q.question_text }}</div>
-                <div class="q-meta">
-                    <span class="q-chip subject">{{ q.subject_name or q.subject_code }}</span>
+                            {% if q.grade %}
+                                <span class="qa-tag qa-tag--grade">🎓 {{ q.grade }}</span>
+                            {% endif %}
 
-                    {% if q.grade %}
-                        <span class="q-chip grade">🎓 {{ q.grade }}</span>
-                    {% endif %}
+                            {% if q.chapter %}
+                                <span class="qa-tag qa-tag--chapter">📖 {{ q.chapter }}</span>
+                            {% endif %}
 
-                    {% if q.chapter %}
-                        <span class="q-chip">📖 {{ q.chapter }}</span>
-                    {% endif %}
-                    <span class="q-chip stars">
-                        {% for i in range(1, 6) %}{% if i <= q.difficulty %}⭐{% else %}☆{% endif %}{% endfor %}
-                    </span>
+                            <span class="qa-tag qa-tag--stars" title="Difficulty {{ q.difficulty }}">
+                                {% for i in range(1, 6) %}{% if i <= q.difficulty %}⭐{% else %}☆{% endif %}{% endfor %}
+                            </span>
 
-                    {% if q.pdf_code %}
-                        {% if pdf and pdf.exists %}
-                            <span class="q-chip pdf">📄 {{ q.pdf_code }}{% if q.pdf_page %} · p.{{ q.pdf_page }}{% endif %}</span>
-                        {% else %}
-                            <span class="q-chip pdf-warn">⚠ {{ q.pdf_code }} (not found)</span>
+                            {% if q.pdf_code %}
+                                {% if pdf and pdf.exists %}
+                                    <span class="qa-tag qa-tag--pdf">📄 {{ q.pdf_code }}{% if q.pdf_page %} · p.{{ q.pdf_page }}{% endif %}</span>
+                                {% else %}
+                                    <span class="qa-tag qa-tag--pdf-warn">⚠ {{ q.pdf_code }} (missing)</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="qa-tag qa-tag--none">No source</span>
+                            {% endif %}
+
+                            {% if q.status == 'active' %}
+                                <span class="qa-tag qa-tag--active">✅ Active</span>
+                            {% elif q.status == 'archived' %}
+                                <span class="qa-tag qa-tag--archived">📦 Archived</span>
+                            {% else %}
+                                <span class="qa-tag qa-tag--draft">✏️ Draft</span>
+                            {% endif %}
+
+                            {% if m_attempts > 0 %}
+                                {% if m_rate >= 70 %}
+                                    <span class="qa-tag qa-tag--miss-high" title="{{ m_misses }}/{{ m_attempts }} misses">❌ {{ m_rate }}% miss</span>
+                                {% elif m_rate >= 40 %}
+                                    <span class="qa-tag qa-tag--miss-med" title="{{ m_misses }}/{{ m_attempts }} misses">⚠️ {{ m_rate }}% miss</span>
+                                {% else %}
+                                    <span class="qa-tag qa-tag--miss-low" title="{{ m_misses }}/{{ m_attempts }} misses">✅ {{ m_rate }}% miss</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="qa-tag qa-tag--miss-none">Not attempted</span>
+                            {% endif %}
+
+                            <span class="qa-tag qa-tag--id">#{{ q.id }} · {{ (q.created_at or '')[:10] }}</span>
+                        </div>
+                    </div>
+
+                    <div class="qa-row__actions" onclick="event.stopPropagation();">
+                        {% if admin_can('questions.edit') %}
+                            <a href="{{ url_for('admin_content.question_edit', question_id=q.id) }}"
+                               class="qa-icon-btn" title="Edit">
+                                <i class="fas fa-pen"></i>
+                            </a>
                         {% endif %}
-                    {% else %}
-                        <span class="q-chip pdf-none">No source</span>
-                    {% endif %}
-
-                    {% if q.status == 'active' %}
-                        <span class="q-chip active">✅ Active</span>
-                    {% elif q.status == 'archived' %}
-                        <span class="q-chip archived">📦 Archived</span>
-                    {% else %}
-                        <span class="q-chip draft">✏️ Draft</span>
-                    {% endif %}
-
-                    {% if m_attempts > 0 %}
-                        {% if m_rate >= 70 %}
-                            <span class="q-chip miss-high" title="{{ m_misses }} misses / {{ m_attempts }} attempts">
-                                ❌ {{ m_rate }}% miss ({{ m_misses }}/{{ m_attempts }})
-                            </span>
-                        {% elif m_rate >= 40 %}
-                            <span class="q-chip miss-medium" title="{{ m_misses }} misses / {{ m_attempts }} attempts">
-                                ⚠️ {{ m_rate }}% miss ({{ m_misses }}/{{ m_attempts }})
-                            </span>
-                        {% else %}
-                            <span class="q-chip miss-low" title="{{ m_misses }} misses / {{ m_attempts }} attempts">
-                                ✅ {{ m_rate }}% miss ({{ m_misses }}/{{ m_attempts }})
-                            </span>
+                        {% if admin_can('questions.archive') and q.status == 'active' %}
+                            <button type="button"
+                                    class="qa-icon-btn qa-icon-btn--danger qa-row-archive"
+                                    data-qid="{{ q.id }}"
+                                    title="Archive">
+                                <i class="fas fa-box-archive"></i>
+                            </button>
                         {% endif %}
-                    {% else %}
-                        <span class="q-chip miss-none">Not attempted yet</span>
-                    {% endif %}
-
-                    <span style="color:var(--text-muted);font-size:11px;">
-                        #{{ q.id }} · {{ (q.created_at or '')[:10] }}
-                    </span>
+                    </div>
                 </div>
-            </div>
-
-            <div class="q-actions">
-                {% if admin_can('questions.edit') %}
-                    <a href="{{ url_for('admin_content.question_edit', question_id=q.id) }}"
-                       class="admin-btn secondary sm" title="Edit">
-                        <i class="fas fa-pen"></i>
-                    </a>
-                {% endif %}
-                {% if admin_can('questions.archive') and q.status == 'active' %}
-                    <form method="POST"
-                          action="{{ url_for('admin_content.question_archive', question_id=q.id) }}"
-                          style="display:inline;"
-                          onsubmit="return confirm('Archive this question?');">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <button type="submit" class="admin-btn secondary sm" title="Archive">
-                            <i class="fas fa-box-archive"></i>
-                        </button>
-                    </form>
-                {% endif %}
-            </div>
+            {% endfor %}
         </div>
-    {% endfor %}
-</section>
 
-{# ─────── PAGINATION ─────── #}
-{% if total_pages > 1 %}
-<div class="admin-pagination">
-    {% set base_params = {
-        'search': search,
-        'subject': subject_code,
-        'grade': grade_filter,
-        'pdf': pdf_filter,
-        'pdf_code': pdf_code,
-        'status': status_filter,
-        'chapter': chapter,
-        'interactions': interactions,
-        'miss': miss_filter,
-        'difficulty_min': difficulty_min if difficulty_min is not none else '',
-        'difficulty_max': difficulty_max if difficulty_max is not none else '',
-        'from': date_from,
-        'to': date_to,
-        'sort': sort,
-    } | urlencode %}
+        {# ══════════════════════════════════════════════════════════
+           7. PAGINATION
+           ══════════════════════════════════════════════════════════ #}
+        {% if total_pages > 1 %}
+            {% set base_params = {
+                'search': search,
+                'subject': subject_code,
+                'grade': grade_filter,
+                'pdf': pdf_filter,
+                'pdf_code': pdf_code,
+                'status': status_filter,
+                'chapter': chapter,
+                'interactions': interactions,
+                'miss': miss_filter,
+                'difficulty_min': difficulty_min if difficulty_min is not none else '',
+                'difficulty_max': difficulty_max if difficulty_max is not none else '',
+                'from': date_from,
+                'to': date_to,
+                'sort': sort,
+            } | urlencode %}
 
-    <a href="?page=1&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
-        <i class="fas fa-angle-double-left"></i>
-    </a>
-    <a href="?page={{ page - 1 }}&{{ base_params }}" class="{% if page == 1 %}disabled{% endif %}">
-        <i class="fas fa-angle-left"></i>
-    </a>
-    {% for p in range(1, total_pages + 1) %}
-        {% if p == page %}
-            <span class="active">{{ p }}</span>
-        {% elif p <= page + 2 and p >= page - 2 %}
-            <a href="?page={{ p }}&{{ base_params }}">{{ p }}</a>
+            <nav class="qa-pager" aria-label="Pagination">
+                <a href="?page=1&{{ base_params }}"
+                   class="qa-pager__btn {% if page == 1 %}is-disabled{% endif %}"
+                   aria-label="First page">
+                    <i class="fas fa-angle-double-left"></i>
+                </a>
+                <a href="?page={{ page - 1 }}&{{ base_params }}"
+                   class="qa-pager__btn {% if page == 1 %}is-disabled{% endif %}"
+                   aria-label="Previous page">
+                    <i class="fas fa-angle-left"></i>
+                </a>
+
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                        <span class="qa-pager__btn is-active" aria-current="page">{{ p }}</span>
+                    {% elif p <= page + 2 and p >= page - 2 %}
+                        <a href="?page={{ p }}&{{ base_params }}" class="qa-pager__btn">{{ p }}</a>
+                    {% endif %}
+                {% endfor %}
+
+                <a href="?page={{ page + 1 }}&{{ base_params }}"
+                   class="qa-pager__btn {% if page == total_pages %}is-disabled{% endif %}"
+                   aria-label="Next page">
+                    <i class="fas fa-angle-right"></i>
+                </a>
+                <a href="?page={{ total_pages }}&{{ base_params }}"
+                   class="qa-pager__btn {% if page == total_pages %}is-disabled{% endif %}"
+                   aria-label="Last page">
+                    <i class="fas fa-angle-double-right"></i>
+                </a>
+
+                <span class="qa-pager__info">
+                    Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong>
+                </span>
+            </nav>
         {% endif %}
-    {% endfor %}
-    <a href="?page={{ page + 1 }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}">
-        <i class="fas fa-angle-right"></i>
-    </a>
-    <a href="?page={{ total_pages }}&{{ base_params }}" class="{% if page == total_pages %}disabled{% endif %}">
-        <i class="fas fa-angle-double-right"></i>
-    </a>
-</div>
-{% endif %}
 
-{% else %}
-<div class="admin-empty">
-    <span class="empty-icon">📭</span>
-    <h3>No questions found</h3>
-    <p>Try adjusting the filters or clearing them.</p>
-    {% if search or subject_code or grade_filter or pdf_filter or pdf_code
-          or status_filter or chapter or interactions or miss_filter
-          or difficulty_min or difficulty_max or date_from or date_to %}
-        <a href="{{ url_for('admin_content.questions') }}" class="admin-btn primary">
-            <i class="fas fa-times"></i> Clear all filters
-        </a>
-    {% elif admin_can('questions.create') %}
-        <a href="{{ url_for('admin_content.question_new') }}" class="admin-btn primary">
-            <i class="fas fa-plus"></i> New Question
-        </a>
+    {% else %}
+        <div class="qa-empty">
+            <span class="qa-empty__icon">📭</span>
+            <h3>No questions found</h3>
+            <p>
+                {% if subject_code %}
+                    No questions in this subject match the current filters.
+                {% else %}
+                    Try adjusting the filters or clearing them.
+                {% endif %}
+            </p>
+            {% if search or subject_code or grade_filter or pdf_filter or pdf_code
+                  or status_filter or chapter or interactions or miss_filter
+                  or difficulty_min or difficulty_max or date_from or date_to %}
+                <a href="{{ url_for('admin_content.questions') }}" class="qa-btn-primary">
+                    <i class="fas fa-times"></i> Clear all filters
+                </a>
+            {% elif admin_can('questions.create') %}
+                <a href="{{ url_for('admin_content.question_new') }}" class="qa-btn-primary">
+                    <i class="fas fa-plus"></i> New Question
+                </a>
+            {% endif %}
+        </div>
     {% endif %}
+
 </div>
-{% endif %}
 
-<style>
-    .active-filters-bar {
-        display: flex; flex-wrap: wrap; align-items: center;
-        gap: 8px;
-        padding: 10px 14px;
-        background: var(--background);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        margin-top: 12px; margin-bottom: 14px;
-        font-size: 12px;
-    }
-    .active-filters-bar .af-label {
-        color: var(--text-secondary); font-weight: 600;
-        display: inline-flex; align-items: center; gap: 6px;
-    }
-    .active-filters-bar .af-chip {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 4px 10px;
-        background: var(--primary-light); color: var(--primary);
-        border-radius: 12px;
-        font-weight: 600; text-decoration: none;
-        transition: var(--transition);
-    }
-    .active-filters-bar .af-chip:hover {
-        background: var(--primary); color: #fff; text-decoration: none;
-    }
-    .active-filters-bar .af-chip-label { opacity: 0.85; }
-    .active-filters-bar .af-chip-value {
-        max-width: 140px; overflow: hidden;
-        text-overflow: ellipsis; white-space: nowrap;
-    }
-    .active-filters-bar .af-chip-close { font-size: 10px; opacity: 0.7; }
-    .active-filters-bar .af-chip:hover .af-chip-close { opacity: 1; }
-    .active-filters-bar .af-clear {
-        margin-left: auto;
-        color: var(--text-muted); text-decoration: none;
-        font-weight: 600; padding: 4px 10px; border-radius: 12px;
-    }
-    .active-filters-bar .af-clear:hover {
-        color: var(--primary); background: var(--primary-light);
-    }
+{# ══════════════════════════════════════════════════════════
+   8. DRAWER
+   ══════════════════════════════════════════════════════════ #}
+<div class="qa-drawer-backdrop" id="qaDrawerBackdrop" hidden></div>
+<aside class="qa-drawer" id="qaDrawer" hidden
+       role="dialog" aria-modal="true" aria-labelledby="qaDrawerTitle">
+    <div class="qa-drawer__head">
+        <button type="button" class="qa-drawer__close" id="qaDrawerClose" aria-label="Close">
+            <i class="fas fa-times"></i>
+        </button>
+        <div>
+            <h3 class="qa-drawer__title" id="qaDrawerTitle">Question</h3>
+            <p class="qa-drawer__sub" id="qaDrawerSub">—</p>
+        </div>
+    </div>
+    <div class="qa-drawer__body" id="qaDrawerBody"></div>
+    <div class="qa-drawer__foot" id="qaDrawerFoot"></div>
+</aside>
 
-    .q-chip.miss-high { background: #FEF2F2; color: #991B1B; font-weight: 700; }
-    .q-chip.miss-medium { background: #FFFBEB; color: #92400E; font-weight: 700; }
-    .q-chip.miss-low { background: #ECFDF5; color: #065F46; font-weight: 700; }
-    .q-chip.miss-none {
-        background: var(--background); color: var(--text-muted);
-        font-weight: 500; font-style: italic;
-    }
-    .q-chip.grade {
-        background: linear-gradient(135deg, rgba(99,102,241,0.14), rgba(139,92,246,0.10));
-        color: #4F46E5;
-        font-weight: 700;
-    }
+{# ══════════════════════════════════════════════════════════
+   9. UNDO TOAST
+   ══════════════════════════════════════════════════════════ #}
+<div class="qa-toast" id="qaToast" hidden>
+    <span id="qaToastText">—</span>
+    <button type="button" id="qaToastUndo">Undo</button>
+</div>
 
-    [data-theme="dark"] .q-chip.miss-high   { background: #3A1A1A; color: #F87171; }
-    [data-theme="dark"] .q-chip.miss-medium { background: #3A2E1A; color: #FBBF24; }
-    [data-theme="dark"] .q-chip.miss-low    { background: #1A3A2E; color: #34D399; }
-    [data-theme="dark"] .q-chip.grade       { background: rgba(99,102,241,0.20); color: #A5B4FC; }
+{# ══════════════════════════════════════════════════════════
+   10. KEYBOARD HELP OVERLAY
+   ══════════════════════════════════════════════════════════ #}
+<div class="qa-keys-overlay" id="qaKeysOverlay" hidden>
+    <div class="qa-keys-modal">
+        <h3><i class="fas fa-keyboard"></i> Keyboard shortcuts</h3>
+        <table>
+            <tr><td><kbd>/</kbd></td><td>Focus search</td></tr>
+            <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Close drawer / clear search</td></tr>
+            <tr><td><kbd>j</kbd> <kbd>k</kbd></td><td>Next / previous row</td></tr>
+            <tr><td><kbd>Enter</kbd></td><td>Preview focused row</td></tr>
+            <tr><td><kbd>e</kbd></td><td>Edit focused row</td></tr>
+            <tr><td><kbd>a</kbd></td><td>Archive focused row</td></tr>
+            <tr><td><kbd>x</kbd></td><td>Toggle checkbox on focused row</td></tr>
+        </table>
+        <button type="button" class="close" id="qaKeysClose">Close</button>
+    </div>
+</div>
 
-    [data-theme="dark"] .active-filters-bar { background: var(--surface-alt); }
-    [data-theme="dark"] .active-filters-bar .af-chip { background: var(--primary-light); }
-</style>
+<script type="application/json" id="qaQuestionsData">{{ questions|tojson }}</script>
+<script type="application/json" id="qaPdfMap">{{ pdf_map|tojson }}</script>
 
+{% endblock %}
+
+{% block admin_js %}
+{{ super() }}
 <script>
 (function () {
     'use strict';
-    var toggleBtn = document.getElementById('toggleAdvanced');
-    var panel = document.getElementById('advancedPanel');
-    var icon = document.getElementById('toggleAdvancedIcon');
-    if (toggleBtn && panel) {
-        toggleBtn.addEventListener('click', function () {
-            var isOpen = panel.style.display !== 'none';
-            panel.style.display = isOpen ? 'none' : 'block';
-            if (icon) {
-                icon.className = isOpen
-                    ? 'fas fa-chevron-down'
-                    : 'fas fa-chevron-up';
+
+    var page = document.getElementById('qaPage');
+    if (!page) return;
+
+    var CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var BULK_URL = page.getAttribute('data-bulk-url') || '';
+    var ARCHIVE_TPL = page.getAttribute('data-archive-url-template') || '';
+    var UNARCHIVE_TPL = page.getAttribute('data-unarchive-url-template') || '';
+    var DUP_URL = page.getAttribute('data-dup-url') || '';
+    var EDIT_TPL = '{{ url_for("admin_content.question_edit", question_id=0) }}';
+
+    function idUrl(tpl, qid) {
+        return tpl.replace('/0/', '/' + qid + '/');
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Boot data
+    // ────────────────────────────────────────────────────────
+    var QUESTIONS = {};
+    try {
+        var raw = document.getElementById('qaQuestionsData');
+        if (raw) {
+            var arr = JSON.parse(raw.textContent || '[]');
+            arr.forEach(function (q) { QUESTIONS[String(q.id)] = q; });
+        }
+    } catch (e) {}
+
+    var PDF_MAP = {};
+    try {
+        var rawPdf = document.getElementById('qaPdfMap');
+        if (rawPdf) PDF_MAP = JSON.parse(rawPdf.textContent || '{}');
+    } catch (e) {}
+
+    // ────────────────────────────────────────────────────────
+    // Escape helper
+    // ────────────────────────────────────────────────────────
+    function esc(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Advanced toggle
+    // ────────────────────────────────────────────────────────
+    var advBtn = document.getElementById('qaToggleAdvanced');
+    var advPanel = document.getElementById('qaAdvanced');
+    var advIcon = document.getElementById('qaToggleIcon');
+
+    function setAdvanced(open) {
+        if (!advPanel || !advBtn) return;
+        advPanel.hidden = !open;
+        advBtn.classList.toggle('open', open);
+        advBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (advIcon) {
+            advIcon.className = open ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
+        }
+    }
+
+    if (advBtn) {
+        advBtn.addEventListener('click', function () {
+            setAdvanced(advPanel.hidden);
+        });
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Auto-filter on change
+    // ────────────────────────────────────────────────────────
+    var form = document.getElementById('qaFilterForm');
+    document.querySelectorAll('[data-autofilter]').forEach(function (el) {
+        el.addEventListener('change', function () {
+            if (form) form.submit();
+        });
+    });
+
+    // ────────────────────────────────────────────────────────
+    // Density toggle
+    // ────────────────────────────────────────────────────────
+    var listEl = document.getElementById('qaList');
+    var densityBtn = document.getElementById('qaDensityToggle');
+    var densityIcon = document.getElementById('qaDensityIcon');
+    var DENSITY_KEY = 'nuun.admin.questions.density';
+
+    function applyDensity(mode) {
+        if (!listEl) return;
+        listEl.setAttribute('data-density', mode);
+        if (densityIcon) {
+            densityIcon.className = mode === 'compact' ? 'fas fa-list' : 'fas fa-bars';
+        }
+        try { localStorage.setItem(DENSITY_KEY, mode); } catch (e) {}
+    }
+
+    if (listEl) {
+        var savedDensity = null;
+        try { savedDensity = localStorage.getItem(DENSITY_KEY); } catch (e) {}
+        if (savedDensity === 'compact' || savedDensity === 'comfortable') {
+            applyDensity(savedDensity);
+        }
+    }
+    if (densityBtn) {
+        densityBtn.addEventListener('click', function () {
+            var current = listEl.getAttribute('data-density') || 'comfortable';
+            applyDensity(current === 'compact' ? 'comfortable' : 'compact');
+        });
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Selection
+    // ────────────────────────────────────────────────────────
+    var selected = new Set();
+    var bulkBar = document.getElementById('qaBulkBar');
+    var bulkCount = document.getElementById('qaBulkCount');
+    var bulkArchiveBtn = document.getElementById('qaBulkArchive');
+    var bulkClearBtn = document.getElementById('qaBulkClear');
+
+    function syncBulkBar() {
+        if (!bulkBar) return;
+        bulkBar.hidden = selected.size === 0;
+        if (bulkCount) bulkCount.textContent = selected.size;
+    }
+
+    document.addEventListener('change', function (e) {
+        var t = e.target;
+        if (!t || !t.classList || !t.classList.contains('qa-row__check-input')) return;
+        var qid = t.getAttribute('data-qid');
+        if (!qid) return;
+        var row = t.closest('.qa-row');
+        if (t.checked) {
+            selected.add(qid);
+            if (row) row.classList.add('is-selected');
+        } else {
+            selected.delete(qid);
+            if (row) row.classList.remove('is-selected');
+        }
+        syncBulkBar();
+    });
+
+    if (bulkClearBtn) {
+        bulkClearBtn.addEventListener('click', function () {
+            selected.clear();
+            document.querySelectorAll('.qa-row__check-input').forEach(function (cb) {
+                cb.checked = false;
+            });
+            document.querySelectorAll('.qa-row.is-selected').forEach(function (r) {
+                r.classList.remove('is-selected');
+            });
+            syncBulkBar();
+        });
+    }
+
+    if (bulkArchiveBtn) {
+        bulkArchiveBtn.addEventListener('click', function () {
+            if (!selected.size) return;
+            if (!confirm('Archive ' + selected.size + ' question(s)? They can be restored later.')) return;
+
+            var ids = Array.prototype.slice.call(selected);
+            bulkArchiveBtn.disabled = true;
+            var original = bulkArchiveBtn.innerHTML;
+            bulkArchiveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Archiving…';
+
+            fetch(BULK_URL, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': CSRF,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({ ids: ids }),
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (res && res.success) {
+                    window.location.reload();
+                } else {
+                    alert((res && res.error) || 'Bulk archive failed.');
+                    bulkArchiveBtn.disabled = false;
+                    bulkArchiveBtn.innerHTML = original;
+                }
+            })
+            .catch(function () {
+                alert('Network error.');
+                bulkArchiveBtn.disabled = false;
+                bulkArchiveBtn.innerHTML = original;
+            });
+        });
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Undo toast
+    // ────────────────────────────────────────────────────────
+    var toast = document.getElementById('qaToast');
+    var toastText = document.getElementById('qaToastText');
+    var toastUndo = document.getElementById('qaToastUndo');
+    var toastTimer = null;
+    var undoFn = null;
+
+    function showToast(text, undoCallback, seconds) {
+        if (!toast) return;
+        if (toastTimer) clearTimeout(toastTimer);
+        toastText.textContent = text;
+        undoFn = undoCallback;
+        toast.hidden = false;
+        toastTimer = setTimeout(function () {
+            toast.hidden = true;
+            undoFn = null;
+        }, (seconds || 8) * 1000);
+    }
+
+    if (toastUndo) {
+        toastUndo.addEventListener('click', function () {
+            if (typeof undoFn === 'function') {
+                var cb = undoFn;
+                toast.hidden = true;
+                if (toastTimer) clearTimeout(toastTimer);
+                undoFn = null;
+                cb();
             }
         });
     }
+
+    // ────────────────────────────────────────────────────────
+    // Inline archive (row icon button)
+    // ────────────────────────────────────────────────────────
+    function archiveRow(qid, row) {
+        if (!qid || !row) return;
+        fetch(idUrl(ARCHIVE_TPL, qid), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': CSRF,
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: '{}',
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (!res || !res.success) {
+                alert((res && res.error) || 'Archive failed.');
+                return;
+            }
+            row.classList.add('is-archiving');
+            setTimeout(function () { row.style.display = 'none'; }, 260);
+
+            showToast('Question archived.', function () {
+                fetch(idUrl(UNARCHIVE_TPL, qid), {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'X-CSRF-Token': CSRF,
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (u) {
+                    if (u && u.success) {
+                        window.location.reload();
+                    } else {
+                        alert('Undo failed.');
+                    }
+                })
+                .catch(function () { alert('Network error during undo.'); });
+            }, 8);
+        })
+        .catch(function () {
+            alert('Network error.');
+        });
+    }
+
+    if (listEl) {
+        listEl.addEventListener('click', function (e) {
+            var archBtn = e.target.closest('.qa-row-archive');
+            if (archBtn) {
+                e.stopPropagation();
+                e.preventDefault();
+                var qid = archBtn.getAttribute('data-qid');
+                var row = archBtn.closest('.qa-row');
+                archiveRow(qid, row);
+                return;
+            }
+        });
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Drawer
+    // ────────────────────────────────────────────────────────
+    var drawer = document.getElementById('qaDrawer');
+    var backdrop = document.getElementById('qaDrawerBackdrop');
+    var drawerClose = document.getElementById('qaDrawerClose');
+    var drawerTitle = document.getElementById('qaDrawerTitle');
+    var drawerSub = document.getElementById('qaDrawerSub');
+    var drawerBody = document.getElementById('qaDrawerBody');
+    var drawerFoot = document.getElementById('qaDrawerFoot');
+
+    function metaItem(k, v) {
+        return '<div class="qa-drawer__meta-item">'
+             + '<span class="qa-drawer__meta-item__k">' + esc(k) + '</span>'
+             + '<span class="qa-drawer__meta-item__v">' + esc(v) + '</span>'
+             + '</div>';
+    }
+
+    function openDrawer(qid) {
+        var q = QUESTIONS[String(qid)];
+        if (!q) return;
+
+        drawerTitle.textContent = 'Question #' + q.id;
+        drawerSub.textContent = (q.subject_name || q.subject_code || '')
+            + (q.grade ? ' · ' + q.grade : '')
+            + (q.status ? ' · ' + q.status : '');
+
+        var html = '';
+
+        // Question
+        html += '<div class="qa-drawer__section">';
+        html += '<div class="qa-drawer__label"><i class="fas fa-quote-left"></i> Question</div>';
+        html += '<div class="qa-drawer__question">' + esc(q.question_text) + '</div>';
+        html += '</div>';
+
+        // Options
+        var opts = q.options || {};
+        var letters = ['A','B','C','D','E','F'];
+        var hasOpts = letters.some(function(k) { return opts[k]; });
+        if (hasOpts) {
+            html += '<div class="qa-drawer__section">';
+            html += '<div class="qa-drawer__label"><i class="fas fa-list-ul"></i> Options</div>';
+            html += '<div class="qa-drawer__opts">';
+            letters.forEach(function (k) {
+                if (!opts[k]) return;
+                var isCorrect = (q.correct_answer === k);
+                html += '<div class="qa-drawer__opt' + (isCorrect ? ' is-correct' : '') + '">';
+                html += '<span class="qa-drawer__opt__l">' + k + '.</span>';
+                html += '<span>' + esc(opts[k]) + '</span>';
+                if (isCorrect) html += '<i class="fas fa-check qa-drawer__opt__check"></i>';
+                html += '</div>';
+            });
+            html += '</div>';
+            html += '</div>';
+        }
+
+        // Explanation
+        if (q.explanation) {
+            html += '<div class="qa-drawer__section">';
+            html += '<div class="qa-drawer__label"><i class="fas fa-lightbulb"></i> Explanation</div>';
+            html += '<div class="qa-drawer__expl">' + esc(q.explanation) + '</div>';
+            html += '</div>';
+        }
+
+        // Metadata
+        var pdf = q.pdf_code ? (PDF_MAP[q.pdf_code] || null) : null;
+        var pdfLabel = q.pdf_code
+            ? (pdf && pdf.exists ? q.pdf_code + (pdf.source === 'bot' ? ' (staging)' : '') : q.pdf_code + ' (missing)')
+            : '—';
+
+        html += '<div class="qa-drawer__section">';
+        html += '<div class="qa-drawer__label"><i class="fas fa-info-circle"></i> Metadata</div>';
+        html += '<div class="qa-drawer__meta">';
+        html += metaItem('Subject', q.subject_name || q.subject_code);
+        html += metaItem('Grade', q.grade || '—');
+        html += metaItem('Difficulty', '⭐'.repeat(q.difficulty || 1));
+        html += metaItem('Chapter', q.chapter || '—');
+        html += metaItem('PDF code', pdfLabel);
+        html += metaItem('PDF page', q.pdf_page != null ? String(q.pdf_page) : '—');
+        html += metaItem('Tags', q.tags || '—');
+        html += metaItem('Status', q.status || '—');
+        if (q.total_attempts > 0) {
+            html += metaItem(
+                'Miss rate',
+                (q.miss_rate || 0) + '% (' + (q.total_misses || 0) + '/' + q.total_attempts + ')'
+            );
+        } else {
+            html += metaItem('Miss rate', 'never attempted');
+        }
+        html += metaItem('Created', (q.created_at || '').slice(0, 16));
+        html += metaItem('Question ID', '#' + q.id);
+        html += '</div>';
+        html += '</div>';
+
+        // Duplicate check zone — populated on demand
+        html += '<div class="qa-drawer__section">';
+        html += '<div class="qa-drawer__label"><i class="fas fa-clone"></i> Duplicate check</div>';
+        html += '<div id="qaDupZone"><div class="qa-dup-empty">Click “Check” to search for similar questions.</div></div>';
+        html += '</div>';
+
+        drawerBody.innerHTML = html;
+
+        // Footer actions
+        drawerFoot.innerHTML = '';
+
+        var editLink = document.createElement('a');
+        editLink.href = idUrl(EDIT_TPL, q.id);
+        editLink.className = 'qa-btn-primary';
+        editLink.innerHTML = '<i class="fas fa-pen"></i> Edit';
+        drawerFoot.appendChild(editLink);
+
+        var dupBtn = document.createElement('button');
+        dupBtn.type = 'button';
+        dupBtn.className = 'qa-btn-secondary';
+        dupBtn.innerHTML = '<i class="fas fa-search"></i> Check duplicates';
+        dupBtn.addEventListener('click', function () { runDupCheck(q, dupBtn); });
+        drawerFoot.appendChild(dupBtn);
+
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'qa-btn-secondary';
+        copyBtn.innerHTML = '<i class="fas fa-copy"></i> Copy ID';
+        copyBtn.addEventListener('click', function () {
+            var text = '#' + q.id;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function () {
+                    copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied';
+                    setTimeout(function () {
+                        copyBtn.innerHTML = '<i class="fas fa-copy"></i> Copy ID';
+                    }, 1500);
+                });
+            }
+        });
+        drawerFoot.appendChild(copyBtn);
+
+        var closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'qa-btn-secondary';
+        closeBtn.textContent = 'Close';
+        closeBtn.addEventListener('click', closeDrawer);
+        drawerFoot.appendChild(closeBtn);
+
+        backdrop.hidden = false;
+        drawer.hidden = false;
+    }
+
+    function closeDrawer() {
+        drawer.hidden = true;
+        backdrop.hidden = true;
+        drawerBody.innerHTML = '';
+        drawerFoot.innerHTML = '';
+    }
+
+    // ── Duplicate check ──
+    function runDupCheck(q, btn) {
+        if (!DUP_URL) return;
+        var zone = document.getElementById('qaDupZone');
+        if (!zone) return;
+
+        var original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking…';
+        zone.innerHTML = '<div class="qa-dup-empty">Searching…</div>';
+
+        fetch(DUP_URL, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': CSRF,
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({
+                question_text: q.question_text,
+                subject_code: q.subject_code,
+                grade: q.grade || '',
+                exclude_id: q.id,
+            }),
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            btn.disabled = false;
+            btn.innerHTML = original;
+
+            var list = (res && res.duplicates) || [];
+            if (!list.length) {
+                zone.innerHTML = '<div class="qa-dup-empty">No duplicates found.</div>';
+                return;
+            }
+            var html = '<div class="qa-dup-list">';
+            list.forEach(function (d) {
+                var cls = d.match_type === 'exact' ? 'is-exact' : '';
+                var badge = d.match_type === 'exact' ? 'exact' : 'fuzzy';
+                html += '<div class="qa-dup-item ' + cls + '">';
+                html += '<div class="qa-dup-item__head">';
+                html += '<span class="qa-dup-item__badge ' + badge + '">' +
+                        (d.match_type === 'exact' ? 'Exact' : d.similarity_pct + '%') +
+                        '</span>';
+                html += '<span>#' + d.id + '</span>';
+                if (d.grade) html += '<span>· ' + esc(d.grade) + '</span>';
+                html += '</div>';
+                html += '<div class="qa-dup-item__text">' + esc(d.text || d.full_text || '') + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+            zone.innerHTML = html;
+        })
+        .catch(function () {
+            btn.disabled = false;
+            btn.innerHTML = original;
+            zone.innerHTML = '<div class="qa-dup-empty">Could not check — network error.</div>';
+        });
+    }
+
+    if (drawerClose) drawerClose.addEventListener('click', closeDrawer);
+    if (backdrop) backdrop.addEventListener('click', closeDrawer);
+
+    // ────────────────────────────────────────────────────────
+    // Row open
+    // ────────────────────────────────────────────────────────
+    if (listEl) {
+        listEl.addEventListener('click', function (e) {
+            if (e.target.closest('.qa-row__actions')) return;
+            if (e.target.closest('.qa-row__check')) return;
+            var row = e.target.closest('.qa-row');
+            if (!row) return;
+            var qid = row.getAttribute('data-qid');
+            if (qid) openDrawer(qid);
+        });
+
+        listEl.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter') return;
+            if (e.target.classList.contains('qa-row')) {
+                e.preventDefault();
+                var qid = e.target.getAttribute('data-qid');
+                if (qid) openDrawer(qid);
+            }
+        });
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Keyboard shortcuts
+    // ────────────────────────────────────────────────────────
+    var searchInput = document.getElementById('qaSearch');
+    var keysOverlay = document.getElementById('qaKeysOverlay');
+    var keysClose = document.getElementById('qaKeysClose');
+
+    function openKeys() { if (keysOverlay) keysOverlay.hidden = false; }
+    function closeKeys() { if (keysOverlay) keysOverlay.hidden = true; }
+
+    if (keysClose) keysClose.addEventListener('click', closeKeys);
+    if (keysOverlay) {
+        keysOverlay.addEventListener('click', function (e) {
+            if (e.target === keysOverlay) closeKeys();
+        });
+    }
+
+    function focusedRow() {
+        var ae = document.activeElement;
+        return ae && ae.classList && ae.classList.contains('qa-row') ? ae : null;
+    }
+
+    document.addEventListener('keydown', function (e) {
+        var tag = (document.activeElement || {}).tagName || '';
+        var inField = (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT');
+
+        // Close keys overlay first
+        if (e.key === 'Escape' && keysOverlay && !keysOverlay.hidden) {
+            e.preventDefault(); closeKeys(); return;
+        }
+
+        // "/" focuses search
+        if (e.key === '/' && !inField && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            if (searchInput) searchInput.focus();
+            return;
+        }
+
+        // "?" opens help
+        if (e.key === '?' && !inField) {
+            e.preventDefault(); openKeys(); return;
+        }
+
+        // Escape closes drawer / clears search
+        if (e.key === 'Escape') {
+            if (drawer && !drawer.hidden) { closeDrawer(); return; }
+            if (document.activeElement === searchInput && searchInput.value) {
+                searchInput.value = '';
+                if (form) form.submit();
+            }
+            return;
+        }
+
+        // j / k navigation
+        if ((e.key === 'j' || e.key === 'k') && !inField && drawer.hidden) {
+            var rows = Array.prototype.slice.call(document.querySelectorAll('.qa-row'));
+            if (!rows.length) return;
+            var cur = focusedRow();
+            var idx = cur ? rows.indexOf(cur) : -1;
+            var next = e.key === 'j'
+                ? Math.min(rows.length - 1, idx + 1)
+                : Math.max(0, idx - 1);
+            rows[next].focus();
+            rows[next].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            return;
+        }
+
+        // Row-context single-letter shortcuts
+        var row = focusedRow();
+        if (row && !inField) {
+            var qid = row.getAttribute('data-qid');
+            if (e.key === 'a' && qid) {
+                e.preventDefault();
+                archiveRow(qid, row);
+                return;
+            }
+            if (e.key === 'e' && qid) {
+                e.preventDefault();
+                window.location.href = idUrl(EDIT_TPL, qid);
+                return;
+            }
+            if (e.key === 'x') {
+                e.preventDefault();
+                var cb = row.querySelector('.qa-row__check-input');
+                if (cb) {
+                    cb.checked = !cb.checked;
+                    cb.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                return;
+            }
+        }
+    });
+
+    syncBulkBar();
 })();
 </script>
-
 {% endblock %}

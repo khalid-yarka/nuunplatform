@@ -29,6 +29,7 @@ from db import (
     get_questions_paginated,
     get_question_stats,
     get_questions_filter_options,
+    get_question_counts_by_subject,
     check_pdf_codes_exist,
     check_question_exists,
     bulk_create_questions,
@@ -384,6 +385,7 @@ def questions():
     )
 
     stats = get_question_stats()
+    subject_counts = get_question_counts_by_subject()
     filter_options = get_questions_filter_options()
     total_pages = (total + per_page - 1) // per_page if total > 0 else 1
 
@@ -409,6 +411,7 @@ def questions():
         total_pages=total_pages,
         stats=stats,
         subjects=get_all_subjects(),
+        subject_counts=subject_counts,
         filter_options=filter_options,
         pdf_map=pdf_map,
         search=search,

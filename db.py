@@ -3478,6 +3478,44 @@ def get_questions_paginated(
     return questions, total
 
 
+def get_question_counts_by_subject() -> dict:
+    """
+    Return per-subject counts broken down by status and grade.
+
+    Shape:
+        {
+          'geography': {
+            'total': 87, 'active': 80, 'archived': 5, 'draft': 2,
+            'grades': {'F4': 50, 'F3': 30, 'G8': 7},
+          },
+          ...
+        }
+    """
+    try:
+        cursor = execute_with_retry(
+            "SELECT subject_code, status, grade, COUNT(*) AS n "
+            "FROM questions "
+            "GROUP BY subject_code, status, grade"
+        )
+        out = {}
+        for r in cursor.fetchall():
+            subj = r['subject_code'] or '—'
+            status = r['status'] or 'active'
+            grade = r['grade'] or 'F4'
+            n = int(r['n'])
+            bucket = out.setdefault(subj, {
+                'total': 0, 'active': 0, 'archived': 0, 'draft': 0,
+                'grades': {},
+            })
+            bucket['total'] += n
+            if status in ('active', 'archived', 'draft'):
+                bucket[status] += n
+            bucket['grades'][grade] = bucket['grades'].get(grade, 0) + n
+        return out
+    except Exception as e:
+        logger.error(f"get_question_counts_by_subject failed: {e}")
+        return {}
+
 def get_questions_filter_options() -> dict:
     result = {'subjects': [], 'chapters': [], 'pdf_codes': [], 'grades': []}
     _ensure_question_schema()

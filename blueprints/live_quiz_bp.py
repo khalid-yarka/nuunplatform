@@ -426,8 +426,12 @@ def lobby_join(quiz_id):
 def available_count():
     """
     AJAX: how many active questions exist for a subject + grade.
-    Any logged-in user can call this — it powers the qualitative hint
-    on both the quiz setup page and the live quiz create page.
+
+    Mirrors db.get_questions_by_subject's two-query behaviour:
+      • exact count for the (subject, grade) pair
+      • fallback count for the subject regardless of grade
+    Returns both so the hint can tell the user what will happen
+    when they start the quiz.
     """
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -438,8 +442,17 @@ def available_count():
         grade = DEFAULT_GRADE
 
     if not subject_code:
-        return jsonify({'count': 0, 'grade': grade})
+        return jsonify({
+            'count': 0, 'grade': grade, 'subject': '',
+            'breakdown': {}, 'total_subject': 0, 'error': None,
+        })
 
+    breakdown = {}
+    total_subject = 0
+    count = 0
+    err_text = None
+
+    # ── Query 1 — exact pair (matches get_questions_by_subject's first query) ──
     try:
         cursor = execute_with_retry(
             "SELECT COUNT(*) AS c FROM questions "
@@ -448,10 +461,36 @@ def available_count():
         )
         row = cursor.fetchone()
         count = int(row['c']) if row else 0
-        return jsonify({'count': count, 'grade': grade, 'subject': subject_code})
     except Exception as e:
-        logger.warning(f"available_count failed: {e}")
-        return jsonify({'count': 0, 'grade': grade, 'subject': subject_code})
+        err_text = str(e)
+        logger.warning(f"available_count exact query failed: {e}")
+
+    # ── Query 2 — fallback (matches get_questions_by_subject's second query) ──
+    try:
+        cur = execute_with_retry(
+            "SELECT grade, COUNT(*) AS c FROM questions "
+            "WHERE subject_code = ? AND status = 'active' "
+            "GROUP BY grade ORDER BY grade",
+            (subject_code,),
+        )
+        for r in cur.fetchall():
+            g = r['grade'] or '(empty)'
+            n = int(r['c'])
+            breakdown[g] = n
+            total_subject += n
+    except Exception as e:
+        logger.warning(f"available_count fallback query failed: {e}")
+        if err_text is None:
+            err_text = str(e)
+
+    return jsonify({
+        'count': count,                 # exact (subject, grade)
+        'grade': grade,
+        'subject': subject_code,
+        'breakdown': breakdown,          # {grade: n} across all grades
+        'total_subject': total_subject,  # what the fallback would use
+        'error': err_text,
+    })
 
 
 @live_quiz_bp.route('/create', methods=['GET', 'POST'])

@@ -95,7 +95,6 @@
     }
     .grade-pill.active .gp-label { color: var(--primary); opacity: 0.9; }
 
-    /* Free users: pills visible, dimmed, tapping opens upgrade sheet */
     .grade-pills--locked .grade-pill {
         cursor: pointer;
         opacity: 0.7;
@@ -114,7 +113,7 @@
     }
     .grade-pill.active .gp-lock { color: var(--primary); }
 
-    /* ─── GRADE HINT (below pills) ─── */
+    /* ─── GRADE HINT ─── */
     .grade-hint {
         margin-top: 10px;
         padding: 10px 14px;
@@ -129,10 +128,13 @@
         transition: var(--transition);
         min-height: 40px;
     }
-    .grade-hint i { font-size: 13px; }
+    .grade-hint i { font-size: 13px; flex-shrink: 0; }
+    .grade-hint span { line-height: 1.4; }
+    .grade-hint strong { font-weight: 800; }
     .grade-hint.ok { background: #ECFDF5; color: #065F46; }
     .grade-hint.warn { background: #FFFBEB; color: #92400E; }
     .grade-hint.err { background: #FEF2F2; color: #991B1B; }
+    .grade-hint.info { background: #EFF6FF; color: #1E40AF; }
 
     [data-theme="dark"] .grade-pill.active {
         border-color: #FF6B70 !important;
@@ -146,6 +148,10 @@
         border-color: #FF6B70 !important;
         background: rgba(255, 107, 112, 0.1) !important;
     }
+    [data-theme="dark"] .grade-hint.ok   { background: #1A3A2E; color: #6EE7B7; }
+    [data-theme="dark"] .grade-hint.warn { background: #3A2E1A; color: #FCD34D; }
+    [data-theme="dark"] .grade-hint.err  { background: #3A1A1A; color: #FCA5A5; }
+    [data-theme="dark"] .grade-hint.info { background: #1A2A4A; color: #93C5FD; }
 
     .question-count-options {
         display: grid;
@@ -446,10 +452,33 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // ─── Grade hint ───
+    // ─── Hint — exact count, then fallback ───
+    //
+    // The quiz engine (db.get_questions_by_subject) runs two queries:
+    //   1. WHERE subject_code = ? AND status = 'active' AND grade = ?
+    //   2. if 0 rows: WHERE subject_code = ? AND status = 'active'
+    //
+    // The hint mirrors that. It shows the exact count when there are
+    // questions in the chosen grade, and when there aren't, it tells
+    // the user the quiz will fall back to other grades — and how many
+    // questions that fallback will provide.
+
+    var GRADE_LABELS = {
+        'F4': 'Form 4',
+        'F3': 'Form 3',
+        'G8': 'Grade 8',
+        'G7': 'Grade 7'
+    };
+
     function currentGrade() {
         const checked = document.querySelector('input[name="grade"]:checked');
         return checked ? checked.value : 'F4';
+    }
+
+    function currentSubjectLabel() {
+        if (!subjectSelect || subjectSelect.selectedIndex < 0) return '';
+        const opt = subjectSelect.options[subjectSelect.selectedIndex];
+        return (opt.text || '').replace(/^[^\w]+/, '').trim() || opt.value;
     }
 
     function setHint(state, html) {
@@ -459,38 +488,102 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     var hintTimer = null;
+    var hintSeq = 0;
+
     function refreshHint() {
         clearTimeout(hintTimer);
-        var subject = subjectSelect ? subjectSelect.value : '';
-        var grade = currentGrade();
+        const mySeq = ++hintSeq;
+
+        const subject = subjectSelect ? subjectSelect.value : '';
+        const grade = currentGrade();
+        const gradeLabel = GRADE_LABELS[grade] || grade;
+        const subjectLabel = currentSubjectLabel();
 
         if (!subject) {
             setHint('', '<i class="fas fa-info-circle"></i><span>Pick a subject to continue</span>');
             return;
         }
-        setHint('', '<i class="fas fa-circle-notch fa-spin"></i><span>Checking…</span>');
+
+        setHint('', '<i class="fas fa-circle-notch fa-spin"></i><span>Checking ' +
+                gradeLabel + ' · ' + subjectLabel + '…</span>');
 
         hintTimer = setTimeout(function() {
-            var url = '/live-quiz/available-count?subject=' + encodeURIComponent(subject) + '&grade=' + encodeURIComponent(grade);
-            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    var n = data.count || 0;
-                    if (n >= 20) {
-                        setHint('ok', '<i class="fas fa-check-circle"></i><span>Plenty of questions ready — pick your count</span>');
-                    } else if (n >= 10) {
-                        setHint('ok', '<i class="fas fa-check-circle"></i><span>Good selection ready</span>');
-                    } else if (n >= 5) {
-                        setHint('warn', '<i class="fas fa-exclamation-triangle"></i><span>Only a few available — try the other grade</span>');
-                    } else if (n > 0) {
-                        setHint('err', '<i class="fas fa-times-circle"></i><span>Not enough for a quiz — try the other grade</span>');
-                    } else {
-                        setHint('err', '<i class="fas fa-times-circle"></i><span>Nothing available for this grade</span>');
-                    }
-                })
-                .catch(function() {
-                    setHint('', '<i class="fas fa-info-circle"></i><span>Could not check availability</span>');
-                });
+            var url = '/live-quiz/available-count'
+                    + '?subject=' + encodeURIComponent(subject)
+                    + '&grade=' + encodeURIComponent(grade);
+            fetch(url, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            })
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+                if (mySeq !== hintSeq) return;
+
+                if (!data) {
+                    setHint('info',
+                        '<i class="fas fa-info-circle"></i>' +
+                        '<span>Could not check availability for <strong>' +
+                        gradeLabel + '</strong> · <strong>' + subjectLabel + '</strong></span>');
+                    return;
+                }
+
+                if (data.error) {
+                    setHint('err',
+                        '<i class="fas fa-triangle-exclamation"></i>' +
+                        '<span>Server error: <code>' +
+                        String(data.error).slice(0, 120) + '</code></span>');
+                    return;
+                }
+
+                var exact = (typeof data.count === 'number') ? data.count : 0;
+                var fallback = (typeof data.total_subject === 'number') ? data.total_subject : 0;
+
+                // ── Case 1: exact grade has questions ──
+                if (exact >= 10) {
+                    setHint('ok',
+                        '<i class="fas fa-check-circle"></i>' +
+                        '<span>Plenty of <strong>' + gradeLabel + '</strong> questions ready</span>');
+                    return;
+                }
+                if (exact >= 5) {
+                    setHint('ok',
+                        '<i class="fas fa-check-circle"></i>' +
+                        '<span><strong>' + exact + '</strong> ' + gradeLabel +
+                        ' questions ready</span>');
+                    return;
+                }
+                if (exact > 0) {
+                    setHint('warn',
+                        '<i class="fas fa-exclamation-triangle"></i>' +
+                        '<span>Only <strong>' + exact + '</strong> ' + gradeLabel +
+                        ' question' + (exact === 1 ? '' : 's') +
+                        ' — pick a smaller count</span>');
+                    return;
+                }
+
+                // ── Case 2: exact is 0, but subject has other grades ──
+                if (fallback > 0) {
+                    setHint('info',
+                        '<i class="fas fa-circle-info"></i>' +
+                        '<span>No <strong>' + gradeLabel + '</strong> questions in <strong>' +
+                        subjectLabel + '</strong>. The quiz will use <strong>' +
+                        fallback + '</strong> from other grades.</span>');
+                    return;
+                }
+
+                // ── Case 3: subject has no questions at all ──
+                setHint('err',
+                    '<i class="fas fa-times-circle"></i>' +
+                    '<span>No questions in <strong>' + subjectLabel +
+                    '</strong> yet</span>');
+            })
+            .catch(function() {
+                if (mySeq !== hintSeq) return;
+                setHint('info',
+                    '<i class="fas fa-info-circle"></i>' +
+                    '<span>Could not check availability for <strong>' +
+                    gradeLabel + '</strong> · <strong>' + subjectLabel + '</strong></span>');
+            });
         }, 200);
     }
 
