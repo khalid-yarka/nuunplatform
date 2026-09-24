@@ -94,9 +94,25 @@ class QuizState:
     # ---------- Participant Management ----------
 
     def add_participant(self, user_id: int, name: str, public_id: str) -> bool:
+        """
+        Add a participant to the in-memory state.
+
+        Returns True when the participant is present and active after
+        the call, False only if they were already active and we did
+        NOT overwrite them.
+
+        FIX: A participant whose previous state is 'left' is allowed
+        to re-join. Their ParticipantState is replaced with a clean
+        one. Previously this method returned False for ANY existing
+        entry — which made rejoin impossible once someone had left
+        and the memory entry had been marked 'left'.
+        """
         with self.lock:
-            if user_id in self.participants:
+            existing = self.participants.get(user_id)
+            if existing is not None and existing.status != 'left':
+                # Already active or completed — do not clobber.
                 return False
+            # Fresh join OR re-join after a previous leave.
             self.participants[user_id] = ParticipantState(
                 user_id=user_id,
                 name=name,
@@ -108,6 +124,10 @@ class QuizState:
             return True
 
     def remove_participant(self, user_id: int) -> bool:
+        """
+        Mark a participant as left. The entry is retained so the UI
+        can render a 'left' badge and history is preserved.
+        """
         with self.lock:
             p = self.participants.get(user_id)
             if not p:
@@ -140,9 +160,38 @@ class QuizState:
             return None
 
     def get_all_participants(self) -> List[dict]:
+        """
+        Every participant currently held in memory — INCLUDING those
+        with status 'left'. The client uses the 'left' entries to
+        render a badge, so we do not filter them out here.
+
+        Use get_active_participants() when the caller wants a strict
+        "who is in the room right now" list.
+        """
         with self.lock:
             result = []
             for uid, p in self.participants.items():
+                result.append({
+                    'student_id': uid,
+                    'name': p.name,
+                    'public_id': p.public_id,
+                    'status': p.status,
+                    'is_ready': p.is_ready,
+                    'is_creator': (uid == self.metadata.get('creator_id'))
+                })
+            return result
+
+    def get_active_participants(self) -> List[dict]:
+        """
+        Same shape as get_all_participants, but excludes anyone with
+        status 'left'. This is the list callers should use for header
+        counts and any UI that represents "currently here".
+        """
+        with self.lock:
+            result = []
+            for uid, p in self.participants.items():
+                if p.status == 'left':
+                    continue
                 result.append({
                     'student_id': uid,
                     'name': p.name,
@@ -580,6 +629,19 @@ class LiveQuizStateManager:
             return list(self._quizzes.keys())
 
     def ensure_quiz_in_memory(self, quiz_id: int) -> bool:
+        """
+        Ensure the quiz is held in memory. On a miss, we reload from
+        SQLite (checkpoint or raw participants).
+
+        FIX: the rebuild now happens OUTSIDE the lock and the result
+        is re-checked under the lock before insertion. Previously the
+        lock was released after the first membership test, which
+        allowed two concurrent callers (e.g. two tabs hitting
+        /waiting-room after a process restart) to both build a fresh
+        QuizState and race to overwrite each other. Last writer won,
+        silently discarding whatever participants the first caller
+        had already loaded.
+        """
         with self._lock:
             if quiz_id in self._quizzes:
                 return True
@@ -604,19 +666,20 @@ class LiveQuizStateManager:
                 quiz = QuizState(quiz_id, quiz_data, question_ids, questions_cache)
                 quiz.restore_from_checkpoint(cp_data)
                 self._replay_events_after(quiz, cp_data['version'])
-                with self._lock:
-                    self._quizzes[quiz_id] = quiz
-                logger.info(f"Recovered quiz {quiz_id} from checkpoint on demand")
-                return True
             else:
                 quiz = QuizState(quiz_id, quiz_data, question_ids, questions_cache)
                 self._load_participants_from_db(quiz)
                 quiz._update_leaderboard()
                 quiz.dirty = True
-                with self._lock:
-                    self._quizzes[quiz_id] = quiz
-                logger.info(f"Recovered quiz {quiz_id} from participants (no checkpoint) on demand")
-                return True
+
+            with self._lock:
+                if quiz_id in self._quizzes:
+                    # Another thread won the race while we were reading
+                    # from SQLite. Discard our copy and use theirs.
+                    return True
+                self._quizzes[quiz_id] = quiz
+            logger.info(f"Recovered quiz {quiz_id} from storage on demand")
+            return True
         except Exception as e:
             logger.error(f"Failed to recover quiz {quiz_id} on demand: {e}", exc_info=True)
             return False

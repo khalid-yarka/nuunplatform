@@ -718,6 +718,9 @@ def create():
     name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
     quiz_state.add_participant(user_id, name, user.get('public_id', '----'))
     quiz_state.set_participant_ready(user_id, True)
+    # Persist the creator's ready flag so it survives a process restart.
+    # Previously it lived only in memory and reset to 0 on recovery.
+    update_participant_ready(quiz['id'], user_id, True)
 
     manager.enqueue_event({
         'quiz_id': quiz['id'],
@@ -831,6 +834,8 @@ def create_with_available():
     name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
     quiz_state.add_participant(user_id, name, user.get('public_id', '----'))
     quiz_state.set_participant_ready(user_id, True)
+    # Persist the creator's ready flag — see note in create().
+    update_participant_ready(quiz['id'], user_id, True)
 
     manager.enqueue_event({
         'quiz_id': quiz['id'],
@@ -1035,7 +1040,12 @@ def waiting_room(quiz_id):
         return redirect(url_for('auth.login'))
 
     user_id = session['user_id']
-    quiz = get_live_quiz_by_id(quiz_id)
+    # FIX: use the subject-enriched helper so the template can render
+    # quiz.subjects.name. Previously this used get_live_quiz_by_id,
+    # which returns the raw DB row without a `subjects` field, so the
+    # template's `quiz.subjects.name if quiz.subjects else ...` guard
+    # always fell through to "Unknown subject".
+    quiz = get_live_quiz_with_subject(quiz_id)
     if not quiz:
         flash('Quiz not found.', 'error')
         return redirect(url_for('live_quiz.lobby'))
@@ -1053,12 +1063,15 @@ def waiting_room(quiz_id):
     quiz_state = manager.get_quiz(quiz_id)
     if quiz_state:
         participants = quiz_state.get_all_participants()
-        participant_count = len(participants)
         active_count = quiz_state.get_active_count()
     else:
         participants = get_active_participants(quiz_id)
-        participant_count = len(participants)
-        active_count = participant_count
+        active_count = len(participants)
+
+    # FIX: header count should mean "who is in the room right now".
+    # Previously we passed len(participants) which includes anyone
+    # with status 'left', inflating the number after any leave.
+    participant_count = active_count
 
     scheduled_start = quiz.get('scheduled_start')
     starts_in_seconds = None
@@ -1096,9 +1109,19 @@ def waiting_room_participants(quiz_id):
     quiz_state = manager.get_quiz(quiz_id)
     if quiz_state:
         participants = quiz_state.get_all_participants()
-        return jsonify({'participants': participants, 'count': len(participants)})
+        active_count = quiz_state.get_active_count()
+        # FIX: `count` now represents "currently in the room", which is
+        # what the header wants. `total` exposes the full list length
+        # (including left) for callers that need it.
+        return jsonify({
+            'participants': participants,
+            'count': active_count,
+            'total': len(participants),
+        })
 
     db_participants = get_active_participants(quiz_id)
+    quiz_row = get_live_quiz_by_id(quiz_id)
+    creator_id = quiz_row.get('creator_id') if quiz_row else None
     formatted = []
     for p in db_participants:
         formatted.append({
@@ -1107,8 +1130,13 @@ def waiting_room_participants(quiz_id):
             'public_id': p.get('public_id', '----'),
             'status': p.get('status', 'active'),
             'is_ready': p.get('is_ready', False),
+            'is_creator': (p['student_id'] == creator_id),
         })
-    return jsonify({'participants': formatted, 'count': len(formatted)})
+    return jsonify({
+        'participants': formatted,
+        'count': len(formatted),
+        'total': len(formatted),
+    })
 
 
 @live_quiz_bp.route('/toggle-ready/<quiz_id>', methods=['POST'])
@@ -1216,7 +1244,13 @@ def quiz_state_endpoint(quiz_id):
                 'status': 'finished',
                 'redirect_url': url_for('live_quiz.results', quiz_id=quiz_id),
             })
-        return jsonify({'status': 'waiting', 'error': 'Quiz not active'})
+        # FIX: report the real DB status instead of hardcoding 'waiting'.
+        # A scheduled quiz whose memory was lost would previously be
+        # misreported as 'waiting', which stalled the client countdown.
+        return jsonify({
+            'status': quiz['status'],
+            'error': 'Quiz not active',
+        })
 
     p = quiz_state.get_participant(user_id)
     if not p and quiz['creator_id'] != user_id:
@@ -1684,7 +1718,8 @@ def play(quiz_id):
         return redirect(url_for('auth.login'))
 
     user_id = session['user_id']
-    quiz = get_live_quiz_by_id(quiz_id)
+    # FIX: use the subject-enriched helper (same reason as waiting_room).
+    quiz = get_live_quiz_with_subject(quiz_id)
     if not quiz:
         flash('Quiz not found.', 'error')
         return redirect(url_for('live_quiz.lobby'))
@@ -1834,14 +1869,22 @@ def results(quiz_id):
         return redirect(url_for('auth.login'))
 
     user_id = session['user_id']
-    quiz = get_live_quiz_by_id(quiz_id)
+    # FIX: fetch the enriched version immediately. Previously, when the
+    # quiz was already finished we skipped the re-fetch and passed a
+    # quiz dict without `subjects`, breaking any template reference to
+    # quiz.subjects.name.
+    quiz = get_live_quiz_with_subject(quiz_id)
     if not quiz:
         flash('Quiz not found.', 'error')
         return redirect(url_for('live_quiz.lobby'))
 
     if quiz['status'] != 'finished':
         finalize_live_quiz(quiz_id)
+        # Re-fetch after finalization to reflect the new finished state.
         quiz = get_live_quiz_with_subject(quiz_id)
+        if not quiz:
+            flash('Quiz not found.', 'error')
+            return redirect(url_for('live_quiz.lobby'))
 
     is_creator = quiz['creator_id'] == user_id
     all_participants = get_live_quiz_participants_with_names(quiz_id)
