@@ -214,7 +214,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const rejoinBtn = document.getElementById('rejoinBtn');
     const deleteBtn = document.getElementById('deleteBtn');
 
-    let initialStartsIn = {{ starts_in_seconds|default(0) }};
+    // ── FIX: `|int(0)` coerces None/empty to 0, so this line is valid
+    //         JS for both waiting (0) and scheduled (real seconds).
+    let initialStartsIn = {{ starts_in_seconds|int(0) }};
 
     function startCountdown(seconds) {
         if (countdownInterval) clearInterval(countdownInterval);
@@ -263,8 +265,6 @@ document.addEventListener('DOMContentLoaded', function() {
         startCountdown(initialStartsIn);
     }
 
-    // ── Browser notification: uses service worker when available.
-    //    Never asks for permission here — the prompt card handles that.
     function sendBrowserNotification(title, body, url) {
         if (!('Notification' in window)) return;
         if (Notification.permission !== 'granted') return;
@@ -330,7 +330,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 renderParticipants(data.participants);
-                updateCounts(data.count);
+                updateCounts(data);
                 isPolling = false;
             })
             .catch(function(err) {
@@ -391,16 +391,14 @@ document.addEventListener('DOMContentLoaded', function() {
         participantListEl.innerHTML = html;
     }
 
-    function updateCounts(count) {
-        if (participantCountEl) participantCountEl.textContent = count;
-        if (participantCountLabel) participantCountLabel.textContent = count + ' joined';
-        if (waitingCountEl) {
-            const active = participantList.filter(p => p.status !== 'left').length;
-            waitingCountEl.textContent = active;
-        }
+    function updateCounts(data) {
+        const activeCount = (typeof data === 'number') ? data : (data && data.count) || 0;
+
+        if (participantCountEl) participantCountEl.textContent = activeCount;
+        if (participantCountLabel) participantCountLabel.textContent = activeCount + ' joined';
+        if (waitingCountEl) waitingCountEl.textContent = activeCount;
 
         if (isCreator) {
-            const activeCount = participantList.filter(p => p.status !== 'left').length;
             if (statusMsg) {
                 if (activeCount >= 2) {
                     statusMsg.innerHTML = `✅ {{ _('live_quiz.waiting.status_ready_before') }} <span class="highlight">${activeCount}</span> {{ _('live_quiz.waiting.status_ready_after') }}`;

@@ -1040,11 +1040,7 @@ def waiting_room(quiz_id):
         return redirect(url_for('auth.login'))
 
     user_id = session['user_id']
-    # FIX: use the subject-enriched helper so the template can render
-    # quiz.subjects.name. Previously this used get_live_quiz_by_id,
-    # which returns the raw DB row without a `subjects` field, so the
-    # template's `quiz.subjects.name if quiz.subjects else ...` guard
-    # always fell through to "Unknown subject".
+    # Enriched fetch so the template can render quiz.subjects.name.
     quiz = get_live_quiz_with_subject(quiz_id)
     if not quiz:
         flash('Quiz not found.', 'error')
@@ -1068,13 +1064,15 @@ def waiting_room(quiz_id):
         participants = get_active_participants(quiz_id)
         active_count = len(participants)
 
-    # FIX: header count should mean "who is in the room right now".
-    # Previously we passed len(participants) which includes anyone
-    # with status 'left', inflating the number after any leave.
+    # Header count = "who is in the room right now" (excludes left).
     participant_count = active_count
 
     scheduled_start = quiz.get('scheduled_start')
-    starts_in_seconds = None
+    # Default 0 (not None) so the template's JS line `let initialStartsIn
+    # = {{ starts_in_seconds }};` renders a valid integer for waiting
+    # quizzes. Previously `None` was rendered as the JS literal `None`
+    # and threw ReferenceError, killing the entire script.
+    starts_in_seconds = 0
     scheduled_start_display = None
     if scheduled_start and quiz['status'] == 'scheduled':
         try:
