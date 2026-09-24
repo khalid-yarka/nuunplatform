@@ -2,13 +2,17 @@
 # services/admin/entitlements.py
 # Admin-side operations for the entitlement system.
 #
-# This module wraps the existing entitlement_service with
-# admin-oriented read/write helpers: grid building, per-feature
-# detail, override diffs, and audit integration.
+# ── FIX: save_feature_detail() now compares each submitted value
+#    against the SEED policy (unmerged) rather than the effective
+#    policy. This lets the writer detect three distinct states:
 #
-# The registry-override pattern: registry (code) defines the
-# default policy per feature per tier; entitlement_overrides
-# (DB) stores only what the super admin has changed.
+#      submitted == seed        → clear any override (revert to inherit)
+#      submitted != seed        → set/update the override
+#      submitted == effective   → no-op (already in the right state)
+#
+#    Previously it compared against the effective policy, which
+#    meant an admin who reverted a field to seed value left a dead
+#    override behind. Now the override is cleaned up automatically.
 # ============================================================
 
 import json
@@ -16,7 +20,11 @@ import logging
 from typing import Optional, Any
 
 from db import execute_with_retry
-from services.entitlement_service import get_policy, reload_policy_cache
+from services.entitlement_service import (
+    get_policy,
+    get_seed_feature,
+    reload_policy_cache,
+)
 from services.admin.audit import write_audit
 
 logger = logging.getLogger(__name__)
@@ -147,7 +155,6 @@ def build_feature_catalog() -> list[dict]:
         overrides = list_overrides_for_feature(key)
         modified = len(overrides) > 0
 
-        # Compact per-tier summary: "10 / 30 / ∞"
         summary_parts = []
         for tier in ('free', 'premium', 'pro'):
             tp = feature['policies'].get(tier, {})
@@ -183,8 +190,8 @@ def build_feature_catalog() -> list[dict]:
 
 def build_feature_detail(feature_key: str) -> Optional[dict]:
     """
-    Return the full detail for one feature, including the
-    effective policy per tier and the overrides applied.
+    Return the full detail for one feature, including the effective
+    policy per tier and the overrides applied.
     """
     policy = get_policy()
     feature = policy.get(feature_key)
@@ -202,7 +209,6 @@ def build_feature_detail(feature_key: str) -> Optional[dict]:
             'limit_value': tp.get('limit_value'),
             'limit_unit':  tp.get('limit_unit'),
         }
-        # Mark each field as modified if an override exists
         for field in ('is_enabled', 'level_value', 'limit_value', 'limit_unit'):
             tier_out[f'{field}_override'] = (tier, field) in overrides
         tiers_out[tier] = tier_out
@@ -226,6 +232,20 @@ def build_feature_detail(feature_key: str) -> Optional[dict]:
 # WRITE MODEL — Feature Detail Save
 # ============================================================
 
+def _norm_field(field: str, value: Any) -> Any:
+    """Normalize a submitted or seed value into its canonical type."""
+    if field == 'is_enabled':
+        return bool(value)
+    if field in ('level_value', 'limit_value'):
+        if value is None or value == '':
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+    return value
+
+
 def save_feature_detail(
     feature_key: str,
     payload: dict,
@@ -235,31 +255,29 @@ def save_feature_detail(
     """
     Save one feature's policy grid.
 
-    payload = {
-        'is_global_active': bool,
-        'tiers': {
-            'free':    {'is_enabled': bool, 'level_value': int|None,
-                        'limit_value': int|None, 'limit_unit': str|None},
-            'premium': {...},
-            'pro':     {...},
-        },
-        'description': str,   # optional
-    }
-
-    Fields equal to the registry default are cleared (revert to inherit).
-    Fields that differ are written as overrides.
+    Comparison is done against the SEED policy, not the effective policy:
+        submitted == seed   → clear any override on this field (inherit)
+        submitted != seed   → set / update the override
     """
     policy = get_policy()
     feature = policy.get(feature_key)
     if not feature:
         return {'error': 'Unknown feature'}
 
+    seed = get_seed_feature(feature_key)
+    if not seed:
+        # Extremely defensive: fall back to the effective policy as a
+        # comparison base if the seed read fails.
+        seed = feature
+
+    existing_overrides = list_overrides_for_feature(feature_key)
     changed = 0
 
-    # is_global_active
+    # ---------- is_global_active ----------
     if 'is_global_active' in payload:
         new_active = bool(payload['is_global_active'])
-        if new_active != bool(feature.get('is_global_active')):
+        old_active = bool(feature.get('is_global_active'))
+        if new_active != old_active:
             execute_with_retry(
                 "UPDATE entitlement_features SET is_global_active = ? "
                 "WHERE feature_key = ?",
@@ -268,51 +286,77 @@ def save_feature_detail(
             write_audit(
                 action='entitlement.toggle_active',
                 target_type='entitlement',
-                before={'feature_key': feature_key, 'is_global_active': bool(feature.get('is_global_active'))},
+                before={'feature_key': feature_key, 'is_global_active': old_active},
                 after={'feature_key': feature_key, 'is_global_active': new_active},
                 note=note,
                 severity='warning',
             )
             changed += 1
 
-    # Per-tier fields
+    # ---------- Per-tier fields ----------
     for tier in ('free', 'premium', 'pro'):
-        submitted = payload.get('tiers', {}).get(tier)
-        if not submitted:
+        submitted_tier = payload.get('tiers', {}).get(tier)
+        if not submitted_tier:
             continue
-        current = feature['policies'].get(tier, {})
+
+        seed_tier = seed.get('policies', {}).get(tier, {})
 
         for field in ('is_enabled', 'level_value', 'limit_value', 'limit_unit'):
-            if field not in submitted:
+            if field not in submitted_tier:
                 continue
-            submitted_value = submitted[field]
-            current_value = current.get(field)
 
-            # Normalize
-            if field == 'is_enabled':
-                submitted_value = bool(submitted_value)
-                current_value = bool(current_value)
-            elif field in ('level_value', 'limit_value'):
-                if submitted_value is not None:
-                    try:
-                        submitted_value = int(submitted_value)
-                    except (TypeError, ValueError):
-                        submitted_value = None
-                if current_value is not None:
-                    try:
-                        current_value = int(current_value)
-                    except (TypeError, ValueError):
-                        current_value = None
+            submitted_value = _norm_field(field, submitted_tier[field])
+            seed_value = _norm_field(field, seed_tier.get(field))
 
-            if submitted_value == current_value:
+            has_override = (tier, field) in existing_overrides
+            current_override = existing_overrides.get((tier, field))
+
+            if submitted_value == seed_value:
+                # Should inherit — clear any existing override.
+                if has_override:
+                    if clear_override(feature_key, tier, field):
+                        write_audit(
+                            action='entitlement.clear_override',
+                            target_type='entitlement',
+                            before={
+                                'feature_key': feature_key,
+                                'tier': tier,
+                                'field': field,
+                                'value': current_override,
+                            },
+                            after={
+                                'feature_key': feature_key,
+                                'tier': tier,
+                                'field': field,
+                                'value': None,
+                            },
+                            note=note,
+                            severity='warning',
+                        )
+                        changed += 1
+                continue
+
+            # submitted differs from seed — set / update override.
+            if has_override and _norm_field(field, current_override) == submitted_value:
+                # Override already holds the requested value. No-op.
                 continue
 
             if set_override(feature_key, tier, field, submitted_value, actor_id):
                 write_audit(
                     action='entitlement.update_policy',
                     target_type='entitlement',
-                    before={'feature_key': feature_key, 'tier': tier, 'field': field, 'value': current_value},
-                    after={'feature_key': feature_key, 'tier': tier, 'field': field, 'value': submitted_value},
+                    before={
+                        'feature_key': feature_key,
+                        'tier': tier,
+                        'field': field,
+                        'value': current_override if has_override else seed_value,
+                    },
+                    after={
+                        'feature_key': feature_key,
+                        'tier': tier,
+                        'field': field,
+                        'value': submitted_value,
+                    },
                     note=note,
                     severity='warning',
                 )

@@ -1,4 +1,5 @@
 import os
+import secrets
 from dotenv import load_dotenv
 from datetime import timedelta
 from pathlib import Path
@@ -62,7 +63,12 @@ class Config:
     SESSION_TYPE = 'filesystem'
     PERMANENT_SESSION_LIFETIME_DAYS = int(os.getenv('PERMANENT_SESSION_LIFETIME_DAYS', '1'))
     PERMANENT_SESSION_LIFETIME = timedelta(days=PERMANENT_SESSION_LIFETIME_DAYS)
-    SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', 'false')
+
+    # Defaults changed to be secure-by-default:
+    #   SESSION_COOKIE_SECURE = true  → cookies are HTTPS-only.
+    #     If you develop over plain HTTP, set
+    #     SESSION_COOKIE_SECURE=false in your local .env.
+    SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', 'true')
     SESSION_COOKIE_HTTPONLY = _env_bool('SESSION_COOKIE_HTTPONLY', 'true')
     SESSION_COOKIE_SAMESITE = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
     ADMIN_SESSION_TIMEOUT = int(os.getenv('ADMIN_SESSION_TIMEOUT', '1800'))
@@ -102,7 +108,13 @@ class Config:
     # BACKUP
     # ============================================
     BACKUP_ENABLED = _env_bool('BACKUP_ENABLED', 'true')
-    BACKUP_TRIGGER_TOKEN = os.getenv('BACKUP_TRIGGER_TOKEN', 'change_this_token_in_production')
+
+    # No default. Empty string means "not configured" and the trigger
+    # endpoint refuses to run (see app.py). Set this in .env to a
+    # strong random value:
+    #     python -c "import secrets; print(secrets.token_urlsafe(32))"
+    BACKUP_TRIGGER_TOKEN = os.getenv('BACKUP_TRIGGER_TOKEN', '')
+
     BACKUP_RETENTION_DAILY = int(os.getenv('BACKUP_RETENTION_DAILY', '7'))
     BACKUP_RETENTION_WEEKLY = int(os.getenv('BACKUP_RETENTION_WEEKLY', '4'))
     BACKUP_RETENTION_MONTHLY = int(os.getenv('BACKUP_RETENTION_MONTHLY', '12'))
@@ -182,12 +194,8 @@ class Config:
     BASE_URL = os.getenv('BASE_URL', 'https://yourdomain.com')
 
     # ============================================
-    # SOCIAL LINKS (dashboard footer + FAB)
+    # SOCIAL LINKS
     # ============================================
-    # WhatsApp uses SUPER_ADMIN_PHONE (defined above) for personal
-    # contact. WHATSAPP_GROUP_URL is the community group invite link,
-    # surfaced by the floating action button in dashboard_base.html.
-    # Leave it blank to hide the FAB entirely.
     TIKTOK_URL = os.getenv('TIKTOK_URL', 'https://www.tiktok.com/@nuunplatform')
     YOUTUBE_URL = os.getenv('YOUTUBE_URL', 'https://www.youtube.com/@nuunplatform')
     WHATSAPP_GROUP_URL = os.getenv('WHATSAPP_GROUP_URL', '')
@@ -226,6 +234,8 @@ class Config:
         errors = []
         if not cls.SECRET_KEY or cls.SECRET_KEY == 'dev-secret-key-change-in-production':
             errors.append("SECRET_KEY must be set to a secure value in production")
+        if len(cls.SECRET_KEY or '') < 32:
+            errors.append("SECRET_KEY should be at least 32 characters")
         if not cls.ADMIN_ERROR_PASSWORD:
             errors.append("ADMIN_ERROR_PASSWORD must be set in .env")
         if cls.EMAIL_ENABLED:
@@ -239,6 +249,21 @@ class Config:
             errors.append("TELEGRAM_BOT_TOKEN must be set for Telegram bot functionality")
         if not cls.BASE_URL or cls.BASE_URL == 'https://yourdomain.com':
             errors.append("BASE_URL must be set to a valid domain")
+
+        # Backup trigger hygiene — refuse to start with a weak or missing
+        # token when the trigger is enabled.
+        if cls.BACKUP_ENABLED:
+            token = (cls.BACKUP_TRIGGER_TOKEN or '').strip()
+            weak = {'', 'change_this_token_in_production', 'changeme', 'default'}
+            if token.lower() in weak:
+                errors.append(
+                    "BACKUP_TRIGGER_TOKEN must be set to a strong random value "
+                    "(python -c \"import secrets; print(secrets.token_urlsafe(32))\")"
+                )
+            elif len(token) < 24:
+                errors.append(
+                    "BACKUP_TRIGGER_TOKEN should be at least 24 characters"
+                )
         return errors
 
     # ============================================

@@ -1,4 +1,4 @@
-# blueprints/admin_backup_bp.py
+# blueprints/admin/backup_bp.py
 # ============================================================
 # Backup management endpoints.
 #
@@ -7,12 +7,17 @@
 #   /admin/backup/       (legacy singular → redirects to plural)
 #
 # Blueprint has NO url_prefix — every route declares its own full path.
-# This lets us offer both URL shapes from one blueprint.
+#
+# SECURITY: every route here is guarded by @admin_can(...) which
+# routes through the capability system. The previous version used a
+# local @admin_required decorator that only checked is_admin() — so
+# any admin, even one with zero backup capabilities granted, could
+# download the entire database, create backups, and restore. That
+# bypass is closed.
 # ============================================================
 
 import os
 import time
-from functools import wraps
 
 from flask import (
     Blueprint, render_template, request, session, jsonify,
@@ -27,23 +32,12 @@ from backup import (
     release_backup_lock,
 )
 from activity_logger import log_backup_event, log_admin_action
+from services.admin.guards import admin_can
+from services.admin.audit import write_audit
 from config import Config
 
 
 admin_backup_bp = Blueprint('admin_backup', __name__)
-
-
-# ------------------------------------------------------------
-# GUARD
-# ------------------------------------------------------------
-
-def admin_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if 'user_id' not in session or not is_admin(session['user_id']):
-            abort(403)
-        return f(*args, **kwargs)
-    return decorated
 
 
 # ------------------------------------------------------------
@@ -101,7 +95,7 @@ def _enrich_backups(manager, backups):
 
 @admin_backup_bp.route('/admin/backups/')
 @admin_backup_bp.route('/admin/backups')
-@admin_required
+@admin_can('backups.view')
 def dashboard():
     manager = get_manager()
     health = manager.get_backup_health_summary()
@@ -130,8 +124,16 @@ def dashboard_singular():
 # ============================================================
 
 @admin_backup_bp.route('/admin/backups/create', methods=['POST'])
-@admin_required
+@admin_can('backups.create')
 def create_backup():
+    # CSRF check for form POSTs (JSON requests skip it since the
+    # capability system already authenticates the caller and the
+    # modern JS clients send X-CSRF-Token anyway).
+    if not request.is_json:
+        token = request.form.get('csrf_token') or request.headers.get('X-CSRF-Token')
+        if not token or token != session.get('csrf_token'):
+            return jsonify({'success': False, 'message': 'Invalid session'}), 403
+
     if request.is_json:
         payload = request.get_json(silent=True) or {}
         backup_type = payload.get('type', 'manual')
@@ -139,24 +141,15 @@ def create_backup():
         backup_type = request.form.get('type', 'manual')
 
     if backup_type not in ('daily', 'weekly', 'monthly', 'manual'):
-        return jsonify({
-            'success': False,
-            'message': 'Invalid backup type',
-        }), 400
+        return jsonify({'success': False, 'message': 'Invalid backup type'}), 400
 
     if is_backup_locked():
-        return jsonify({
-            'success': False,
-            'message': 'Another backup is already running',
-        }), 409
+        return jsonify({'success': False, 'message': 'Another backup is already running'}), 409
 
     manager = get_manager()
     lock_fd = acquire_backup_lock()
     if lock_fd is None:
-        return jsonify({
-            'success': False,
-            'message': 'Could not acquire backup lock',
-        }), 500
+        return jsonify({'success': False, 'message': 'Could not acquire backup lock'}), 500
 
     try:
         start = time.time()
@@ -175,6 +168,14 @@ def create_backup():
             f"{'succeeded' if result['success'] else 'failed'}",
             severity='info' if result['success'] else 'critical',
         )
+        write_audit(
+            action='backup.create',
+            target_type='backup',
+            target_id=result.get('filename'),
+            before=None,
+            after={'type': backup_type, 'success': result['success']},
+            severity='info' if result['success'] else 'warning',
+        )
 
         return jsonify({
             'success': result['success'],
@@ -192,16 +193,17 @@ def create_backup():
 # ============================================================
 
 @admin_backup_bp.route('/admin/backups/verify/<filename>', methods=['POST'])
-@admin_required
+@admin_can('backups.view')
 def verify_backup(filename):
+    token = request.form.get('csrf_token') or request.headers.get('X-CSRF-Token')
+    if not token or token != session.get('csrf_token'):
+        return jsonify({'success': False, 'message': 'Invalid session'}), 403
+
     manager = get_manager()
     file_path = os.path.join(manager.backup_dir, filename)
 
     if not os.path.exists(file_path):
-        return jsonify({
-            'success': False,
-            'message': 'File not found',
-        }), 404
+        return jsonify({'success': False, 'message': 'File not found'}), 404
 
     ver_ok, details = manager.verify_backup(file_path)
 
@@ -216,8 +218,15 @@ def verify_backup(filename):
 
     log_admin_action(
         'backup.verify',
-        f"Verification of {filename}: "
-        f"{'OK' if ver_ok else 'FAILED'}",
+        f"Verification of {filename}: {'OK' if ver_ok else 'FAILED'}",
+        severity='info' if ver_ok else 'warning',
+    )
+    write_audit(
+        action='backup.verify',
+        target_type='backup',
+        target_id=filename,
+        before=None,
+        after={'success': ver_ok},
         severity='info' if ver_ok else 'warning',
     )
     return jsonify({'success': ver_ok, 'details': details})
@@ -228,14 +237,23 @@ def verify_backup(filename):
 # ============================================================
 
 @admin_backup_bp.route('/admin/backups/restore/<filename>', methods=['POST'])
-@admin_required
+@admin_can('backups.restore')
 def restore_backup(filename):
+    token = request.form.get('csrf_token') or request.headers.get('X-CSRF-Token')
+    if not token or token != session.get('csrf_token'):
+        return jsonify({'success': False, 'message': 'Invalid session'}), 403
+
     password = request.form.get('confirm_password') or ''
     if not password or password != Config.ADMIN_ERROR_PASSWORD:
-        return jsonify({
-            'success': False,
-            'message': 'Invalid admin password',
-        }), 403
+        write_audit(
+            action='backup.restore.denied',
+            target_type='backup',
+            target_id=filename,
+            before=None, after=None,
+            note='Invalid confirmation password',
+            severity='critical',
+        )
+        return jsonify({'success': False, 'message': 'Invalid admin password'}), 403
 
     manager = get_manager()
     result = manager.restore_web(filename, admin_id=session['user_id'])
@@ -248,8 +266,15 @@ def restore_backup(filename):
     )
     log_admin_action(
         'backup.restore',
-        f"Restore of {filename} "
-        f"{'succeeded' if result['success'] else 'failed'}",
+        f"Restore of {filename} {'succeeded' if result['success'] else 'failed'}",
+        severity='critical',
+    )
+    write_audit(
+        action='backup.restore',
+        target_type='backup',
+        target_id=filename,
+        before=None,
+        after={'success': result['success']},
         severity='critical',
     )
     return jsonify(result)
@@ -260,16 +285,17 @@ def restore_backup(filename):
 # ============================================================
 
 @admin_backup_bp.route('/admin/backups/delete/<filename>', methods=['POST'])
-@admin_required
+@admin_can('backups.delete')
 def delete_backup(filename):
+    token = request.form.get('csrf_token') or request.headers.get('X-CSRF-Token')
+    if not token or token != session.get('csrf_token'):
+        return jsonify({'success': False, 'message': 'Invalid session'}), 403
+
     manager = get_manager()
     file_path = os.path.join(manager.backup_dir, filename)
 
     if not os.path.exists(file_path):
-        return jsonify({
-            'success': False,
-            'message': 'File not found',
-        }), 404
+        return jsonify({'success': False, 'message': 'File not found'}), 404
 
     try:
         os.remove(file_path)
@@ -284,6 +310,14 @@ def delete_backup(filename):
             f"Deleted backup {filename}",
             severity='info',
         )
+        write_audit(
+            action='backup.delete',
+            target_type='backup',
+            target_id=filename,
+            before={'existed': True},
+            after={'existed': False},
+            severity='warning',
+        )
         return jsonify({'success': True, 'message': 'Backup deleted'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -294,7 +328,7 @@ def delete_backup(filename):
 # ============================================================
 
 @admin_backup_bp.route('/admin/backups/download/<filename>')
-@admin_required
+@admin_can('backups.view')
 def download_backup(filename):
     manager = get_manager()
     file_path = os.path.join(manager.backup_dir, filename)
@@ -304,9 +338,16 @@ def download_backup(filename):
 
     real_path = os.path.realpath(file_path)
     base_path = os.path.realpath(manager.backup_dir)
-    if not (real_path == base_path
-            or real_path.startswith(base_path + os.sep)):
+    if not (real_path == base_path or real_path.startswith(base_path + os.sep)):
         abort(403)
+
+    write_audit(
+        action='backup.download',
+        target_type='backup',
+        target_id=filename,
+        before=None, after=None,
+        severity='warning',
+    )
 
     return send_file(file_path, as_attachment=True, download_name=filename)
 
@@ -316,9 +357,13 @@ def download_backup(filename):
 # ============================================================
 
 @admin_backup_bp.route('/admin/backups/settings', methods=['GET', 'POST'])
-@admin_required
+@admin_can('backups.settings')
 def settings():
     if request.method == 'POST':
+        token = request.form.get('csrf_token') or request.headers.get('X-CSRF-Token')
+        if not token or token != session.get('csrf_token'):
+            return jsonify({'success': False, 'error': 'Invalid session'}), 403
+
         try:
             data = {
                 'daily_retention': int(request.form.get('daily_retention', 7)),
@@ -331,15 +376,14 @@ def settings():
                 'scheduled_time': request.form.get('scheduled_time', '02:00'),
             }
         except (TypeError, ValueError):
-            return jsonify({
-                'success': False,
-                'error': 'Invalid retention values',
-            }), 400
+            return jsonify({'success': False, 'error': 'Invalid retention values'}), 400
 
         _update_backup_config(data)
-        log_admin_action(
-            'backup.settings',
-            "Updated backup settings",
+        log_admin_action('backup.settings', "Updated backup settings", severity='info')
+        write_audit(
+            action='backup.settings',
+            target_type='platform',
+            before=None, after=data,
             severity='info',
         )
         return jsonify({'success': True, 'message': 'Settings saved'})

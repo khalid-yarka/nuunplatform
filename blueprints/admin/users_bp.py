@@ -45,7 +45,26 @@ logger = logging.getLogger(__name__)
 
 admin_users_bp = Blueprint('admin_users', __name__, url_prefix='/admin')
 
-DEFAULT_PASSWORD_PRESET = '12345678'
+
+# ============================================================
+# PASSWORD GENERATION
+# ============================================================
+# The previous version hard-coded '12345678' as the reset password.
+# That value is predictable — anyone could log in as any user whose
+# password had been "reset to default". We now generate a random
+# 12-character password per invocation and show it to the admin so
+# they can relay it to the user.
+# ============================================================
+
+_PASSWORD_ALPHABET = string.ascii_letters + string.digits
+_RANDOM_PASSWORD_LENGTH = 12
+
+
+def _generate_random_password() -> str:
+    return ''.join(
+        secrets.choice(_PASSWORD_ALPHABET)
+        for _ in range(_RANDOM_PASSWORD_LENGTH)
+    )
 
 
 # ============================================================
@@ -159,8 +178,10 @@ def user_detail(user_id):
     except Exception:
         session_info = None
 
-    alphabet = string.ascii_letters + string.digits
-    suggested_password = ''.join(secrets.choice(alphabet) for _ in range(12))
+    # Show a *suggested* random password the admin can copy and give
+    # to the user. This is display-only; the reset routes generate
+    # their own random value at click time.
+    suggested_password = _generate_random_password()
 
     return render_template(
         'dashboard/admin/access/user_detail.html',
@@ -172,7 +193,10 @@ def user_detail(user_id):
         avg_score=avg,
         session_info=session_info,
         suggested_password=suggested_password,
-        default_password_preset=DEFAULT_PASSWORD_PRESET,
+        # Legacy template variable. Kept as an empty string so old
+        # templates don't crash. New templates should use
+        # suggested_password instead.
+        default_password_preset='',
     )
 
 
@@ -248,7 +272,6 @@ def verify_user(user_id):
             before={'is_verified': 0}, after={'is_verified': 1},
             severity='info',
         )
-        # Best-effort: notify the user in-app
         try:
             from db import create_notification
             create_notification(
@@ -387,7 +410,7 @@ def notify(user_id):
 
 
 # ============================================================
-# PASSWORD — custom
+# PASSWORD — custom (admin types a new password)
 # ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/set-password', methods=['POST'],
@@ -407,6 +430,10 @@ def set_password(user_id):
 
     if not new_pw:
         flash('Password is required.', 'error')
+        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
+    if len(new_pw) < 8:
+        flash('Password must be at least 8 characters.', 'error')
         return redirect(url_for('admin_users.user_detail', user_id=user_id))
 
     if new_pw != confirm:
@@ -435,41 +462,62 @@ def set_password(user_id):
 
 
 # ============================================================
-# PASSWORD — preset 12345678
+# PASSWORD — random reset
+# ============================================================
+# Replaces the old "reset to 12345678" flow. Generates a random
+# 12-char password per click and displays it to the admin. The
+# password is shown ONLY in the flash message — it is never sent
+# to the user's UI, never logged, and never written to the audit
+# row (audit records that a reset happened, not the value).
 # ============================================================
 
-@admin_users_bp.route('/users/<int:user_id>/reset-password-default',
+@admin_users_bp.route('/users/<int:user_id>/reset-password-random',
                       methods=['POST'],
-                      endpoint='reset_password_to_default')
+                      endpoint='reset_password_random')
 @admin_can('users.reset_password')
-def reset_password_to_default(user_id):
+def reset_password_random(user_id):
     validate_csrf()
 
     if user_id == session['user_id']:
         flash('Use Settings → Security to change your own password.', 'error')
         return redirect(url_for('admin_users.user_detail', user_id=user_id))
 
+    new_pw = _generate_random_password()
     ok, msg = reset_user_password_to_default(
         user_id,
         session['user_id'],
-        default_password=DEFAULT_PASSWORD_PRESET,
+        default_password=new_pw,
         force_logout=True,
         notify_user=True,
     )
 
     if ok:
         write_audit(
-            action='user.reset_password', target_type='user', target_id=user_id,
+            action='user.reset_password',
+            target_type='user',
+            target_id=user_id,
             before=None,
-            after={'mode': 'preset_12345678'},
+            after={'mode': 'random'},
             severity='critical',
         )
-        flash(f'Password reset to {DEFAULT_PASSWORD_PRESET}. '
-              f'User must log in again.', 'success')
+        flash(
+            f'Password reset. Give this to the user: {new_pw} '
+            f'(they must change it after first login).',
+            'success',
+        )
     else:
         flash(msg or 'Failed to reset password.', 'error')
 
     return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
+
+# Keep the old URL working — it now delegates to the random flow.
+@admin_users_bp.route('/users/<int:user_id>/reset-password-default',
+                      methods=['POST'],
+                      endpoint='reset_password_to_default')
+@admin_can('users.reset_password')
+def reset_password_to_default_legacy(user_id):
+    return reset_password_random(user_id)
 
 
 # ============================================================
@@ -585,11 +633,17 @@ def users_bulk():
         extra['title'] = (request.form.get('bulk_title') or '').strip()
         extra['body'] = (request.form.get('bulk_body') or '').strip()
 
-    if action == 'reset_password_default':
+    # Bulk random-password reset — replaces the old fixed-preset flow.
+    if action == 'reset_password_default' or action == 'reset_password_random':
         from werkzeug.security import generate_password_hash
         succeeded = 0
         failed = 0
-        pw_hash = generate_password_hash(DEFAULT_PASSWORD_PRESET)
+        # Generate one shared random password for the whole batch so
+        # the admin has a single value to relay. Bump session_version
+        # on every account so any active sessions are killed.
+        batch_password = _generate_random_password()
+        pw_hash = generate_password_hash(batch_password)
+
         for uid in user_ids:
             try:
                 execute_with_retry(
@@ -605,20 +659,24 @@ def users_bulk():
                 except Exception:
                     pass
                 log_admin_user_action(session['user_id'], uid,
-                                      'reset_password', None, 'preset_12345678')
+                                      'reset_password', None, 'random')
                 succeeded += 1
             except Exception:
                 failed += 1
 
         write_audit(
-            action='users.bulk_reset_password_default',
+            action='users.bulk_reset_password_random',
             target_type='user', before=None,
             after={'succeeded': succeeded, 'failed': failed},
             severity='critical',
         )
 
         if succeeded:
-            flash(f'Bulk reset: {succeeded} user(s) set to {DEFAULT_PASSWORD_PRESET}.', 'success')
+            flash(
+                f'Bulk reset: {succeeded} user(s). '
+                f'Shared password for this batch: {batch_password}',
+                'success',
+            )
         if failed:
             flash(f'Bulk reset: {failed} failed.', 'error')
         return redirect(request.referrer or url_for('admin_users.list_users'))
@@ -731,9 +789,6 @@ def restore_deleted_user(deleted_id):
 # ============================================================
 # JSON — DRAWER DATA
 # ============================================================
-# Powers the slide-in user drawer on /admin/users.
-# Read-only; returns a compact payload the frontend renders.
-# ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/json', methods=['GET'],
                       endpoint='user_json')
@@ -743,7 +798,6 @@ def user_json(user_id):
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    # ---- Stats ----
     def _count(sql, params):
         try:
             row = execute_with_retry(sql, params).fetchone()
@@ -765,8 +819,6 @@ def user_json(user_id):
         (user_id,),
     )
 
-    # ---- Capabilities ----
-    # has_capability is the boolean resolver (NOT the decorator).
     is_self = (user_id == session.get('user_id'))
     can = {
         'verify':       bool(has_capability('users.view'))        and not is_self,
@@ -809,10 +861,6 @@ def user_json(user_id):
 # ============================================================
 # JSON — DRAWER QUICK ACTIONS
 # ============================================================
-# Dispatches single-click actions from the drawer. Reuses the same
-# service calls and audit entries the existing form routes use —
-# nothing new is written except the JSON envelope.
-# ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/quick-action', methods=['POST'],
                       endpoint='user_quick_action')
@@ -832,7 +880,6 @@ def user_quick_action(user_id):
 
     is_self = (user_id == session['user_id'])
 
-    # ---------- VERIFY ----------
     if action == 'verify':
         if not has_capability('users.view'):
             return jsonify({'success': False, 'error': 'Permission denied'}), 403
@@ -859,7 +906,6 @@ def user_quick_action(user_id):
             'row_updates': {'verified': True},
         })
 
-    # ---------- UNVERIFY ----------
     if action == 'unverify':
         if not has_capability('users.view'):
             return jsonify({'success': False, 'error': 'Permission denied'}), 403
@@ -876,7 +922,6 @@ def user_quick_action(user_id):
             'row_updates': {'verified': False},
         })
 
-    # ---------- SET TIER ----------
     if action == 'set_tier':
         if not has_capability('users.set_tier'):
             return jsonify({'success': False, 'error': 'Permission denied'}), 403
@@ -898,7 +943,6 @@ def user_quick_action(user_id):
             'row_updates': {'tier': new_tier},
         })
 
-    # ---------- NOTIFY ----------
     if action == 'notify':
         if not has_capability('users.notify'):
             return jsonify({'success': False, 'error': 'Permission denied'}), 403
@@ -918,7 +962,6 @@ def user_quick_action(user_id):
         )
         return jsonify({'success': True, 'message': 'Notification sent'})
 
-    # ---------- FORCE LOGOUT ----------
     if action == 'force_logout':
         if not has_capability('users.force_logout'):
             return jsonify({'success': False, 'error': 'Permission denied'}), 403
@@ -932,7 +975,6 @@ def user_quick_action(user_id):
         )
         return jsonify({'success': True, 'message': 'User will be logged out on their next request'})
 
-    # ---------- TOGGLE ADMIN ----------
     if action == 'toggle_admin':
         if not has_capability('users.toggle_admin'):
             return jsonify({'success': False, 'error': 'Permission denied'}), 403

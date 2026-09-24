@@ -318,6 +318,66 @@ def set_request_id():
     g.start_time = time.time()
 
 
+# ============================================
+# SECURITY HEADERS
+# ============================================
+# Added globally to every response. These close the clickjacking,
+# MIME-sniffing, referrer-leak, and (partially) XSS classes of attack.
+#
+# CSP notes:
+#   - The codebase has inline <script> and <style> everywhere, plus
+#     inline `onclick=` handlers. A strict CSP would break the app,
+#     so 'unsafe-inline' is required for script-src and style-src.
+#   - Even with unsafe-inline, CSP still blocks loads from arbitrary
+#     origins, forbids framing (frame-ancestors), forbids plugins
+#     (object-src), and prevents form hijacking (form-action).
+#   - If the app is ever refactored to external .js files and
+#     nonce-based script tags, remove 'unsafe-inline' from script-src.
+#
+# If the request is served over HTTPS, Strict-Transport-Security is
+# sent. On plain HTTP (dev), HSTS is skipped so localhost isn't
+# permanently pinned to HTTPS by the browser.
+# ============================================
+
+_CSP_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+    "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+    "font-src 'self' https://cdnjs.cloudflare.com data:; "
+    "img-src 'self' data: blob: https:; "
+    "connect-src 'self'; "
+    "media-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    response.headers.setdefault(
+        'Permissions-Policy',
+        'geolocation=(), microphone=(), camera=(), payment=(), usb=()',
+    )
+    # CSP is only applied to text/html responses — for JSON, JS, CSS,
+    # PDFs and CSV it has no meaning and can interfere with some tools.
+    ctype = (response.headers.get('Content-Type') or '').lower()
+    if 'text/html' in ctype:
+        response.headers.setdefault('Content-Security-Policy', _CSP_POLICY)
+
+    # HSTS only over HTTPS.
+    if request.is_secure:
+        response.headers.setdefault(
+            'Strict-Transport-Security',
+            'max-age=31536000; includeSubDomains',
+        )
+    return response
+
+
 @app.after_request
 def log_request_end(response):
     if hasattr(g, 'start_time'):
@@ -430,13 +490,6 @@ def generate_csrf_if_needed():
 # ============================================
 # SESSION VERSION CHECK
 # ============================================
-# Every request compares the session's stored session_version against
-# the DB value. If they differ, the session is killed and the user
-# is forced to log in again. This is what makes "Force logout" work.
-#
-# The check is bundled into refresh_user_state_if_needed below so we
-# only hit the DB once per request.
-
 @app.before_request
 def refresh_user_state_if_needed():
     if 'user_id' not in session:
@@ -461,9 +514,6 @@ def refresh_user_state_if_needed():
             should_reload = True
 
     if not should_reload:
-        # Still need to validate session_version on EVERY request.
-        # This is a single indexed SELECT — cheap. It's the mechanism
-        # that makes "Force logout" actually work.
         try:
             row = execute_with_retry(
                 "SELECT session_version FROM students WHERE id = ?",
@@ -473,7 +523,6 @@ def refresh_user_state_if_needed():
                 db_sv = int(row['session_version'] or 0)
                 session_sv = int(session.get('session_version', 0) or 0)
                 if db_sv != session_sv:
-                    # Session was revoked. Kill it.
                     logger.info(
                         f"Session version mismatch for user {session['user_id']}: "
                         f"session={session_sv}, db={db_sv} — forcing re-login."
@@ -618,8 +667,6 @@ app.register_blueprint(docs_bp)
 
 register_admin_blueprints(app)
 
-
-
 register_error_handlers(app)
 
 
@@ -651,7 +698,8 @@ def cleanup():
 @app.route('/webhook/<token>', methods=['POST'])
 def telegram_webhook(token):
     expected_token = Config.TELEGRAM_BOT_TOKEN
-    if not expected_token or token != expected_token:
+    # Constant-time comparison to defeat timing side-channels.
+    if not expected_token or not secrets.compare_digest(token, expected_token):
         logger.warning("Webhook token mismatch.")
         return jsonify({'error': 'Unauthorized'}), 403
 
@@ -669,10 +717,13 @@ def telegram_webhook(token):
         logger.error(f"Webhook error: {e}", exc_info=True)
         return jsonify({'error': 'Internal error'}), 500
 
+
 @app.route('/telegram/webhook', methods=['POST'])
 def telegram_webhook_legacy():
     """Legacy path — returns 200 so Telegram stops retrying. No-op."""
     return jsonify({'ok': True}), 200
+
+
 # ============================================
 # ROUTES
 # ============================================
@@ -680,12 +731,15 @@ def telegram_webhook_legacy():
 def favicon():
     return '', 204
 
+
 from flask import send_from_directory
+
 
 @app.route('/manifest.json')
 def manifest():
     return send_from_directory('static', 'manifest.json',
                                mimetype='application/manifest+json')
+
 
 @app.route('/sw.js')
 def service_worker():
@@ -694,16 +748,50 @@ def service_worker():
     resp.headers['Cache-Control'] = 'no-cache'
     return resp
 
+
 @app.route('/offline.html')
 def offline():
     return render_template('offline.html'), 200
 
 
-
 @app.route('/health', methods=['GET'])
 def health_check():
+    """
+    Detailed health report. Only full-content when the caller is
+    authenticated as a super admin; otherwise returns a minimal
+    status payload so the shape of the platform is not leaked.
+    """
     db_health = get_database_health()
     startup_health = get_startup_health()
+
+    critical_issues = []
+    if not db_health.get('exists'):
+        critical_issues.append('Database does not exist')
+    if not db_health.get('openable'):
+        critical_issues.append('Database cannot be opened')
+    if not db_health.get('tables_ok'):
+        critical_issues.append('Missing required tables')
+    if not db_health.get('wal_enabled'):
+        critical_issues.append('WAL mode is disabled')
+
+    is_healthy = len(critical_issues) == 0
+    status_code = 200 if is_healthy else 503
+
+    # Who's asking?
+    is_admin_caller = False
+    try:
+        if session.get('user_id') and session.get('is_admin'):
+            from services.admin.roles import is_super_admin
+            is_admin_caller = is_super_admin()
+    except Exception:
+        is_admin_caller = False
+
+    if not is_admin_caller:
+        # Minimal public payload. No paths, no backup state, no config.
+        return jsonify({
+            'status': 'healthy' if is_healthy else 'critical',
+            'timestamp': get_somali_time_display(),
+        }), status_code
 
     backup_health = {'status': 'unknown'}
     if BACKUP_AVAILABLE:
@@ -729,19 +817,6 @@ def health_check():
 
     error_stats = get_error_stats()
 
-    critical_issues = []
-    if not db_health.get('exists'):
-        critical_issues.append('Database does not exist')
-    if not db_health.get('openable'):
-        critical_issues.append('Database cannot be opened')
-    if not db_health.get('tables_ok'):
-        critical_issues.append('Missing required tables')
-    if not db_health.get('wal_enabled'):
-        critical_issues.append('WAL mode is disabled')
-
-    is_healthy = len(critical_issues) == 0
-    status_code = 200 if is_healthy else 503
-
     return jsonify({
         'status': 'healthy' if is_healthy else 'critical',
         'timestamp': get_somali_time_display(),
@@ -757,8 +832,6 @@ def health_check():
     }), status_code
 
 
-
-
 @app.route('/')
 def index():
     if 'user_id' in session:
@@ -767,20 +840,61 @@ def index():
 
 
 # ============================================
-# BACKUP TRIGGER ENDPOINTS
+# BACKUP TRIGGER ENDPOINT
 # ============================================
-@app.route('/backup/trigger', methods=['GET'])
+# POST-only, and refuses to run when the token is the well-known
+# default. Previously this was a GET endpoint that accepted a
+# default-valued token, letting anyone who read the source code
+# force a backup (disk exhaustion) or observe token acceptance.
+#
+# If you are running a cron-based scheduled backup, switch the cron
+# to POST:
+#     curl -X POST -H "X-Backup-Token: <TOKEN>" \
+#          https://<host>/backup/trigger?type=daily
+# ============================================
+
+_DEFAULT_BACKUP_TOKENS = {
+    '',
+    'change_this_token_in_production',
+    'changeme',
+    'default',
+}
+
+
+def _read_backup_token_from_request():
+    # Prefer the header (does not appear in access logs).
+    header = request.headers.get('X-Backup-Token')
+    if header:
+        return header.strip()
+    # Fall back to query string for legacy callers.
+    return (request.args.get('token') or '').strip()
+
+
+@app.route('/backup/trigger', methods=['POST'])
 def trigger_backup():
     if not Config.BACKUP_ENABLED:
         return jsonify({'status': 'disabled', 'message': 'Backup system is disabled'}), 503
 
-    token = request.args.get('token')
-    if token != Config.BACKUP_TRIGGER_TOKEN:
-        logger.warning(f"Unauthorized backup trigger attempt from {request.remote_addr}")
+    expected = (Config.BACKUP_TRIGGER_TOKEN or '').strip()
+    if not expected or expected.lower() in _DEFAULT_BACKUP_TOKENS:
+        logger.critical(
+            "Backup trigger refused: BACKUP_TRIGGER_TOKEN is unset or is "
+            "a known default. Set a strong random value in .env."
+        )
+        return jsonify({
+            'error': 'Backup trigger is not configured securely. '
+                     'Set BACKUP_TRIGGER_TOKEN in .env to a strong random value.',
+        }), 503
+
+    provided = _read_backup_token_from_request()
+    if not provided or not secrets.compare_digest(provided, expected):
+        logger.warning(
+            f"Unauthorized backup trigger attempt from {request.remote_addr}"
+        )
         return jsonify({'error': 'Unauthorized'}), 401
 
     backup_type = request.args.get('type', 'daily')
-    if backup_type not in ['daily', 'weekly', 'monthly', 'manual']:
+    if backup_type not in ('daily', 'weekly', 'monthly', 'manual'):
         backup_type = 'daily'
 
     if not BACKUP_AVAILABLE:
@@ -801,11 +915,10 @@ def trigger_backup():
             'size_kb': round(result['size_bytes'] / 1024, 2),
             'duration_seconds': round(duration, 2),
             'timestamp': get_somali_time_display(),
-            'warning': 'Web-triggered backups are not recommended. Use scheduled tasks.',
         }), 200
-    else:
-        error_msg = result.get('message', 'Backup failed') if result else 'Backup failed'
-        return jsonify({'status': 'error', 'message': error_msg}), 500
+
+    error_msg = result.get('message', 'Backup failed') if result else 'Backup failed'
+    return jsonify({'status': 'error', 'message': error_msg}), 500
 
 
 @app.route('/backup/status', methods=['GET'])
@@ -827,21 +940,18 @@ def backup_status():
         logger.error(f"Backup status error: {e}")
         return jsonify({'error': str(e)}), 500
 
+
 # ============================================
 # DOCS HELP URL CONTEXT
 # ============================================
 @app.context_processor
 def _docs_help_url_context():
-    """
-    Exposes `docs_help_url` to every template.
-    Used by the navbar "?" icon to deep-link contextually.
-    Falls back to /docs/ if anything fails.
-    """
     try:
         from docs.help_urls import help_url_for_request
         return {'docs_help_url': help_url_for_request(request)}
     except Exception:
         return {'docs_help_url': '/docs/'}
+
 
 # ============================================
 # CONTEXT PROCESSOR
@@ -871,7 +981,6 @@ def utility_processor():
         from utils import get_accent_colours as get_accent
         accent_colours = get_accent(accent, is_dark)
 
-    # Pending upgrade requests — SUPER ADMIN ONLY.
     pending_upgrades_count = 0
     try:
         from services.admin.roles import is_super_admin as _sa_check
@@ -895,17 +1004,11 @@ def utility_processor():
         except Exception:
             has_focus_access = False
 
-    # ---- Footer social links ----
     _sa_phone = (Config.SUPER_ADMIN_PHONE or '').replace('+', '').replace(' ', '').replace('-', '')
     social_whatsapp = f"https://wa.me/{_sa_phone}" if _sa_phone else ''
     social_tiktok   = Config.TIKTOK_URL or ''
     social_youtube  = Config.YOUTUBE_URL or ''
 
-    # ---- Community WhatsApp group (FAB) ----
-    # Separate from social_whatsapp above: that one is the admin's
-    # personal wa.me deep-link for verification requests. This one is
-    # the community group invite, surfaced by the floating action
-    # button in dashboard_base.html. Empty string hides the FAB.
     whatsapp_group_url = Config.WHATSAPP_GROUP_URL or ''
 
     from services.admin.capabilities import admin_can as _admin_can
@@ -931,21 +1034,18 @@ def utility_processor():
         'whatsapp_group_url': whatsapp_group_url,
         'push_enabled': Config.PUSH_ENABLED,
     }
-# At the end of app.py, or in _run_bot_db_init
+
+
 try:
     from safe_db import prime_schema
     prime_schema()
 except Exception:
     pass
 
+
 # ============================================
 # WELL-KNOWN FILES
 # ============================================
-# Android Chrome fetches /.well-known/assetlinks.json on PWA install.
-# Serving it prevents a permanent 404 in the error log and enables
-# the "enhanced" install flow on Android.
-# ============================================
-
 @app.route('/.well-known/assetlinks.json', methods=['GET'])
 def well_known_assetlinks():
     from flask import send_from_directory, current_app
@@ -958,14 +1058,14 @@ def well_known_assetlinks():
 
 @app.route('/.well-known/security.txt', methods=['GET'])
 def well_known_security():
-    """Optional — sets a security contact. Also silences a common 404."""
     from flask import Response
     body = (
-        "Contact: mailto:admin@yourdomain.com\n"
+        "Contact: mailto:security@yourdomain.com\n"
         "Preferred-Languages: en, so\n"
         "Expires: 2027-12-31T23:59:59.000Z\n"
     )
     return Response(body, mimetype='text/plain')
+
 
 # ============================================
 # RUN APP

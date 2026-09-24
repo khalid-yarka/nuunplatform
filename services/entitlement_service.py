@@ -3,9 +3,14 @@
 # Entitlement service — single source of truth for what each tier
 # is allowed to do.
 #
-# ── FIX (Focus): The policy cache no longer caches empty results,
-#    so running migrate_focus.py while the app is live is picked up
-#    on the next request without a restart.
+# ── FIX (Overrides merge): _load_policy() now reads BOTH the seed
+#    policies (entitlement_policies) and the admin overrides
+#    (entitlement_overrides), and merges them per (tier, field).
+#    Previously it only read the seed — so admin edits were saved,
+#    audited, and displayed as "modified" but never applied to the
+#    enforcement path. That is why checking "Enabled" for Free on
+#    create_live_quiz had no effect: the write path went to
+#    entitlement_overrides, but the read path never consulted it.
 # ---------------------------------------------------------------
 
 import os
@@ -34,6 +39,10 @@ logger = logging.getLogger(__name__)
 VALID_TIERS = ('free', 'premium', 'pro')
 VALID_POLICY_TYPES = ('permission', 'level', 'quota', 'content')
 
+# Canonical fields that can appear on a per-tier policy row, both in
+# the seed table and in the overrides table.
+_POLICY_FIELDS = ('is_enabled', 'level_value', 'limit_value', 'limit_unit')
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 USER_STATE_FLAG = os.path.join(BASE_DIR, 'instance', 'user_state_changes.flag')
 
@@ -48,11 +57,66 @@ _POLICY_LAST_ATTEMPT: float = 0.0
 _POLICY_RETRY_INTERVAL: float = 5.0   # seconds between failed-load retries
 
 
+def _normalize_field_value(field: str, value: Any) -> Any:
+    """Coerce an override / seed value into its canonical type."""
+    if field == 'is_enabled':
+        return bool(value)
+    if field in ('level_value', 'limit_value'):
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+    return value
+
+
+def _load_overrides(conn) -> Dict[Tuple[str, str, str], Any]:
+    """
+    Read every row from entitlement_overrides into a flat dict keyed by
+    (feature_key, tier, field).
+
+    The table may not exist on very old installs; treat that as "no
+    overrides" rather than failing the whole policy load.
+    """
+    overrides: Dict[Tuple[str, str, str], Any] = {}
+    try:
+        cursor = conn.execute("""
+            SELECT feature_key, tier, field, value
+            FROM entitlement_overrides
+        """)
+        for row in cursor.fetchall():
+            key = (row['feature_key'], row['tier'], row['field'])
+            raw = row['value']
+            if raw is None:
+                overrides[key] = None
+                continue
+            try:
+                overrides[key] = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                overrides[key] = raw
+    except sqlite3.OperationalError:
+        # Table does not exist yet — nothing to merge.
+        pass
+    except Exception as e:
+        logger.warning(f"entitlement_overrides read failed: {e}")
+    return overrides
+
+
 def _load_policy() -> Dict[str, Dict[str, Any]]:
-    """Read every feature + policy from the DB into a keyed dict."""
+    """
+    Read features + seed policies + admin overrides and merge them
+    into the effective policy dict.
+
+    Merge order (each layer overrides the previous):
+        1. entitlement_policies  (shipped seed)
+        2. entitlement_overrides (admin edits, keyed by feature_key/tier/field)
+    """
     cache: Dict[str, Dict[str, Any]] = {}
     try:
         conn = get_db()
+
+        # ---------- 1. Features ----------
         cursor = conn.execute("""
             SELECT id, feature_key, display_name, description, category,
                    policy_type, unit_hint, is_global_active, sort_order, notes
@@ -60,23 +124,49 @@ def _load_policy() -> Dict[str, Dict[str, Any]]:
         """)
         features = cursor.fetchall()
 
+        # ---------- 2. Seed policies ----------
+        seed_by_feature: Dict[int, Dict[str, Dict[str, Any]]] = {}
+        cursor = conn.execute("""
+            SELECT feature_id, tier, is_enabled, level_value, limit_value, limit_unit
+            FROM entitlement_policies
+        """)
+        for p in cursor.fetchall():
+            seed_by_feature.setdefault(p['feature_id'], {})[p['tier']] = {
+                'is_enabled': bool(p['is_enabled']),
+                'level_value': p['level_value'],
+                'limit_value': p['limit_value'],
+                'limit_unit': p['limit_unit'],
+            }
+
+        # ---------- 3. Overrides ----------
+        overrides = _load_overrides(conn)
+
+        # ---------- 4. Merge ----------
         for f in features:
             feature_id = f['id']
             feature_key = f['feature_key']
+            seed_tiers = seed_by_feature.get(feature_id, {})
 
-            cursor2 = conn.execute("""
-                SELECT tier, is_enabled, level_value, limit_value, limit_unit
-                FROM entitlement_policies
-                WHERE feature_id = ?
-            """, (feature_id,))
             policies: Dict[str, Dict[str, Any]] = {}
-            for p in cursor2.fetchall():
-                policies[p['tier']] = {
-                    'is_enabled': bool(p['is_enabled']),
-                    'level_value': p['level_value'],
-                    'limit_value': p['limit_value'],
-                    'limit_unit': p['limit_unit'],
-                }
+            for tier in VALID_TIERS:
+                base = seed_tiers.get(tier)
+                if base is None:
+                    # No seed row for this tier: treat as disabled by default.
+                    base = {
+                        'is_enabled': False,
+                        'level_value': None,
+                        'limit_value': None,
+                        'limit_unit': None,
+                    }
+                else:
+                    base = dict(base)
+
+                for field in _POLICY_FIELDS:
+                    override_key = (feature_key, tier, field)
+                    if override_key in overrides:
+                        base[field] = _normalize_field_value(field, overrides[override_key])
+
+                policies[tier] = base
 
             cache[feature_key] = {
                 'id': feature_id,
@@ -102,10 +192,10 @@ def get_policy() -> Dict[str, Dict[str, Any]]:
     """
     Return the process-memory policy cache, loading it on first access.
 
-    ── FIX (Focus): If the load returns an empty dict (features table not
-       seeded yet, or migrations ran after process start), we do NOT cache
-       that empty result. Instead we retry at most every 5 seconds until
-       the DB actually has features.
+    If the load returns an empty dict (features table not seeded yet, or
+    migrations ran after process start), we do NOT cache that empty
+    result. Instead we retry at most every 5 seconds until the DB
+    actually has features.
     """
     global _POLICY, _POLICY_LAST_ATTEMPT
 
@@ -118,7 +208,6 @@ def get_policy() -> Dict[str, Dict[str, Any]]:
 
         now = time.time()
         if now - _POLICY_LAST_ATTEMPT < _POLICY_RETRY_INTERVAL:
-            # Too soon to retry — return empty without caching
             return {}
 
         _POLICY_LAST_ATTEMPT = now
@@ -129,7 +218,6 @@ def get_policy() -> Dict[str, Dict[str, Any]]:
             logger.info(f"Entitlement policy cache loaded ({len(_POLICY)} features)")
             return _POLICY
 
-        # Do NOT cache empty — allow retry after the interval
         logger.warning("Entitlement policy load returned empty; will retry in 5s")
         return {}
 
@@ -153,6 +241,60 @@ def reload_policy_cache() -> None:
         logger.info(f"Entitlement policy cache reloaded ({len(_POLICY)} features)")
     else:
         logger.warning("Entitlement policy reload returned empty")
+
+
+def get_seed_feature(feature_key: str) -> Optional[Dict[str, Any]]:
+    """
+    Return a single feature with UNMERGED seed policies (overrides not
+    applied). Used by the admin write path to determine whether a
+    submitted value matches the seed — in which case the override
+    should be cleared and the field reverted to inherit.
+
+    Never cached; the write path is rare so a direct read is fine.
+    """
+    try:
+        conn = get_db()
+
+        cursor = conn.execute("""
+            SELECT id, feature_key, display_name, description, category,
+                   policy_type, unit_hint, is_global_active, sort_order, notes
+            FROM entitlement_features
+            WHERE feature_key = ?
+        """, (feature_key,))
+        f = cursor.fetchone()
+        if not f:
+            return None
+
+        cursor = conn.execute("""
+            SELECT tier, is_enabled, level_value, limit_value, limit_unit
+            FROM entitlement_policies
+            WHERE feature_id = ?
+        """, (f['id'],))
+        policies: Dict[str, Dict[str, Any]] = {}
+        for p in cursor.fetchall():
+            policies[p['tier']] = {
+                'is_enabled': bool(p['is_enabled']),
+                'level_value': p['level_value'],
+                'limit_value': p['limit_value'],
+                'limit_unit': p['limit_unit'],
+            }
+
+        return {
+            'id': f['id'],
+            'feature_key': f['feature_key'],
+            'display_name': f['display_name'],
+            'description': f['description'],
+            'category': f['category'],
+            'policy_type': f['policy_type'],
+            'unit_hint': f['unit_hint'],
+            'is_global_active': bool(f['is_global_active']),
+            'sort_order': f['sort_order'],
+            'notes': f['notes'],
+            'policies': policies,
+        }
+    except Exception as e:
+        logger.error(f"get_seed_feature failed for {feature_key}: {e}", exc_info=True)
+        return None
 
 
 # ============================================
@@ -209,7 +351,6 @@ def _get_expires_at(user_id: Optional[int]) -> Optional[str]:
 def _effective_tier(user_id: Optional[int]) -> str:
     """
     Return the user's effective tier, treating expired paid tiers as free.
-    Does not write to the DB — expiry is applied by tier_service.expire_tier().
     """
     tier = _resolve_tier_from_session(user_id)
     if tier is None:

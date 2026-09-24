@@ -6,16 +6,17 @@
 # No email. No verification step. No password reset.
 # New users register with is_verified=0. Admin verifies manually.
 #
-# Back-button fix: auth pages send Cache-Control: no-store so the
-# browser cannot serve them from the back-forward cache after login.
-#
-# Registration side-effect: a Telegram DM is sent to super admins
-# with a direct link to the user's admin panel page.
+# SECURITY ADDITIONS IN THIS VERSION:
+#   - Per-account login lockout (in addition to the existing per-IP
+#     rate limit). Ten failed attempts for a given phone number lock
+#     that account for 15 minutes, regardless of the IP used.
+#   - Security headers on auth pages (no-store) are preserved.
 
 import time
 import secrets
 import logging
 import re
+import threading
 from urllib.parse import quote as urlquote
 
 from flask import (
@@ -41,10 +42,6 @@ auth_bp = Blueprint('auth', __name__, url_prefix='')
 # ============================================
 # NO-CACHE HEADERS ON AUTH PAGES
 # ============================================
-# Without this, pressing "Back" after login serves the login page
-# from the browser's back-forward cache and never hits the server,
-# so the "already logged in -> redirect to /home" check never runs.
-
 @auth_bp.after_request
 def _no_cache_for_auth_pages(response):
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
@@ -58,18 +55,20 @@ def _no_cache_for_auth_pages(response):
 # ============================================
 
 _rate_buckets = {}
+_rate_lock = threading.Lock()
 
 
 def _rate_limit(key: str, max_calls: int, window_seconds: int) -> bool:
     now = time.time()
-    bucket = _rate_buckets.setdefault(key, [])
-    cutoff = now - window_seconds
-    while bucket and bucket[0] < cutoff:
-        bucket.pop(0)
-    if len(bucket) >= max_calls:
-        return False
-    bucket.append(now)
-    return True
+    with _rate_lock:
+        bucket = _rate_buckets.setdefault(key, [])
+        cutoff = now - window_seconds
+        while bucket and bucket[0] < cutoff:
+            bucket.pop(0)
+        if len(bucket) >= max_calls:
+            return False
+        bucket.append(now)
+        return True
 
 
 def _client_ip() -> str:
@@ -77,6 +76,65 @@ def _client_ip() -> str:
     if fwd:
         return fwd.split(',')[0].strip()
     return request.remote_addr or 'unknown'
+
+
+# ============================================
+# PER-ACCOUNT LOGIN LOCKOUT
+# ============================================
+# The per-IP rate limiter above only slows a single source. An attacker
+# using a botnet, or rotating through mobile IPs, gets unlimited tries
+# against a single account. This lockout is keyed on the normalised
+# phone number, so it survives IP rotation.
+#
+# Behaviour:
+#   - After LOGIN_MAX_FAILURES failed attempts for a given phone
+#     within LOGIN_FAILURE_WINDOW seconds, the account is locked for
+#     LOGIN_LOCKOUT_DURATION seconds.
+#   - A successful login clears the failure history for that phone.
+#   - The lockout applies even if the password later becomes correct.
+
+LOGIN_MAX_FAILURES = 10
+LOGIN_FAILURE_WINDOW = 15 * 60       # 15 minutes
+LOGIN_LOCKOUT_DURATION = 15 * 60     # 15 minutes
+
+_login_failures = {}   # phone -> [timestamp, ...]
+_login_lockouts = {}   # phone -> locked_until_timestamp
+_login_state_lock = threading.Lock()
+
+
+def _login_is_locked(phone: str) -> tuple:
+    """Return (locked, seconds_remaining)."""
+    now = time.time()
+    with _login_state_lock:
+        until = _login_lockouts.get(phone, 0)
+        if until > now:
+            return True, int(until - now)
+        if until and until <= now:
+            _login_lockouts.pop(phone, None)
+        return False, 0
+
+
+def _login_record_failure(phone: str) -> None:
+    now = time.time()
+    cutoff = now - LOGIN_FAILURE_WINDOW
+    with _login_state_lock:
+        bucket = _login_failures.setdefault(phone, [])
+        # drop old entries
+        bucket[:] = [t for t in bucket if t > cutoff]
+        bucket.append(now)
+        if len(bucket) >= LOGIN_MAX_FAILURES:
+            _login_lockouts[phone] = now + LOGIN_LOCKOUT_DURATION
+            _login_failures.pop(phone, None)
+            logger.warning(
+                f"Account lockout triggered for phone ending ...{phone[-4:]} "
+                f"after {LOGIN_MAX_FAILURES} failures"
+            )
+
+
+def _login_clear_failures(phone: str) -> None:
+    with _login_state_lock:
+        _login_failures.pop(phone, None)
+        _login_lockouts.pop(phone, None)
 
 
 # ============================================
@@ -106,10 +164,6 @@ def _normalize_phone(phone: str) -> str:
 
 
 def _escape_like(value: str) -> str:
-    """
-    Escape SQL LIKE metacharacters. Uses '!' as the escape character
-    so we never clash with backslash handling across Python/SQL layers.
-    """
     if not value:
         return ''
     return (
@@ -127,10 +181,6 @@ VALID_GRADES = ('G7', 'G8', 'F3', 'F4')
 # ============================================
 
 def _notify_new_registration(student: dict) -> None:
-    """
-    Send a Telegram DM to super admins announcing a new registration.
-    Never raises. Failure is logged and swallowed.
-    """
     try:
         from services.telegram_notify import (
             notify_super_admins,
@@ -263,11 +313,6 @@ def check_phone():
 # ============================================
 # SCHOOL SUGGESTIONS (AJAX — for registration form)
 # ============================================
-# Returns up to 10 distinct school names that already exist in the
-# students table for the given location, matching the typed prefix.
-# Ranked by frequency (most-used schools first).
-#
-# No hardcoded suggestions — if the DB is empty, returns [].
 
 @auth_bp.route('/auth/school-suggestions', methods=['GET'])
 def school_suggestions():
@@ -373,7 +418,6 @@ def register():
         flash('Please select a valid grade.', 'error')
         return render_template('auth/register.html')
 
-    # School validation: 2+ words, each 4+ letters
     school_words = school.split()
     if len(school_words) < 2 or not all(
         len(w) >= 4 and w.isalpha() for w in school_words
@@ -430,7 +474,6 @@ def register():
         flash('An error occurred while saving your details. Please try again.', 'error')
         return render_template('auth/register.html')
 
-    # Notify super admins via Telegram (fire-and-forget).
     try:
         new_user = get_student_by_phone(phone)
         if new_user:
@@ -455,6 +498,7 @@ def login():
         ensure_csrf_token()
         return render_template('auth/login.html')
 
+    # Layer 1: per-IP rate limit (existing behavior).
     if not _rate_limit(f'login:{_client_ip()}', max_calls=5, window_seconds=60):
         flash('Too many login attempts. Please wait a minute.', 'error')
         return render_template('auth/login.html')
@@ -472,6 +516,18 @@ def login():
 
     phone = _normalize_phone(phone_raw)
 
+    # Layer 2: per-account lockout (new).
+    locked, seconds_left = _login_is_locked(phone)
+    if locked:
+        minutes = max(1, seconds_left // 60)
+        flash(
+            f'This account is temporarily locked after too many failed '
+            f'attempts. Try again in {minutes} minute(s).',
+            'error',
+        )
+        logger.warning(f"Login attempt against locked account ...{phone[-4:]}")
+        return render_template('auth/login.html')
+
     try:
         student = get_student_by_phone(phone)
     except Exception as e:
@@ -479,13 +535,19 @@ def login():
         flash('An error occurred. Please try again.', 'error')
         return render_template('auth/login.html')
 
+    # Unified failure message: never reveal whether the phone exists.
     if not student:
+        _login_record_failure(phone)
         flash('Invalid phone number or password.', 'error')
         return render_template('auth/login.html')
 
     if not check_password_hash(student.get('password', ''), password):
+        _login_record_failure(phone)
         flash('Invalid phone number or password.', 'error')
         return render_template('auth/login.html')
+
+    # Success — clear lockout state for this account.
+    _login_clear_failures(phone)
 
     session.clear()
     session['user_id'] = student['id']
