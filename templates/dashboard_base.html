@@ -144,6 +144,102 @@
             font-size: 12px;
         }
     }
+
+    /* ============================================
+       WHATSAPP COMMUNITY FAB
+       ============================================ */
+    .whatsapp-fab {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 800;
+        display: inline-flex;
+        align-items: center;
+        height: 56px;
+        background: #25D366;
+        color: #ffffff;
+        border-radius: 28px;
+        text-decoration: none;
+        box-shadow: 0 6px 20px rgba(37, 211, 102, 0.40),
+                    0 2px 6px  rgba(0, 0, 0, 0.12);
+        transition: background 0.25s ease,
+                    transform  0.25s ease,
+                    box-shadow 0.25s ease;
+    }
+    .whatsapp-fab::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        z-index: 0;
+        /* Ring pulses 4 times on first appearance, then stops. */
+        animation: whatsappPulse 2.4s ease-out 4;
+    }
+    @keyframes whatsappPulse {
+        0%   { box-shadow: 0 0 0 0    rgba(37, 211, 102, 0.60); }
+        70%  { box-shadow: 0 0 0 18px rgba(37, 211, 102, 0.00); }
+        100% { box-shadow: 0 0 0 0    rgba(37, 211, 102, 0.00); }
+    }
+
+    .whatsapp-fab__label {
+        max-width: 0;
+        opacity: 0;
+        padding-left: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        font-weight: 700;
+        font-size: 14px;
+        letter-spacing: 0.2px;
+        position: relative;
+        z-index: 1;
+        transition: max-width    0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                    opacity      0.20s ease 0.10s,
+                    padding-left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .whatsapp-fab > i {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        height: 56px;
+        font-size: 28px;
+        flex-shrink: 0;
+        position: relative;
+        z-index: 1;
+    }
+
+    .whatsapp-fab:hover,
+    .whatsapp-fab:focus-visible {
+        background: #1DA851;
+        color: #ffffff;
+        text-decoration: none;
+        transform: translateY(-3px);
+        box-shadow: 0 10px 28px rgba(37, 211, 102, 0.50),
+                    0 3px  10px rgba(0, 0, 0, 0.15);
+        outline: none;
+    }
+    .whatsapp-fab:hover .whatsapp-fab__label,
+    .whatsapp-fab:focus-visible .whatsapp-fab__label {
+        max-width: 180px;
+        opacity: 1;
+        padding-left: 20px;
+    }
+    .whatsapp-fab:active {
+        transform: translateY(-1px) scale(0.98);
+    }
+
+    /* Mobile — no label, slightly smaller */
+    @media (max-width: 640px) {
+        .whatsapp-fab { right: 16px; bottom: 16px; height: 52px; }
+        .whatsapp-fab > i { width: 52px; height: 52px; font-size: 26px; }
+        .whatsapp-fab__label { display: none; }
+        .whatsapp-fab:hover,
+        .whatsapp-fab:focus-visible { transform: translateY(-2px); }
+    }
+
+    /* Honour reduced motion */
+    .reduced-motion .whatsapp-fab::before { animation: none; }
 </style>
 {% endblock %}
 
@@ -475,7 +571,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <a href="{{ docs_help_url or url_for('docs.home') }}"
                    class="theme-toggle"
                    id="helpToggle"
@@ -483,7 +579,7 @@
                    title="{{ _('navbar.help') }}">
                     <i class="fas fa-circle-question"></i>
                 </a>
-                
+
                 <span class="nav-divider"></span>
                 <a href="{{ url_for('dashboard.profile') }}" class="user-menu">
                     <div class="avatar avatar-sm avatar-primary">
@@ -504,9 +600,9 @@
         <!-- ============================================ -->
         <footer class="app-footer">
             <div class="footer-container">
-        
+
                 <div class="footer-top">
-        
+
                     <!-- ---------- Brand ---------- -->
                     <div class="footer-col footer-col-brand">
                         <a href="{{ url_for('dashboard.home') }}" class="footer-brand">
@@ -514,9 +610,9 @@
                                  alt="NuunPlatform" class="footer-logo" />
                             <span class="footer-brand-text">Nuun<span>Platform</span></span>
                         </a>
-        
+
                         <p class="footer-tagline">{{ _('footer.tagline') }}</p>
-        
+
                         <div class="footer-social" role="group" aria-label="{{ _('footer.follow_us') }}">
                             {% if social_whatsapp %}
                             <a href="{{ social_whatsapp }}"
@@ -547,7 +643,7 @@
                             {% endif %}
                         </div>
                     </div>
-        
+
                     <!-- ---------- Learn ---------- -->
                     <nav class="footer-col" aria-label="{{ _('footer.learn') }}">
                         <h4 class="footer-col-title">{{ _('footer.learn') }}</h4>
@@ -558,7 +654,7 @@
                             <li><a href="{{ url_for('focus.index') }}">{{ _('nav.focus') }}</a></li>
                         </ul>
                     </nav>
-        
+
                     <!-- ---------- Community ---------- -->
                     <nav class="footer-col" aria-label="{{ _('footer.community') }}">
                         <h4 class="footer-col-title">{{ _('footer.community') }}</h4>
@@ -569,7 +665,7 @@
                             <li><a href="{{ url_for('notifications.index') }}">{{ _('nav.notifications') }}</a></li>
                         </ul>
                     </nav>
-        
+
                     <!-- ---------- Support ---------- -->
                     <nav class="footer-col" aria-label="{{ _('footer.support') }}">
                         <h4 class="footer-col-title">{{ _('footer.support') }}</h4>
@@ -587,7 +683,7 @@
                         </ul>
                     </nav>
                 </div>
-        
+
                 <!-- ---------- Bottom bar ---------- -->
                 <div class="footer-bottom">
                     <div class="footer-copy">
@@ -603,7 +699,7 @@
                         <span>{{ _('footer.back_to_top') }}</span>
                     </button>
                 </div>
-        
+
             </div>
         </footer>
     </main>
@@ -632,6 +728,23 @@
 <!-- ============================================ -->
 <!-- END UPGRADE SHEET                            -->
 <!-- ============================================ -->
+
+{# ============================================ #}
+{# WHATSAPP COMMUNITY FAB                       #}
+{# Persistent across every authenticated page.  #}
+{# Hidden entirely when WHATSAPP_GROUP_URL is   #}
+{# not set in .env.                             #}
+{# ============================================ #}
+{% if whatsapp_group_url %}
+<a href="{{ whatsapp_group_url }}"
+   target="_blank"
+   rel="noopener noreferrer"
+   class="whatsapp-fab"
+   aria-label="Join our WhatsApp community">
+    <span class="whatsapp-fab__label">Join Community</span>
+    <i class="fab fa-whatsapp" aria-hidden="true"></i>
+</a>
+{% endif %}
 
 {% endblock %}
 

@@ -894,17 +894,24 @@ def utility_processor():
             has_focus_access = ((_sl is None) or (_sl > 0)) or (_al > 0)
         except Exception:
             has_focus_access = False
-    
+
     # ---- Footer social links ----
     _sa_phone = (Config.SUPER_ADMIN_PHONE or '').replace('+', '').replace(' ', '').replace('-', '')
     social_whatsapp = f"https://wa.me/{_sa_phone}" if _sa_phone else ''
     social_tiktok   = Config.TIKTOK_URL or ''
     social_youtube  = Config.YOUTUBE_URL or ''
-    
+
+    # ---- Community WhatsApp group (FAB) ----
+    # Separate from social_whatsapp above: that one is the admin's
+    # personal wa.me deep-link for verification requests. This one is
+    # the community group invite, surfaced by the floating action
+    # button in dashboard_base.html. Empty string hides the FAB.
+    whatsapp_group_url = Config.WHATSAPP_GROUP_URL or ''
+
     from services.admin.capabilities import admin_can as _admin_can
     from services.admin.roles import is_any_admin as _is_any_admin
     from services.admin.roles import is_super_admin as _is_super_admin
-    
+
     return {
         'session': session,
         'is_admin': session.get('is_admin', False),
@@ -921,6 +928,7 @@ def utility_processor():
         'social_whatsapp': social_whatsapp,
         'social_tiktok': social_tiktok,
         'social_youtube': social_youtube,
+        'whatsapp_group_url': whatsapp_group_url,
         'push_enabled': Config.PUSH_ENABLED,
     }
 # At the end of app.py, or in _run_bot_db_init

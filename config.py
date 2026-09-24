@@ -20,14 +20,7 @@ class Config:
     # ============================================
     # DEBUG / DEV MODE
     # ============================================
-    # `DEBUG=true` enables verbose logging, console output, Flask debug,
-    # SQL echoing, and the detailed 500 error page. `FLASK_DEBUG` is
-    # kept for backward compatibility — if either is true, DEBUG is true.
-    """DEBUG = (
-        _env_bool('DEBUG', 'false')
-        or _env_bool('FLASK_DEBUG', 'false')
-    )"""
-    DEBUG=False
+    DEBUG = False
 
     # ============================================
     # SECURITY
@@ -73,16 +66,15 @@ class Config:
     SESSION_COOKIE_HTTPONLY = _env_bool('SESSION_COOKIE_HTTPONLY', 'true')
     SESSION_COOKIE_SAMESITE = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
     ADMIN_SESSION_TIMEOUT = int(os.getenv('ADMIN_SESSION_TIMEOUT', '1800'))
-    
+
     # ============================================
     # WEB PUSH (VAPID)
     # ============================================
-    # Optional. When VAPID keys are missing, every push code path is a
-    # safe no-op; the in-app notification center is unaffected.
     VAPID_PUBLIC_KEY  = os.getenv('VAPID_PUBLIC_KEY', '')
     VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
     VAPID_SUBJECT     = os.getenv('VAPID_SUBJECT', 'mailto:admin@yourdomain.com')
     PUSH_ENABLED      = bool(VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY)
+
     # ============================================
     # PATHS
     # ============================================
@@ -132,16 +124,13 @@ class Config:
     # ============================================
     # LOGGING
     # ============================================
-    # Levels
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
-    # Rotation (in DEBUG mode we allow a bit more room for troubleshooting)
     LOG_MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', str(2 * 1024 * 1024)))
     LOG_BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', '3'))
 
-    # Dev-only flags (ignored unless DEBUG is true)
-    LOG_CONSOLE = _env_bool('LOG_CONSOLE', 'false')  # mirror INFO+ to stdout in dev
-    LOG_ACCESS = _env_bool('LOG_ACCESS', 'false')     # write access.log in dev
-    LOG_SQL = _env_bool('LOG_SQL', 'false')           # echo SQL statements in dev
+    LOG_CONSOLE = _env_bool('LOG_CONSOLE', 'false')
+    LOG_ACCESS = _env_bool('LOG_ACCESS', 'false')
+    LOG_SQL = _env_bool('LOG_SQL', 'false')
 
     # ============================================
     # EMAIL (admin-only, for error dashboard)
@@ -191,20 +180,25 @@ class Config:
     TELEGRAM_ADMIN_IDS = os.getenv('TELEGRAM_ADMIN_IDS', '')
     TELEGRAM_SUPER_ADMIN_IDS = os.getenv('TELEGRAM_SUPER_ADMIN_IDS', '')
     BASE_URL = os.getenv('BASE_URL', 'https://yourdomain.com')
+
     # ============================================
-    # SOCIAL LINKS (dashboard footer)
+    # SOCIAL LINKS (dashboard footer + FAB)
     # ============================================
-    # WhatsApp uses SUPER_ADMIN_PHONE (already defined above).
-    # TikTok / YouTube are standalone URLs — override via .env if needed.
+    # WhatsApp uses SUPER_ADMIN_PHONE (defined above) for personal
+    # contact. WHATSAPP_GROUP_URL is the community group invite link,
+    # surfaced by the floating action button in dashboard_base.html.
+    # Leave it blank to hide the FAB entirely.
     TIKTOK_URL = os.getenv('TIKTOK_URL', 'https://www.tiktok.com/@nuunplatform')
     YOUTUBE_URL = os.getenv('YOUTUBE_URL', 'https://www.youtube.com/@nuunplatform')
+    WHATSAPP_GROUP_URL = os.getenv('WHATSAPP_GROUP_URL', '')
+
     if not TELEGRAM_BOT_TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN environment variable must be set for Telegram bot functionality")
 
     # ============================================
     # FLASK / RUN
     # ============================================
-    FLASK_DEBUG = DEBUG  # kept as alias
+    FLASK_DEBUG = DEBUG
     PORT = int(os.getenv('PORT', 5000))
 
     # ============================================
