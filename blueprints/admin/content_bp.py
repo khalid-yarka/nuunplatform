@@ -62,6 +62,26 @@ admin_content_bp = Blueprint('admin_content', __name__, url_prefix='/admin')
 
 
 # ============================================================
+# CONSTANTS — FULL COVERAGE LISTS
+# ============================================================
+# These are the CANONICAL sets of values an admin may pick. They
+# are NOT derived from the DB, so the dropdowns always show every
+# option even if the library currently has only a subset.
+# ============================================================
+
+# Curriculum codes with human labels. Kept aligned with the
+# students table's location codes so nothing drifts.
+_PDF_CURRICULA = (
+    ('PL', 'Puntland'),
+    ('SO', 'Somalia'),
+    ('SL', 'Somaliland'),
+)
+
+# Classes / grades a PDF may target.
+_PDF_CLASSES = ('F4', 'F3', 'G8', 'G7')
+
+
+# ============================================================
 # HELPERS
 # ============================================================
 
@@ -130,6 +150,18 @@ def _int_or_none(raw):
         return int(s)
     except (ValueError, TypeError):
         return None
+
+
+def _coerce_bool(raw):
+    """Convert any form value to a 0/1 int. Accepts 'on', '1', 'true', 'yes'."""
+    if raw is None:
+        return 0
+    if isinstance(raw, bool):
+        return 1 if raw else 0
+    if isinstance(raw, int):
+        return 1 if raw else 0
+    s = str(raw).strip().lower()
+    return 1 if s in ('1', 'true', 'yes', 'on') else 0
 
 
 def _generate_staging_pdf_code():
@@ -1082,6 +1114,89 @@ def pdf_info():
 
 
 # ============================================================
+# PDF CODE AVAILABILITY CHECK (AJAX — used by PDF edit page)
+# ============================================================
+
+@admin_content_bp.route('/pdfs/check-code', methods=['POST'],
+                        endpoint='pdf_check_code')
+@admin_can('pdfs.view')
+def pdf_check_code():
+    """
+    Live uniqueness check used by the edit page's code field.
+    Body: { 'code': 'XXXX-XXXX', 'exclude_id': <pdf_id> }
+
+    Returns { 'valid': bool, 'available': bool, 'format_ok': bool,
+              'owner_id': int|None, 'reason': str }
+    """
+    if not _csrf_ok():
+        return jsonify({'error': 'Invalid session.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    code = _normalize_pdf_code(data.get('code')) or ''
+
+    exclude_raw = data.get('exclude_id')
+    try:
+        exclude_id = int(exclude_raw) if exclude_raw else None
+    except (TypeError, ValueError):
+        exclude_id = None
+
+    out = {
+        'valid': False,
+        'available': False,
+        'format_ok': False,
+        'owner_id': None,
+        'reason': None,
+    }
+
+    if not code:
+        out['reason'] = 'empty'
+        return jsonify(out)
+
+    if not _validate_pdf_code_format(code):
+        out['reason'] = 'invalid_format'
+        return jsonify(out)
+
+    out['format_ok'] = True
+    out['valid'] = True
+
+    # Same id as the row being edited → "available" for this edit
+    if exclude_id:
+        try:
+            existing = get_pdf_by_code(code)
+            if existing and existing.get('id') == exclude_id:
+                out['available'] = True
+                return jsonify(out)
+        except Exception:
+            pass
+
+    # Check main DB
+    try:
+        row = execute_with_retry(
+            "SELECT id FROM pdfs WHERE code = ? LIMIT 1",
+            (code,),
+        ).fetchone()
+        if row:
+            out['owner_id'] = row['id']
+            out['reason'] = 'taken_in_main'
+            return jsonify(out)
+    except Exception as e:
+        logger.warning(f"pdf_check_code main lookup failed: {e}")
+
+    # Check bot DB
+    try:
+        from bot.db import get_bot_pdf_by_code
+        bot_pdf = get_bot_pdf_by_code(code)
+        if bot_pdf and not bot_pdf.get('published'):
+            out['reason'] = 'taken_in_staging'
+            return jsonify(out)
+    except Exception as e:
+        logger.warning(f"pdf_check_code bot lookup failed: {e}")
+
+    out['available'] = True
+    return jsonify(out)
+
+
+# ============================================================
 # BULK IMPORT (questions)
 # ============================================================
 
@@ -1758,8 +1873,8 @@ def pdfs():
         'staging_count':    staging_count,
         'unverified_count': unverified_count,
         'subjects':  get_all_subjects(),
-        'curricula': get_pdf_distinct_curricula(),
-        'classes':   get_pdf_distinct_classes(),
+        'curricula': [c[0] for c in _PDF_CURRICULA],
+        'classes':   list(_PDF_CLASSES),
         'csrf_token': session.get('csrf_token'),
     }
 
@@ -1931,13 +2046,19 @@ def pdfs():
 
 
 # ============================================================
-# PDFs — LIBRARY EDIT / DELETE / PREVIEW
+# PDFs — LIBRARY PREVIEW / DOWNLOAD
 # ============================================================
 
 @admin_content_bp.route('/pdfs/<int:pdf_id>/preview', methods=['GET'],
                         endpoint='pdf_library_preview')
 @admin_can('pdfs.view')
 def pdf_library_preview(pdf_id):
+    """
+    Inline PDF preview. Serves either the local file or streams from
+    Telegram. Safe to embed in an <iframe> — we explicitly strip the
+    CSP frame-ancestors directive for this one response by setting
+    X-Frame-Options to SAMEORIGIN.
+    """
     pdf = get_pdf_by_id(pdf_id)
     if not pdf:
         abort(404)
@@ -1945,12 +2066,19 @@ def pdf_library_preview(pdf_id):
     file_url = pdf.get('file_url')
     if file_url and os.path.exists(file_url) and os.path.isfile(file_url):
         try:
-            return send_file(
+            resp = send_file(
                 file_url, mimetype='application/pdf',
                 as_attachment=False,
                 download_name=f"{pdf.get('title') or pdf.get('code') or 'document'}.pdf",
                 conditional=True,
             )
+            resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
+            resp.headers['Content-Security-Policy'] = (
+                "default-src 'self'; "
+                "object-src 'self'; "
+                "frame-ancestors 'self'"
+            )
+            return resp
         except Exception as e:
             logger.warning(f"Local file send failed for pdf {pdf_id}: {e}")
 
@@ -1988,7 +2116,12 @@ def pdf_library_preview(pdf_id):
             conditional=True,
         )
         response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
-        response.headers.pop('X-Frame-Options', None)
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "object-src 'self'; "
+            "frame-ancestors 'self'"
+        )
         response.headers['Cache-Control'] = 'private, max-age=300'
         return response
     except Exception as e:
@@ -1999,6 +2132,81 @@ def pdf_library_preview(pdf_id):
         abort(502)
 
 
+@admin_content_bp.route('/pdfs/<int:pdf_id>/download', methods=['GET'],
+                        endpoint='pdf_download')
+@admin_can('pdfs.view')
+def pdf_download(pdf_id):
+    """
+    Force-download the PDF as an attachment. Same source resolution as
+    the preview route.
+    """
+    pdf = get_pdf_by_id(pdf_id)
+    if not pdf:
+        abort(404)
+
+    safe_title = re.sub(r'[^A-Za-z0-9\-_ ]+', '', pdf.get('title') or '')[:80].strip()
+    if not safe_title:
+        safe_title = pdf.get('code') or f'pdf-{pdf_id}'
+    filename = f"{safe_title}.pdf"
+
+    file_url = pdf.get('file_url')
+    if file_url and os.path.exists(file_url) and os.path.isfile(file_url):
+        try:
+            return send_file(
+                file_url, mimetype='application/pdf',
+                as_attachment=True, download_name=filename,
+                conditional=True,
+            )
+        except Exception as e:
+            logger.warning(f"Local download failed for pdf {pdf_id}: {e}")
+
+    code = pdf.get('code')
+    if not code:
+        abort(404, 'PDF has no code')
+
+    try:
+        from bot.db import get_bot_pdf_by_code
+        bot_pdf = get_bot_pdf_by_code(code)
+    except Exception as e:
+        logger.warning(f"Bot lookup failed for pdf {pdf_id}: {e}")
+        bot_pdf = None
+
+    if not bot_pdf:
+        abort(404, 'PDF is not available in Telegram storage.')
+
+    file_id = bot_pdf.get('file_id')
+    if not file_id:
+        abort(404, 'No Telegram file_id stored for this PDF.')
+
+    try:
+        from bot.utils import get_bot
+        bot = get_bot()
+        tg_file = bot.get_file(file_id)
+        data = bot.download_file(tg_file.file_path)
+        if not data:
+            abort(502, 'Telegram returned an empty file.')
+        buf = io.BytesIO(data)
+        buf.seek(0)
+        response = send_file(
+            buf, mimetype='application/pdf',
+            as_attachment=True, download_name=filename,
+        )
+        response.headers['Content-Disposition'] = (
+            f'attachment; filename="{filename}"'
+        )
+        return response
+    except Exception as e:
+        logger.error(
+            f"Admin download failed for pdf {pdf_id} (code {code}): {e}",
+            exc_info=True,
+        )
+        abort(502)
+
+
+# ============================================================
+# PDFs — LIBRARY EDIT / UPDATE / DELETE
+# ============================================================
+
 @admin_content_bp.route('/pdfs/<int:pdf_id>/edit', methods=['GET'],
                         endpoint='pdf_edit')
 @admin_can('pdfs.edit')
@@ -2006,12 +2214,61 @@ def pdf_edit(pdf_id):
     pdf = get_pdf_by_id(pdf_id)
     if not pdf:
         abort(404)
+
+    # Look up the file source so the preview card can render the right
+    # actions: local file / Telegram-backed / missing.
+    preview_info = {
+        'available': False,
+        'source': None,
+        'size_mb': None,
+        'has_local_file': False,
+        'has_telegram': False,
+    }
+
+    file_url = pdf.get('file_url')
+    if file_url and os.path.exists(file_url):
+        preview_info['available'] = True
+        preview_info['source'] = 'local'
+        preview_info['has_local_file'] = True
+        try:
+            preview_info['size_mb'] = round(
+                os.path.getsize(file_url) / (1024 * 1024), 2
+            )
+        except Exception:
+            pass
+    else:
+        # Fall back to Telegram
+        try:
+            from bot.db import get_bot_pdf_by_code
+            bot_pdf = get_bot_pdf_by_code(pdf.get('code') or '')
+            if bot_pdf and bot_pdf.get('file_id'):
+                preview_info['has_telegram'] = True
+                size = _get_telegram_file_size(bot_pdf['file_id'])
+                if size:
+                    preview_info['available'] = True
+                    preview_info['source'] = 'telegram'
+                    preview_info['size_mb'] = round(size / (1024 * 1024), 2)
+        except Exception as e:
+            logger.warning(f"pdf_edit: bot lookup failed for {pdf_id}: {e}")
+
+    # Which batches contain this PDF? Nice context for the admin.
+    batches = []
+    try:
+        from db import get_batches_for_item
+        batches = get_batches_for_item('pdf', pdf_id)
+    except Exception:
+        pass
+
     return render_template(
         'dashboard/admin/content/pdf_edit.html',
         pdf=pdf,
+        preview_info=preview_info,
+        batches=batches,
+        # Full-coverage classification options — always complete
         subjects=get_all_subjects(),
-        curricula=get_pdf_distinct_curricula(),
-        classes=get_pdf_distinct_classes(),
+        curricula=_PDF_CURRICULA,
+        classes=_PDF_CLASSES,
+        csrf_token=session.get('csrf_token'),
     )
 
 
@@ -2021,32 +2278,97 @@ def pdf_edit(pdf_id):
 def pdf_update(pdf_id):
     if not validate_csrf():
         abort(403)
+
     pdf = get_pdf_by_id(pdf_id)
     if not pdf:
         abort(404)
 
-    title = (request.form.get('title') or '').strip()
-    description = (request.form.get('description') or '').strip()
-    curriculum = (request.form.get('curriculum') or '').strip()
-    class_filter = (request.form.get('class') or '').strip()
-    subject = (request.form.get('subject') or '').strip()
-    chapter = (request.form.get('chapter') or '').strip()
-    tags = (request.form.get('tags') or '').strip()
-    is_premium = 1 if request.form.get('is_premium') == 'on' else 0
+    # ── Read + normalise every editable field ────────────────
+    new_code = _normalize_pdf_code(request.form.get('code'))
 
-    if not title or not subject:
-        flash('Title and Subject are required.', 'error')
+    title       = (request.form.get('title') or '').strip()
+    description = (request.form.get('description') or '').strip()
+    curriculum  = (request.form.get('curriculum') or '').strip()
+    class_val   = (request.form.get('class') or '').strip()
+    subject     = (request.form.get('subject') or '').strip()
+    chapter     = (request.form.get('chapter') or '').strip()
+    tags        = (request.form.get('tags') or '').strip()
+
+    # Premium: accept any of 'on'/'1'/'true'/'yes'; anything else (or
+    # an unchecked box) → 0. The hidden input trick in the template
+    # guarantees this field is always present, so no ambiguity.
+    is_premium = _coerce_bool(request.form.get('is_premium'))
+
+    # ── Validation ──────────────────────────────────────────
+    errors = []
+
+    if not title:
+        errors.append('Title is required.')
+    if not subject:
+        errors.append('Subject is required.')
+
+    # Curriculum: must be a known code OR empty (unset)
+    valid_curriculum_codes = {c[0] for c in _PDF_CURRICULA}
+    if curriculum and curriculum not in valid_curriculum_codes:
+        errors.append(f'Invalid curriculum: {curriculum}')
+
+    # Class: must be a known code OR empty (unset)
+    if class_val and class_val not in _PDF_CLASSES:
+        errors.append(f'Invalid class: {class_val}')
+
+    # Subject: must be a known code
+    if subject and subject not in get_all_subject_codes():
+        errors.append(f'Unknown subject: {subject}')
+
+    # Code: if changed, must be valid format and unique
+    code_changed = (new_code and new_code != pdf.get('code'))
+    if new_code:
+        if not _validate_pdf_code_format(new_code):
+            errors.append('PDF code must match XXXX-XXXX.')
+        elif code_changed:
+            try:
+                clash = execute_with_retry(
+                    "SELECT id FROM pdfs WHERE code = ? AND id != ? LIMIT 1",
+                    (new_code, pdf_id),
+                ).fetchone()
+                if clash:
+                    errors.append(f'Code {new_code} is already used by another PDF.')
+            except Exception as e:
+                logger.warning(f"pdf_update: code check failed: {e}")
+                errors.append('Could not verify code availability. Try again.')
+    else:
+        errors.append('PDF code is required.')
+
+    if errors:
+        for e in errors:
+            flash(e, 'error')
         return redirect(url_for('admin_content.pdf_edit', pdf_id=pdf_id))
 
+    # ── Persist ─────────────────────────────────────────────
     try:
         execute_with_retry("""
             UPDATE pdfs SET
-                title = ?, description = ?, curriculum = ?, class = ?,
-                subject = ?, chapter = ?, tags = ?, is_premium = ?
+                code = ?,
+                title = ?, description = ?,
+                curriculum = ?, class = ?,
+                subject = ?, chapter = ?, tags = ?,
+                is_premium = ?
             WHERE id = ?
-        """, (title, description, curriculum, class_filter,
-              subject, chapter, tags, is_premium, pdf_id), commit=True)
+        """, (
+            new_code or pdf.get('code'),
+            title,
+            description,
+            curriculum,
+            class_val,
+            subject,
+            chapter,
+            tags,
+            is_premium,
+            pdf_id,
+        ), commit=True)
 
+        # Auto-confirm the unverified record for this PDF (if any),
+        # since an admin has now reviewed it.
         try:
             execute_with_retry(
                 "UPDATE unverified_pdfs SET confirmed = 1 WHERE pdf_id = ?",
@@ -2055,17 +2377,53 @@ def pdf_update(pdf_id):
         except Exception:
             pass
 
+        # Keep the bot-staging row in sync for metadata the admin edited.
+        # Only updates fields the admin actually has control over; the
+        # file_id and Telegram refs are never touched.
+        try:
+            from bot.db import get_bot_pdf_by_code, update_bot_pdf
+            if pdf.get('code'):
+                bot_row = get_bot_pdf_by_code(pdf.get('code'))
+                if bot_row:
+                    update_bot_pdf(bot_row['id'], {
+                        'title': title,
+                        'description': description,
+                        'curriculum': curriculum,
+                        'class': class_val,
+                        'subject': subject,
+                        'chapter': chapter,
+                        'tags': tags,
+                        'is_premium': is_premium,
+                    })
+        except Exception as e:
+            logger.warning(f"pdf_update: bot sync failed (non-fatal): {e}")
+
         write_audit(
             action='pdf.update', target_type='pdf', target_id=pdf_id,
-            before={'title': pdf.get('title'), 'subject': pdf.get('subject')},
-            after={'title': title, 'subject': subject},
+            before={
+                'code': pdf.get('code'),
+                'title': pdf.get('title'),
+                'subject': pdf.get('subject'),
+                'curriculum': pdf.get('curriculum'),
+                'class': pdf.get('class'),
+                'is_premium': pdf.get('is_premium'),
+            },
+            after={
+                'code': new_code or pdf.get('code'),
+                'title': title,
+                'subject': subject,
+                'curriculum': curriculum,
+                'class': class_val,
+                'is_premium': is_premium,
+            },
             severity='info',
         )
+
         flash('PDF updated.', 'success')
-        return redirect(url_for('admin_content.pdfs'))
+        return redirect(url_for('admin_content.pdf_edit', pdf_id=pdf_id))
 
     except Exception as e:
-        logger.error(f"pdf_update failed: {e}")
+        logger.error(f"pdf_update failed: {e}", exc_info=True)
         flash('Error updating PDF.', 'error')
         return redirect(url_for('admin_content.pdf_edit', pdf_id=pdf_id))
 
@@ -2111,7 +2469,7 @@ def pdfs_broken():
 
 
 # ============================================================
-# PDFs — INTAKE (pending)
+# PDFs — INTAKE
 # ============================================================
 
 @admin_content_bp.route('/pdfs/intake/<int:pending_id>/process',
@@ -2143,7 +2501,7 @@ def pdf_intake_process(pending_id):
         subject = (request.form.get('subject') or '').strip()
         chapter = (request.form.get('chapter') or '').strip()
         tags = (request.form.get('tags') or '').strip()
-        is_premium = 1 if request.form.get('is_premium') == 'on' else 0
+        is_premium = _coerce_bool(request.form.get('is_premium'))
 
         errors = []
         if not code or not _validate_pdf_code_format(code):
@@ -2202,8 +2560,8 @@ def pdf_intake_process(pending_id):
         'dashboard/admin/content/pdf_process.html',
         pending=pending, auto_code=auto_code, suggested=suggested,
         subjects=get_all_subjects(),
-        curricula=[('PL', 'Puntland'), ('SO', 'Somalia'), ('SL', 'Somaliland')],
-        classes=['F4', 'F3', 'G8', 'G7'],
+        curricula=_PDF_CURRICULA,
+        classes=list(_PDF_CLASSES),
     )
 
 
@@ -2236,7 +2594,7 @@ def pdf_intake_preview(pending_id):
             conditional=True,
         )
         response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
-        response.headers.pop('X-Frame-Options', None)
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
         response.headers['Cache-Control'] = 'private, max-age=300'
         return response
     except Exception as e:
@@ -2314,7 +2672,7 @@ def pdf_staging_edit(staging_id):
             'subject': (request.form.get('subject') or '').strip(),
             'chapter': (request.form.get('chapter') or '').strip(),
             'tags': (request.form.get('tags') or '').strip(),
-            'is_premium': 1 if request.form.get('is_premium') == 'on' else 0,
+            'is_premium': _coerce_bool(request.form.get('is_premium')),
         }
 
         if not data['title'] or not data['subject']:
@@ -2342,8 +2700,8 @@ def pdf_staging_edit(staging_id):
         'dashboard/admin/content/pdf_staging_edit.html',
         pdf=bot_pdf,
         subjects=get_all_subjects(),
-        curricula=[('PL', 'Puntland'), ('SO', 'Somalia'), ('SL', 'Somaliland')],
-        classes=['F4', 'F3', 'G8', 'G7'],
+        curricula=_PDF_CURRICULA,
+        classes=list(_PDF_CLASSES),
     )
 
 
@@ -2719,8 +3077,8 @@ def pdfs_bulk_workspace():
         truncated=truncated, max_rows=BULK_MAX_ROWS,
         can_publish=can_publish,
         subjects=get_all_subjects(),
-        curricula=[('PL', 'Puntland'), ('SO', 'Somalia'), ('SL', 'Somaliland')],
-        classes=['F4', 'F3', 'G8', 'G7'],
+        curricula=_PDF_CURRICULA,
+        classes=list(_PDF_CLASSES),
     )
 
 
@@ -2771,7 +3129,7 @@ def pdfs_bulk_workspace_commit():
         class_val = (row.get('class') or 'F4').strip() or 'F4'
         chapter = (row.get('chapter') or '').strip()
         tags = (row.get('tags') or '').strip()
-        is_premium = 1 if row.get('is_premium') else 0
+        is_premium = _coerce_bool(row.get('is_premium'))
 
         if not code or not _validate_pdf_code_format(code):
             results['failed'] += 1
