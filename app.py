@@ -356,27 +356,35 @@ _CSP_POLICY = (
 
 @app.after_request
 def add_security_headers(response):
-    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
-    response.headers.setdefault('X-Frame-Options', 'DENY')
-    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
-    response.headers.setdefault(
-        'Permissions-Policy',
-        'geolocation=(), microphone=(), camera=(), payment=(), usb=()',
-    )
-    # CSP is only applied to text/html responses — for JSON, JS, CSS,
-    # PDFs and CSV it has no meaning and can interfere with some tools.
     ctype = (response.headers.get('Content-Type') or '').lower()
-    if 'text/html' in ctype:
-        response.headers.setdefault('Content-Security-Policy', _CSP_POLICY)
+    is_pdf = 'application/pdf' in ctype
 
-    # HSTS only over HTTPS.
+    # ── PDF responses are exempt from the global policy ──
+    # Chrome's built-in PDF viewer runs as a browser extension
+    # (mhjfbmdgcfjbbpaeojofohoefgiehjai). Any X-Frame-Options or
+    # CSP frame-ancestors value on the PDF response causes Chrome to
+    # refuse to display it with "This content is blocked." The PDF
+    # bytes themselves are inert data — they don't need framing
+    # restrictions. Routes that serve PDFs handle their own headers.
+    if not is_pdf:
+        response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+        response.headers.setdefault('X-Frame-Options', 'DENY')
+        response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        response.headers.setdefault(
+            'Permissions-Policy',
+            'geolocation=(), microphone=(), camera=(), payment=(), usb=()',
+        )
+        # CSP only meaningful for HTML
+        if 'text/html' in ctype:
+            response.headers.setdefault('Content-Security-Policy', _CSP_POLICY)
+
+    # HSTS only over HTTPS
     if request.is_secure:
         response.headers.setdefault(
             'Strict-Transport-Security',
             'max-age=31536000; includeSubDomains',
         )
     return response
-
 
 @app.after_request
 def log_request_end(response):

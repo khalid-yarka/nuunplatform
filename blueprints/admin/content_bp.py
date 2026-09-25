@@ -16,7 +16,7 @@ import secrets
 import string
 import time
 
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote as _urlquote
 
 from config import Config
 from db import (
@@ -69,15 +69,12 @@ admin_content_bp = Blueprint('admin_content', __name__, url_prefix='/admin')
 # option even if the library currently has only a subset.
 # ============================================================
 
-# Curriculum codes with human labels. Kept aligned with the
-# students table's location codes so nothing drifts.
 _PDF_CURRICULA = (
     ('PL', 'Puntland'),
     ('SO', 'Somalia'),
     ('SL', 'Somaliland'),
 )
 
-# Classes / grades a PDF may target.
 _PDF_CLASSES = ('F4', 'F3', 'G8', 'G7')
 
 
@@ -133,6 +130,60 @@ def _get_telegram_file_size(file_id):
     except Exception as e:
         logger.warning(f"Could not get Telegram file size: {e}")
         return None
+
+
+# ============================================================
+# SAFE FILENAME FOR HTTP HEADERS
+# ============================================================
+# HTTP headers can only contain Latin-1 characters. PDF titles can
+# contain emojis, Arabic, Somali diacritics, etc. If we interpolate
+# those into Content-Disposition directly, Werkzeug's WSGI layer
+# raises "http header must be encodable in latin1".
+#
+# Strategy:
+#   • Build a Latin-1-safe ASCII fallback (filename="...") — always sent.
+#   • If the original name had non-ASCII characters, also emit the
+#     RFC 5987 encoded form (filename*=UTF-8''...) which modern
+#     browsers prefer. Both together are spec-compliant.
+# ============================================================
+
+def _ascii_filename(raw, fallback='document.pdf'):
+    """Return an ASCII-only filename suitable for a Latin-1 header."""
+    if not raw:
+        return fallback
+    s = str(raw)
+    # Keep only Latin-1 safe characters. Anything else becomes '_'.
+    s = ''.join(
+        ch if (ord(ch) < 128 and (ch.isalnum() or ch in ' -_().')) else '_'
+        for ch in s
+    )
+    # Collapse runs of underscores and strip
+    s = re.sub(r'_+', '_', s).strip('_ ')
+    if not s:
+        return fallback
+    # Cap length so header doesn't grow unbounded
+    return s[:120]
+
+
+def _encode_content_disposition(disposition, filename):
+    """
+    Build a Content-Disposition value that is guaranteed Latin-1 safe.
+
+    Always emits filename="<ascii>". If the original filename had
+    non-ASCII characters, also emits filename*=UTF-8''<pct-encoded>
+    so compliant browsers display the pretty name.
+    """
+    ascii_name = _ascii_filename(filename)
+    header = f'{disposition}; filename="{ascii_name}"'
+
+    try:
+        if any(ord(c) >= 128 for c in str(filename or '')):
+            encoded = _urlquote(str(filename), safe='')
+            header += f"; filename*=UTF-8''{encoded}"
+    except Exception:
+        pass
+
+    return header
 
 
 def _csrf_ok():
@@ -1124,9 +1175,6 @@ def pdf_check_code():
     """
     Live uniqueness check used by the edit page's code field.
     Body: { 'code': 'XXXX-XXXX', 'exclude_id': <pdf_id> }
-
-    Returns { 'valid': bool, 'available': bool, 'format_ok': bool,
-              'owner_id': int|None, 'reason': str }
     """
     if not _csrf_ok():
         return jsonify({'error': 'Invalid session.'}), 403
@@ -1159,7 +1207,6 @@ def pdf_check_code():
     out['format_ok'] = True
     out['valid'] = True
 
-    # Same id as the row being edited → "available" for this edit
     if exclude_id:
         try:
             existing = get_pdf_by_code(code)
@@ -1169,7 +1216,6 @@ def pdf_check_code():
         except Exception:
             pass
 
-    # Check main DB
     try:
         row = execute_with_retry(
             "SELECT id FROM pdfs WHERE code = ? LIMIT 1",
@@ -1182,7 +1228,6 @@ def pdf_check_code():
     except Exception as e:
         logger.warning(f"pdf_check_code main lookup failed: {e}")
 
-    # Check bot DB
     try:
         from bot.db import get_bot_pdf_by_code
         bot_pdf = get_bot_pdf_by_code(code)
@@ -1210,14 +1255,6 @@ def bulk_import():
                         endpoint='bulk_import_apply')
 @admin_can('questions.bulk_import')
 def bulk_import_apply():
-    """
-    Import only the indices the user selected.
-    Accepts JSON body with:
-      { json_data, pdf_code, grade, import_indices: [1, 3, 5, ...] }
-
-    Grade resolution (identical to bulk_preview):
-      metadata.grade  >  request 'grade'  >  DEFAULT_GRADE
-    """
     import_indices = None
     request_grade_raw = ''
     if request.is_json:
@@ -1267,7 +1304,6 @@ def bulk_import_apply():
     subject_code = (metadata.get('subject_code') or '').strip()
     chapter = (metadata.get('chapter') or '').strip()
 
-    # ── Grade resolution ──
     meta_grade_raw = (metadata.get('grade') or '').strip()
     if meta_grade_raw:
         grade = normalize_grade(meta_grade_raw)
@@ -1530,15 +1566,6 @@ def bulk_template():
 @admin_content_bp.route('/bulk-preview', methods=['POST'], endpoint='bulk_preview')
 @admin_can('questions.bulk_import')
 def bulk_preview():
-    """
-    Live preview. Returns per-item status and full data so the sidebar
-    can render a rich card for each question.
-
-    Grade resolution:
-      • metadata.grade in the JSON  → wins  (grade_source = 'metadata')
-      • else the request 'grade' field      (grade_source = 'picker')
-      • else DEFAULT_GRADE                  (grade_source = 'picker')
-    """
     if not _csrf_ok():
         return jsonify({'error': 'Invalid session. Refresh the page.'}), 403
 
@@ -1597,7 +1624,6 @@ def bulk_preview():
     subject_code = (metadata.get('subject_code') or '').strip()
     chapter = (metadata.get('chapter') or '').strip()
 
-    # ── Grade resolution ──
     meta_grade_raw = (metadata.get('grade') or '').strip()
     if meta_grade_raw:
         grade = normalize_grade(meta_grade_raw)
@@ -2054,14 +2080,28 @@ def pdfs():
 @admin_can('pdfs.view')
 def pdf_library_preview(pdf_id):
     """
-    Inline PDF preview. Serves either the local file or streams from
-    Telegram. Safe to embed in an <iframe> — we explicitly strip the
-    CSP frame-ancestors directive for this one response by setting
-    X-Frame-Options to SAMEORIGIN.
+    Inline PDF preview. Served inside an iframe on the edit page.
+
+    Header policy: NONE of X-Frame-Options, X-Content-Type-Options,
+    Referrer-Policy, or CSP is set on this response. Chrome's PDF
+    viewer runs as a browser extension whose origin is not same-
+    origin with the site, so ANY framing restriction breaks the
+    viewer with "This content is blocked."
+
+    The global add_security_headers handler in app.py explicitly
+    exempts application/pdf responses for the same reason.
     """
     pdf = get_pdf_by_id(pdf_id)
     if not pdf:
         abort(404)
+
+    raw_name = (pdf.get('title') or pdf.get('code') or f'pdf-{pdf_id}') + '.pdf'
+
+    # Only headers that help the browser: filename hint + cache.
+    base_headers = {
+        'Content-Disposition': _encode_content_disposition('inline', raw_name),
+        'Cache-Control': 'private, max-age=300',
+    }
 
     file_url = pdf.get('file_url')
     if file_url and os.path.exists(file_url) and os.path.isfile(file_url):
@@ -2069,15 +2109,10 @@ def pdf_library_preview(pdf_id):
             resp = send_file(
                 file_url, mimetype='application/pdf',
                 as_attachment=False,
-                download_name=f"{pdf.get('title') or pdf.get('code') or 'document'}.pdf",
                 conditional=True,
             )
-            resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
-            resp.headers['Content-Security-Policy'] = (
-                "default-src 'self'; "
-                "object-src 'self'; "
-                "frame-ancestors 'self'"
-            )
+            for k, v in base_headers.items():
+                resp.headers[k] = v
             return resp
         except Exception as e:
             logger.warning(f"Local file send failed for pdf {pdf_id}: {e}")
@@ -2109,20 +2144,13 @@ def pdf_library_preview(pdf_id):
             abort(502, 'Telegram returned an empty file.')
         buf = io.BytesIO(data)
         buf.seek(0)
-        filename = (pdf.get('title') or code) + '.pdf'
         response = send_file(
             buf, mimetype='application/pdf',
-            as_attachment=False, download_name=filename,
+            as_attachment=False,
             conditional=True,
         )
-        response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
-        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-        response.headers['Content-Security-Policy'] = (
-            "default-src 'self'; "
-            "object-src 'self'; "
-            "frame-ancestors 'self'"
-        )
-        response.headers['Cache-Control'] = 'private, max-age=300'
+        for k, v in base_headers.items():
+            response.headers[k] = v
         return response
     except Exception as e:
         logger.error(
@@ -2131,32 +2159,31 @@ def pdf_library_preview(pdf_id):
         )
         abort(502)
 
-
 @admin_content_bp.route('/pdfs/<int:pdf_id>/download', methods=['GET'],
                         endpoint='pdf_download')
 @admin_can('pdfs.view')
 def pdf_download(pdf_id):
     """
-    Force-download the PDF as an attachment. Same source resolution as
-    the preview route.
+    Force-download the PDF as an attachment.
     """
     pdf = get_pdf_by_id(pdf_id)
     if not pdf:
         abort(404)
 
-    safe_title = re.sub(r'[^A-Za-z0-9\-_ ]+', '', pdf.get('title') or '')[:80].strip()
-    if not safe_title:
-        safe_title = pdf.get('code') or f'pdf-{pdf_id}'
-    filename = f"{safe_title}.pdf"
+    raw_name = (pdf.get('title') or pdf.get('code') or f'pdf-{pdf_id}') + '.pdf'
+    disposition = _encode_content_disposition('attachment', raw_name)
 
     file_url = pdf.get('file_url')
     if file_url and os.path.exists(file_url) and os.path.isfile(file_url):
         try:
-            return send_file(
+            resp = send_file(
                 file_url, mimetype='application/pdf',
-                as_attachment=True, download_name=filename,
+                as_attachment=True,
                 conditional=True,
             )
+            resp.headers['Content-Disposition'] = disposition
+            resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
+            return resp
         except Exception as e:
             logger.warning(f"Local download failed for pdf {pdf_id}: {e}")
 
@@ -2189,11 +2216,10 @@ def pdf_download(pdf_id):
         buf.seek(0)
         response = send_file(
             buf, mimetype='application/pdf',
-            as_attachment=True, download_name=filename,
+            as_attachment=True,
         )
-        response.headers['Content-Disposition'] = (
-            f'attachment; filename="{filename}"'
-        )
+        response.headers['Content-Disposition'] = disposition
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
         return response
     except Exception as e:
         logger.error(
@@ -2215,8 +2241,6 @@ def pdf_edit(pdf_id):
     if not pdf:
         abort(404)
 
-    # Look up the file source so the preview card can render the right
-    # actions: local file / Telegram-backed / missing.
     preview_info = {
         'available': False,
         'source': None,
@@ -2237,7 +2261,6 @@ def pdf_edit(pdf_id):
         except Exception:
             pass
     else:
-        # Fall back to Telegram
         try:
             from bot.db import get_bot_pdf_by_code
             bot_pdf = get_bot_pdf_by_code(pdf.get('code') or '')
@@ -2251,7 +2274,6 @@ def pdf_edit(pdf_id):
         except Exception as e:
             logger.warning(f"pdf_edit: bot lookup failed for {pdf_id}: {e}")
 
-    # Which batches contain this PDF? Nice context for the admin.
     batches = []
     try:
         from db import get_batches_for_item
@@ -2264,7 +2286,6 @@ def pdf_edit(pdf_id):
         pdf=pdf,
         preview_info=preview_info,
         batches=batches,
-        # Full-coverage classification options — always complete
         subjects=get_all_subjects(),
         curricula=_PDF_CURRICULA,
         classes=_PDF_CLASSES,
@@ -2283,7 +2304,6 @@ def pdf_update(pdf_id):
     if not pdf:
         abort(404)
 
-    # ── Read + normalise every editable field ────────────────
     new_code = _normalize_pdf_code(request.form.get('code'))
 
     title       = (request.form.get('title') or '').strip()
@@ -2294,12 +2314,8 @@ def pdf_update(pdf_id):
     chapter     = (request.form.get('chapter') or '').strip()
     tags        = (request.form.get('tags') or '').strip()
 
-    # Premium: accept any of 'on'/'1'/'true'/'yes'; anything else (or
-    # an unchecked box) → 0. The hidden input trick in the template
-    # guarantees this field is always present, so no ambiguity.
     is_premium = _coerce_bool(request.form.get('is_premium'))
 
-    # ── Validation ──────────────────────────────────────────
     errors = []
 
     if not title:
@@ -2307,20 +2323,16 @@ def pdf_update(pdf_id):
     if not subject:
         errors.append('Subject is required.')
 
-    # Curriculum: must be a known code OR empty (unset)
     valid_curriculum_codes = {c[0] for c in _PDF_CURRICULA}
     if curriculum and curriculum not in valid_curriculum_codes:
         errors.append(f'Invalid curriculum: {curriculum}')
 
-    # Class: must be a known code OR empty (unset)
     if class_val and class_val not in _PDF_CLASSES:
         errors.append(f'Invalid class: {class_val}')
 
-    # Subject: must be a known code
     if subject and subject not in get_all_subject_codes():
         errors.append(f'Unknown subject: {subject}')
 
-    # Code: if changed, must be valid format and unique
     code_changed = (new_code and new_code != pdf.get('code'))
     if new_code:
         if not _validate_pdf_code_format(new_code):
@@ -2344,7 +2356,6 @@ def pdf_update(pdf_id):
             flash(e, 'error')
         return redirect(url_for('admin_content.pdf_edit', pdf_id=pdf_id))
 
-    # ── Persist ─────────────────────────────────────────────
     try:
         execute_with_retry("""
             UPDATE pdfs SET
@@ -2367,8 +2378,6 @@ def pdf_update(pdf_id):
             pdf_id,
         ), commit=True)
 
-        # Auto-confirm the unverified record for this PDF (if any),
-        # since an admin has now reviewed it.
         try:
             execute_with_retry(
                 "UPDATE unverified_pdfs SET confirmed = 1 WHERE pdf_id = ?",
@@ -2377,9 +2386,6 @@ def pdf_update(pdf_id):
         except Exception:
             pass
 
-        # Keep the bot-staging row in sync for metadata the admin edited.
-        # Only updates fields the admin actually has control over; the
-        # file_id and Telegram refs are never touched.
         try:
             from bot.db import get_bot_pdf_by_code, update_bot_pdf
             if pdf.get('code'):
@@ -2569,6 +2575,10 @@ def pdf_intake_process(pending_id):
                         endpoint='pdf_intake_preview')
 @admin_can('pdfs.intake')
 def pdf_intake_preview(pending_id):
+    """
+    Same header policy as pdf_library_preview — no framing or CSP
+    headers, so Chrome's PDF viewer can render the file inline.
+    """
     from bot.db import get_pending_pdf_by_id
     pending = get_pending_pdf_by_id(pending_id)
     if not pending:
@@ -2577,6 +2587,8 @@ def pdf_intake_preview(pending_id):
     file_id = pending.get('file_id')
     if not file_id:
         abort(404, 'No Telegram file_id stored for this pending upload.')
+
+    raw_name = pending.get('filename') or 'document.pdf'
 
     try:
         from bot.utils import get_bot
@@ -2587,14 +2599,12 @@ def pdf_intake_preview(pending_id):
             abort(502, 'Telegram returned an empty file.')
         buf = io.BytesIO(data)
         buf.seek(0)
-        filename = pending.get('filename') or 'document.pdf'
         response = send_file(
             buf, mimetype='application/pdf',
-            as_attachment=False, download_name=filename,
+            as_attachment=False,
             conditional=True,
         )
-        response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
-        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        response.headers['Content-Disposition'] = _encode_content_disposition('inline', raw_name)
         response.headers['Cache-Control'] = 'private, max-age=300'
         return response
     except Exception as e:
@@ -2603,7 +2613,6 @@ def pdf_intake_preview(pending_id):
             exc_info=True,
         )
         abort(502)
-
 
 # ============================================================
 # PDFs — LEGACY REDIRECT
