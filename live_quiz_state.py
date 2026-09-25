@@ -101,11 +101,8 @@ class QuizState:
         the call, False only if they were already active and we did
         NOT overwrite them.
 
-        FIX: A participant whose previous state is 'left' is allowed
-        to re-join. Their ParticipantState is replaced with a clean
-        one. Previously this method returned False for ANY existing
-        entry — which made rejoin impossible once someone had left
-        and the memory entry had been marked 'left'.
+        A participant whose previous state is 'left' is allowed to
+        re-join. Their ParticipantState is replaced with a clean one.
         """
         with self.lock:
             existing = self.participants.get(user_id)
@@ -121,6 +118,46 @@ class QuizState:
             self._update_leaderboard()
             self.version += 1
             self.dirty = True
+            return True
+
+    def restore_participant(self, user_id: int,
+                            name: Optional[str] = None,
+                            public_id: Optional[str] = None) -> bool:
+        """
+        Bring a participant back into the active set.
+
+        Behaviour:
+          • No existing entry       → creates a fresh active entry.
+          • Existing status='left'  → flips status back to 'active'
+                                       WITHOUT resetting score, answers,
+                                       or reactions (safer if a rejoin
+                                       happens mid-quiz).
+          • Existing status='active'/'completed' → no-op, returns True.
+
+        This is the method callers should use for rejoin flows.
+        """
+        with self.lock:
+            existing = self.participants.get(user_id)
+
+            if existing is None:
+                return self.add_participant(
+                    user_id,
+                    name or 'Participant',
+                    public_id or '----',
+                )
+
+            # Refresh name / public_id if the caller provided new values.
+            if name:
+                existing.name = name
+            if public_id:
+                existing.public_id = public_id
+
+            if existing.status == 'left':
+                existing.status = 'active'
+                self._update_leaderboard()
+                self.version += 1
+                self.dirty = True
+
             return True
 
     def remove_participant(self, user_id: int) -> bool:
@@ -164,9 +201,6 @@ class QuizState:
         Every participant currently held in memory — INCLUDING those
         with status 'left'. The client uses the 'left' entries to
         render a badge, so we do not filter them out here.
-
-        Use get_active_participants() when the caller wants a strict
-        "who is in the room right now" list.
         """
         with self.lock:
             result = []
@@ -184,8 +218,7 @@ class QuizState:
     def get_active_participants(self) -> List[dict]:
         """
         Same shape as get_all_participants, but excludes anyone with
-        status 'left'. This is the list callers should use for header
-        counts and any UI that represents "currently here".
+        status 'left'.
         """
         with self.lock:
             result = []
@@ -301,8 +334,6 @@ class QuizState:
             }
 
     # ---------- Skip ----------
-    # Register a skip but DO NOT advance. The client must call
-    # advance_question (or /live-quiz/advance) to move the index.
 
     def skip_question(self, user_id: int, question_id: int) -> Tuple[bool, str]:
         with self.lock:
@@ -334,10 +365,7 @@ class QuizState:
             self.dirty = True
             return True, 'skipped'
 
-    # ---------- Advance (real "next") ----------
-    # Requires the participant to have answered OR skipped the current
-    # question. Increments the index. Replaces submit_rating as the
-    # canonical progression primitive.
+    # ---------- Advance ----------
 
     def advance_question(self, user_id: int, question_id: int) -> Tuple[bool, str]:
         with self.lock:
@@ -372,8 +400,6 @@ class QuizState:
             return True, 'advanced'
 
     # ---------- Legacy rating (dormant) ----------
-    # Kept ONLY so historical checkpoint/event replay doesn't crash.
-    # Not called by any new code path.
 
     def submit_rating(self, user_id: int, question_id: int, rating: str) -> Tuple[bool, str]:
         with self.lock:
@@ -392,7 +418,7 @@ class QuizState:
                 p.status = 'completed'
             return True, 'rated'
 
-    # ---------- Reaction methods (memory only — flushed at finalization) ----------
+    # ---------- Reaction methods ----------
 
     def toggle_like(self, user_id: int, question_id: int) -> bool:
         with self.lock:
@@ -633,14 +659,9 @@ class LiveQuizStateManager:
         Ensure the quiz is held in memory. On a miss, we reload from
         SQLite (checkpoint or raw participants).
 
-        FIX: the rebuild now happens OUTSIDE the lock and the result
-        is re-checked under the lock before insertion. Previously the
-        lock was released after the first membership test, which
-        allowed two concurrent callers (e.g. two tabs hitting
-        /waiting-room after a process restart) to both build a fresh
-        QuizState and race to overwrite each other. Last writer won,
-        silently discarding whatever participants the first caller
-        had already loaded.
+        The rebuild happens OUTSIDE the lock and the result is
+        re-checked under the lock before insertion, so two concurrent
+        callers do not race to overwrite each other.
         """
         with self._lock:
             if quiz_id in self._quizzes:
@@ -674,8 +695,6 @@ class LiveQuizStateManager:
 
             with self._lock:
                 if quiz_id in self._quizzes:
-                    # Another thread won the race while we were reading
-                    # from SQLite. Discard our copy and use theirs.
                     return True
                 self._quizzes[quiz_id] = quiz
             logger.info(f"Recovered quiz {quiz_id} from storage on demand")
@@ -929,7 +948,6 @@ class LiveQuizStateManager:
                         quiz.version += 1
 
             elif event_type == 'RATING':
-                # Legacy. Old checkpoints may contain these. Idempotent.
                 p = quiz.participants.get(user_id)
                 if p and str(question_id) not in p.ratings:
                     rating = payload.get('rating')
@@ -941,6 +959,14 @@ class LiveQuizStateManager:
                 p = quiz.participants.get(user_id)
                 if p:
                     p.status = 'left'
+                    quiz._update_leaderboard()
+                    quiz.version += 1
+
+            elif event_type == 'JOIN':
+                # A participant re-joined after having left.
+                p = quiz.participants.get(user_id)
+                if p:
+                    p.status = 'active'
                     quiz._update_leaderboard()
                     quiz.version += 1
 

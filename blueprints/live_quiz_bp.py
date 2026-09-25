@@ -154,8 +154,6 @@ def _is_grade_locked_for_viewer(quiz_row, user_id, user_tier):
     if user_tier in ('premium', 'pro'):
         return False
     quiz_grade = normalize_grade(quiz_row.get('grade') if quiz_row else None)
-    # normalize_grade defaults to F4 for anything not in VALID_GRADES;
-    # compare against the user's UI grade so G8-stored rows align with F4.
     if quiz_grade not in UI_GRADES:
         quiz_grade = UI_GRADES[0]
     return quiz_grade != _profile_grade(user_id)
@@ -181,6 +179,73 @@ def _get_active_quiz_for_user(user_id: int):
     if not quiz:
         return None
     return _enrich_active_quiz(quiz, user_id)
+
+
+def _rejoin_if_left(quiz_id: int, user_id: int) -> bool:
+    """
+    If the user has a 'left' participant record for this quiz, flip
+    them back to active — in both the DB and memory.
+
+    Returns True if the user is active after the call (whether or not
+    a rejoin was needed), False only when the record doesn't exist or
+    the DB rejoin failed.
+
+    This is the single entry point used by every rejoin path:
+      • waiting_room GET (auto-rejoin on landing)
+      • /join (code form)
+      • /lobby/join/<id> (lobby button)
+      • /rejoin/<id> (explicit rejoin button)
+    """
+    try:
+        participant = get_live_quiz_participant(quiz_id, user_id)
+    except Exception as e:
+        logger.warning(f"_rejoin_if_left: DB read failed for quiz {quiz_id} user {user_id}: {e}")
+        return False
+
+    if not participant:
+        return False
+
+    current_status = participant.get('status')
+    if current_status != 'left':
+        # Already active or completed — nothing to rejoin.
+        return True
+
+    # Hit the DB rejoin.
+    try:
+        ok = db_rejoin_live_quiz(quiz_id, user_id)
+    except Exception as e:
+        logger.error(f"_rejoin_if_left: db_rejoin_live_quiz raised: {e}", exc_info=True)
+        return False
+
+    if not ok:
+        logger.info(f"_rejoin_if_left: db_rejoin returned False for quiz {quiz_id} user {user_id}")
+        return False
+
+    # Update memory so the participant list reflects the change immediately.
+    try:
+        manager = get_state_manager()
+        manager.ensure_quiz_in_memory(quiz_id)
+        quiz_state = manager.get_quiz(quiz_id)
+        if quiz_state:
+            user = get_student_by_id(user_id) or {}
+            name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
+            public_id = user.get('public_id', '----')
+
+            quiz_state.restore_participant(user_id, name=name, public_id=public_id)
+
+            manager.enqueue_event({
+                'quiz_id': quiz_id,
+                'user_id': user_id,
+                'event_type': 'JOIN',
+                'payload': json.dumps({'name': name}),
+            })
+
+        invalidate_quiz_cache(quiz_id)
+        logger.info(f"_rejoin_if_left: auto-rejoined user {user_id} into quiz {quiz_id}")
+        return True
+    except Exception as e:
+        logger.error(f"_rejoin_if_left: memory update failed: {e}", exc_info=True)
+        return False
 
 
 def finalize_live_quiz(quiz_id: int) -> dict:
@@ -319,7 +384,6 @@ def lobby():
         per_page=per_page,
     )
 
-    # Grade-lock enrichment: per-viewer flag on each quiz.
     for q in quizzes:
         q['grade'] = q.get('grade') or DEFAULT_GRADE
         q['grade_locked'] = _is_grade_locked_for_viewer(q, user_id, user_tier)
@@ -362,7 +426,7 @@ def lobby_join(quiz_id):
     if not quiz:
         return jsonify({'error': 'Quiz not found'}), 404
 
-    # ── Grade gate (only blocks free users with a mismatched profile grade)
+    # Grade gate (only blocks free users with a mismatched profile grade)
     if _is_grade_locked_for_viewer(quiz, user_id, get_current_user_tier()):
         return jsonify({
             'error': 'This quiz is for a different grade. '
@@ -372,6 +436,23 @@ def lobby_join(quiz_id):
             'required_grade': normalize_grade(quiz.get('grade')),
         }), 403
 
+    # ── If the user has a 'left' record, rejoin rather than insert.
+    existing = get_live_quiz_participant(quiz_id, user_id)
+    if existing:
+        if existing.get('status') == 'left':
+            if _rejoin_if_left(quiz_id, user_id):
+                return jsonify({
+                    'success': True,
+                    'redirect': url_for('live_quiz.waiting_room', quiz_id=quiz_id),
+                })
+            return jsonify({'error': 'Failed to rejoin quiz'}), 500
+        # Already active — nothing to do, just send them to the room.
+        return jsonify({
+            'success': True,
+            'redirect': url_for('live_quiz.waiting_room', quiz_id=quiz_id),
+        })
+
+    # ── Fresh join path
     can_join, reason = can_join_live_quiz(quiz_id, user_id)
     if not can_join:
         return jsonify({'error': reason}), 400
@@ -382,7 +463,6 @@ def lobby_join(quiz_id):
 
     manager = get_state_manager()
     if not manager.ensure_quiz_in_memory(quiz_id):
-        logger.warning(f"Quiz {quiz_id} not in memory after join; attempting to recover again.")
         if not manager.ensure_quiz_in_memory(quiz_id):
             return jsonify({'error': 'Quiz state could not be loaded'}), 500
 
@@ -430,8 +510,6 @@ def available_count():
     Mirrors db.get_questions_by_subject's two-query behaviour:
       • exact count for the (subject, grade) pair
       • fallback count for the subject regardless of grade
-    Returns both so the hint can tell the user what will happen
-    when they start the quiz.
     """
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -452,7 +530,6 @@ def available_count():
     count = 0
     err_text = None
 
-    # ── Query 1 — exact pair (matches get_questions_by_subject's first query) ──
     try:
         cursor = execute_with_retry(
             "SELECT COUNT(*) AS c FROM questions "
@@ -465,7 +542,6 @@ def available_count():
         err_text = str(e)
         logger.warning(f"available_count exact query failed: {e}")
 
-    # ── Query 2 — fallback (matches get_questions_by_subject's second query) ──
     try:
         cur = execute_with_retry(
             "SELECT grade, COUNT(*) AS c FROM questions "
@@ -484,11 +560,11 @@ def available_count():
             err_text = str(e)
 
     return jsonify({
-        'count': count,                 # exact (subject, grade)
+        'count': count,
         'grade': grade,
         'subject': subject_code,
-        'breakdown': breakdown,          # {grade: n} across all grades
-        'total_subject': total_subject,  # what the fallback would use
+        'breakdown': breakdown,
+        'total_subject': total_subject,
         'error': err_text,
     })
 
@@ -550,7 +626,6 @@ def create():
         )
         return redirect(url_for('live_quiz.create'))
 
-    # ── Grade ───────────────────────────────────────────
     form_grade = (request.form.get('grade') or '').strip().upper()
     if form_grade not in UI_GRADES:
         form_grade = user_grade
@@ -718,8 +793,6 @@ def create():
     name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
     quiz_state.add_participant(user_id, name, user.get('public_id', '----'))
     quiz_state.set_participant_ready(user_id, True)
-    # Persist the creator's ready flag so it survives a process restart.
-    # Previously it lived only in memory and reset to 0 on recovery.
     update_participant_ready(quiz['id'], user_id, True)
 
     manager.enqueue_event({
@@ -834,7 +907,6 @@ def create_with_available():
     name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
     quiz_state.add_participant(user_id, name, user.get('public_id', '----'))
     quiz_state.set_participant_ready(user_id, True)
-    # Persist the creator's ready flag — see note in create().
     update_participant_ready(quiz['id'], user_id, True)
 
     manager.enqueue_event({
@@ -964,32 +1036,25 @@ def join():
             flash('You are already in another quiz. Please leave that quiz first.', 'error')
             return render_template('dashboard/live_quiz/join.html')
 
+        # ── If they have a prior participation (left), rejoin via helper.
         participant = get_live_quiz_participant(quiz['id'], user_id)
         if participant:
-            if participant.get('status') == 'left':
-                if quiz['status'] in ['waiting', 'scheduled']:
-                    success = db_rejoin_live_quiz(quiz['id'], user_id)
-                    if success:
-                        manager = get_state_manager()
-                        manager.ensure_quiz_in_memory(quiz['id'])
-                        quiz_state = manager.get_quiz(quiz['id'])
-                        if quiz_state:
-                            quiz_state.set_participant_ready(user_id, False)
-                            quiz_state.remove_participant(user_id)
-                            user = get_student_by_id(user_id)
-                            name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
-                            quiz_state.add_participant(user_id, name, user.get('public_id', '----'))
+            status = participant.get('status')
+            if status == 'left':
+                if quiz['status'] in ('waiting', 'scheduled'):
+                    if _rejoin_if_left(quiz['id'], user_id):
                         flash('You have rejoined the quiz!', 'success')
                         return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
-                    else:
-                        flash('Failed to rejoin. Please try again.', 'error')
+                    flash('Failed to rejoin. Please try again.', 'error')
+                    return redirect(url_for('live_quiz.lobby'))
                 else:
                     flash('Cannot rejoin an active quiz.', 'error')
-                return redirect(url_for('live_quiz.lobby'))
+                    return redirect(url_for('live_quiz.lobby'))
             else:
                 flash('You have already joined this quiz.', 'info')
                 return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
 
+        # ── Fresh join.
         participant_count = get_live_quiz_count(quiz['id'])
         if participant_count >= quiz.get('max_participants', 50):
             flash('This quiz is full.', 'error')
@@ -1040,11 +1105,22 @@ def waiting_room(quiz_id):
         return redirect(url_for('auth.login'))
 
     user_id = session['user_id']
-    # Enriched fetch so the template can render quiz.subjects.name.
     quiz = get_live_quiz_with_subject(quiz_id)
     if not quiz:
         flash('Quiz not found.', 'error')
         return redirect(url_for('live_quiz.lobby'))
+
+    # ── Auto-rejoin: if the user has a 'left' record and the quiz is
+    # still joinable, flip them back to active before rendering.
+    # This is what makes the lobby → waiting room path work without a
+    # manual button press.
+    if quiz['status'] in ('waiting', 'scheduled'):
+        try:
+            existing = get_live_quiz_participant(quiz_id, user_id)
+            if existing and existing.get('status') == 'left':
+                _rejoin_if_left(quiz_id, user_id)
+        except Exception as e:
+            logger.warning(f"auto-rejoin attempt failed for user {user_id} in quiz {quiz_id}: {e}")
 
     participant = get_live_quiz_participant(quiz_id, user_id)
     if not participant and quiz['creator_id'] != user_id:
@@ -1064,14 +1140,9 @@ def waiting_room(quiz_id):
         participants = get_active_participants(quiz_id)
         active_count = len(participants)
 
-    # Header count = "who is in the room right now" (excludes left).
     participant_count = active_count
 
     scheduled_start = quiz.get('scheduled_start')
-    # Default 0 (not None) so the template's JS line `let initialStartsIn
-    # = {{ starts_in_seconds }};` renders a valid integer for waiting
-    # quizzes. Previously `None` was rendered as the JS literal `None`
-    # and threw ReferenceError, killing the entire script.
     starts_in_seconds = 0
     scheduled_start_display = None
     if scheduled_start and quiz['status'] == 'scheduled':
@@ -1108,9 +1179,6 @@ def waiting_room_participants(quiz_id):
     if quiz_state:
         participants = quiz_state.get_all_participants()
         active_count = quiz_state.get_active_count()
-        # FIX: `count` now represents "currently in the room", which is
-        # what the header wants. `total` exposes the full list length
-        # (including left) for callers that need it.
         return jsonify({
             'participants': participants,
             'count': active_count,
@@ -1242,9 +1310,6 @@ def quiz_state_endpoint(quiz_id):
                 'status': 'finished',
                 'redirect_url': url_for('live_quiz.results', quiz_id=quiz_id),
             })
-        # FIX: report the real DB status instead of hardcoding 'waiting'.
-        # A scheduled quiz whose memory was lost would previously be
-        # misreported as 'waiting', which stalled the client countdown.
         return jsonify({
             'status': quiz['status'],
             'error': 'Quiz not active',
@@ -1716,7 +1781,6 @@ def play(quiz_id):
         return redirect(url_for('auth.login'))
 
     user_id = session['user_id']
-    # FIX: use the subject-enriched helper (same reason as waiting_room).
     quiz = get_live_quiz_with_subject(quiz_id)
     if not quiz:
         flash('Quiz not found.', 'error')
@@ -1784,6 +1848,12 @@ def leave_quiz(quiz_id):
 
 @live_quiz_bp.route('/rejoin/<quiz_id>', methods=['POST'])
 def rejoin_quiz(quiz_id):
+    """
+    Explicit rejoin button handler.
+
+    Delegates to the shared _rejoin_if_left helper, which handles both
+    the DB UPDATE and the in-memory restore in one shot.
+    """
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
     if not validate_csrf():
@@ -1797,7 +1867,6 @@ def rejoin_quiz(quiz_id):
     if quiz['status'] not in ['waiting', 'scheduled']:
         return jsonify({'error': 'Quiz is not open for rejoining'}), 400
 
-    # Grade gate on rejoin too
     if _is_grade_locked_for_viewer(quiz, user_id, get_current_user_tier()):
         return jsonify({
             'error': 'This quiz is for a different grade.',
@@ -1808,23 +1877,7 @@ def rejoin_quiz(quiz_id):
     if not participant or participant.get('status') != 'left':
         return jsonify({'error': 'You are not eligible to rejoin'}), 400
 
-    success = db_rejoin_live_quiz(quiz_id, user_id)
-    if success:
-        manager = get_state_manager()
-        manager.ensure_quiz_in_memory(quiz_id)
-        quiz_state = manager.get_quiz(quiz_id)
-        if quiz_state:
-            quiz_state.remove_participant(user_id)
-            user = get_student_by_id(user_id)
-            name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
-            quiz_state.add_participant(user_id, name, user.get('public_id', '----'))
-            manager.enqueue_event({
-                'quiz_id': quiz_id,
-                'user_id': user_id,
-                'event_type': 'JOIN',
-                'payload': json.dumps({'name': name}),
-            })
-        invalidate_quiz_cache(quiz_id)
+    if _rejoin_if_left(quiz_id, user_id):
         return jsonify({
             'success': True,
             'message': 'You have rejoined the quiz',
@@ -1867,10 +1920,6 @@ def results(quiz_id):
         return redirect(url_for('auth.login'))
 
     user_id = session['user_id']
-    # FIX: fetch the enriched version immediately. Previously, when the
-    # quiz was already finished we skipped the re-fetch and passed a
-    # quiz dict without `subjects`, breaking any template reference to
-    # quiz.subjects.name.
     quiz = get_live_quiz_with_subject(quiz_id)
     if not quiz:
         flash('Quiz not found.', 'error')
@@ -1878,7 +1927,6 @@ def results(quiz_id):
 
     if quiz['status'] != 'finished':
         finalize_live_quiz(quiz_id)
-        # Re-fetch after finalization to reflect the new finished state.
         quiz = get_live_quiz_with_subject(quiz_id)
         if not quiz:
             flash('Quiz not found.', 'error')
