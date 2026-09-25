@@ -1,7 +1,7 @@
 {# ============================================================
    templates/dashboard/admin/content/pdf_edit.html
-   Rich PDF editor with live preview, full-coverage classification,
-   working premium toggle, and "Get file" actions.
+   Rich PDF editor with live preview (blob-URL loader), full
+   classification catalog, working premium toggle, and Get file.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -749,10 +749,16 @@
                 </div>
 
                 <div class="pdf-preview__stage">
+                    {# The iframe has NO src attribute. A data-src holds the
+                       real URL. The JS fetches that URL, wraps the bytes
+                       in a blob, and assigns the blob URL to src. This
+                       bypasses any X-Frame-Options / CSP frame-ancestors
+                       header that a proxy might inject on the raw PDF
+                       response — blob URLs carry no HTTP headers. #}
                     <iframe class="pdf-preview__frame"
                             id="previewFrame"
                             title="PDF preview"
-                            src="{{ url_for('admin_content.pdf_library_preview', pdf_id=pdf.id) }}"></iframe>
+                            data-src="{{ url_for('admin_content.pdf_library_preview', pdf_id=pdf.id) }}"></iframe>
 
                     <div class="pdf-preview__placeholder" id="previewPlaceholder">
                         {% if preview_info.available %}
@@ -1076,6 +1082,18 @@
 (function () {
     'use strict';
 
+    // ═══════════════════════════════════════════════════
+    // 0. Shared helpers
+    // ═══════════════════════════════════════════════════
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     var CSRF = {{ csrf_token|tojson }};
     var PDF_ID = {{ pdf.id|tojson }};
     var ORIGINAL_CODE = {{ (pdf.code or '')|tojson }};
@@ -1151,7 +1169,17 @@
     }
 
     // ═══════════════════════════════════════════════════
-    // 3. Preview iframe loading
+    // 3. Preview iframe — blob-URL loader
+    // ═══════════════════════════════════════════════════
+    // WHY A BLOB:
+    //   Chrome's built-in PDF viewer refuses to render any PDF whose
+    //   HTTP response carries X-Frame-Options or CSP frame-ancestors,
+    //   even 'SAMEORIGIN' / 'self'. Some hosting environments also
+    //   inject those headers on every response, beyond our control.
+    //
+    //   Solution: fetch the PDF ourselves, wrap the bytes in a blob,
+    //   and point the iframe at the blob URL. Blob URLs carry no
+    //   HTTP headers, so no framing check ever fires.
     // ═══════════════════════════════════════════════════
     var frame = document.getElementById('previewFrame');
     var placeholder = document.getElementById('previewPlaceholder');
@@ -1165,41 +1193,76 @@
             placeholder.hidden = true;
         }
     }
-    function showPlaceholder() {
-        if (frame && placeholder) {
-            frame.classList.remove('is-visible');
-            placeholder.hidden = false;
+
+    function showPreviewPlaceholder(html) {
+        if (!placeholder) return;
+        if (html) placeholder.innerHTML = html;
+        placeholder.hidden = false;
+        if (frame) frame.classList.remove('is-visible');
+    }
+
+    function revokeFrameBlob() {
+        if (frame && frame._blobUrl) {
+            try { URL.revokeObjectURL(frame._blobUrl); } catch (e) {}
+            frame._blobUrl = null;
         }
+    }
+
+    function loadPdfPreview() {
+        if (!frame) return;
+
+        var realUrl = frame.getAttribute('data-src');
+        if (!realUrl) return;
+
+        revokeFrameBlob();
+
+        fetch(realUrl, {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/pdf' },
+        })
+        .then(function (resp) {
+            if (!resp.ok) {
+                throw new Error('Server returned HTTP ' + resp.status);
+            }
+            var ctype = (resp.headers.get('content-type') || '').toLowerCase();
+            if (ctype.indexOf('application/pdf') === -1) {
+                throw new Error('Server returned "' + ctype + '" instead of a PDF.');
+            }
+            return resp.blob();
+        })
+        .then(function (blob) {
+            var blobUrl = URL.createObjectURL(blob);
+            frame._blobUrl = blobUrl;
+            frame.src = blobUrl;
+        })
+        .catch(function (err) {
+            console.error('[PDF preview]', err);
+            showPreviewPlaceholder(
+                '<i class="fas fa-triangle-exclamation err-icon"></i>' +
+                '<h4>Preview unavailable</h4>' +
+                '<p>' + escapeHtml(err.message || 'Could not load the file.') + '</p>' +
+                '<a href="' + realUrl + '" target="_blank" rel="noopener" ' +
+                '   class="pdf-preview__btn" style="margin-top:12px;display:inline-flex;">' +
+                '<i class="fas fa-up-right-from-square"></i> Open in a new tab</a>'
+            );
+        });
     }
 
     if (frame) {
         frame.addEventListener('load', function () {
-            // Successful load — if the response was an error page,
-            // most browsers still fire load, so we just show it.
-            showFrame();
-        });
-        frame.addEventListener('error', function () {
-            if (placeholder) {
-                placeholder.innerHTML =
-                    '<i class="fas fa-triangle-exclamation err-icon"></i>' +
-                    '<h4>Preview could not be loaded</h4>' +
-                    '<p>The file may be unavailable or too large to stream.</p>';
-                placeholder.hidden = false;
-            }
+            // Only reveal the frame once we've actually loaded a blob
+            if (frame._blobUrl) showFrame();
         });
     }
 
-    if (refreshBtn && frame) {
+    if (refreshBtn) {
         refreshBtn.addEventListener('click', function () {
-            showPlaceholder();
-            if (placeholder) {
-                placeholder.innerHTML =
-                    '<i class="fas fa-circle-notch fa-spin spin"></i>' +
-                    '<h4>Reloading…</h4>' +
-                    '<p>The file will appear shortly.</p>';
-            }
-            var src = frame.src.split('?')[0];
-            frame.src = src + '?t=' + Date.now();
+            showPreviewPlaceholder(
+                '<i class="fas fa-circle-notch fa-spin spin"></i>' +
+                '<h4>Reloading…</h4>' +
+                '<p>The file will appear shortly.</p>'
+            );
+            loadPdfPreview();
         });
     }
 
@@ -1252,15 +1315,6 @@
     if (tagsInput) {
         updateTagsPreview();
         tagsInput.addEventListener('input', updateTagsPreview);
-    }
-
-    function escapeHtml(s) {
-        return String(s == null ? '' : s)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
     }
 
     // ═══════════════════════════════════════════════════
@@ -1346,7 +1400,7 @@
         })
         .catch(function () {
             setCodeStatus('warn', '<span class="pdf-field__status warn"><i class="fas fa-triangle-exclamation"></i> Could not verify</span>');
-            codeState.ok = true; // allow save; server will re-check
+            codeState.ok = true;
             checkDirty();
         });
     }
@@ -1363,25 +1417,19 @@
             codeCheckTimer = setTimeout(checkCodeAvailability, 350);
             checkDirty();
         });
-        // If code differs from what was saved, verify now.
         if (codeInput.value.trim()) {
-            codeCheckAvailability();
+            checkCodeAvailability();
         }
     }
 
     // ═══════════════════════════════════════════════════
     // 7. Premium hidden fallback
     // ═══════════════════════════════════════════════════
-    // When the checkbox is checked, we want only one value ('1') to
-    // reach the server. The fallback input stays as-is when unchecked.
     var premium = document.getElementById('isPremium');
     var fallback = document.getElementById('isPremiumFallback');
     function syncPremiumFallback() {
         if (!premium || !fallback) return;
         if (premium.checked) {
-            // The checkbox now submits '1' and the fallback would also
-            // submit '0'. Remove the fallback from the form on submit
-            // so the server sees only the checkbox value.
             fallback.disabled = true;
         } else {
             fallback.disabled = false;
@@ -1456,7 +1504,6 @@
         }
     });
 
-    // Disable the guard once the form submits intentionally
     if (form) {
         form.addEventListener('submit', function () {
             window.onbeforeunload = null;
@@ -1476,6 +1523,10 @@
     // ═══════════════════════════════════════════════════
     // 11. Boot
     // ═══════════════════════════════════════════════════
+    // Start loading the PDF as a blob (bypasses any header-based
+    // framing block that a proxy might inject).
+    loadPdfPreview();
+
     setTimeout(checkDirty, 100);
 })();
 </script>

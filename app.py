@@ -337,6 +337,14 @@ def set_request_id():
 # If the request is served over HTTPS, Strict-Transport-Security is
 # sent. On plain HTTP (dev), HSTS is skipped so localhost isn't
 # permanently pinned to HTTPS by the browser.
+#
+# Per-path CSP (added):
+#   The strict policy uses `object-src 'none'` and no `frame-src`,
+#   which is the right default for student-facing pages. It blocks
+#   Chrome's PDF viewer from rendering a blob URL inside the admin
+#   PDF edit page. That single page therefore gets a slightly
+#   relaxed policy that adds `blob:` to `frame-src` and `object-src`.
+#   No other page is affected.
 # ============================================
 
 _CSP_POLICY = (
@@ -352,6 +360,35 @@ _CSP_POLICY = (
     "form-action 'self'; "
     "frame-ancestors 'none'"
 )
+
+# Relaxed CSP for the admin PDF edit page only.
+_CSP_POLICY_ADMIN_PDF = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+    "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+    "font-src 'self' https://cdnjs.cloudflare.com data:; "
+    "img-src 'self' data: blob: https:; "
+    "connect-src 'self'; "
+    "media-src 'self' blob:; "
+    "object-src 'self' blob:; "
+    "frame-src 'self' blob:; "
+    "base-uri 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
+
+def _is_admin_pdf_edit_path(path: str) -> bool:
+    """True only for /admin/pdfs/<numeric-id>/edit (optionally trailing /)."""
+    p = (path or '').rstrip('/')
+    parts = p.split('/')
+    # ['', 'admin', 'pdfs', '<id>', 'edit']
+    return (len(parts) == 5
+            and parts[0] == ''
+            and parts[1] == 'admin'
+            and parts[2] == 'pdfs'
+            and parts[3].isdigit()
+            and parts[4] == 'edit')
 
 
 @app.after_request
@@ -376,7 +413,17 @@ def add_security_headers(response):
         )
         # CSP only meaningful for HTML
         if 'text/html' in ctype:
-            response.headers.setdefault('Content-Security-Policy', _CSP_POLICY)
+            # The admin PDF edit page gets the relaxed CSP so its
+            # blob-URL preview iframe can render the PDF viewer.
+            # Everywhere else uses the strict policy.
+            if _is_admin_pdf_edit_path(request.path):
+                response.headers.setdefault(
+                    'Content-Security-Policy', _CSP_POLICY_ADMIN_PDF
+                )
+            else:
+                response.headers.setdefault(
+                    'Content-Security-Policy', _CSP_POLICY
+                )
 
     # HSTS only over HTTPS
     if request.is_secure:
@@ -385,6 +432,7 @@ def add_security_headers(response):
             'max-age=31536000; includeSubDomains',
         )
     return response
+
 
 @app.after_request
 def log_request_end(response):
