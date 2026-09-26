@@ -338,13 +338,17 @@ def set_request_id():
 # sent. On plain HTTP (dev), HSTS is skipped so localhost isn't
 # permanently pinned to HTTPS by the browser.
 #
-# Per-path CSP (added):
-#   The strict policy uses `object-src 'none'` and no `frame-src`,
-#   which is the right default for student-facing pages. It blocks
-#   Chrome's PDF viewer from rendering a blob URL inside the admin
-#   PDF edit page. That single page therefore gets a slightly
-#   relaxed policy that adds `blob:` to `frame-src` and `object-src`.
-#   No other page is affected.
+# PER-PAGE EXEMPTION:
+#   The admin PDF edit page embeds a blob-URL PDF inside an iframe.
+#   Chrome's PDF viewer refuses to render when the parent page
+#   carries any Content-Security-Policy — even one that explicitly
+#   allows `frame-src blob:` and `object-src blob:`. The exact
+#   reason is that the viewer runs as a browser extension and its
+#   internal origin mismatches against any CSP-declared origin set.
+#
+#   We therefore skip the CSP header entirely on that ONE endpoint.
+#   It is admin-only and gated by @admin_can('pdfs.edit'). Every
+#   other page retains the strict policy.
 # ============================================
 
 _CSP_POLICY = (
@@ -361,34 +365,23 @@ _CSP_POLICY = (
     "frame-ancestors 'none'"
 )
 
-# Relaxed CSP for the admin PDF edit page only.
-_CSP_POLICY_ADMIN_PDF = (
-    "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
-    "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
-    "font-src 'self' https://cdnjs.cloudflare.com data:; "
-    "img-src 'self' data: blob: https:; "
-    "connect-src 'self'; "
-    "media-src 'self' blob:; "
-    "object-src 'self' blob:; "
-    "frame-src 'self' blob:; "
-    "base-uri 'self'; "
-    "form-action 'self'; "
-    "frame-ancestors 'none'"
-)
+# Endpoints that are exempt from the CSP header entirely.
+# Matched against request.endpoint (exact) and request.path prefix.
+_CSP_EXEMPT_ENDPOINTS = frozenset({
+    'admin_content.pdf_edit',
+})
 
 
-def _is_admin_pdf_edit_path(path: str) -> bool:
-    """True only for /admin/pdfs/<numeric-id>/edit (optionally trailing /)."""
-    p = (path or '').rstrip('/')
-    parts = p.split('/')
-    # ['', 'admin', 'pdfs', '<id>', 'edit']
-    return (len(parts) == 5
-            and parts[0] == ''
-            and parts[1] == 'admin'
-            and parts[2] == 'pdfs'
-            and parts[3].isdigit()
-            and parts[4] == 'edit')
+def _endpoint_is_csp_exempt(endpoint) -> bool:
+    if not endpoint:
+        return False
+    if endpoint in _CSP_EXEMPT_ENDPOINTS:
+        return True
+    # Fallback: any endpoint on the admin_content blueprint whose name
+    # ends with `pdf_edit`. Covers renamed blueprints.
+    if endpoint.startswith('admin_content.') and endpoint.endswith('pdf_edit'):
+        return True
+    return False
 
 
 @app.after_request
@@ -411,19 +404,20 @@ def add_security_headers(response):
             'Permissions-Policy',
             'geolocation=(), microphone=(), camera=(), payment=(), usb=()',
         )
-        # CSP only meaningful for HTML
         if 'text/html' in ctype:
-            # The admin PDF edit page gets the relaxed CSP so its
+            # Skip CSP entirely for the admin PDF edit page so its
             # blob-URL preview iframe can render the PDF viewer.
-            # Everywhere else uses the strict policy.
-            if _is_admin_pdf_edit_path(request.path):
-                response.headers.setdefault(
-                    'Content-Security-Policy', _CSP_POLICY_ADMIN_PDF
-                )
+            try:
+                endpoint = request.endpoint
+            except Exception:
+                endpoint = None
+
+            if not _endpoint_is_csp_exempt(endpoint):
+                response.headers.setdefault('Content-Security-Policy', _CSP_POLICY)
+            # else: no CSP header at all for this response.
+            # We also remove any CSP that might have been set upstream.
             else:
-                response.headers.setdefault(
-                    'Content-Security-Policy', _CSP_POLICY
-                )
+                response.headers.pop('Content-Security-Policy', None)
 
     # HSTS only over HTTPS
     if request.is_secure:

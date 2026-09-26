@@ -222,10 +222,9 @@ document.addEventListener('DOMContentLoaded', function () {
     function validateSchool() {
         const val = schoolInput.value.trim();
         const words = val.split(/\s+/).filter(w => w.length > 0);
-        const valid = words.length >= 2 &&
-                      words.every(w => w.length >= 4 && /^[A-Za-z]+$/.test(w));
+        const valid = words.length >= 2;
         showErrorState(schoolInput, document.getElementById('schoolError'),
-                       valid, 'Min 2 words, each 4+ letters, no numbers');
+                       valid, 'Enter at least two words');
         fieldStates.school = valid;
         return valid;
     }

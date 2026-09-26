@@ -186,6 +186,118 @@ def _encode_content_disposition(disposition, filename):
     return header
 
 
+# ============================================================
+# PDF RESPONSE BUILDERS
+# ============================================================
+# Two flavors of PDF Response, because the browser treats previews
+# and downloads very differently.
+# ============================================================
+
+def _pdf_response(data: bytes, disposition_header: str) -> Response:
+    """
+    Plain PDF Response for ATTACHMENT DOWNLOADS.
+
+    WHY NOT send_file:
+        send_file() with a BytesIO cannot determine size reliably and
+        falls back to chunked transfer encoding. PythonAnywhere's
+        proxy rejects chunked upstream responses on some paths,
+        returning a 502 "Bad Gateway" to the browser.
+
+        A plain Response with an explicit Content-Length avoids the
+        chunked path entirely.
+
+    WHY NO Accept-Ranges:
+        Advertising byte-range support while returning 200 for a
+        range request makes browsers fall back to download UI.
+        Since we do not implement 206 slicing here, we simply do
+        not advertise ranges.
+    """
+    if data is None:
+        data = b''
+    length = len(data)
+
+    return Response(
+        data,
+        status=200,
+        mimetype='application/pdf',
+        headers={
+            'Content-Length': str(length),
+            'Content-Disposition': disposition_header,
+            'Cache-Control': 'private, max-age=300',
+        },
+    )
+
+
+def _pdf_preview_response(data: bytes, disposition_header: str) -> Response:
+    """
+    PDF Response for INLINE PREVIEW (used by /preview and intake/preview).
+
+    Chrome's PDF viewer extension asks for the file in byte ranges
+    (`Range: bytes=0-N`) and expects a proper 206 Partial Content
+    response. It uses that to stream the PDF while rendering.
+
+    If the server replies with a plain 200 + full body to a range
+    request, Chrome decides the PDF cannot be streamed and falls
+    back to its "Open in new tab" UI — which is exactly what
+    happened when we served previews via a plain Response.
+
+    The reliable way to support range requests for a file already
+    in memory is to hand the bytes to send_file with
+    conditional=True. Werkzeug slices the BytesIO internally and
+    emits a proper 206 when the browser asks for a range.
+    """
+    if data is None:
+        data = b''
+
+    buf = io.BytesIO(data)
+    buf.seek(0)
+
+    resp = send_file(
+        buf,
+        mimetype='application/pdf',
+        as_attachment=False,
+        conditional=True,
+    )
+    # Override the disposition so we control the pretty filename
+    # (with RFC 5987 fallback for non-ASCII titles).
+    resp.headers['Content-Disposition'] = disposition_header
+    resp.headers['Cache-Control'] = 'private, max-age=300'
+    return resp
+
+
+def _fetch_telegram_pdf_bytes(code: str):
+    """
+    Fetch a PDF from Telegram by code. Returns (bytes, error_message).
+    error_message is None on success. Never raises.
+    """
+    if not code:
+        return None, 'No PDF code'
+    try:
+        from bot.db import get_bot_pdf_by_code
+        bot_pdf = get_bot_pdf_by_code(code)
+    except Exception as e:
+        return None, f'Bot lookup failed: {e}'
+
+    if not bot_pdf:
+        return None, 'PDF not found in Telegram staging'
+
+    file_id = bot_pdf.get('file_id')
+    if not file_id:
+        return None, 'No Telegram file_id stored for this PDF'
+
+    try:
+        from bot.utils import get_bot
+        bot = get_bot()
+        tg_file = bot.get_file(file_id)
+        data = bot.download_file(tg_file.file_path)
+        if not data:
+            return None, 'Telegram returned an empty file'
+        return data, None
+    except Exception as e:
+        logger.error(f"Telegram download failed for code {code}: {e}", exc_info=True)
+        return None, f'Telegram download failed: {e}'
+
+
 def _csrf_ok():
     token = request.form.get('csrf_token') or request.headers.get('X-CSRF-Token')
     return bool(token) and token == session.get('csrf_token')
@@ -2080,84 +2192,44 @@ def pdfs():
 @admin_can('pdfs.view')
 def pdf_library_preview(pdf_id):
     """
-    Inline PDF preview. Served inside an iframe on the edit page.
+    Inline PDF preview. Served inside an iframe on the edit page and
+    also as a standalone page in a new tab.
 
-    Header policy: NONE of X-Frame-Options, X-Content-Type-Options,
-    Referrer-Policy, or CSP is set on this response. Chrome's PDF
-    viewer runs as a browser extension whose origin is not same-
-    origin with the site, so ANY framing restriction breaks the
-    viewer with "This content is blocked."
-
-    The global add_security_headers handler in app.py explicitly
-    exempts application/pdf responses for the same reason.
+    Uses _pdf_preview_response so Werkzeug handles byte-range
+    requests. Chrome's PDF viewer sends `Range: bytes=0-N` first and
+    needs a proper 206 Partial Content to stream the PDF inline.
+    Serving a plain 200 + full body to a range request makes Chrome
+    fall back to its "Open in new tab" UI.
     """
     pdf = get_pdf_by_id(pdf_id)
     if not pdf:
         abort(404)
 
     raw_name = (pdf.get('title') or pdf.get('code') or f'pdf-{pdf_id}') + '.pdf'
+    disposition = _encode_content_disposition('inline', raw_name)
 
-    # Only headers that help the browser: filename hint + cache.
-    base_headers = {
-        'Content-Disposition': _encode_content_disposition('inline', raw_name),
-        'Cache-Control': 'private, max-age=300',
-    }
-
+    # Local file branch
     file_url = pdf.get('file_url')
     if file_url and os.path.exists(file_url) and os.path.isfile(file_url):
         try:
-            resp = send_file(
-                file_url, mimetype='application/pdf',
-                as_attachment=False,
-                conditional=True,
-            )
-            for k, v in base_headers.items():
-                resp.headers[k] = v
-            return resp
+            with open(file_url, 'rb') as f:
+                data = f.read()
+            return _pdf_preview_response(data, disposition)
         except Exception as e:
-            logger.warning(f"Local file send failed for pdf {pdf_id}: {e}")
+            logger.warning(f"Local file read failed for pdf {pdf_id}: {e}")
 
+    # Telegram branch
     code = pdf.get('code')
     if not code:
         abort(404, 'PDF has no code')
 
-    try:
-        from bot.db import get_bot_pdf_by_code
-        bot_pdf = get_bot_pdf_by_code(code)
-    except Exception as e:
-        logger.warning(f"Bot lookup failed for pdf {pdf_id} (code {code}): {e}")
-        bot_pdf = None
+    data, err = _fetch_telegram_pdf_bytes(code)
+    if err or data is None:
+        logger.warning(f"Preview failed for pdf {pdf_id} (code {code}): {err}")
+        abort(502, err or 'Could not fetch PDF')
 
-    if not bot_pdf:
-        abort(404, 'PDF is not available in Telegram storage.')
+    return _pdf_preview_response(data, disposition)
 
-    file_id = bot_pdf.get('file_id')
-    if not file_id:
-        abort(404, 'No Telegram file_id stored for this PDF.')
-
-    try:
-        from bot.utils import get_bot
-        bot = get_bot()
-        tg_file = bot.get_file(file_id)
-        data = bot.download_file(tg_file.file_path)
-        if not data:
-            abort(502, 'Telegram returned an empty file.')
-        buf = io.BytesIO(data)
-        buf.seek(0)
-        response = send_file(
-            buf, mimetype='application/pdf',
-            as_attachment=False,
-            conditional=True,
-        )
-        for k, v in base_headers.items():
-            response.headers[k] = v
-        return response
-    except Exception as e:
-        logger.error(
-            f"Admin preview failed for pdf {pdf_id} (code {code}): {e}",
-            exc_info=True,
-        )
-        abort(502)
 
 @admin_content_bp.route('/pdfs/<int:pdf_id>/download', methods=['GET'],
                         endpoint='pdf_download')
@@ -2165,6 +2237,12 @@ def pdf_library_preview(pdf_id):
 def pdf_download(pdf_id):
     """
     Force-download the PDF as an attachment.
+
+    Uses _pdf_response() with an explicit Content-Length so the
+    response is a single well-formed body, avoiding the chunked
+    encoding that PythonAnywhere's proxy rejects with a 502.
+    Range support is not advertised because we do not implement
+    206 responses on this route.
     """
     pdf = get_pdf_by_id(pdf_id)
     if not pdf:
@@ -2173,60 +2251,27 @@ def pdf_download(pdf_id):
     raw_name = (pdf.get('title') or pdf.get('code') or f'pdf-{pdf_id}') + '.pdf'
     disposition = _encode_content_disposition('attachment', raw_name)
 
+    # Local file branch
     file_url = pdf.get('file_url')
     if file_url and os.path.exists(file_url) and os.path.isfile(file_url):
         try:
-            resp = send_file(
-                file_url, mimetype='application/pdf',
-                as_attachment=True,
-                conditional=True,
-            )
-            resp.headers['Content-Disposition'] = disposition
-            resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
-            return resp
+            with open(file_url, 'rb') as f:
+                data = f.read()
+            return _pdf_response(data, disposition)
         except Exception as e:
-            logger.warning(f"Local download failed for pdf {pdf_id}: {e}")
+            logger.warning(f"Local file read failed for pdf {pdf_id}: {e}")
 
+    # Telegram branch
     code = pdf.get('code')
     if not code:
         abort(404, 'PDF has no code')
 
-    try:
-        from bot.db import get_bot_pdf_by_code
-        bot_pdf = get_bot_pdf_by_code(code)
-    except Exception as e:
-        logger.warning(f"Bot lookup failed for pdf {pdf_id}: {e}")
-        bot_pdf = None
+    data, err = _fetch_telegram_pdf_bytes(code)
+    if err or data is None:
+        logger.warning(f"Download failed for pdf {pdf_id} (code {code}): {err}")
+        abort(502, err or 'Could not fetch PDF')
 
-    if not bot_pdf:
-        abort(404, 'PDF is not available in Telegram storage.')
-
-    file_id = bot_pdf.get('file_id')
-    if not file_id:
-        abort(404, 'No Telegram file_id stored for this PDF.')
-
-    try:
-        from bot.utils import get_bot
-        bot = get_bot()
-        tg_file = bot.get_file(file_id)
-        data = bot.download_file(tg_file.file_path)
-        if not data:
-            abort(502, 'Telegram returned an empty file.')
-        buf = io.BytesIO(data)
-        buf.seek(0)
-        response = send_file(
-            buf, mimetype='application/pdf',
-            as_attachment=True,
-        )
-        response.headers['Content-Disposition'] = disposition
-        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-        return response
-    except Exception as e:
-        logger.error(
-            f"Admin download failed for pdf {pdf_id} (code {code}): {e}",
-            exc_info=True,
-        )
-        abort(502)
+    return _pdf_response(data, disposition)
 
 
 # ============================================================
@@ -2576,8 +2621,8 @@ def pdf_intake_process(pending_id):
 @admin_can('pdfs.intake')
 def pdf_intake_preview(pending_id):
     """
-    Same header policy as pdf_library_preview — no framing or CSP
-    headers, so Chrome's PDF viewer can render the file inline.
+    Same preview policy as pdf_library_preview — Werkzeug's send_file
+    with conditional=True so Chrome's PDF viewer can range-fetch.
     """
     from bot.db import get_pending_pdf_by_id
     pending = get_pending_pdf_by_id(pending_id)
@@ -2589,6 +2634,7 @@ def pdf_intake_preview(pending_id):
         abort(404, 'No Telegram file_id stored for this pending upload.')
 
     raw_name = pending.get('filename') or 'document.pdf'
+    disposition = _encode_content_disposition('inline', raw_name)
 
     try:
         from bot.utils import get_bot
@@ -2597,22 +2643,15 @@ def pdf_intake_preview(pending_id):
         data = bot.download_file(tg_file.file_path)
         if not data:
             abort(502, 'Telegram returned an empty file.')
-        buf = io.BytesIO(data)
-        buf.seek(0)
-        response = send_file(
-            buf, mimetype='application/pdf',
-            as_attachment=False,
-            conditional=True,
-        )
-        response.headers['Content-Disposition'] = _encode_content_disposition('inline', raw_name)
-        response.headers['Cache-Control'] = 'private, max-age=300'
-        return response
     except Exception as e:
         logger.error(
             f"Preview failed for pending #{pending_id} (file_id={file_id}): {e}",
             exc_info=True,
         )
         abort(502)
+
+    return _pdf_preview_response(data, disposition)
+
 
 # ============================================================
 # PDFs — LEGACY REDIRECT

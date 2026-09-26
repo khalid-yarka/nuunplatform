@@ -81,17 +81,6 @@ def _client_ip() -> str:
 # ============================================
 # PER-ACCOUNT LOGIN LOCKOUT
 # ============================================
-# The per-IP rate limiter above only slows a single source. An attacker
-# using a botnet, or rotating through mobile IPs, gets unlimited tries
-# against a single account. This lockout is keyed on the normalised
-# phone number, so it survives IP rotation.
-#
-# Behaviour:
-#   - After LOGIN_MAX_FAILURES failed attempts for a given phone
-#     within LOGIN_FAILURE_WINDOW seconds, the account is locked for
-#     LOGIN_LOCKOUT_DURATION seconds.
-#   - A successful login clears the failure history for that phone.
-#   - The lockout applies even if the password later becomes correct.
 
 LOGIN_MAX_FAILURES = 10
 LOGIN_FAILURE_WINDOW = 15 * 60       # 15 minutes
@@ -119,7 +108,6 @@ def _login_record_failure(phone: str) -> None:
     cutoff = now - LOGIN_FAILURE_WINDOW
     with _login_state_lock:
         bucket = _login_failures.setdefault(phone, [])
-        # drop old entries
         bucket[:] = [t for t in bucket if t > cutoff]
         bucket.append(now)
         if len(bucket) >= LOGIN_MAX_FAILURES:
@@ -418,11 +406,10 @@ def register():
         flash('Please select a valid grade.', 'error')
         return render_template('auth/register.html')
 
+    # School: at least 2 words. No per-word length or letters-only rule.
     school_words = school.split()
-    if len(school_words) < 2 or not all(
-        len(w) >= 4 and w.isalpha() for w in school_words
-    ):
-        flash('School must be at least 2 words, each 4+ letters.', 'error')
+    if len(school_words) < 2:
+        flash('School must be at least 2 words.', 'error')
         return render_template('auth/register.html')
 
     if location == 'PL':
