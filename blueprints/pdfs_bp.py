@@ -37,10 +37,6 @@ _VALID_SORTS = {'newest', 'oldest', 'popular', 'title_asc', 'title_desc'}
 # ============================================================
 
 def _log_guest_attempt(action: str, pdf=None, pdf_code=None):
-    """
-    Record when a logged-out user tries to perform a gated action.
-    Best-effort — never raises.
-    """
     try:
         from activity_logger import log_activity
         meta = {'action': action}
@@ -66,7 +62,6 @@ def _log_guest_attempt(action: str, pdf=None, pdf_code=None):
             user_agent=request.headers.get('User-Agent', '')[:200],
         )
     except Exception:
-        # Never let logging break the redirect
         pass
 
 
@@ -81,12 +76,53 @@ def _report_reasons():
     ]
 
 
+def _current_path_with_query():
+    """Return the request path + query string, usable as a `next` target."""
+    path = request.path or '/'
+    qs = request.query_string.decode() if request.query_string else ''
+    return path + ('?' + qs if qs else '')
+
+
 # ============================================================
 # LIST
 # ============================================================
 
 @pdfs_bp.route('/')
 def list_pdfs():
+    # ─── Shared-PDF flow (before anything else) ────────────
+    # Guests must log in first so the ?pdf=<id> survives the
+    # round-trip and lands them on the focused view.
+    shared_pdf_id_raw = request.args.get('pdf')
+    shared_pdf = None
+    shared_not_found = False
+    showing_shared = False
+
+    if shared_pdf_id_raw:
+        if 'user_id' not in session:
+            flash('Please login to view this shared PDF.', 'info')
+            return redirect(url_for(
+                'auth.login',
+                next=_current_path_with_query(),
+            ))
+
+        try:
+            shared_id_int = int(shared_pdf_id_raw)
+        except (ValueError, TypeError):
+            shared_id_int = 0
+
+        if shared_id_int > 0:
+            try:
+                shared_pdf = get_pdf_by_id(shared_id_int)
+            except Exception as e:
+                logger.warning(f"shared pdf lookup failed: {e}")
+                shared_pdf = None
+
+        if shared_pdf:
+            showing_shared = True
+        else:
+            shared_not_found = True
+
+    # ─── Filter parsing (unchanged) ────────────────────────
     subject_filter    = (request.args.get('subject') or '').strip()
     class_filter      = (request.args.get('class') or '').strip()
     curriculum_filter = (request.args.get('curriculum') or '').strip()
@@ -113,15 +149,13 @@ def list_pdfs():
         user_tier = 'free'
         search_level = 0
         can_access_premium = False
-        saved_only = False   # guests can't use the saved view
+        saved_only = False
 
     effective_search     = search_query     if search_level > 0  else ''
     effective_subject    = subject_filter   if search_level >= 1 else ''
     effective_curriculum = curriculum_filter if search_level >= 2 else ''
     effective_class      = class_filter     if search_level >= 2 else ''
 
-    # Per-user save + report state — computed up front so the saved
-    # view can filter against it.
     saved_ids    = set()
     reported_ids = set()
     if user_id:
@@ -134,8 +168,19 @@ def list_pdfs():
         except Exception:
             reported_ids = set()
 
-    # ─── Branch A: saved-only view ──────────────────────────────
-    if saved_only:
+    # ─── Branch A: shared-PDF focused view ─────────────────
+    if showing_shared:
+        pdfs = [shared_pdf]
+        total = 1
+        total_pages = 1
+        page = 1
+        offset = 0
+        range_start = 1
+        range_end = 1
+        saved_only = False
+
+    # ─── Branch B: saved-only view ─────────────────────────
+    elif saved_only:
         all_saved = _list_saved_pdfs(
             saved_ids=saved_ids,
             search=effective_search,
@@ -151,7 +196,7 @@ def list_pdfs():
         offset = (page - 1) * PER_PAGE
         pdfs = all_saved[offset:offset + PER_PAGE]
 
-    # ─── Branch B: normal view (unchanged) ──────────────────────
+    # ─── Branch C: normal view ─────────────────────────────
     else:
         total = get_main_pdf_count(
             search=effective_search,
@@ -184,6 +229,16 @@ def list_pdfs():
         range_start = offset + 1
         range_end = min(offset + PER_PAGE, total)
 
+    # ─── Precompute share URLs for each visible PDF ────────
+    base_url = (getattr(Config, 'BASE_URL', '') or '').rstrip('/')
+    for p in pdfs:
+        pid = p.get('id')
+        if pid:
+            p['_share_url'] = f"{base_url}/pdfs/?pdf={pid}" if base_url \
+                              else f"/pdfs/?pdf={pid}"
+        else:
+            p['_share_url'] = ''
+
     return render_template(
         'dashboard/pdfs.html',
         pdfs=pdfs,
@@ -209,18 +264,15 @@ def list_pdfs():
         reported_pdf_ids=reported_ids,
         report_reasons=_report_reasons(),
         saved_filter=saved_only,
+        showing_shared=showing_shared,
+        shared_pdf=shared_pdf,
+        shared_not_found=shared_not_found,
+        base_url=base_url,
     )
 
 
 def _list_saved_pdfs(saved_ids, search, subject, curriculum,
                      class_filter, sort):
-    """
-    Return every saved PDF belonging to the user, filtered and sorted
-    the same way the normal view does. Caller paginates.
-
-    Saved sets are tier-limited (a few dozen rows at most), so
-    iterating them and hitting get_pdf_by_id() is cheap.
-    """
     if not saved_ids:
         return []
 
@@ -256,7 +308,7 @@ def _list_saved_pdfs(saved_ids, search, subject, curriculum,
         items.sort(key=lambda x: (x.get('title') or '').lower(), reverse=True)
     elif sort == 'oldest':
         items.sort(key=lambda x: x.get('uploaded_at') or '')
-    else:  # newest
+    else:
         items.sort(key=lambda x: x.get('uploaded_at') or '', reverse=True)
 
     return items
@@ -271,7 +323,7 @@ def view_pdf(pdf_id):
     if 'user_id' not in session:
         _log_guest_attempt('view', pdf_code=request.args.get('code'))
         flash('Please login to view PDFs.', 'warning')
-        return redirect(url_for('auth.login', next=request.url))
+        return redirect(url_for('auth.login', next=_current_path_with_query()))
 
     user_id = session['user_id']
     pdf = get_pdf_by_id(pdf_id)
@@ -311,7 +363,7 @@ def download_pdf(pdf_id):
     if 'user_id' not in session:
         _log_guest_attempt('download', pdf_code=request.args.get('code'))
         flash('Please login to download PDFs.', 'warning')
-        return redirect(url_for('auth.login', next=request.url))
+        return redirect(url_for('auth.login', next=_current_path_with_query()))
 
     user_id = session['user_id']
     user_tier = get_user_tier(user_id)
@@ -536,7 +588,6 @@ def report_pdf(pdf_id):
         metadata={'title': pdf['title'], 'code': pdf['code'], 'reason': reason},
     )
 
-    # ── Notify admins ─────────────────────────────────────
     try:
         _notify_admins_about_report(user_id, pdf, reason, comment)
     except Exception as e:
@@ -560,10 +611,6 @@ _REASON_LABELS = {
 
 
 def _notify_admins_about_report(reporter_id, pdf, reason, comment):
-    """
-    Send an in-app notification to every admin, plus a Telegram DM to
-    super admins with a rich markdown report.
-    """
     from db import get_student_by_id
 
     reporter = get_student_by_id(reporter_id) or {}
@@ -581,7 +628,6 @@ def _notify_admins_about_report(reporter_id, pdf, reason, comment):
     )
     link = f"/admin/reports?type=pdf&id={pdf.get('id')}"
 
-    # ── In-app notification to every admin ─────────────
     try:
         from db import execute_with_retry
         cursor = execute_with_retry(
@@ -594,7 +640,7 @@ def _notify_admins_about_report(reporter_id, pdf, reason, comment):
             try:
                 send_notification(
                     user_id=aid,
-                    notification_type='question_report',  # reuse existing type
+                    notification_type='question_report',
                     title=title,
                     body=body,
                     link=link,
@@ -606,7 +652,6 @@ def _notify_admins_about_report(reporter_id, pdf, reason, comment):
     except Exception as e:
         logger.warning(f"In-app admin notify failed: {e}")
 
-    # ── Telegram DM to super admins ────────────────────
     try:
         from services.telegram_notify import (
             notify_super_admins,
@@ -630,7 +675,6 @@ def _notify_admins_about_report(reporter_id, pdf, reason, comment):
             'reason':      reason,
         }
 
-        # PDF details table
         pdf_table = '\n'.join([
             '| Field | Value |',
             '|:--|:--|',
@@ -642,7 +686,6 @@ def _notify_admins_about_report(reporter_id, pdf, reason, comment):
             f"| Views | {pdf.get('view_count') or 0} |",
         ])
 
-        # Reporter details table
         reporter_table = '\n'.join([
             '| Field | Value |',
             '|:--|:--|',
@@ -653,7 +696,6 @@ def _notify_admins_about_report(reporter_id, pdf, reason, comment):
             f"| Grade | {reporter.get('grade') or '—'} |",
         ])
 
-        # Report details
         report_lines = [
             f"**Reason:** {reason_label}",
         ]
