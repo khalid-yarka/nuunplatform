@@ -6,11 +6,12 @@
 # No email. No verification step. No password reset.
 # New users register with is_verified=0. Admin verifies manually.
 #
-# SECURITY ADDITIONS IN THIS VERSION:
-#   - Per-account login lockout (in addition to the existing per-IP
-#     rate limit). Ten failed attempts for a given phone number lock
-#     that account for 15 minutes, regardless of the IP used.
-#   - Security headers on auth pages (no-store) are preserved.
+# `next` propagation:
+#   The query-string `next` from a gated route (e.g. /pdfs/?pdf=42) is
+#   captured on any GET to /login or /register and stored in the session.
+#   It survives POST form submission and the register → login round-trip,
+#   and is consumed on successful authentication. Values older than
+#   AUTH_NEXT_MAX_AGE seconds are ignored.
 
 import time
 import secrets
@@ -37,6 +38,74 @@ from utils import ensure_csrf_token, validate_csrf
 logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth', __name__, url_prefix='')
+
+
+# ============================================
+# NEXT-URL RELAY
+# ============================================
+
+_AUTH_NEXT_SESSION = '_auth_next_url'
+_AUTH_NEXT_TS_SESSION = '_auth_next_ts'
+AUTH_NEXT_MAX_AGE = 20 * 60  # 20 minutes
+
+
+def _is_safe_next(url: str) -> bool:
+    """Only allow same-site paths. Rejects '//host' and anything else."""
+    if not url:
+        return False
+    if not url.startswith('/'):
+        return False
+    if url.startswith('//'):
+        return False
+    return True
+
+
+def _capture_next_from_request():
+    """
+    Read `next` from the current request's query string and store it in
+    the session. Never overwrites an existing value when the current
+    request doesn't provide one — this is what lets register → login
+    carry the value forward across the handoff.
+
+    Returns the captured value (or None).
+    """
+    raw = (request.args.get('next') or '').strip()
+    if _is_safe_next(raw):
+        session[_AUTH_NEXT_SESSION] = raw
+        session[_AUTH_NEXT_TS_SESSION] = time.time()
+        return raw
+    return None
+
+
+def _peek_next():
+    """Return the pending next URL without consuming it, or ''."""
+    value = session.get(_AUTH_NEXT_SESSION)
+    ts = session.get(_AUTH_NEXT_TS_SESSION)
+    if not _is_safe_next(value):
+        return ''
+    try:
+        if ts and (time.time() - float(ts)) > AUTH_NEXT_MAX_AGE:
+            return ''
+    except (TypeError, ValueError):
+        return ''
+    return value
+
+
+def _consume_next():
+    """
+    Return the pending next URL (if any) and remove it from the session.
+    Used on successful login.
+    """
+    value = session.pop(_AUTH_NEXT_SESSION, None)
+    ts = session.pop(_AUTH_NEXT_TS_SESSION, None)
+    if not _is_safe_next(value):
+        return ''
+    try:
+        if ts and (time.time() - float(ts)) > AUTH_NEXT_MAX_AGE:
+            return ''
+    except (TypeError, ValueError):
+        return ''
+    return value
 
 
 # ============================================
@@ -347,8 +416,15 @@ def register():
         return redirect(url_for('dashboard.home'))
 
     if request.method == 'GET':
+        # Capture `next` from the URL (if any). Never overwrites an
+        # existing session value when the request doesn't provide one,
+        # so the register → login handoff can carry it forward.
+        _capture_next_from_request()
         ensure_csrf_token()
-        return render_template('auth/register.html')
+        return render_template(
+            'auth/register.html',
+            next_url=_peek_next(),
+        )
 
     if not _rate_limit(f'register:{_client_ip()}', max_calls=5, window_seconds=600):
         flash('Too many attempts. Please wait a few minutes.', 'error')
@@ -468,7 +544,15 @@ def register():
     except Exception as e:
         logger.warning(f"Registration notification failed (non-fatal): {e}")
 
+    # Peek — do not consume. The login GET will re-capture from the URL
+    # and the login POST will consume it. This makes the register → login
+    # handoff preserve the `next` value.
+    pending_next = _peek_next()
+
     flash('Registration successful! Please login.', 'success')
+
+    if pending_next:
+        return redirect(url_for('auth.login', next=pending_next))
     return redirect(url_for('auth.login'))
 
 
@@ -482,8 +566,12 @@ def login():
         return redirect(url_for('dashboard.home'))
 
     if request.method == 'GET':
+        _capture_next_from_request()
         ensure_csrf_token()
-        return render_template('auth/login.html')
+        return render_template(
+            'auth/login.html',
+            next_url=_peek_next(),
+        )
 
     # Layer 1: per-IP rate limit (existing behavior).
     if not _rate_limit(f'login:{_client_ip()}', max_calls=5, window_seconds=60):
@@ -503,7 +591,7 @@ def login():
 
     phone = _normalize_phone(phone_raw)
 
-    # Layer 2: per-account lockout (new).
+    # Layer 2: per-account lockout.
     locked, seconds_left = _login_is_locked(phone)
     if locked:
         minutes = max(1, seconds_left // 60)
@@ -535,6 +623,9 @@ def login():
 
     # Success — clear lockout state for this account.
     _login_clear_failures(phone)
+
+    # Read the pending `next` BEFORE session.clear() wipes it.
+    next_url = _consume_next()
 
     session.clear()
     session['user_id'] = student['id']
@@ -570,8 +661,7 @@ def login():
 
     session.modified = True
 
-    next_url = request.args.get('next')
-    if next_url and next_url.startswith('/') and not next_url.startswith('//'):
+    if next_url:
         return redirect(next_url)
     return redirect(url_for('dashboard.home'))
 
