@@ -4,631 +4,7 @@
 {% block page_title %}{{ _('nav.dashboard') }}{% endblock %}
 
 {% block dashboard_css %}
-<style>
-    /* ============================================
-       HERO
-       ============================================ */
-    .dh-hero {
-        position: relative;
-        border-radius: var(--radius);
-        padding: 26px 28px;
-        margin-bottom: 20px;
-        overflow: hidden;
-        color: #fff;
-        background:
-            radial-gradient(1200px 400px at 100% -50%, rgba(255,255,255,0.18), transparent 60%),
-            linear-gradient(135deg, var(--primary) 0%, #B91C1C 100%);
-        box-shadow: 0 12px 40px rgba(255, 49, 56, 0.28);
-    }
-    .dh-hero::after {
-        content: '';
-        position: absolute;
-        right: -60px;
-        bottom: -60px;
-        width: 220px;
-        height: 220px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.05);
-        pointer-events: none;
-    }
-    .dh-hero-inner {
-        position: relative;
-        z-index: 1;
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-        flex-wrap: wrap;
-        gap: 20px;
-    }
-    .dh-hero-text h1 {
-        font-size: 24px;
-        font-weight: 800;
-        letter-spacing: -0.4px;
-        margin: 0;
-        line-height: 1.2;
-    }
-    .dh-hero-text h1 .accent { color: #FCD34D; }
-    .dh-hero-text p {
-        font-size: 14px;
-        opacity: 0.9;
-        margin: 6px 0 0 0;
-        max-width: 520px;
-        line-height: 1.5;
-    }
-    .dh-hero-text .xp-line {
-        margin-top: 14px;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 12px;
-        background: rgba(255,255,255,0.15);
-        border: 1px solid rgba(255,255,255,0.25);
-        padding: 4px 12px;
-        border-radius: 20px;
-        backdrop-filter: blur(4px);
-    }
-    .dh-hero-text .xp-line strong { color: #FCD34D; }
-
-    .dh-level-card {
-        background: rgba(0, 0, 0, 0.18);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255,255,255,0.18);
-        border-radius: 16px;
-        padding: 14px 18px;
-        min-width: 180px;
-    }
-    .dh-level-card .lv-row {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 8px;
-    }
-    .dh-level-card .lv-num {
-        font-size: 34px;
-        font-weight: 800;
-        line-height: 1;
-        letter-spacing: -1px;
-    }
-    .dh-level-card .lv-label {
-        font-size: 10px;
-        text-transform: uppercase;
-        letter-spacing: 1.2px;
-        opacity: 0.75;
-        font-weight: 700;
-    }
-    .dh-level-card .lv-xp {
-        font-size: 11px;
-        opacity: 0.85;
-        margin-top: 4px;
-    }
-    .dh-level-bar {
-        margin-top: 10px;
-        height: 8px;
-        background: rgba(0,0,0,0.25);
-        border-radius: 20px;
-        overflow: hidden;
-    }
-    .dh-level-bar .fill {
-        height: 100%;
-        background: linear-gradient(90deg, #FCD34D, #F59E0B);
-        border-radius: 20px;
-        transition: width 0.9s ease;
-    }
-
-    /* ============================================
-       TIER STRIP
-       ============================================ */
-    .dh-tier-strip {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        flex-wrap: wrap;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-left: 4px solid var(--primary);
-        border-radius: var(--radius);
-        padding: 14px 20px;
-        margin-bottom: 22px;
-        box-shadow: var(--shadow-sm);
-    }
-    .dh-tier-strip .ts-left {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        flex: 1;
-        min-width: 220px;
-    }
-    .dh-tier-strip .ts-icon { font-size: 22px; }
-    .dh-tier-strip .ts-text {
-        font-size: 13px;
-        color: var(--text);
-        line-height: 1.5;
-    }
-    .dh-tier-strip .ts-text strong { color: var(--primary); }
-    .dh-tier-strip .ts-btn {
-        background: var(--primary);
-        color: white;
-        border: none;
-        padding: 8px 18px;
-        border-radius: 24px;
-        font-weight: 700;
-        font-size: 13px;
-        cursor: pointer;
-        transition: var(--transition);
-        white-space: nowrap;
-        box-shadow: 0 4px 14px rgba(255,49,56,0.28);
-    }
-    .dh-tier-strip .ts-btn:hover {
-        background: var(--primary-hover);
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(255,49,56,0.4);
-    }
-
-    /* ============================================
-       LIVE BANNER
-       ============================================ */
-    .dh-live {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        flex-wrap: wrap;
-        background: linear-gradient(135deg, #1E293B, #0F172A);
-        color: white;
-        border: 1px solid #334155;
-        border-radius: var(--radius);
-        padding: 16px 22px;
-        margin-bottom: 22px;
-        box-shadow: 0 6px 24px rgba(15, 23, 42, 0.4);
-    }
-    .dh-live .l-left {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        flex: 1;
-        min-width: 200px;
-    }
-    .dh-live .pulse {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: #10B981;
-        box-shadow: 0 0 0 4px rgba(16,185,129,0.25);
-        animation: dhPulse 1.6s ease-in-out infinite;
-        flex-shrink: 0;
-    }
-    @keyframes dhPulse {
-        0%,100% { box-shadow: 0 0 0 4px rgba(16,185,129,0.25); }
-        50%     { box-shadow: 0 0 0 10px rgba(16,185,129,0.05); }
-    }
-    .dh-live .l-info h4 {
-        margin: 0;
-        font-size: 15px;
-        font-weight: 700;
-    }
-    .dh-live .l-info p {
-        margin: 2px 0 0 0;
-        font-size: 12px;
-        color: #94A3B8;
-    }
-    .dh-live .l-btn {
-        background: white;
-        color: #0F172A;
-        padding: 8px 20px;
-        border-radius: 24px;
-        font-weight: 700;
-        font-size: 13px;
-        text-decoration: none;
-        transition: var(--transition);
-        white-space: nowrap;
-    }
-    .dh-live .l-btn:hover {
-        transform: scale(1.04);
-        box-shadow: 0 6px 20px rgba(255,255,255,0.2);
-        text-decoration: none;
-        color: #0F172A;
-    }
-
-    /* ============================================
-       STATS
-       ============================================ */
-    .dh-stats {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
-        margin-bottom: 22px;
-    }
-    .dh-stat {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 16px 18px;
-        box-shadow: var(--shadow-sm);
-        transition: var(--transition);
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        position: relative;
-        overflow: hidden;
-    }
-    .dh-stat:hover {
-        transform: translateY(-3px);
-        box-shadow: var(--shadow-md);
-        border-color: var(--primary);
-    }
-    .dh-stat::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 0; right: 0;
-        height: 3px;
-        background: var(--primary);
-        opacity: 0.8;
-    }
-    .dh-stat.green::before  { background: #10B981; }
-    .dh-stat.blue::before   { background: #3B82F6; }
-    .dh-stat.amber::before  { background: #F59E0B; }
-    .dh-stat.purple::before { background: #8B5CF6; }
-    .dh-stat .top {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-    }
-    .dh-stat .num {
-        font-size: 24px;
-        font-weight: 800;
-        color: var(--text);
-        line-height: 1.1;
-        letter-spacing: -0.5px;
-    }
-    .dh-stat .ico { font-size: 18px; opacity: 0.65; }
-    .dh-stat .lbl {
-        font-size: 11px;
-        color: var(--text-secondary);
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.4px;
-        margin-top: 2px;
-    }
-    .dh-stat .sub { font-size: 11px; color: var(--text-muted); }
-
-    .dh-grid-2 {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 20px;
-        margin-bottom: 22px;
-    }
-    @media (min-width: 768px) {
-        .dh-stats { grid-template-columns: repeat(4, 1fr); }
-        .dh-grid-2 { grid-template-columns: 1fr 1fr; }
-    }
-
-    .dh-card {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow-sm);
-        overflow: hidden;
-    }
-    .dh-card-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 14px 20px;
-        border-bottom: 1px solid var(--border);
-        background: var(--background);
-    }
-    .dh-card-head h3 {
-        font-size: 14px;
-        font-weight: 700;
-        color: var(--text);
-        margin: 0;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .dh-card-head h3 i { color: var(--primary); }
-    .dh-card-head .hint {
-        font-size: 11px;
-        color: var(--text-muted);
-        font-weight: 500;
-    }
-    .dh-card-body { padding: 16px 20px; }
-
-    .dh-card.locked .dh-card-body {
-        position: relative;
-    }
-    .dh-locked-overlay {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        padding: 30px 20px;
-        text-align: center;
-        color: var(--text-secondary);
-    }
-    .dh-locked-overlay .lock-badge {
-        font-size: 34px;
-        opacity: 0.6;
-    }
-    .dh-locked-overlay .lock-title {
-        font-size: 14px;
-        font-weight: 700;
-        color: var(--text);
-    }
-    .dh-locked-overlay .lock-sub {
-        font-size: 12px;
-        color: var(--text-muted);
-        max-width: 260px;
-        line-height: 1.5;
-    }
-    .dh-locked-overlay .lock-btn {
-        margin-top: 8px;
-        background: var(--primary);
-        color: white;
-        border: none;
-        padding: 8px 20px;
-        border-radius: 20px;
-        font-weight: 700;
-        font-size: 12px;
-        cursor: pointer;
-        transition: var(--transition);
-        box-shadow: 0 4px 12px rgba(255,49,56,0.25);
-    }
-    .dh-locked-overlay .lock-btn:hover {
-        background: var(--primary-hover);
-        transform: translateY(-1px);
-    }
-
-    .dh-mastery-list {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-    }
-    .dh-mastery-item .head {
-        display: flex;
-        justify-content: space-between;
-        font-size: 13px;
-        margin-bottom: 4px;
-    }
-    .dh-mastery-item .head .name { color: var(--text); font-weight: 600; }
-    .dh-mastery-item .head .pct  { color: var(--text-secondary); font-weight: 700; font-variant-numeric: tabular-nums; }
-    .dh-mastery-item .bar {
-        width: 100%;
-        height: 6px;
-        background: var(--border);
-        border-radius: 10px;
-        overflow: hidden;
-    }
-    .dh-mastery-item .bar .fill {
-        height: 100%;
-        border-radius: 10px;
-        transition: width 1s ease;
-    }
-    .dh-mastery-item .bar .fill.high   { background: #10B981; }
-    .dh-mastery-item .bar .fill.medium { background: #F59E0B; }
-    .dh-mastery-item .bar .fill.low    { background: #EF4444; }
-    .dh-mastery-more {
-        text-align: center;
-        font-size: 12px;
-        color: var(--text-muted);
-        margin-top: 4px;
-    }
-
-    .dh-chart-wrap {
-        position: relative;
-        height: 200px;
-    }
-
-    .dh-insights {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
-    .dh-insight {
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        background: var(--background);
-        border-radius: var(--radius-sm);
-        padding: 12px 14px;
-        border-left: 3px solid var(--primary);
-    }
-    .dh-insight .ii {
-        font-size: 18px;
-        flex-shrink: 0;
-    }
-    .dh-insight .it {
-        font-size: 13px;
-        color: var(--text);
-        line-height: 1.5;
-    }
-    .dh-insight .it strong { color: var(--primary); }
-
-    .dh-activity {
-        display: flex;
-        flex-direction: column;
-    }
-    .dh-activity-item {
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        padding: 12px 0;
-        border-bottom: 1px solid var(--border-light);
-    }
-    .dh-activity-item:last-child { border-bottom: none; }
-    .dh-activity-item .ai {
-        width: 32px; height: 32px;
-        border-radius: 8px;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 15px;
-        flex-shrink: 0;
-        background: var(--background);
-    }
-    .dh-activity-item .ai.green  { background: #ECFDF5; }
-    .dh-activity-item .ai.amber  { background: #FFFBEB; }
-    .dh-activity-item .ai.red    { background: #FEF2F2; }
-    .dh-activity-item .ab {
-        flex: 1;
-        min-width: 0;
-    }
-    .dh-activity-item .ab-title {
-        font-size: 13px;
-        color: var(--text);
-        line-height: 1.4;
-    }
-    .dh-activity-item .ab-meta {
-        font-size: 11px;
-        color: var(--text-secondary);
-        margin-top: 2px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-    }
-    .dh-activity-item .ab-pts {
-        font-size: 12px;
-        font-weight: 700;
-        color: var(--primary);
-        white-space: nowrap;
-        align-self: flex-start;
-        padding-top: 2px;
-    }
-
-    .dh-quick {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
-    }
-    @media (min-width: 640px) {
-        .dh-quick { grid-template-columns: repeat(4, 1fr); }
-    }
-    .dh-quick a {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 6px;
-        padding: 14px 10px;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        text-decoration: none;
-        transition: var(--transition);
-        text-align: center;
-    }
-    .dh-quick a:hover {
-        transform: translateY(-3px);
-        border-color: var(--primary);
-        background: var(--primary-light);
-        text-decoration: none;
-        box-shadow: var(--shadow-sm);
-    }
-    .dh-quick a .qi { font-size: 20px; }
-    .dh-quick a .qt {
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--text);
-    }
-
-    .dh-quotas {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
-    }
-    @media (min-width: 640px) {
-        .dh-quotas { grid-template-columns: repeat(4, 1fr); }
-    }
-    .dh-quota {
-        background: var(--background);
-        border: 1px solid var(--border-light);
-        border-radius: var(--radius-sm);
-        padding: 12px 14px;
-    }
-    .dh-quota .qk {
-        font-size: 11px;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.4px;
-        font-weight: 700;
-    }
-    .dh-quota .qv {
-        font-size: 16px;
-        color: var(--text);
-        font-weight: 800;
-        margin-top: 2px;
-        line-height: 1.2;
-    }
-    .dh-quota .qv small {
-        font-size: 11px;
-        font-weight: 500;
-        color: var(--text-muted);
-        margin-left: 4px;
-    }
-    .dh-quota .qv.unlimited { color: #10B981; }
-
-    .dh-empty {
-        text-align: center;
-        padding: 30px 20px;
-        color: var(--text-secondary);
-    }
-    .dh-empty .ico {
-        font-size: 42px;
-        opacity: 0.35;
-        display: block;
-        margin-bottom: 8px;
-    }
-    .dh-empty h4 {
-        margin: 0;
-        font-size: 15px;
-        font-weight: 700;
-        color: var(--text);
-    }
-    .dh-empty p {
-        font-size: 13px;
-        margin: 4px 0 14px;
-        line-height: 1.5;
-    }
-    .dh-empty a {
-        display: inline-block;
-        padding: 8px 20px;
-        background: var(--primary);
-        color: white;
-        border-radius: var(--radius-sm);
-        text-decoration: none;
-        font-weight: 600;
-        font-size: 13px;
-        transition: var(--transition);
-    }
-    .dh-empty a:hover {
-        background: var(--primary-hover);
-        transform: translateY(-2px);
-        text-decoration: none;
-        color: white;
-    }
-
-    @media (max-width: 480px) {
-        .dh-hero { padding: 20px; }
-        .dh-hero-text h1 { font-size: 20px; }
-        .dh-level-card { min-width: unset; width: 100%; }
-        .dh-stats { gap: 10px; }
-        .dh-stat { padding: 12px 14px; }
-        .dh-stat .num { font-size: 20px; }
-        .dh-card-body { padding: 14px; }
-        .dh-card-head { padding: 12px 14px; }
-    }
-
-    [data-theme="dark"] .dh-live {
-        background: linear-gradient(135deg, #0F172A, #020617);
-        border-color: #1E293B;
-    }
-    [data-theme="dark"] .dh-live .l-btn {
-        background: var(--surface);
-        color: white;
-    }
-    [data-theme="dark"] .dh-tier-strip { background: var(--surface); }
-    [data-theme="dark"] .dh-insight { background: var(--surface-alt); }
-    [data-theme="dark"] .dh-quota { background: var(--surface-alt); }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard-home.css') }}" />
 {% endblock %}
 
 {% block dashboard_content %}
@@ -686,93 +62,6 @@
             aria-label="{{ _('common.close') }}">✕</button>
 </div>
 
-<style>
-    .dh-tour-banner {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        padding: 16px 20px;
-        background:
-            radial-gradient(600px 200px at 100% -50%, rgba(255,255,255,0.18), transparent 60%),
-            linear-gradient(135deg, var(--primary) 0%, #B91C1C 100%);
-        color: #ffffff;
-        border-radius: var(--radius);
-        margin-bottom: 20px;
-        box-shadow: 0 8px 26px rgba(255, 49, 56, 0.28);
-        flex-wrap: wrap;
-    }
-    .dh-tour-banner__icon {
-        font-size: 30px;
-        flex-shrink: 0;
-        line-height: 1;
-    }
-    .dh-tour-banner__text {
-        flex: 1;
-        min-width: 180px;
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-    }
-    .dh-tour-banner__text strong {
-        font-size: 15px;
-        font-weight: 800;
-        letter-spacing: -0.2px;
-    }
-    .dh-tour-banner__text span {
-        font-size: 13px;
-        opacity: 0.92;
-        line-height: 1.5;
-    }
-    .dh-tour-banner__cta {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 9px 18px;
-        background: #ffffff;
-        color: var(--primary);
-        border-radius: 20px;
-        font-weight: 700;
-        font-size: 13px;
-        text-decoration: none;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-        white-space: nowrap;
-        flex-shrink: 0;
-    }
-    .dh-tour-banner__cta:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0,0,0,0.22);
-        text-decoration: none;
-        color: var(--primary);
-    }
-    .dh-tour-banner__cta i { font-size: 11px; }
-    .dh-tour-banner__close {
-        background: rgba(255,255,255,0.18);
-        border: 1px solid rgba(255,255,255,0.32);
-        color: #ffffff;
-        width: 30px;
-        height: 30px;
-        border-radius: 50%;
-        font-size: 13px;
-        cursor: pointer;
-        font-family: inherit;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background 0.2s ease;
-    }
-    .dh-tour-banner__close:hover {
-        background: rgba(255,255,255,0.3);
-    }
-    @media (max-width: 640px) {
-        .dh-tour-banner { padding: 14px; gap: 12px; }
-        .dh-tour-banner__icon { font-size: 24px; }
-        .dh-tour-banner__text strong { font-size: 14px; }
-        .dh-tour-banner__text span { font-size: 12px; }
-        .dh-tour-banner__cta { padding: 7px 14px; font-size: 12px; }
-    }
-</style>
-
 <script>
     function dismissTourBanner() {
         var b = document.getElementById('dhTourBanner');
@@ -793,73 +82,73 @@
 </script>
 {% endif %}
 
-<!-- HERO -->
-<div class="dh-hero">
-    <div class="dh-hero-inner">
-        <div class="dh-hero-text">
-            <h1>
-                {{ greeting_icon }}
-                {% if greeting == 'Good Morning' %}{{ _('home.hero.greeting_morning') }}
-                {% elif greeting == 'Good Afternoon' %}{{ _('home.hero.greeting_afternoon') }}
-                {% else %}{{ _('home.hero.greeting_evening') }}{% endif %},
-                <span class="accent">{{ session.user_name }}</span>!
-            </h1>
-            <p>
-                {% if total_points > 0 %}
-                    {{ _('home.hero.earned_xp', n=total_points) }}
-                    {% if xp_to_next > 0 %}
-                        {{ _('home.hero.to_next_level', n=xp_to_next, level=level + 1) }}
-                    {% endif %}
-                {% else %}
-                    {{ _('home.hero.ready') }}
+{# ============================================
+   WELCOME HEADER
+   ============================================ #}
+<section class="dh-welcome">
+    <div class="dh-welcome__text">
+        <h1 class="dh-welcome__title">
+            {{ greeting_icon }}
+            {% if greeting == 'Good Morning' %}{{ _('home.hero.greeting_morning') }}
+            {% elif greeting == 'Good Afternoon' %}{{ _('home.hero.greeting_afternoon') }}
+            {% else %}{{ _('home.hero.greeting_evening') }}{% endif %},
+            <span class="dh-welcome__name">{{ session.user_name }}</span>
+        </h1>
+        <p class="dh-welcome__sub">
+            {% if total_points > 0 %}
+                {{ _('home.hero.earned_xp', n=total_points) }}
+                {% if xp_to_next > 0 %}
+                    {{ _('home.hero.to_next_level', n=xp_to_next, level=level + 1) }}
                 {% endif %}
-            </p>
-            <div class="xp-line">
-                🎯 {{ _('home.hero.level_and_xp', n=level, current=xp_in_level, needed=xp_needed) }}
-            </div>
-        </div>
-        <div class="dh-level-card">
-            <div class="lv-row">
-                <div>
-                    <div class="lv-label">{{ _('home.hero.your_level') }}</div>
-                    <div class="lv-num">{{ level }}</div>
-                </div>
-                <div style="text-align:right;">
-                    <div class="lv-label">{{ _('home.hero.total_xp') }}</div>
-                    <div class="lv-num" style="font-size:24px; color:#FCD34D;">{{ total_points }}</div>
-                </div>
-            </div>
-            <div class="dh-level-bar">
-                <div class="fill" style="width: {{ xp_percent }}%;"></div>
-            </div>
-            <div class="lv-xp">{{ _('home.hero.xp_to_next', n=xp_to_next) }}</div>
-        </div>
-    </div>
-</div>
-
-<!-- TIER STRIP -->
-{% if next_tier %}
-<div class="dh-tier-strip">
-    <div class="ts-left">
-        <span class="ts-icon">⬆️</span>
-        <div class="ts-text">
-            {% if upgrade_hint %}
-                {{ upgrade_hint }}
-            {% elif tier == 'free' %}
-                {{ _('home.tier.line_free') }}
             {% else %}
-                {{ _('home.tier.line_premium') }}
+                {{ _('home.hero.ready') }}
             {% endif %}
-        </div>
+        </p>
     </div>
-    <button type="button" class="ts-btn"
-            onclick="openSafkaPreview({ requiredTier: '{{ next_tier }}' })">
-        {{ _('home.tier.upgrade_to', tier=_('tier.' ~ next_tier)) }}
-    </button>
-</div>
-{% endif %}
 
-<!-- LIVE QUIZ BANNER -->
+    <div class="dh-welcome__chips">
+        <span class="dh-chip dh-chip--level">
+            <i class="fas fa-star"></i>
+            <span>Lv {{ level }}</span>
+        </span>
+        <span class="dh-chip dh-chip--xp">
+            <i class="fas fa-bolt"></i>
+            <span>{{ xp_in_level }}/{{ xp_needed }} XP</span>
+        </span>
+        {% if streak > 0 %}
+        <span class="dh-chip">
+            🔥 <span>{{ streak }}</span>
+        </span>
+        {% endif %}
+    </div>
+</section>
+
+{# ============================================
+   FEATURE CARDS (3 vivid gradients)
+   ============================================ #}
+<section class="dh-features">
+    <a href="{{ url_for('pdfs.list_pdfs') }}" class="dh-feature dh-feature--red">
+        <span class="dh-feature__icon"><i class="fas fa-file-pdf"></i></span>
+        <span class="dh-feature__title">{{ _('nav.pdfs') }}</span>
+        <span class="dh-feature__sub">Study Materials</span>
+    </a>
+
+    <a href="{{ url_for('quiz.index') }}" class="dh-feature dh-feature--yellow">
+        <span class="dh-feature__icon"><i class="fas fa-pencil-alt"></i></span>
+        <span class="dh-feature__title">{{ _('nav.quizzes') }}</span>
+        <span class="dh-feature__sub">Test Your Knowledge</span>
+    </a>
+
+    <a href="{{ url_for('groups.list_groups') }}" class="dh-feature dh-feature--purple">
+        <span class="dh-feature__icon"><i class="fas fa-users"></i></span>
+        <span class="dh-feature__title">{{ _('nav.groups') }}</span>
+        <span class="dh-feature__sub">Learn Together</span>
+    </a>
+</section>
+
+{# ============================================
+   LIVE QUIZ BANNER
+   ============================================ #}
 {% if active_quiz and active_quiz.status in ['waiting', 'scheduled', 'active'] %}
 <div class="dh-live">
     <div class="l-left">
@@ -884,7 +173,9 @@
 </div>
 {% endif %}
 
-<!-- STATS -->
+{# ============================================
+   STATS
+   ============================================ #}
 <div class="dh-stats">
     <div class="dh-stat green">
         <div class="top">
@@ -923,27 +214,33 @@
     </div>
 </div>
 
-<!-- QUICK ACTIONS -->
-<div class="dh-quick" style="margin-bottom: 22px;">
-    <a href="{{ url_for('quiz.index') }}">
-        <span class="qi">📝</span>
-        <span class="qt">{{ _('home.quick.take_quiz') }}</span>
-    </a>
-    <a href="{{ url_for('live_quiz.lobby') }}">
-        <span class="qi">⚡</span>
-        <span class="qt">{{ _('home.quick.live_quiz') }}</span>
-    </a>
-    <a href="{{ url_for('pdfs.list_pdfs') }}">
-        <span class="qi">📄</span>
-        <span class="qt">{{ _('home.quick.resources') }}</span>
-    </a>
-    <a href="{{ url_for('history.index') }}">
-        <span class="qi">📈</span>
-        <span class="qt">{{ _('home.quick.history') }}</span>
-    </a>
+{# ============================================
+   TIER STRIP
+   ============================================ #}
+{% if next_tier %}
+<div class="dh-tier-strip">
+    <div class="ts-left">
+        <span class="ts-icon">⬆️</span>
+        <div class="ts-text">
+            {% if upgrade_hint %}
+                {{ upgrade_hint }}
+            {% elif tier == 'free' %}
+                {{ _('home.tier.line_free') }}
+            {% else %}
+                {{ _('home.tier.line_premium') }}
+            {% endif %}
+        </div>
+    </div>
+    <button type="button" class="ts-btn"
+            onclick="openSafkaPreview({ requiredTier: '{{ next_tier }}' })">
+        {{ _('home.tier.upgrade_to', tier=_('tier.' ~ next_tier)) }}
+    </button>
 </div>
+{% endif %}
 
-<!-- MASTERY + CHART -->
+{# ============================================
+   MASTERY + CHART
+   ============================================ #}
 <div class="dh-grid-2">
     <div class="dh-card">
         <div class="dh-card-head">
@@ -1019,7 +316,7 @@
 
 {# ============================================
    PERSONAL INSIGHTS
-   Gate on `insights_level` (personal_learning_insights feature):
+   Gate on `insights_level`:
        0 → locked (free)
        1 → premium sees insights
        2 → pro sees more insights
@@ -1054,7 +351,7 @@
         </div>
     </div>
 {% else %}
-    <div class="dh-card locked" style="margin-bottom: 22px;">
+    <div class="dh-card" style="margin-bottom: 22px;">
         <div class="dh-card-head">
             <h3><i class="fas fa-lightbulb"></i> {{ _('home.insights.title') }}</h3>
             <span class="hint">{{ _('tier.premium') }}+</span>
@@ -1075,7 +372,9 @@
     </div>
 {% endif %}
 
-<!-- QUOTAS + ACTIVITY -->
+{# ============================================
+   QUOTAS + ACTIVITY
+   ============================================ #}
 <div class="dh-grid-2">
     <div class="dh-card">
         <div class="dh-card-head">
@@ -1146,7 +445,7 @@
                     <a href="{{ url_for('quiz.index') }}">{{ _('home.activity.start_quiz') }}</a>
                     <div style="margin-top:10px;">
                         <a href="{{ url_for('docs.feature_start', feature_key='first-look') }}"
-                           style="font-size:12px; color: var(--text-secondary); text-decoration:none;">
+                           class="dh-empty__link-muted">
                             📖 {{ _('home.activity.docs_link') }}
                         </a>
                     </div>
