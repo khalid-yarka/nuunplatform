@@ -9,12 +9,13 @@
     <script>
         (function() {
             try {
-                var theme = localStorage.getItem('preferred-theme') || 'system';
+                var saved = localStorage.getItem('preferred-theme');
+                // 'system' or absent → resolve from OS; otherwise use saved value
                 var resolved;
-                if (theme === 'system') {
+                if (!saved || saved === 'system') {
                     resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
                 } else {
-                    resolved = theme;
+                    resolved = saved;
                 }
                 document.documentElement.setAttribute('data-theme', resolved);
 
@@ -58,6 +59,122 @@
 
         </div>
     </div>
+
+    <!-- ============================================ -->
+    <!-- FLOATING THEME TOGGLE (simple on/off)        -->
+    <!-- ============================================ -->
+    <button type="button"
+            class="auth-theme-toggle"
+            id="authThemeToggle"
+            aria-label="Toggle theme">
+        <i class="fas fa-moon" id="authThemeIcon" aria-hidden="true"></i>
+    </button>
+
+    <style>
+        .auth-theme-toggle {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 10000;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: transform 0.2s ease, box-shadow 0.2s ease,
+                        background 0.2s ease, color 0.2s ease;
+        }
+        .auth-theme-toggle:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 26px rgba(0, 0, 0, 0.20);
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+        .auth-theme-toggle:active {
+            transform: translateY(0) scale(0.96);
+        }
+        @media (max-width: 480px) {
+            .auth-theme-toggle {
+                bottom: 16px;
+                right: 16px;
+                width: 44px;
+                height: 44px;
+                font-size: 18px;
+            }
+        }
+    </style>
+
+    <script>
+        (function () {
+            var btn  = document.getElementById('authThemeToggle');
+            var icon = document.getElementById('authThemeIcon');
+            if (!btn || !icon) return;
+
+            function currentResolved() {
+                var saved = localStorage.getItem('preferred-theme');
+                if (!saved || saved === 'system') {
+                    return window.matchMedia('(prefers-color-scheme: dark)').matches
+                        ? 'dark' : 'light';
+                }
+                return saved;
+            }
+
+            function syncIcon() {
+                icon.className = currentResolved() === 'dark'
+                    ? 'fas fa-sun'
+                    : 'fas fa-moon';
+            }
+
+            function applyAccentTint(resolved) {
+                try {
+                    var accent = localStorage.getItem('preferred-accent') || 'red';
+                    var ACCENTS = {
+                        red:    { hex: '#FF3138', hover: '#E62B32', light: '#FFEBE8', light_dark: '#3A1A20' },
+                        blue:   { hex: '#3B82F6', hover: '#2563EB', light: '#E8F0FE', light_dark: '#1A2A4A' },
+                        green:  { hex: '#10B981', hover: '#059669', light: '#D1FAE5', light_dark: '#1A3A2E' },
+                        purple: { hex: '#8B5CF6', hover: '#7C3AED', light: '#EDE9FE', light_dark: '#2A1A4A' },
+                        orange: { hex: '#F59E0B', hover: '#D97706', light: '#FEF3C7', light_dark: '#3A2E1A' }
+                    };
+                    var a = ACCENTS[accent] || ACCENTS.red;
+                    var root = document.documentElement;
+                    root.style.setProperty('--primary', a.hex);
+                    root.style.setProperty('--primary-hover', a.hover);
+                    root.style.setProperty('--primary-light', resolved === 'dark' ? a.light_dark : a.light);
+                } catch (e) { /* silent */ }
+            }
+
+            syncIcon();
+
+            btn.addEventListener('click', function () {
+                var next = currentResolved() === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', next);
+                localStorage.setItem('preferred-theme', next);
+                applyAccentTint(next);
+                syncIcon();
+            });
+
+            // If OS theme changes and the user hasn't pinned a preference,
+            // keep the icon in sync.
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+                var saved = localStorage.getItem('preferred-theme');
+                if (!saved || saved === 'system') {
+                    var resolved = currentResolved();
+                    document.documentElement.setAttribute('data-theme', resolved);
+                    applyAccentTint(resolved);
+                    syncIcon();
+                }
+            });
+        })();
+    </script>
 
     {% block extra_js %}{% endblock %}
 </body>

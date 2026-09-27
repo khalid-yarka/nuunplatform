@@ -886,7 +886,7 @@ def health_check():
 def index():
     if 'user_id' in session:
         return redirect(url_for('dashboard.home'))
-    return redirect(url_for('auth.login'))
+    return render_template('start.html')
 
 
 # ============================================
