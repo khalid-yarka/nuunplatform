@@ -1,108 +1,160 @@
-const CACHE = 'nuun-shell-v2';
-const SHELL = [
-  '/static/css/style.css',
-  '/static/css/dashboard.css',
-  '/static/js/main.js',
-  '/static/js/dashboard.js',
-  '/static/images/logo.png',
-  '/static/images/icon-192.png'
+/* ============================================================
+   static/sw.js — NuunPlatform service worker
+   Strategy:
+     • Navigations (HTML)  → network-first, offline fallback
+     • /static/* assets    → stale-while-revalidate
+     • /admin, /webhook,   → bypass entirely (never cached)
+       /api, /backup, etc.
+     • Everything else     → network-with-cache-fallback
+   Bump CACHE_VERSION on any release that must reach old clients.
+   ============================================================ */
+
+const CACHE_VERSION = 'nuun-v3-20260929';
+const SHELL_CACHE   = 'nuun-shell-' + CACHE_VERSION;
+const RUNTIME_CACHE = 'nuun-runtime-' + CACHE_VERSION;
+
+// The shell is small. Everything else is cached lazily at runtime.
+const SHELL_ASSETS = [
+    '/offline.html',
+    '/manifest.json',
+    '/static/images/logo.png',
+    '/static/images/icon-192.png',
+    '/static/images/icon-512.png',
 ];
 
-self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE)
-      .then(c => c.addAll(SHELL))
-      .then(() => self.skipWaiting())
-  );
+/* ---------- install ---------- */
+self.addEventListener('install', function (event) {
+    event.waitUntil(
+        caches.open(SHELL_CACHE).then(function (cache) {
+            // Tolerate individual failures — a missing icon must not
+            // block the SW from installing.
+            return Promise.all(
+                SHELL_ASSETS.map(function (url) {
+                    return cache.add(url).catch(function () { /* skip */ });
+                })
+            );
+        }).then(function () {
+            // Activate as soon as possible. Registration code will
+            // reload open clients once they receive controllerchange.
+            return self.skipWaiting();
+        })
+    );
 });
 
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(
-        keys.filter(k => k !== CACHE).map(k => caches.delete(k))
-      ))
-      .then(() => self.clients.claim())
-  );
+/* ---------- activate ---------- */
+self.addEventListener('activate', function (event) {
+    event.waitUntil(
+        caches.keys().then(function (keys) {
+            return Promise.all(
+                keys
+                    .filter(function (k) {
+                        // Keep only the current two caches.
+                        return k.startsWith('nuun-')
+                            && k !== SHELL_CACHE
+                            && k !== RUNTIME_CACHE;
+                    })
+                    .map(function (k) { return caches.delete(k); })
+            );
+        }).then(function () {
+            // Take control of every open tab so the reload happens now,
+            // not on the next open.
+            return self.clients.claim();
+        })
+    );
 });
 
-self.addEventListener('fetch', e => {
-  const req = e.request;
-  if (req.method !== 'GET') return;
-  const url = new URL(req.url);
-  if (url.origin !== location.origin) return;
-  if (url.pathname.startsWith('/admin')) return;
-  if (url.pathname.startsWith('/webhook')) return;
-
-  if (req.destination === 'document') {
-    e.respondWith(fetch(req).catch(() => caches.match('/offline.html')));
-    return;
-  }
-  e.respondWith(
-    caches.match(req).then(hit => hit || fetch(req).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(req, copy));
-      return res;
-    }))
-  );
+/* ---------- message ---------- */
+self.addEventListener('message', function (event) {
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
+    if (event.data && event.data.type === 'GET_VERSION') {
+        event.source && event.source.postMessage({
+            type: 'VERSION',
+            version: CACHE_VERSION
+        });
+    }
 });
 
-// ═══════════════════════════════════════════════════════════════════
-//  WEB PUSH
-// ═══════════════════════════════════════════════════════════════════
+/* ---------- fetch ---------- */
+function _shouldBypass(pathname) {
+    // Endpoints that must always hit the live server, never the cache.
+    return (
+        pathname.startsWith('/admin') ||
+        pathname.startsWith('/webhook') ||
+        pathname.startsWith('/telegram') ||
+        pathname.startsWith('/backup') ||
+        pathname.startsWith('/api/') ||
+        pathname === '/health' ||
+        pathname === '/maintenance' ||
+        pathname === '/sw.js'
+    );
+}
 
-self.addEventListener('push', function (event) {
-  var data = {
-    title: 'NuunPlatform',
-    body: 'You have a new notification.',
-    url: '/',
-  };
+self.addEventListener('fetch', function (event) {
+    var req = event.request;
 
-  try {
-    if (event.data) data = event.data.json();
-  } catch (e) {
-    // Keep the fallback.
-  }
+    // Only GET is cacheable.
+    if (req.method !== 'GET') return;
 
-  var options = {
-    body: data.body || '',
-    icon: data.icon || '/static/images/icon-192.png',
-    badge: '/static/images/icon-192.png',
-    tag: data.tag || 'nuun-default',
-    data: {
-      url: data.url || '/',
-      extra: data.data || {},
-    },
-    vibrate: [80, 40, 80],
-  };
+    var url;
+    try { url = new URL(req.url); } catch (e) { return; }
 
-  event.waitUntil(
-    self.registration.showNotification(
-      data.title || 'NuunPlatform',
-      options
-    )
-  );
-});
+    // Same-origin only. Cross-origin (Telegram, CDN) passes straight through.
+    if (url.origin !== self.location.origin) return;
 
-self.addEventListener('notificationclick', function (event) {
-  event.notification.close();
+    if (_shouldBypass(url.pathname)) return;
 
-  var data = event.notification.data || {};
-  var target = data.url || '/';
+    // ── Navigation requests: network-first ──
+    var isNav = (req.mode === 'navigate')
+             || (req.headers.get('accept') || '').includes('text/html');
 
-  event.waitUntil(
-    clients
-      .matchAll({ type: 'window', includeUncontrolled: true })
-      .then(function (list) {
-        for (var i = 0; i < list.length; i++) {
-          var c = list[i];
-          if (c.url.indexOf(self.location.origin) === 0) {
-            c.focus();
-            if ('navigate' in c) return c.navigate(target);
-            return;
-          }
-        }
-        if (clients.openWindow) return clients.openWindow(target);
-      })
-  );
+    if (isNav) {
+        event.respondWith(
+            fetch(req)
+                .then(function (res) {
+                    // Cache a fresh copy for offline use.
+                    var copy = res.clone();
+                    caches.open(RUNTIME_CACHE).then(function (c) {
+                        c.put(req, copy).catch(function () {});
+                    });
+                    return res;
+                })
+                .catch(function () {
+                    return caches.match(req).then(function (cached) {
+                        return cached || caches.match('/offline.html');
+                    });
+                })
+        );
+        return;
+    }
+
+    // ── Static assets: stale-while-revalidate ──
+    if (url.pathname.startsWith('/static/') || url.pathname === '/manifest.json') {
+        event.respondWith(
+            caches.open(RUNTIME_CACHE).then(function (cache) {
+                return cache.match(req).then(function (cached) {
+                    var network = fetch(req).then(function (res) {
+                        if (res && res.status === 200 && res.type === 'basic') {
+                            cache.put(req, res.clone()).catch(function () {});
+                        }
+                        return res;
+                    }).catch(function () { return cached; });
+                    // Return cached immediately if present, but keep the
+                    // network fetch alive so the cache refreshes.
+                    return cached || network;
+                });
+            })
+        );
+        return;
+    }
+
+    // ── Everything else: network with cache fallback ──
+    event.respondWith(
+        fetch(req).catch(function () {
+            return caches.match(req).then(function (cached) {
+                return cached || Response.error();
+            });
+        })
+    );
 });

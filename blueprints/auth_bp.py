@@ -756,6 +756,9 @@ def help():
         help_prefill=prefill,
     )
 
+@pwa_bp.route('/reset-app')
+def reset_app():
+    return render_template('pwa_reset.html')
 
 # ============================================
 # INTERNAL HELPERS

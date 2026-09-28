@@ -12,6 +12,8 @@
 #   - Bookmarks (saved + liked questions)
 #   - Performance analytics (subject bars, accuracy line, etc.)
 #   - Focus tips (level 3 narrative)
+#
+# Tier model: free / premium only. No pro.
 # ---------------------------------------------------------------
 
 import json
@@ -387,7 +389,7 @@ def get_focus_tips(user_id: int) -> List[Dict[str, str]]:
     if not misses:
         return [{
             'icon': '🎉',
-            'text': 'No wrong answers yet — take a quiz to unlock insights.'
+            'text': 'No wrong answers yet — take a practice to unlock insights.'
         }]
 
     total_misses = sum(m['count'] for m in misses.values())
@@ -424,7 +426,7 @@ def get_focus_tips(user_id: int) -> List[Dict[str, str]]:
             tips.append({
                 'icon': '💪',
                 'text': "Most of your misses are on <strong>hard questions</strong> "
-                        "— that's normal. Keep practicing."
+                        "— that's normal. Keep practising."
             })
 
     sources = get_suggested_sources(user_id, 1)

@@ -1,5 +1,9 @@
 # blueprints/pdfs_bp.py
 import os
+import re
+from urllib.parse import quote
+from datetime import datetime, timedelta
+
 from flask import (
     Blueprint, render_template, request, session, flash,
     redirect, url_for, abort, send_file, Response, jsonify,
@@ -16,11 +20,13 @@ from db import (
 from services.tier_service import (
     can_access_premium_resources, get_user_tier, get_feature_level,
     get_saved_content_limit, get_resource_downloads_remaining,
+    get_resource_download_limit, consume_resource_download,
 )
 from bot.utils import get_bot
-from bot.db import get_bot_pdf_by_code
+from bot.db import get_bot_pdf_by_code, get_bot_pdfs_by_codes
 from config import Config
 from history_logger import add_history_entry
+from utils import SOMALI_TIMEZONE
 import requests
 import logging
 
@@ -33,10 +39,10 @@ _VALID_SORTS = {'newest', 'oldest', 'popular', 'title_asc', 'title_desc'}
 
 
 # ============================================================
-# GUEST ATTEMPT LOGGING
+# HELPERS
 # ============================================================
 
-def _log_guest_attempt(action: str, pdf=None, pdf_code=None):
+def _log_guest_attempt(action, pdf=None, pdf_code=None):
     try:
         from activity_logger import log_activity
         meta = {'action': action}
@@ -47,11 +53,9 @@ def _log_guest_attempt(action: str, pdf=None, pdf_code=None):
             meta['subject'] = pdf.get('subject')
         elif pdf_code:
             meta['pdf_code'] = pdf_code
-
         msg = f"Guest attempted: {action}"
         if pdf_code:
             msg += f" ({pdf_code})"
-
         log_activity(
             activity_type='pdf_guest_attempt',
             message=msg,
@@ -77,17 +81,42 @@ def _report_reasons():
 
 
 def _current_path_with_query():
-    """Return the request path + query string, usable as a `next` target."""
     path = request.path or '/'
     qs = request.query_string.decode() if request.query_string else ''
     return path + ('?' + qs if qs else '')
 
 
 def _normalise_remaining(raw):
-    """999 / None / negatives mean unlimited — return None."""
     if raw is None or raw >= 999 or raw < 0:
         return None
     return raw
+
+
+def _seconds_to_quota_reset():
+    now = datetime.now(SOMALI_TIMEZONE)
+    tomorrow = (now + timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0)
+    return max(0, int((tomorrow - now).total_seconds()))
+
+
+def _format_reset_time(seconds):
+    if seconds <= 0:
+        return "0s"
+    days, rem = divmod(int(seconds), 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, secs = divmod(rem, 60)
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes}m"
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
+
+
+def _safe_filename(title, fallback='document'):
+    base = re.sub(r'[^\w\-_. ]+', '_', (title or fallback)).strip() or fallback
+    return (base[:120] + '.pdf') if not base.lower().endswith('.pdf') else base[:120]
 
 
 # ============================================================
@@ -96,7 +125,6 @@ def _normalise_remaining(raw):
 
 @pdfs_bp.route('/')
 def list_pdfs():
-    # ─── Shared-PDF flow (before anything else) ────────────
     shared_pdf_id_raw = request.args.get('pdf')
     shared_pdf = None
     shared_not_found = False
@@ -105,10 +133,7 @@ def list_pdfs():
     if shared_pdf_id_raw:
         if 'user_id' not in session:
             flash('Please login to view this shared PDF.', 'info')
-            return redirect(url_for(
-                'auth.login',
-                next=_current_path_with_query(),
-            ))
+            return redirect(url_for('auth.login', next=_current_path_with_query()))
 
         try:
             shared_id_int = int(shared_pdf_id_raw)
@@ -127,7 +152,6 @@ def list_pdfs():
         else:
             shared_not_found = True
 
-    # ─── Filter parsing ────────────────────────────────────
     subject_filter    = (request.args.get('subject') or '').strip()
     class_filter      = (request.args.get('class') or '').strip()
     curriculum_filter = (request.args.get('curriculum') or '').strip()
@@ -148,13 +172,16 @@ def list_pdfs():
     user_id = session.get('user_id')
     remaining_downloads = None
     downloads_unlimited = False
+    download_limit = 20
+    user_tier = 'free'
+    search_level = 0
+    can_access_premium = False
 
     if user_id:
         user_tier = get_user_tier(user_id)
         search_level = get_feature_level("resource_search", user_id=user_id)
         can_access_premium = can_access_premium_resources()
 
-        # Downloads remaining — normalised to None for unlimited.
         try:
             raw_remaining = get_resource_downloads_remaining(user_id)
             remaining_downloads = _normalise_remaining(raw_remaining)
@@ -163,10 +190,14 @@ def list_pdfs():
             logger.warning(f"downloads remaining lookup failed: {e}")
             remaining_downloads = None
             downloads_unlimited = False
+
+        try:
+            dl_raw = get_resource_download_limit(user_id)
+            if dl_raw and dl_raw < 999:
+                download_limit = int(dl_raw)
+        except Exception:
+            pass
     else:
-        user_tier = 'free'
-        search_level = 0
-        can_access_premium = False
         saved_only = False
 
     effective_search     = search_query       if search_level > 0  else ''
@@ -174,7 +205,7 @@ def list_pdfs():
     effective_curriculum = curriculum_filter  if search_level >= 2 else ''
     effective_class      = class_filter       if search_level >= 2 else ''
 
-    saved_ids    = set()
+    saved_ids = set()
     reported_ids = set()
     if user_id:
         try:
@@ -186,7 +217,6 @@ def list_pdfs():
         except Exception:
             reported_ids = set()
 
-    # ─── Branch A: shared-PDF focused view ─────────────────
     if showing_shared:
         pdfs = [shared_pdf]
         total = 1
@@ -196,16 +226,11 @@ def list_pdfs():
         range_start = 1
         range_end = 1
         saved_only = False
-
-    # ─── Branch B: saved-only view ─────────────────────────
     elif saved_only:
         all_saved = _list_saved_pdfs(
-            saved_ids=saved_ids,
-            search=effective_search,
-            subject=effective_subject,
-            curriculum=effective_curriculum,
-            class_filter=effective_class,
-            sort=sort,
+            saved_ids=saved_ids, search=effective_search,
+            subject=effective_subject, curriculum=effective_curriculum,
+            class_filter=effective_class, sort=sort,
         )
         total = len(all_saved)
         total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
@@ -213,27 +238,19 @@ def list_pdfs():
             page = total_pages
         offset = (page - 1) * PER_PAGE
         pdfs = all_saved[offset:offset + PER_PAGE]
-
-    # ─── Branch C: normal view ─────────────────────────────
     else:
         total = get_main_pdf_count(
-            search=effective_search,
-            subject=effective_subject,
-            curriculum=effective_curriculum,
-            class_filter=effective_class,
+            search=effective_search, subject=effective_subject,
+            curriculum=effective_curriculum, class_filter=effective_class,
         )
         total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
         if page > total_pages:
             page = total_pages
         offset = (page - 1) * PER_PAGE
-
         pdfs = get_all_pdfs(
-            limit=PER_PAGE,
-            offset=offset,
-            search=effective_search,
-            subject=effective_subject,
-            curriculum=effective_curriculum,
-            class_filter=effective_class,
+            limit=PER_PAGE, offset=offset,
+            search=effective_search, subject=effective_subject,
+            curriculum=effective_curriculum, class_filter=effective_class,
             sort=sort,
         )
 
@@ -247,15 +264,72 @@ def list_pdfs():
         range_start = offset + 1
         range_end = min(offset + PER_PAGE, total)
 
-    # ─── Precompute share URLs for each visible PDF ────────
+    # ── Share URLs ─────────────────────────────────────────
     base_url = (getattr(Config, 'BASE_URL', '') or '').rstrip('/')
     for p in pdfs:
         pid = p.get('id')
-        if pid:
-            p['_share_url'] = f"{base_url}/pdfs/?pdf={pid}" if base_url \
-                              else f"/pdfs/?pdf={pid}"
+        p['_share_url'] = (f"{base_url}/pdfs/?pdf={pid}" if base_url else f"/pdfs/?pdf={pid}") if pid else ''
+
+    # ── Batch lookup bot PDFs for streamability + action states ──
+    codes = [p['code'] for p in pdfs if p.get('code')]
+    try:
+        bot_map = get_bot_pdfs_by_codes(codes)
+    except Exception as e:
+        logger.warning(f"bot batch lookup failed: {e}")
+        bot_map = {}
+
+    MAX_BYTES = Config.PDF_DIRECT_DOWNLOAD_MAX_BYTES
+
+    for p in pdfs:
+        bot_row = bot_map.get(p.get('code'))
+        size = bot_row.get('file_size') if bot_row else None
+        has_direct_url = bool(p.get('file_url'))
+        has_bot_row = bot_row is not None
+
+        # Only hide when we KNOW the file is too big. Missing size or -1
+        # (getFile failed) is treated optimistically — the /direct
+        # endpoint silently falls back to Telegram if the fetch fails.
+        known_too_large = (
+            size is not None
+            and int(size) > 0
+            and int(size) > MAX_BYTES
+        )
+        streamable = has_direct_url or (has_bot_row and not known_too_large)
+        p['_is_streamable'] = streamable
+
+        is_premium_pdf = bool(p.get('is_premium'))
+
+        if not user_id:
+            # Guest — every gated action shows a locked login button,
+            # regardless of streamability (encourages sign-up).
+            p['_download_state'] = 'locked_login'
+            p['_view_state']     = 'locked_login'
+            p['_get_state']      = 'locked_login'
+        elif user_tier == 'premium' and (not is_premium_pdf or can_access_premium):
+            # Premium with access
+            if streamable:
+                if downloads_unlimited or (remaining_downloads or 0) > 0:
+                    p['_download_state'] = 'enabled'
+                else:
+                    p['_download_state'] = 'locked_quota'
+                p['_view_state'] = 'enabled'
+            else:
+                p['_download_state'] = 'hidden'
+                p['_view_state']     = 'hidden'
+            p['_get_state'] = 'enabled'
         else:
-            p['_share_url'] = ''
+            # Free user
+            if is_premium_pdf:
+                p['_download_state'] = 'locked_premium'
+                p['_view_state']     = 'locked_premium'
+                p['_get_state']      = 'locked_premium'
+            else:
+                p['_download_state'] = 'locked_premium'
+                p['_view_state']     = 'enabled' if streamable else 'hidden'
+                p['_get_state']      = 'enabled'
+
+    seconds_to_reset = _seconds_to_quota_reset() if user_id else 0
+    reset_time_str = _format_reset_time(seconds_to_reset) if user_id else ''
 
     return render_template(
         'dashboard/pdfs.html',
@@ -288,14 +362,15 @@ def list_pdfs():
         base_url=base_url,
         remaining_downloads=remaining_downloads,
         downloads_unlimited=downloads_unlimited,
+        download_limit=download_limit,
+        seconds_to_reset=seconds_to_reset,
+        reset_time_str=reset_time_str,
     )
 
 
-def _list_saved_pdfs(saved_ids, search, subject, curriculum,
-                     class_filter, sort):
+def _list_saved_pdfs(saved_ids, search, subject, curriculum, class_filter, sort):
     if not saved_ids:
         return []
-
     items = []
     for pid in saved_ids:
         try:
@@ -311,11 +386,8 @@ def _list_saved_pdfs(saved_ids, search, subject, curriculum,
         if class_filter and (p.get('class') or '') != class_filter:
             continue
         if search:
-            hay = ' '.join([
-                p.get('title') or '',
-                p.get('code') or '',
-                p.get('subject') or '',
-            ]).lower()
+            hay = ' '.join([p.get('title') or '', p.get('code') or '',
+                            p.get('subject') or '']).lower()
             if search.lower() not in hay:
                 continue
         items.append(p)
@@ -330,7 +402,6 @@ def _list_saved_pdfs(saved_ids, search, subject, curriculum,
         items.sort(key=lambda x: x.get('uploaded_at') or '')
     else:
         items.sort(key=lambda x: x.get('uploaded_at') or '', reverse=True)
-
     return items
 
 
@@ -363,19 +434,15 @@ def view_pdf(pdf_id):
         user_id=user_id,
         entry_type='pdf_view',
         action='viewed',
-        metadata={
-            'title': pdf['title'],
-            'subject': pdf.get('subject'),
-            'code': pdf['code'],
-        }
+        metadata={'title': pdf['title'], 'subject': pdf.get('subject'),
+                  'code': pdf['code']},
     )
-
     user_tier = get_user_tier(user_id)
     return render_template('dashboard/pdf_view.html', pdf=pdf, user_tier=user_tier)
 
 
 # ============================================================
-# DOWNLOAD
+# DOWNLOAD (legacy route — redirects to Telegram)
 # ============================================================
 
 @pdfs_bp.route('/download/<pdf_id>')
@@ -397,27 +464,19 @@ def download_pdf(pdf_id):
         return redirect(url_for('pdfs.list_pdfs'))
 
     increment_pdf_view(pdf_id)
-
     add_history_entry(
         user_id=user_id,
         entry_type='pdf_download',
         action='downloaded',
-        metadata={
-            'title': pdf['title'],
-            'subject': pdf.get('subject'),
-            'code': pdf['code'],
-        }
+        metadata={'title': pdf['title'], 'subject': pdf.get('subject'),
+                  'code': pdf['code']},
     )
 
-    # Direct file download for premium when a direct URL is stored.
     if user_tier == 'premium' and pdf.get('file_url'):
         file_path = pdf['file_url']
         if os.path.exists(file_path):
-            return send_file(
-                file_path,
-                as_attachment=True,
-                download_name=pdf.get('title', 'document.pdf'),
-            )
+            return send_file(file_path, as_attachment=True,
+                             download_name=pdf.get('title', 'document.pdf'))
         return redirect(pdf['file_url'])
 
     return redirect(url_for('pdfs.telegram_download', code=pdf['code']))
@@ -440,16 +499,88 @@ def telegram_download(code):
             user_id=session['user_id'],
             entry_type='pdf_download',
             action='downloaded',
-            metadata={
-                'title': pdf['title'],
-                'subject': pdf.get('subject'),
-                'code': pdf['code'],
-            }
+            metadata={'title': pdf['title'], 'subject': pdf.get('subject'),
+                      'code': pdf['code']},
         )
 
     bot_username = Config.TELEGRAM_BOT_USERNAME or 'nuunplatform_bot'
-    telegram_link = f"https://t.me/{bot_username}?start={code}"
-    return redirect(telegram_link)
+    return redirect(f"https://t.me/{bot_username}?start={code}")
+
+
+# ============================================================
+# DIRECT DOWNLOAD (streams from Telegram as attachment)
+# ============================================================
+
+@pdfs_bp.route('/direct/<code>')
+def direct_download(code):
+    if 'user_id' not in session:
+        return redirect(url_for('auth.login', next=_current_path_with_query()))
+
+    user_id = session['user_id']
+    user_tier = get_user_tier(user_id)
+
+    if user_tier != 'premium':
+        return redirect(url_for('pdfs.telegram_download', code=code))
+
+    main_pdf = get_pdf_by_code(code)
+    if not main_pdf:
+        return redirect(url_for('pdfs.list_pdfs'))
+
+    if main_pdf.get('is_premium', 0) and not can_access_premium_resources():
+        return redirect(url_for('pdfs.telegram_download', code=code))
+
+    bot_pdf = get_bot_pdf_by_code(code)
+    if not bot_pdf:
+        return redirect(url_for('pdfs.telegram_download', code=code))
+
+    size = bot_pdf.get('file_size')
+    # If size is unknown (NULL or -1), still try — Telegram will reject
+    # oversized files anyway, and we fall back silently.
+    if size and int(size) > 0 and int(size) > Config.PDF_DIRECT_DOWNLOAD_MAX_BYTES:
+        return redirect(url_for('pdfs.telegram_download', code=code))
+
+    if not consume_resource_download(user_id):
+        return redirect(url_for('pdfs.telegram_download', code=code))
+
+    try:
+        bot = get_bot()
+        file_info = bot.get_file(bot_pdf['file_id'])
+        file_path = file_info.file_path
+        token = Config.TELEGRAM_BOT_TOKEN
+        url = f"https://api.telegram.org/file/bot{token}/{file_path}"
+
+        response = requests.get(url, stream=True, timeout=60)
+        if response.status_code != 200:
+            logger.error(f"Telegram fetch failed: {response.status_code}")
+            return redirect(url_for('pdfs.telegram_download', code=code))
+
+        filename = _safe_filename(main_pdf.get('title') or code)
+        encoded = quote(filename)
+
+        increment_pdf_view_by_code(code)
+        add_history_entry(
+            user_id=user_id,
+            entry_type='pdf_download',
+            action='downloaded',
+            metadata={'title': main_pdf['title'],
+                      'subject': main_pdf.get('subject'),
+                      'code': code},
+        )
+
+        headers = {
+            'Content-Disposition': f"attachment; filename=\"{encoded}\"",
+            'Content-Type': 'application/pdf',
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+        }
+        return Response(
+            response.iter_content(chunk_size=65536),
+            headers=headers,
+            mimetype='application/pdf',
+        )
+    except Exception as e:
+        logger.error(f"Direct download error: {e}")
+        return redirect(url_for('pdfs.telegram_download', code=code))
 
 
 # ============================================================
@@ -533,25 +664,18 @@ def save_pdf(pdf_id):
         if limit is not None and limit < 999:
             current = count_user_saved_pdfs(user_id)
             if current >= limit:
-                return jsonify({
-                    'error': 'Save limit reached',
-                    'reason': 'quota',
-                    'limit': limit,
-                    'current': current,
-                }), 429
+                return jsonify({'error': 'Save limit reached', 'reason': 'quota',
+                                'limit': limit, 'current': current}), 429
 
     if not save_pdf_for_user(user_id, pdf_id):
         return jsonify({'error': 'Could not save'}), 500
 
     if not already:
         add_history_entry(
-            user_id=user_id,
-            entry_type='save',
-            action='saved',
+            user_id=user_id, entry_type='save', action='saved',
             entry_id=pdf_id,
             metadata={'title': pdf['title'], 'code': pdf['code'], 'type': 'pdf'},
         )
-
     return jsonify({'success': True, 'saved': True})
 
 
@@ -559,17 +683,12 @@ def save_pdf(pdf_id):
 def unsave_pdf(pdf_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Please login first.', 'reason': 'login'}), 401
-
     user_id = session['user_id']
     if not unsave_pdf_for_user(user_id, pdf_id):
         return jsonify({'error': 'Could not unsave'}), 500
-
     add_history_entry(
-        user_id=user_id,
-        entry_type='save',
-        action='unsaved',
-        entry_id=pdf_id,
-        metadata={'type': 'pdf'},
+        user_id=user_id, entry_type='save', action='unsaved',
+        entry_id=pdf_id, metadata={'type': 'pdf'},
     )
     return jsonify({'success': True, 'saved': False})
 
@@ -605,9 +724,7 @@ def report_pdf(pdf_id):
         return jsonify({'error': 'Could not submit report'}), 500
 
     add_history_entry(
-        user_id=user_id,
-        entry_type='report',
-        action='reported',
+        user_id=user_id, entry_type='report', action='reported',
         entry_id=pdf_id,
         metadata={'title': pdf['title'], 'code': pdf['code'], 'reason': reason},
     )
@@ -642,35 +759,23 @@ def _notify_admins_about_report(reporter_id, pdf, reason, comment):
         f"{reporter.get('first_name', '')} {reporter.get('last_name', '')}"
     ).strip() or f"User #{reporter_id}"
     reporter_public = reporter.get('public_id') or '----'
-
     reason_label = _REASON_LABELS.get(reason, reason)
 
     title = f"🚩 PDF reported: {pdf.get('title', '')[:60]}"
-    body = (
-        f"{reporter_name} (@{reporter_public}) reported "
-        f"\"{pdf.get('title', '')}\" ({pdf.get('code', '')}) — {reason_label}."
-    )
+    body = (f"{reporter_name} (@{reporter_public}) reported "
+            f"\"{pdf.get('title', '')}\" ({pdf.get('code', '')}) — {reason_label}.")
     link = f"/admin/reports?type=pdf&id={pdf.get('id')}"
 
     try:
         from db import execute_with_retry
-        cursor = execute_with_retry(
-            "SELECT id FROM students WHERE is_admin = 1"
-        )
+        cursor = execute_with_retry("SELECT id FROM students WHERE is_admin = 1")
         admin_ids = [r['id'] for r in cursor.fetchall()]
-
         from services.notification_service import send_notification
         for aid in admin_ids:
             try:
-                send_notification(
-                    user_id=aid,
-                    notification_type='question_report',
-                    title=title,
-                    body=body,
-                    link=link,
-                    icon='🚩',
-                    force=True,
-                )
+                send_notification(user_id=aid, notification_type='question_report',
+                                  title=title, body=body, link=link,
+                                  icon='🚩', force=True)
             except Exception:
                 pass
     except Exception as e:
@@ -678,30 +783,18 @@ def _notify_admins_about_report(reporter_id, pdf, reason, comment):
 
     try:
         from services.telegram_notify import (
-            notify_super_admins,
-            build_markdown_document,
-            make_report_filename,
-            summary_row,
-            truncate,
+            notify_super_admins, build_markdown_document, make_report_filename,
+            summary_row, truncate,
         )
-
         base_url = (getattr(Config, 'BASE_URL', '') or '').rstrip('/')
-        admin_url = None
-        if base_url:
-            admin_url = f"{base_url}/admin/reports?type=pdf&id={pdf.get('id')}"
+        admin_url = f"{base_url}/admin/reports?type=pdf&id={pdf.get('id')}" if base_url else None
 
-        meta = {
-            'type':        'pdf_report',
-            'pdf_id':      pdf.get('id'),
-            'pdf_code':    pdf.get('code'),
-            'reporter_id': reporter_id,
-            'reporter':    reporter_public,
-            'reason':      reason,
-        }
+        meta = {'type': 'pdf_report', 'pdf_id': pdf.get('id'),
+                'pdf_code': pdf.get('code'), 'reporter_id': reporter_id,
+                'reporter': reporter_public, 'reason': reason}
 
         pdf_table = '\n'.join([
-            '| Field | Value |',
-            '|:--|:--|',
+            '| Field | Value |', '|:--|:--|',
             f"| Title | {pdf.get('title') or '—'} |",
             f"| Code | `{pdf.get('code') or '—'}` |",
             f"| Subject | {pdf.get('subject') or '—'} |",
@@ -709,24 +802,17 @@ def _notify_admins_about_report(reporter_id, pdf, reason, comment):
             f"| Curriculum | {pdf.get('curriculum') or '—'} |",
             f"| Views | {pdf.get('view_count') or 0} |",
         ])
-
         reporter_table = '\n'.join([
-            '| Field | Value |',
-            '|:--|:--|',
+            '| Field | Value |', '|:--|:--|',
             f"| Name | {reporter_name} |",
             f"| Public ID | `{reporter_public}` |",
             f"| Phone | `{reporter.get('phone_number') or '—'}` |",
             f"| School | {reporter.get('school') or '—'} |",
             f"| Grade | {reporter.get('grade') or '—'} |",
         ])
-
-        report_lines = [
-            f"**Reason:** {reason_label}",
-        ]
+        report_lines = [f"**Reason:** {reason_label}"]
         if comment:
-            report_lines.append("")
-            report_lines.append(f"**Comment:**")
-            report_lines.append(truncate(comment, 500))
+            report_lines += ["", "**Comment:**", truncate(comment, 500)]
 
         actions = [
             '- [ ] Open the PDF and verify the metadata',
@@ -742,34 +828,24 @@ def _notify_admins_about_report(reporter_id, pdf, reason, comment):
             ('📝 Report details', '\n'.join(report_lines)),
             ('🛠️ Next Steps', '\n'.join(actions)),
         ]
-
         md_body = build_markdown_document(
             title=f"PDF report — {pdf.get('code', '')}",
-            severity='warning',
-            meta=meta,
-            sections=sections,
+            severity='warning', meta=meta, sections=sections,
             footer_id=f"PDF-{pdf.get('code') or 'UNKNOWN'}",
         )
-
         filename = make_report_filename('pdf_report', pdf.get('code') or 'unknown')
-
         summary = [
             summary_row('📄', 'PDF', truncate(pdf.get('title', ''), 60)),
             summary_row('🆔', 'Code', pdf.get('code') or '—'),
             summary_row('👤', 'Reporter', reporter_name),
             summary_row('❗', 'Reason', reason_label),
         ]
-
         notify_super_admins(
             event_type='pdf_report',
             title=f"PDF reported: {pdf.get('code', '')}",
-            md_body=md_body,
-            md_filename=filename,
-            summary=summary,
-            primary_url=admin_url,
-            primary_url_label='Open admin panel',
-            severity='warning',
-            reference_id=f"PDF-{pdf.get('code') or 'UNKNOWN'}",
+            md_body=md_body, md_filename=filename, summary=summary,
+            primary_url=admin_url, primary_url_label='Open admin panel',
+            severity='warning', reference_id=f"PDF-{pdf.get('code') or 'UNKNOWN'}",
             icon='🚩',
         )
     except Exception as e:

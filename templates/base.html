@@ -68,7 +68,7 @@
     <!-- ============================================ -->
     <!-- MAIN CSS – loads first                       -->
     <!-- ============================================ -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=3" />
 
     <!-- ============================================ -->
     <!-- SERVER-SIDE ACCENT COLOURS – OVERRIDES       -->
@@ -89,13 +89,74 @@
     <meta name="apple-mobile-web-app-title" content="Nuun">
     <link rel="apple-touch-icon" href="/static/images/icon-192.png">
     <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(err =>
-          console.warn('SW registration failed:', err)
-        );
-      });
-    }
+    /* ============================================================
+       Service Worker registration with self-healing update flow.
+       Ensures stale clients receive the newest HTML / CSS / JS
+       on their next visit, without requiring an app reinstall.
+       ============================================================ */
+    (function () {
+        if (!('serviceWorker' in navigator)) return;
+    
+        var RELOAD_GUARD_KEY = 'sw-reload-at';
+        var RELOAD_MIN_GAP_MS = 10 * 1000;   // 10s — stops infinite loops
+    
+        function guardedReload() {
+            try {
+                var last = parseInt(sessionStorage.getItem(RELOAD_GUARD_KEY) || '0', 10);
+                var now = Date.now();
+                if (last && (now - last) < RELOAD_MIN_GAP_MS) {
+                    // We already reloaded very recently — stop.
+                    return;
+                }
+                sessionStorage.setItem(RELOAD_GUARD_KEY, String(now));
+            } catch (e) { /* sessionStorage disabled — allow the reload */ }
+            window.location.reload();
+        }
+    
+        window.addEventListener('load', function () {
+            navigator.serviceWorker
+                .register('/sw.js', { updateViaCache: 'none' })
+                .then(function (reg) {
+                    // 1. Ask the browser to check for a new SW right now.
+                    reg.update().catch(function () {});
+    
+                    // 2. If a newer worker is already waiting, activate it.
+                    if (reg.waiting) {
+                        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                    }
+    
+                    // 3. Watch for a newly-installed worker arriving while
+                    //    the page is open, and activate it immediately.
+                    reg.addEventListener('updatefound', function () {
+                        var installing = reg.installing;
+                        if (!installing) return;
+                        installing.addEventListener('statechange', function () {
+                            if (installing.state === 'installed'
+                                && navigator.serviceWorker.controller) {
+                                installing.postMessage({ type: 'SKIP_WAITING' });
+                            }
+                        });
+                    });
+    
+                    // 4. Re-check every 30 minutes while the tab is open.
+                    setInterval(function () {
+                        reg.update().catch(function () {});
+                    }, 30 * 60 * 1000);
+                })
+                .catch(function (err) {
+                    console.warn('SW registration failed:', err);
+                });
+    
+            // 5. When the SW changes controller (new version took over),
+            //    reload once so the user sees the new UI immediately.
+            var reloading = false;
+            navigator.serviceWorker.addEventListener('controllerchange', function () {
+                if (reloading) return;
+                reloading = true;
+                guardedReload();
+            });
+        });
+    })();
     </script>
     <!-- Page specific CSS -->
     {% block extra_css %}{% endblock %}

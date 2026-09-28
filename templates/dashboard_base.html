@@ -309,9 +309,9 @@
 
 {% block extra_css %}
 {{ super() }}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/upgrade.css') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/prompt-cards.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=3" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/upgrade.css') }}?v=3" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/prompt-cards.css') }}?v=3" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/discount-chip.css') }}?v=3" />
 {% block dashboard_css %}{% endblock %}
 {% endblock %}
