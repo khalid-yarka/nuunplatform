@@ -57,6 +57,7 @@ def init_bot_db():
             is_premium        INTEGER DEFAULT 0,
             file_id           TEXT,
             file_unique_id    TEXT UNIQUE,
+            file_size         INTEGER DEFAULT NULL,
             original_filename TEXT,
             uploaded_by       TEXT NOT NULL DEFAULT 'NUUN',
             uploaded_at       TEXT DEFAULT (datetime('now', 'localtime')),
@@ -87,6 +88,10 @@ def init_bot_db():
         if 'published_at' not in existing_cols:
             cursor.execute("ALTER TABLE pdfs ADD COLUMN published_at TEXT")
             logger.info("Added published_at column to bot pdfs table")
+
+        if 'file_size' not in existing_cols:
+            cursor.execute("ALTER TABLE pdfs ADD COLUMN file_size INTEGER DEFAULT NULL")
+            logger.info("Added file_size column to bot pdfs table")
     except Exception as e:
         logger.warning(f"Could not run pdfs column migrations: {e}")
 
@@ -417,3 +422,65 @@ def is_bot_duplicate(file_unique_id):
 def is_duplicate_in_bot(file_unique_id):
     """Check both pending and bot pdfs."""
     return is_pending_duplicate(file_unique_id) or is_bot_duplicate(file_unique_id)
+
+# ============================================================
+# FILE SIZE + BATCH LOOKUP (for direct-download gating)
+# ============================================================
+
+def list_bot_pdfs_missing_size(limit=50):
+    """Return bot PDFs whose file_size has not yet been resolved."""
+    conn = _get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, code, file_id, file_size
+            FROM pdfs
+            WHERE file_size IS NULL
+              AND file_id IS NOT NULL AND file_id != ''
+            ORDER BY id ASC
+            LIMIT ?
+        """, (limit,))
+        return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def update_bot_pdf_file_size(pdf_id, file_size):
+    """Set file_size for a bot PDF row. Idempotent, non-raising."""
+    try:
+        conn = _get_connection()
+        cur = conn.cursor()
+        cur.execute("UPDATE pdfs SET file_size = ? WHERE id = ?",
+                    (int(file_size), int(pdf_id)))
+        conn.commit()
+        n = cur.rowcount
+        conn.close()
+        return n > 0
+    except Exception as e:
+        logger.warning(f"update_bot_pdf_file_size failed for #{pdf_id}: {e}")
+        return False
+
+
+def get_bot_pdfs_by_codes(codes):
+    """
+    Batch lookup bot PDF rows by code. Returns {code: row_dict}.
+    Chunks to stay under SQLite's parameter limit.
+    """
+    if not codes:
+        return {}
+    result = {}
+    try:
+        conn = _get_connection()
+        cur = conn.cursor()
+        code_list = list({str(c).strip() for c in codes if c})
+        chunk = 500
+        for i in range(0, len(code_list), chunk):
+            batch = code_list[i:i + chunk]
+            ph = ','.join('?' * len(batch))
+            cur.execute(f"SELECT * FROM pdfs WHERE code IN ({ph})", batch)
+            for row in cur.fetchall():
+                result[row['code']] = dict(row)
+        conn.close()
+    except Exception as e:
+        logger.warning(f"get_bot_pdfs_by_codes failed: {e}")
+    return result

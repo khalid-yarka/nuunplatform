@@ -328,17 +328,17 @@
             encodeURIComponent((window.upgradeState && window.upgradeState.userId) || '');
 
         const priceLine = state.hasDiscount
-            ? `$0.50 bisha koowaad (50% dhimis), kadib $1.00/bil`
+            ? `$0.50 (50% dhimis, qime hore: $1)`
             : `$1.00/bil`;
 
         const lines = [
-            `Asc, wll. Waxaan soo codsaday kor u qaadista Premium.`,
+            `Asc, wll. Waxaan raba inan Premium furto`,
             ``,
             `📌 Request ID: ${requestId}`,
             `👤 Magaca: ${userName}`,
             `📞 Telefoonka: ${userPhone}`,
             `🆔 Aqoonsiga: ${publicId}`,
-            `🏷️ Qorshaha: Premium — Bille`,
+            `🏷️ Dalabka: Premium — Hal Bil`,
             `💰 Qiimaha: ${priceLine}`,
             ``,
             `🔗 Eeg profaylkayga:`,

@@ -127,6 +127,15 @@ class Config:
     LIVE_QUIZ_MAX_PARTICIPANTS = int(os.getenv('LIVE_QUIZ_MAX_PARTICIPANTS', '50'))
 
     # ============================================
+    # PDF DIRECT DOWNLOAD
+    # ============================================
+    # Max file size for direct streaming from Telegram. Telegram's
+    # getFile API is capped at 20 MB; use 19 MB as a safety margin.
+    PDF_DIRECT_DOWNLOAD_MAX_BYTES = int(
+        os.getenv('PDF_DIRECT_DOWNLOAD_MAX_BYTES', str(19 * 1024 * 1024))
+    )
+  
+    # ============================================
     # RATE LIMITING
     # ============================================
     RATE_LIMIT_DEFAULT = os.getenv('RATE_LIMIT_DEFAULT', '200 per day;50 per hour')
