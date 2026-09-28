@@ -13,7 +13,6 @@
 <script>
     (function() {
         try {
-            // ---- Theme ----
             var serverTheme = "{{ settings.get('appearance.theme', '') if settings is defined else '' }}";
             var theme = serverTheme || localStorage.getItem('preferred-theme') || 'system';
             var resolved = (theme === 'system')
@@ -21,7 +20,6 @@
                 : theme;
             document.documentElement.setAttribute('data-theme', resolved);
 
-            // ---- Accent ----
             var serverAccent = "{{ settings.get('appearance.accent', '') if settings is defined else '' }}";
             var accent = serverAccent || localStorage.getItem('preferred-accent') || 'red';
 
@@ -39,25 +37,21 @@
             root.style.setProperty('--primary-hover', a.hover);
             root.style.setProperty('--primary-light', isDark ? a.light_dark : a.light);
 
-            // ---- Font size ----
             var serverFont = "{{ settings.get('appearance.font_size', '') if settings is defined else '' }}";
             var fontSize = serverFont || localStorage.getItem('preferred-font-size') || 'medium';
             var sizes = { small: '14px', medium: '16px', large: '18px' };
             root.style.setProperty('--base-font-size', sizes[fontSize] || '16px');
 
-            // ---- Compact mode ----
             var serverCompact = "{{ settings.get('appearance.compact_mode', '') if settings is defined else '' }}";
             var compact = serverCompact === 'True' || serverCompact === 'true' || serverCompact === '1'
                           || localStorage.getItem('preferred-compact') === '1';
             if (compact) root.classList.add('compact-mode');
 
-            // ---- Reduced motion ----
             var serverMotion = "{{ settings.get('appearance.reduced_motion', '') if settings is defined else '' }}";
             var reduced = serverMotion === 'True' || serverMotion === 'true' || serverMotion === '1'
                           || localStorage.getItem('preferred-reduced-motion') === '1';
             if (reduced) root.classList.add('reduced-motion');
 
-            // ---- Sidebar collapsed state ----
             if (localStorage.getItem('sidebar-collapsed') === '1') {
                 root.classList.add('sidebar-collapsed');
             }
@@ -67,49 +61,33 @@
 
 <style>
     /* ============================================
-       IMPERSONATION BANNER (loaded on EVERY page)
+       IMPERSONATION BANNER
        ============================================ */
     .impersonation-banner {
         position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
+        top: 0; left: 0; right: 0;
         z-index: 99999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 14px;
-        padding: 10px 20px;
+        display: flex; align-items: center; justify-content: center;
+        gap: 14px; padding: 10px 20px;
         background: linear-gradient(90deg, #F59E0B, #D97706);
-        color: #fff;
-        font-size: 14px;
-        font-weight: 600;
+        color: #fff; font-size: 14px; font-weight: 600;
         box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
         flex-wrap: wrap;
     }
     .impersonation-banner .txt {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        min-width: 0;
-        flex: 1;
-        justify-content: center;
+        display: flex; align-items: center; gap: 10px;
+        min-width: 0; flex: 1; justify-content: center;
     }
     .impersonation-banner .txt strong { color: #fff; }
     .impersonation-banner .stop-btn {
         padding: 6px 16px;
         background: rgba(255, 255, 255, 0.20);
         border: 1px solid rgba(255, 255, 255, 0.45);
-        color: #fff;
-        border-radius: 20px;
-        font-size: 13px;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all 0.2s ease;
+        color: #fff; border-radius: 20px;
+        font-size: 13px; font-weight: 700;
+        cursor: pointer; transition: all 0.2s ease;
         font-family: inherit;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
+        display: inline-flex; align-items: center; gap: 6px;
         white-space: nowrap;
     }
     .impersonation-banner .stop-btn:hover {
@@ -117,32 +95,16 @@
         transform: translateY(-1px);
     }
     .impersonation-banner .stop-btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-        transform: none;
+        opacity: 0.6; cursor: not-allowed; transform: none;
     }
 
-    /* Offset the shell so the banner doesn't overlap the sidebar/topbar */
-    body.is-impersonating .dashboard-wrapper {
-        padding-top: 48px;
-    }
-    body.is-impersonating .sidebar {
-        top: 48px;
-        height: calc(100vh - 48px);
-    }
-    body.is-impersonating .top-navbar {
-        top: 48px;
-    }
+    body.is-impersonating .dashboard-wrapper { padding-top: 48px; }
+    body.is-impersonating .sidebar { top: 48px; height: calc(100vh - 48px); }
+    body.is-impersonating .top-navbar { top: 48px; }
 
     @media (max-width: 640px) {
-        .impersonation-banner {
-            padding: 8px 12px;
-            font-size: 12px;
-        }
-        .impersonation-banner .stop-btn {
-            padding: 4px 12px;
-            font-size: 12px;
-        }
+        .impersonation-banner { padding: 8px 12px; font-size: 12px; }
+        .impersonation-banner .stop-btn { padding: 4px 12px; font-size: 12px; }
     }
 
     /* ============================================
@@ -150,30 +112,19 @@
        ============================================ */
     .whatsapp-fab {
         position: fixed;
-        right: 24px;
-        bottom: 24px;
+        right: 24px; bottom: 24px;
         z-index: 800;
-        display: inline-flex;
-        align-items: center;
+        display: inline-flex; align-items: center;
         height: 56px;
-        background: #25D366;
-        color: #ffffff;
-        border-radius: 28px;
-        text-decoration: none;
+        background: #25D366; color: #ffffff;
+        border-radius: 28px; text-decoration: none;
         box-shadow: 0 6px 20px rgba(37, 211, 102, 0.40),
                     0 2px 6px  rgba(0, 0, 0, 0.12);
-        transition: background 0.25s ease,
-                    transform  0.25s ease,
-                    box-shadow 0.25s ease;
+        transition: background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
     }
     .whatsapp-fab::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        pointer-events: none;
-        z-index: 0;
-        /* Ring pulses 4 times on first appearance, then stops. */
+        content: ''; position: absolute; inset: 0;
+        border-radius: inherit; pointer-events: none; z-index: 0;
         animation: whatsappPulse 2.4s ease-out 4;
     }
     @keyframes whatsappPulse {
@@ -181,38 +132,23 @@
         70%  { box-shadow: 0 0 0 18px rgba(37, 211, 102, 0.00); }
         100% { box-shadow: 0 0 0 0    rgba(37, 211, 102, 0.00); }
     }
-
     .whatsapp-fab__label {
-        max-width: 0;
-        opacity: 0;
-        padding-left: 0;
-        overflow: hidden;
-        white-space: nowrap;
-        font-weight: 700;
-        font-size: 14px;
-        letter-spacing: 0.2px;
-        position: relative;
-        z-index: 1;
-        transition: max-width    0.35s cubic-bezier(0.4, 0, 0.2, 1),
-                    opacity      0.20s ease 0.10s,
+        max-width: 0; opacity: 0; padding-left: 0;
+        overflow: hidden; white-space: nowrap;
+        font-weight: 700; font-size: 14px; letter-spacing: 0.2px;
+        position: relative; z-index: 1;
+        transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                    opacity 0.20s ease 0.10s,
                     padding-left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .whatsapp-fab > i {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 56px;
-        height: 56px;
-        font-size: 28px;
-        flex-shrink: 0;
-        position: relative;
-        z-index: 1;
+        display: flex; align-items: center; justify-content: center;
+        width: 56px; height: 56px; font-size: 28px;
+        flex-shrink: 0; position: relative; z-index: 1;
     }
-
     .whatsapp-fab:hover,
     .whatsapp-fab:focus-visible {
-        background: #1DA851;
-        color: #ffffff;
+        background: #1DA851; color: #ffffff;
         text-decoration: none;
         transform: translateY(-3px);
         box-shadow: 0 10px 28px rgba(37, 211, 102, 0.50),
@@ -221,15 +157,9 @@
     }
     .whatsapp-fab:hover .whatsapp-fab__label,
     .whatsapp-fab:focus-visible .whatsapp-fab__label {
-        max-width: 180px;
-        opacity: 1;
-        padding-left: 20px;
+        max-width: 180px; opacity: 1; padding-left: 20px;
     }
-    .whatsapp-fab:active {
-        transform: translateY(-1px) scale(0.98);
-    }
-
-    /* Mobile — no label, slightly smaller */
+    .whatsapp-fab:active { transform: translateY(-1px) scale(0.98); }
     @media (max-width: 640px) {
         .whatsapp-fab { right: 16px; bottom: 16px; height: 52px; }
         .whatsapp-fab > i { width: 52px; height: 52px; font-size: 26px; }
@@ -237,19 +167,14 @@
         .whatsapp-fab:hover,
         .whatsapp-fab:focus-visible { transform: translateY(-2px); }
     }
-
-    /* Honour reduced motion */
     .reduced-motion .whatsapp-fab::before { animation: none; }
 
     /* ============================================
-       NAVBAR LANGUAGE SWITCH (EN | SO)
+       NAVBAR LANGUAGE SWITCH
        ============================================ */
     .navbar-right .lang-switch {
-        display: inline-flex;
-        align-items: center;
-        height: 34px;
-        padding: 2px;
-        gap: 1px;
+        display: inline-flex; align-items: center;
+        height: 34px; padding: 2px; gap: 1px;
         background: var(--background);
         border: 1.5px solid var(--border);
         border-radius: 18px;
@@ -257,51 +182,256 @@
         -webkit-tap-highlight-color: transparent;
         user-select: none;
     }
-    .navbar-right .lang-switch:hover {
-        border-color: var(--primary);
-    }
+    .navbar-right .lang-switch:hover { border-color: var(--primary); }
     .navbar-right .lang-switch__opt {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 34px;
-        height: 26px;
-        padding: 0 8px;
-        border: none;
-        border-radius: 14px;
-        background: transparent;
-        color: var(--text-secondary);
-        font-family: inherit;
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0.5px;
-        cursor: pointer;
-        transition: all 0.15s ease;
-        line-height: 1;
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 34px; height: 26px; padding: 0 8px;
+        border: none; border-radius: 14px;
+        background: transparent; color: var(--text-secondary);
+        font-family: inherit; font-size: 11px; font-weight: 800;
+        letter-spacing: 0.5px; cursor: pointer;
+        transition: all 0.15s ease; line-height: 1;
     }
     .navbar-right .lang-switch__opt:hover {
-        color: var(--text);
-        background: var(--surface);
+        color: var(--text); background: var(--surface);
     }
     .navbar-right .lang-switch__opt.active {
-        background: var(--primary);
-        color: #fff;
+        background: var(--primary); color: #fff;
         box-shadow: 0 2px 8px rgba(255, 49, 56, 0.25);
     }
     .navbar-right .lang-switch__opt:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
+        opacity: 0.6; cursor: not-allowed;
     }
     @media (max-width: 480px) {
-        .navbar-right .lang-switch {
-            height: 30px;
-            padding: 2px;
-        }
+        .navbar-right .lang-switch { height: 30px; padding: 2px; }
         .navbar-right .lang-switch__opt {
-            min-width: 28px;
-            height: 22px;
-            padding: 0 6px;
-            font-size: 10px;
+            min-width: 28px; height: 22px; padding: 0 6px; font-size: 10px;
+        }
+    }
+
+    /* ============================================
+       NOTIFICATION DROPDOWN — BASE
+       Desktop (>768px): stays right-aligned to the bell (unchanged).
+       Mobile (≤768px): recomputed below as a floating centred card.
+       ============================================ */
+    .notification-dropdown.open { display: flex; }
+
+    /* ----------------------------------------------------------
+       DESKTOP NOTIFICATION DROPDOWN — anchored to the bell,
+       right-aligned. Explicit so no mobile rule can leak up.
+       (Mobile overrides live inside the @media blocks below.)
+       ---------------------------------------------------------- */
+    @media (min-width: 769px) {
+        .notification-wrapper { position: relative; }
+    
+        .notification-wrapper .notification-dropdown {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            left: auto;
+            bottom: auto;
+            width: 380px;
+            max-width: 380px;
+            max-height: 480px;
+            margin: 0;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+        }
+    }
+  
+    @keyframes notifDropIn {
+        from { opacity: 0; transform: translateY(-10px) scale(0.97); }
+        to   { opacity: 1; transform: translateY(0)    scale(1); }
+    }
+
+    /* ============================================
+       TOP NAVBAR — RESPONSIVE LAYOUT
+       ============================================ */
+
+    /* Tablet */
+    @media (max-width: 1024px) {
+        .top-navbar { padding: 0 16px; gap: 8px; }
+        .top-navbar .navbar-right { gap: 6px; }
+        .navbar-right .discount-chip {
+            padding: 6px 12px;
+            min-height: 36px;
+        }
+        .navbar-right .discount-chip .dc-label { font-size: 10px; }
+        .navbar-right .discount-chip .dc-time  { font-size: 11px; }
+    }
+
+    /* Mobile */
+    @media (max-width: 768px) {
+        .top-navbar {
+            padding: 0 10px;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .top-navbar .navbar-left {
+            gap: 8px;
+            min-width: 0;
+            flex-shrink: 0;
+        }
+        .top-navbar .navbar-left .menu-toggle { flex-shrink: 0; }
+        .top-navbar .navbar-left .page-title {
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 15px;
+            white-space: nowrap;
+        }
+
+        .top-navbar .navbar-right {
+            gap: 2px;
+            flex: 1 1 auto;
+            min-width: 0;
+            justify-content: flex-end;
+        }
+
+        .navbar-right .lang-switch { display: none; }
+        .navbar-right #helpToggle  { display: none; }
+        .navbar-right .nav-divider { display: none; }
+
+        .navbar-right .discount-chip {
+            padding: 6px 10px;
+            gap: 6px;
+            min-height: 34px;
+            min-width: 0;
+            max-width: 130px;
+            flex-shrink: 1;
+        }
+        .navbar-right .discount-chip .dc-icon {
+            font-size: 14px; flex-shrink: 0;
+        }
+        .navbar-right .discount-chip .dc-body {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.15;
+            min-width: 0;
+            overflow: hidden;
+        }
+        .navbar-right .discount-chip .dc-label { display: none; }
+        .navbar-right .discount-chip .dc-time {
+            font-size: 11px; font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .navbar-right .theme-toggle,
+        .navbar-right .notification-toggle {
+            width: 34px; height: 34px;
+            font-size: 16px; flex-shrink: 0;
+        }
+        .navbar-right .notification-badge {
+            font-size: 9px;
+            min-width: 16px;
+            height: 16px;
+        }
+        .navbar-right .notification-wrapper {
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .navbar-right .user-menu {
+            padding: 4px; flex-shrink: 0;
+        }
+        .navbar-right .user-menu .user-name-sm { display: none; }
+        .navbar-right .user-menu .avatar-sm {
+            width: 34px; height: 34px; font-size: 13px;
+        }
+
+        /* ---------------------------------------------------
+           NOTIFICATION DROPDOWN — NARROW FLOATING CARD (mobile)
+           Fixed-width, centred with equal breathing room.
+           Desktop keeps the original right-anchored layout.
+           --------------------------------------------------- */
+        .navbar-right .notification-dropdown {
+            position: fixed;
+            top: 70px;
+            left: 0;
+            right: 0;
+            width: calc(100vw - 48px);
+            max-width: 320px;
+            margin: 0 auto;
+            max-height: 68vh;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.24),
+                        0 4px 12px  rgba(0, 0, 0, 0.10);
+            overflow: hidden;
+            animation: notifDropIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        [data-theme="dark"] .navbar-right .notification-dropdown {
+            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.55),
+                        0 4px 12px  rgba(0, 0, 0, 0.35);
+        }
+
+        .navbar-right .notification-dropdown.open {
+            display: flex;
+        }
+
+        .navbar-right .dropdown-header {
+            padding: 12px 16px;
+            font-size: 13px;
+        }
+        .navbar-right .dropdown-body {
+            max-height: calc(68vh - 110px);
+        }
+        .navbar-right .dropdown-footer {
+            padding: 10px 16px;
+        }
+        .navbar-right .notification-item {
+            padding: 12px 16px;
+            gap: 12px;
+        }
+        .navbar-right .notification-item .n-icon { font-size: 20px; }
+        .navbar-right .notification-item .n-title { font-size: 13.5px; }
+        .navbar-right .notification-item .n-body {
+            font-size: 12.5px;
+            line-height: 1.4;
+        }
+        .navbar-right .notification-item .n-time { font-size: 11px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .navbar-right .notification-dropdown { animation: none; }
+    }
+
+    /* Very small */
+    @media (max-width: 480px) {
+        .top-navbar { padding: 0 8px; }
+        .top-navbar .navbar-left .page-title {
+            max-width: 90px;
+            font-size: 14px;
+        }
+
+        .navbar-right .discount-chip {
+            padding: 0;
+            min-width: 34px;
+            max-width: 34px;
+            width: 34px;
+            height: 34px;
+            justify-content: center;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .navbar-right .discount-chip .dc-body { display: none; }
+        .navbar-right .discount-chip .dc-icon {
+            font-size: 16px; margin: 0;
+        }
+
+        /* Tighter card on small phones */
+        .navbar-right .notification-dropdown {
+            top: 62px;
+            width: calc(100vw - 40px);
+            max-width: 300px;
+            border-radius: 14px;
+            max-height: 72vh;
+        }
+        .navbar-right .dropdown-body {
+            max-height: calc(72vh - 108px);
         }
     }
 </style>
@@ -317,9 +447,6 @@
 {% endblock %}
 
 {% block content %}
-<!-- ============================================ -->
-<!-- IMPERSONATION BANNER (global, shown on every page) -->
-<!-- ============================================ -->
 {% if session.get('is_impersonating') and session.get('impersonator') %}
 <div class="impersonation-banner" id="impersonationBanner">
     <div class="txt">
@@ -337,21 +464,16 @@
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         document.body.classList.add('is-impersonating');
-
         var btn = document.getElementById('stopImpersonationBtn');
         if (!btn) return;
         btn.addEventListener('click', function () {
             if (!confirm('Stop impersonating and return to your admin account?')) return;
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Stopping…';
-
             var token = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
             fetch('{{ url_for("admin_access.impersonate_stop") }}', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': token
-                },
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
                 body: JSON.stringify({})
             })
             .then(function (r) { return r.json(); })
@@ -374,16 +496,10 @@
 </script>
 {% endif %}
 
-<!-- Sidebar Overlay (mobile) -->
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
 <div class="dashboard-wrapper">
-    <!-- ============================================ -->
-    <!-- SIDEBAR -->
-    <!-- ============================================ -->
     <aside class="sidebar" id="sidebar">
-
-        <!-- ---------- Brand ---------- -->
         <div class="sidebar-brand">
             <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="logo" />
             <span class="brand-text">Nuun<span>Platform</span></span>
@@ -397,7 +513,6 @@
             </button>
         </div>
 
-        <!-- ---------- User Info ---------- -->
         <a href="{{ url_for('dashboard.profile') }}"
            class="sidebar-user"
            title="{{ _('sidebar.view_profile') }}">
@@ -422,13 +537,9 @@
             </div>
         </a>
 
-        <!-- ---------- Navigation ---------- -->
         <nav class="sidebar-nav">
-
-            <!-- ============ MAIN ============ -->
             <div class="nav-section">
                 <div class="nav-label">{{ _('nav.section.main') }}</div>
-
                 <a href="{{ url_for('dashboard.home') }}"
                    class="nav-item {% if request.endpoint == 'dashboard.home' %}active{% endif %}"
                    data-title="{{ _('nav.dashboard') }}" title="{{ _('nav.dashboard') }}">
@@ -437,17 +548,14 @@
                 </a>
             </div>
 
-            <!-- ============ LEARNING ============ -->
             <div class="nav-section">
                 <div class="nav-label">{{ _('nav.section.learning') }}</div>
-
                 <a href="{{ url_for('quiz.index') }}"
                    class="nav-item {% if request.endpoint.startswith('quiz.') and request.endpoint != 'quiz.leaderboard' %}active{% endif %}"
                    data-title="{{ _('nav.quizzes') }}" title="{{ _('nav.quizzes') }}">
                     <span class="nav-icon"><i class="fas fa-pencil-alt"></i></span>
                     <span class="nav-text">{{ _('nav.quizzes') }}</span>
                 </a>
-
                 <a href="{{ url_for('live_quiz.lobby') }}"
                    class="nav-item {% if request.endpoint.startswith('live_quiz.') %}active{% endif %}"
                    data-title="{{ _('nav.live_quiz') }}" title="{{ _('nav.live_quiz') }}">
@@ -455,7 +563,6 @@
                     <span class="nav-text">{{ _('nav.live_quiz') }}</span>
                     <span class="nav-badge">⚡</span>
                 </a>
-
                 <a href="{{ url_for('focus.index') }}"
                    class="nav-item {% if request.endpoint.startswith('focus.') %}active{% endif %}"
                    data-title="{{ _('nav.focus') }}" title="{{ _('nav.focus') }}">
@@ -463,14 +570,12 @@
                     <span class="nav-text">{{ _('nav.focus') }}</span>
                     {% if has_focus_access is defined and not has_focus_access %}<span class="nav-badge">🔒</span>{% endif %}
                 </a>
-
                 <a href="{{ url_for('pdfs.list_pdfs') }}"
                    class="nav-item {% if request.endpoint == 'pdfs.list_pdfs' or request.endpoint == 'pdfs.view_pdf' %}active{% endif %}"
                    data-title="{{ _('nav.pdfs') }}" title="{{ _('nav.pdfs') }}">
                     <span class="nav-icon"><i class="fas fa-file-pdf"></i></span>
                     <span class="nav-text">{{ _('nav.pdfs') }}</span>
                 </a>
-
                 <a href="{{ url_for('groups.list_groups') }}"
                    class="nav-item {% if request.endpoint == 'groups.list_groups' %}active{% endif %}"
                    data-title="{{ _('nav.groups') }}" title="{{ _('nav.groups') }}">
@@ -479,17 +584,14 @@
                 </a>
             </div>
 
-            <!-- ============ COMMUNITY ============ -->
             <div class="nav-section">
                 <div class="nav-label">{{ _('nav.section.community') }}</div>
-
                 <a href="{{ url_for('quiz.leaderboard') }}"
                    class="nav-item {% if request.endpoint == 'quiz.leaderboard' %}active{% endif %}"
                    data-title="{{ _('nav.leaderboard') }}" title="{{ _('nav.leaderboard') }}">
                     <span class="nav-icon"><i class="fas fa-trophy"></i></span>
                     <span class="nav-text">{{ _('nav.leaderboard') }}</span>
                 </a>
-
                 <a href="{{ url_for('history.index') }}"
                    class="nav-item {% if request.endpoint.startswith('history.') %}active{% endif %}"
                    data-title="{{ _('nav.history') }}" title="{{ _('nav.history') }}">
@@ -498,17 +600,14 @@
                 </a>
             </div>
 
-            <!-- ============ ACCOUNT ============ -->
             <div class="nav-section">
                 <div class="nav-label">{{ _('nav.section.account') }}</div>
-
                 <a href="{{ url_for('dashboard.profile') }}"
                    class="nav-item {% if request.endpoint == 'dashboard.profile' %}active{% endif %}"
                    data-title="{{ _('nav.profile') }}" title="{{ _('nav.profile') }}">
                     <span class="nav-icon"><i class="fas fa-user"></i></span>
                     <span class="nav-text">{{ _('nav.profile') }}</span>
                 </a>
-
                 <a href="{{ url_for('settings.index') }}"
                    class="nav-item {% if request.endpoint.startswith('settings.') %}active{% endif %}"
                    data-title="{{ _('nav.settings') }}" title="{{ _('nav.settings') }}">
@@ -517,28 +616,23 @@
                 </a>
             </div>
 
-            <!-- ============ ADMIN ============ -->
             {% if session.is_admin %}
                 <div class="nav-section">
                     <div class="nav-label">{{ _('nav.section.admin') }}</div>
-
                     <a href="{{ url_for('admin_system.dashboard') }}"
                        class="nav-item {% if request.endpoint.startswith('admin_') and not request.endpoint.startswith('admin_errors.') and not request.endpoint.startswith('admin_batches.') %}active{% endif %}"
                        data-title="{{ _('nav.admin_panel') }}" title="{{ _('nav.admin_panel') }}">
                         <span class="nav-icon"><i class="fas fa-shield-alt"></i></span>
                         <span class="nav-text">{{ _('nav.admin_panel') }}</span>
                     </a>
-
                     {% if is_super_admin() %}
                     <a href="{{ url_for('admin_batches.index') }}"
                        class="nav-item {% if request.endpoint and request.endpoint.startswith('admin_batches.') %}active{% endif %}"
-                       data-title="Batches"
-                       title="Batches">
+                       data-title="Batches" title="Batches">
                         <span class="nav-icon"><i class="fas fa-layer-group"></i></span>
                         <span class="nav-text">Batches</span>
                     </a>
                     {% endif %}
-
                     {% if is_super_admin() and admin_can('upgrades.view') %}
                     <a href="{{ url_for('upgrade.admin_list') }}"
                        class="nav-item {% if request.path.startswith('/upgrade/admin/upgrade-requests') %}active{% endif %}"
@@ -550,7 +644,6 @@
                         {% endif %}
                     </a>
                     {% endif %}
-
                     {% if is_super_admin() and admin_can('discounts.view') %}
                     <a href="{{ url_for('upgrade.admin_discounts') }}"
                        class="nav-item {% if request.path.startswith('/upgrade/admin/discounts') %}active{% endif %}"
@@ -559,7 +652,6 @@
                         <span class="nav-text">{{ _('nav.discount_codes') }}</span>
                     </a>
                     {% endif %}
-
                     {% if admin_can('errors.view') %}
                     <a href="{{ url_for('admin_errors.index') }}"
                        class="nav-item {% if request.endpoint.startswith('admin_errors.') %}active{% endif %}"
@@ -573,7 +665,6 @@
             {% endif %}
         </nav>
 
-        <!-- ---------- Footer ---------- -->
         <div class="sidebar-footer">
             <a href="{{ url_for('docs.home') }}"
                class="nav-item"
@@ -593,11 +684,7 @@
         </div>
     </aside>
 
-    <!-- ============================================ -->
-    <!-- MAIN CONTENT -->
-    <!-- ============================================ -->
     <main class="main-content">
-        <!-- Top Navbar -->
         <header class="top-navbar">
             <div class="navbar-left">
                 <button class="menu-toggle" id="menuToggle" aria-label="{{ _('navbar.toggle_sidebar') }}">
@@ -607,22 +694,18 @@
             </div>
             <div class="navbar-right">
 
-                {# ── Language switch (EN | SO) ── #}
                 {% set current_lang = (settings.get('appearance.language') or 'en') %}
                 <div class="lang-switch" id="langSwitch" role="radiogroup" aria-label="Language">
                     <button type="button"
                             class="lang-switch__opt {% if current_lang == 'en' %}active{% endif %}"
-                            data-lang="en"
-                            role="radio"
+                            data-lang="en" role="radio"
                             aria-checked="{{ 'true' if current_lang == 'en' else 'false' }}">EN</button>
                     <button type="button"
                             class="lang-switch__opt {% if current_lang == 'so' %}active{% endif %}"
-                            data-lang="so"
-                            role="radio"
+                            data-lang="so" role="radio"
                             aria-checked="{{ 'true' if current_lang == 'so' else 'false' }}">SO</button>
                 </div>
 
-                {# ── Discount countdown chip ── #}
                 {% if discount_chip %}
                 <button type="button"
                         class="discount-chip"
@@ -685,61 +768,45 @@
             </div>
         </header>
 
-        <!-- Page Content -->
         <div class="page-content">
             {% block dashboard_content %}{% endblock %}
         </div>
 
-        <!-- ============================================ -->
-        <!-- FOOTER — Advanced                            -->
-        <!-- ============================================ -->
         <footer class="app-footer">
             <div class="footer-container">
-
                 <div class="footer-top">
-
-                    <!-- ---------- Brand ---------- -->
                     <div class="footer-col footer-col-brand">
                         <a href="{{ url_for('dashboard.home') }}" class="footer-brand">
                             <img src="{{ url_for('static', filename='images/logo.png') }}"
                                  alt="NuunPlatform" class="footer-logo" />
                             <span class="footer-brand-text">Nuun<span>Platform</span></span>
                         </a>
-
                         <p class="footer-tagline">{{ _('footer.tagline') }}</p>
-
                         <div class="footer-social" role="group" aria-label="{{ _('footer.follow_us') }}">
                             {% if social_whatsapp %}
-                            <a href="{{ social_whatsapp }}"
-                               target="_blank" rel="noopener noreferrer"
+                            <a href="{{ social_whatsapp }}" target="_blank" rel="noopener noreferrer"
                                class="footer-social-btn footer-social-whatsapp"
-                               aria-label="{{ _('footer.whatsapp') }}"
-                               title="{{ _('footer.whatsapp') }}">
+                               aria-label="{{ _('footer.whatsapp') }}" title="{{ _('footer.whatsapp') }}">
                                 <i class="fab fa-whatsapp" aria-hidden="true"></i>
                             </a>
                             {% endif %}
                             {% if social_tiktok %}
-                            <a href="{{ social_tiktok }}"
-                               target="_blank" rel="noopener noreferrer"
+                            <a href="{{ social_tiktok }}" target="_blank" rel="noopener noreferrer"
                                class="footer-social-btn footer-social-tiktok"
-                               aria-label="{{ _('footer.tiktok') }}"
-                               title="{{ _('footer.tiktok') }}">
+                               aria-label="{{ _('footer.tiktok') }}" title="{{ _('footer.tiktok') }}">
                                 <i class="fab fa-tiktok" aria-hidden="true"></i>
                             </a>
                             {% endif %}
                             {% if social_youtube %}
-                            <a href="{{ social_youtube }}"
-                               target="_blank" rel="noopener noreferrer"
+                            <a href="{{ social_youtube }}" target="_blank" rel="noopener noreferrer"
                                class="footer-social-btn footer-social-youtube"
-                               aria-label="{{ _('footer.youtube') }}"
-                               title="{{ _('footer.youtube') }}">
+                               aria-label="{{ _('footer.youtube') }}" title="{{ _('footer.youtube') }}">
                                 <i class="fab fa-youtube" aria-hidden="true"></i>
                             </a>
                             {% endif %}
                         </div>
                     </div>
 
-                    <!-- ---------- Learn ---------- -->
                     <nav class="footer-col" aria-label="{{ _('footer.learn') }}">
                         <h4 class="footer-col-title">{{ _('footer.learn') }}</h4>
                         <ul class="footer-links">
@@ -750,7 +817,6 @@
                         </ul>
                     </nav>
 
-                    <!-- ---------- Community ---------- -->
                     <nav class="footer-col" aria-label="{{ _('footer.community') }}">
                         <h4 class="footer-col-title">{{ _('footer.community') }}</h4>
                         <ul class="footer-links">
@@ -761,7 +827,6 @@
                         </ul>
                     </nav>
 
-                    <!-- ---------- Support ---------- -->
                     <nav class="footer-col" aria-label="{{ _('footer.support') }}">
                         <h4 class="footer-col-title">{{ _('footer.support') }}</h4>
                         <ul class="footer-links">
@@ -779,7 +844,6 @@
                     </nav>
                 </div>
 
-                <!-- ---------- Bottom bar ---------- -->
                 <div class="footer-bottom">
                     <div class="footer-copy">
                         © 2026 NuunPlatform · {{ _('footer.made_with') }}
@@ -794,44 +858,28 @@
                         <span>{{ _('footer.back_to_top') }}</span>
                     </button>
                 </div>
-
             </div>
         </footer>
     </main>
 </div>
 
-<!-- ============================================ -->
-<!-- UPGRADE SHEET                                -->
-<!-- ============================================ -->
 <div class="upgrade-sheet__backdrop" id="upgradeBackdrop"></div>
 <div class="upgrade-sheet" id="upgradeSheet" role="dialog" aria-modal="true" aria-label="Upgrade to Premium">
     <div class="upgrade-sheet__handle" id="upgradeHandle"></div>
     <button class="upgrade-sheet__close" id="upgradeClose" aria-label="Close preview">&times;</button>
     <div class="upgrade-sheet__content">
         <div class="upgrade-carousel">
-            <div class="upgrade-carousel__track" id="upgradeTrack">
-                <!-- Rendered by JS -->
-            </div>
+            <div class="upgrade-carousel__track" id="upgradeTrack"></div>
         </div>
         <div class="upgrade-pagination" id="upgradePagination" style="display:none;">
             <button class="upgrade-pagination__dot active" data-slide="0" aria-label="Slide 1"></button>
         </div>
     </div>
 </div>
-<!-- ============================================ -->
-<!-- END UPGRADE SHEET                            -->
-<!-- ============================================ -->
 
-{# ============================================ #}
-{# WHATSAPP COMMUNITY FAB                       #}
-{# Persistent across every authenticated page.  #}
-{# Hidden entirely when WHATSAPP_GROUP_URL is   #}
-{# not set in .env.                             #}
-{# ============================================ #}
 {% if whatsapp_group_url %}
 <a href="{{ whatsapp_group_url }}"
-   target="_blank"
-   rel="noopener noreferrer"
+   target="_blank" rel="noopener noreferrer"
    class="whatsapp-fab"
    aria-label="Join our WhatsApp community">
     <span class="whatsapp-fab__label">Join Community</span>
@@ -850,7 +898,6 @@
 <script src="{{ url_for('static', filename='js/discount-chip.js') }}?v=3" defer></script>
 {% block dashboard_js %}{% endblock %}
 
-<!-- Settings bootstrap for authenticated pages -->
 {% if session.user_id %}
 <script id="nuun-settings-data" type="application/json">{{ settings|tojson|safe }}</script>
 <script src="{{ url_for('static', filename='js/platform-settings.js') }}"></script>
@@ -869,9 +916,6 @@
 </script>
 {% endif %}
 
-<!-- ============================================ -->
-<!-- USER DATA FOR UPGRADE SHEET -->
-<!-- ============================================ -->
 <script>
     window.userName = "{{ session.user_name or '' }}";
     window.userPhone = "{{ session.user_phone or '' }}";
@@ -885,9 +929,6 @@
     };
 </script>
 
-<!-- ============================================ -->
-<!-- NAVBAR LANGUAGE SWITCH — JS                  -->
-<!-- ============================================ -->
 <script>
 (function () {
     'use strict';
@@ -924,11 +965,8 @@
                 if (!r.ok) throw new Error('save failed');
                 return r.json();
             })
-            .then(function () {
-                window.location.reload();
-            })
+            .then(function () { window.location.reload(); })
             .catch(function () {
-                // Revert on failure
                 currentLang = (newLang === 'so') ? 'en' : 'so';
                 box.querySelectorAll('.lang-switch__opt').forEach(function (b) {
                     var isActive = b.dataset.lang === currentLang;
@@ -942,9 +980,6 @@
 })();
 </script>
 
-<!-- ============================================ -->
-<!-- FLOATING PROMPT CARDS (notification + install) -->
-<!-- ============================================ -->
 {% if session.user_id %}
     {% include 'partials/_prompt_cards.html' %}
     <script src="{{ url_for('static', filename='js/prompt-cards.js') }}" defer></script>
