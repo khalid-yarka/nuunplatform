@@ -2,21 +2,22 @@
 # ------------------------------------------------------------------
 # Central tier logic for NuunPlatform.
 #
-# PHASE 2: This module is now a thin facade over
-# services.entitlement_service for every policy read. Callers keep
-# their existing function signatures — nothing else needs to change.
+# This module is a thin facade over services.entitlement_service for
+# every policy read. Callers keep their existing function signatures —
+# nothing else needs to change.
 #
 # - tier_config.py remains imported ONLY for:
 #     * normalize_tier()  (single place legacy → canonical mapping lives)
-#     * get_tier_level()  (the ordinal map: free=0, premium=1, pro=2)
-#   Both will be removed in Phase 6.
+#     * get_tier_level()  (the ordinal map: free=0, premium=1)
+#   Both will be removed in a later cleanup phase.
 #
 # - Feature keys, policy types, limits and levels are the sole property
 #   of the entitlement system. This file does not know what a tier
 #   "can do" — it only asks.
 #
-# Vocabulary: free / premium / pro
-# Legacy aliases (danbe / dhexe / hore) are auto-normalized on input.
+# Vocabulary: free / premium.
+# Legacy aliases (danbe / dhexe / hore) are still normalized on input
+# for compatibility with old records; they map to free or premium.
 # ------------------------------------------------------------------
 
 import logging
@@ -184,11 +185,8 @@ def get_analytics_level(user_id: Optional[int] = None) -> int:
 def get_insights_level(user_id: Optional[int] = None) -> int:
     """
     Personal Learning Insights level.
-        0 → locked (free)
-        1 → basic insights (premium)
-        2 → full insights (pro)
-    Wrapper exists so callers never have to remember that
-    get_feature_level takes (feature_code, *, user_id) — not the other way.
+        0 → locked (Free)
+        2 → full insights (Premium)
     """
     return get_feature_level("personal_learning_insights", user_id=user_id)
 

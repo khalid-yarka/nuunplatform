@@ -1,23 +1,23 @@
 {# ============================================================
    templates/dashboard/admin/community/achievement_edit.html
-   Create or edit a single achievement.
+   Create / edit an achievement. Two-tier selector.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
-{% set is_new = (achievement is none) %}
+{% set is_new = is_new or false %}
+{% set a = achievement or {} %}
 
 {% block admin_title_icon %}<i class="fas fa-trophy header-icon"></i>{% endblock %}
 {% block admin_title %}{{ 'New Achievement' if is_new else 'Edit Achievement' }}{% endblock %}
 {% block admin_subtitle %}
-    {% if is_new %}Create a new unlockable badge.
-    {% else %}Achievement #{{ achievement.id }} · {{ achievement.name }}{% endif %}
+    {{ 'Create a new badge students can unlock' if is_new else 'Update the achievement details' }}
 {% endblock %}
 
 {% block admin_breadcrumb %}
     <span class="sep">/</span>
     <a href="{{ url_for('admin_community.achievements') }}">Achievements</a>
     <span class="sep">/</span>
-    <span class="current">{{ 'New' if is_new else ('#' ~ achievement.id) }}</span>
+    <span class="current">{{ 'New' if is_new else (a.name or 'Edit') }}</span>
 {% endblock %}
 
 {% block admin_actions %}
@@ -26,111 +26,214 @@
     </a>
 {% endblock %}
 
-{% block admin_content %}
 
-<div style="max-width:640px;margin:0 auto;">
+{% block admin_css %}
+<style>
+    .ae-wrap { max-width: 640px; margin: 0 auto; }
 
-    <form method="POST" id="achievementForm"
-          action="{{ url_for('admin_community.achievement_new') if is_new else url_for('admin_community.achievement_edit', achievement_id=achievement.id) }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    .ae-preview {
+        text-align: center;
+        padding: 26px 20px;
+        background: linear-gradient(135deg,
+            rgba(252, 211, 77, 0.14),
+            rgba(245, 158, 11, 0.06));
+        border: 1px solid rgba(245, 158, 11, 0.30);
+        border-radius: var(--radius);
+        margin-bottom: 20px;
+    }
+    .ae-preview .icon { font-size: 52px; line-height: 1; display: block; margin-bottom: 6px; }
+    .ae-preview .name {
+        font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 4px;
+    }
+    .ae-preview .desc {
+        font-size: 13px; color: var(--text-secondary); max-width: 400px;
+        margin: 0 auto; line-height: 1.5;
+    }
 
-        <section class="admin-card">
-            <div class="admin-card-head">
-                <h3><i class="fas fa-id-badge"></i> Identity</h3>
-            </div>
-            <div class="admin-card-body">
+    .ae-section {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 22px 24px;
+        margin-bottom: 16px;
+    }
+    .ae-section h3 {
+        font-size: 14px; font-weight: 700; color: var(--text);
+        margin: 0 0 16px; display: flex; align-items: center; gap: 8px;
+    }
+    .ae-section h3 i { color: var(--primary); }
 
-                <div class="admin-form-group">
-                    <label>Name <span style="color:var(--primary);">*</span></label>
-                    <input type="text" name="name" class="admin-input" required
-                           value="{{ achievement.name if achievement else '' }}"
-                           placeholder="e.g. First Quiz"
-                           maxlength="100">
-                </div>
+    .ae-field { margin-bottom: 14px; }
+    .ae-field:last-child { margin-bottom: 0; }
+    .ae-field label {
+        display: block; font-size: 12px; font-weight: 700;
+        color: var(--text); margin-bottom: 6px;
+        text-transform: uppercase; letter-spacing: 0.4px;
+    }
+    .ae-field label .req { color: var(--primary); margin-left: 2px; }
+    .ae-field .hint {
+        font-size: 12px; color: var(--text-muted);
+        margin-top: 5px; line-height: 1.4;
+    }
 
-                <div class="admin-form-group">
-                    <label>Description</label>
-                    <textarea name="description" class="admin-textarea" rows="3"
-                              placeholder="e.g. Complete your first quiz."
-                              maxlength="300">{{ achievement.description if achievement else '' }}</textarea>
-                </div>
-
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-                    <div class="admin-form-group">
-                        <label>Icon (emoji)</label>
-                        <input type="text" name="icon" class="admin-input"
-                               value="{{ achievement.icon if achievement else '🏆' }}"
-                               placeholder="🏆" maxlength="4"
-                               style="font-size:22px;text-align:center;">
-                    </div>
-                    <div class="admin-form-group">
-                        <label>Tier required</label>
-                        <select name="tier_required" class="admin-select">
-                            <option value="free"    {% if not achievement or achievement.tier_required == 'free' %}selected{% endif %}>Free</option>
-                            <option value="premium" {% if achievement and achievement.tier_required == 'premium' %}selected{% endif %}>Premium</option>
-                            <option value="pro"     {% if achievement and achievement.tier_required == 'pro' %}selected{% endif %}>Pro</option>
-                        </select>
-                    </div>
-                </div>
-
-            </div>
-        </section>
-
-        <section class="admin-card" style="margin-top:16px;">
-            <div class="admin-card-head">
-                <h3><i class="fas fa-key"></i> Unlock Condition</h3>
-                <span class="hint">How the user earns it</span>
-            </div>
-            <div class="admin-card-body">
-                <div class="admin-form-group">
-                    <label>Condition key</label>
-                    <input type="text" name="unlock_condition" class="admin-input"
-                           value="{{ achievement.unlock_condition if achievement else '' }}"
-                           placeholder="e.g. complete_quiz_count >= 1"
-                           maxlength="200">
-                    <div class="hint">
-                        Known conditions: <code>complete_quiz_count >= N</code>,
-                        <code>perfect_quiz</code>, <code>live_quiz_joined</code>,
-                        <code>achievement_count >= N</code>, <code>premium_resource_access</code>.
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <div style="display:flex;gap:10px;margin-top:20px;">
-            <a href="{{ url_for('admin_community.achievements') }}" class="admin-btn secondary lg" style="flex:1;justify-content:center;">
-                Cancel
-            </a>
-            <button type="submit" class="admin-btn primary lg" style="flex:1;justify-content:center;">
-                <i class="fas fa-save"></i> {{ 'Create' if is_new else 'Save' }}
-            </button>
-        </div>
-    </form>
-
-    {% if not is_new %}
-    <section class="admin-card" style="margin-top:20px;border-color:#FCA5A5;">
-        <div class="admin-card-head" style="background:#FEF2F2;">
-            <h3 style="color:#991B1B;"><i class="fas fa-exclamation-triangle"></i> Danger zone</h3>
-        </div>
-        <div class="admin-card-body">
-            <p style="font-size:13px;color:#991B1B;margin:0 0 14px;line-height:1.5;">
-                Deleting this achievement will also remove it from every user who unlocked it.
-                This cannot be undone.
-            </p>
-            <button type="button"
-                    class="admin-btn danger"
-                    data-delete-achievement="{{ achievement.id }}"
-                    data-achievement-name="{{ achievement.name }}">
-                <i class="fas fa-trash"></i> Delete achievement
-            </button>
-        </div>
-    </section>
-    {% endif %}
-
-</div>
-
+    .ae-radios {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    .ae-radio {
+        display: flex; align-items: center; gap: 10px;
+        padding: 12px 16px;
+        background: var(--background);
+        border: 1.5px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 13px; font-weight: 600;
+        color: var(--text); cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .ae-radio:hover { border-color: var(--primary); }
+    .ae-radio input { display: none; }
+    .ae-radio.selected {
+        background: var(--primary-light);
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+    .ae-radio .dot {
+        width: 16px; height: 16px; border-radius: 50%;
+        border: 2px solid var(--border); flex-shrink: 0; position: relative;
+    }
+    .ae-radio.selected .dot { border-color: var(--primary); }
+    .ae-radio.selected .dot::after {
+        content: ''; position: absolute;
+        inset: 3px; border-radius: 50%; background: var(--primary);
+    }
+</style>
 {% endblock %}
 
-{% block admin_js %}
-<script src="{{ url_for('static', filename='js/admin/community.js') }}"></script>
+
+{% block admin_content %}
+
+<div class="ae-wrap">
+<form method="POST"
+      action="{% if is_new %}{{ url_for('admin_community.achievement_new') }}{% else %}{{ url_for('admin_community.achievement_edit', achievement_id=a.id) }}{% endif %}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    {# Preview #}
+    <div class="ae-preview">
+        <span class="icon" id="previewIcon">{{ a.icon or '🏆' }}</span>
+        <div class="name" id="previewName">{{ a.name or 'Achievement name' }}</div>
+        <div class="desc" id="previewDesc">
+            {{ a.description or 'Description will appear here.' }}
+        </div>
+    </div>
+
+    {# Basics #}
+    <section class="ae-section">
+        <h3><i class="fas fa-info-circle"></i> Basics</h3>
+
+        <div class="ae-field">
+            <label>Name <span class="req">*</span></label>
+            <input type="text" name="name" id="fieldName" class="admin-input"
+                   value="{{ a.name or '' }}"
+                   required maxlength="80"
+                   placeholder="e.g. First Steps">
+        </div>
+
+        <div class="ae-field">
+            <label>Icon (emoji)</label>
+            <input type="text" name="icon" id="fieldIcon" class="admin-input"
+                   value="{{ a.icon or '🏆' }}"
+                   maxlength="4" placeholder="🏆">
+        </div>
+
+        <div class="ae-field">
+            <label>Description</label>
+            <textarea name="description" id="fieldDesc" class="admin-textarea" rows="3"
+                      maxlength="300"
+                      placeholder="Shown to students on the achievement card…">{{ a.description or '' }}</textarea>
+        </div>
+    </section>
+
+    {# Access #}
+    <section class="ae-section">
+        <h3><i class="fas fa-shield-alt"></i> Who can unlock this</h3>
+
+        <div class="ae-radios">
+            <label class="ae-radio {% if (a.tier_required or 'free') == 'free' %}selected{% endif %}"
+                   data-group="tier">
+                <input type="radio" name="tier_required" value="free"
+                       {% if (a.tier_required or 'free') == 'free' %}checked{% endif %}>
+                <span class="dot"></span>
+                Free tier
+            </label>
+            <label class="ae-radio {% if a.tier_required == 'premium' %}selected{% endif %}"
+                   data-group="tier">
+                <input type="radio" name="tier_required" value="premium"
+                       {% if a.tier_required == 'premium' %}checked{% endif %}>
+                <span class="dot"></span>
+                Premium tier
+            </label>
+        </div>
+    </section>
+
+    {# Unlock condition #}
+    <section class="ae-section">
+        <h3><i class="fas fa-unlock"></i> Unlock condition</h3>
+
+        <div class="ae-field">
+            <label>Internal note (optional)</label>
+            <textarea name="unlock_condition" class="admin-textarea" rows="2"
+                      maxlength="200"
+                      placeholder="Documented for admins — how the achievement is earned.">{{ a.unlock_condition or '' }}</textarea>
+            <div class="hint">Not shown to students. Used by the achievement service to determine eligibility.</div>
+        </div>
+    </section>
+
+    {# Actions #}
+    <div style="display:flex;gap:12px;margin-bottom:24px;">
+        <a href="{{ url_for('admin_community.achievements') }}"
+           class="admin-btn secondary lg" style="flex:1;justify-content:center;">
+            <i class="fas fa-times"></i> Cancel
+        </a>
+        <button type="submit" class="admin-btn primary lg" style="flex:1;justify-content:center;">
+            <i class="fas fa-save"></i> {{ 'Create' if is_new else 'Save Changes' }}
+        </button>
+    </div>
+
+</form>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    // Radio visual selection
+    document.querySelectorAll('.ae-radio').forEach(function (el) {
+        el.addEventListener('click', function () {
+            var group = el.dataset.group;
+            document.querySelectorAll('.ae-radio[data-group="' + group + '"]')
+                .forEach(function (sib) { sib.classList.remove('selected'); });
+            el.classList.add('selected');
+        });
+    });
+
+    // Live preview
+    var nameField = document.getElementById('fieldName');
+    var iconField = document.getElementById('fieldIcon');
+    var descField = document.getElementById('fieldDesc');
+    var previewName = document.getElementById('previewName');
+    var previewIcon = document.getElementById('previewIcon');
+    var previewDesc = document.getElementById('previewDesc');
+
+    function sync() {
+        if (previewName) previewName.textContent = (nameField && nameField.value) || 'Achievement name';
+        if (previewIcon) previewIcon.textContent = (iconField && iconField.value) || '🏆';
+        if (previewDesc) previewDesc.textContent = (descField && descField.value) || 'Description will appear here.';
+    }
+    [nameField, iconField, descField].forEach(function (f) {
+        if (f) f.addEventListener('input', sync);
+    });
+})();
+</script>
+
 {% endblock %}

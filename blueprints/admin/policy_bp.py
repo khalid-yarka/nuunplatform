@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 admin_policy_bp = Blueprint('admin_policy', __name__, url_prefix='/admin')
 
-VALID_TIERS = ('free', 'premium', 'pro')
+VALID_TIERS = ('free', 'premium')
 
 
 # ============================================================

@@ -107,7 +107,6 @@
     }
     .quiz-card .card-actions .participant-count strong { color: var(--text); }
 
-    /* Grade chip — small, pill-shaped, informative */
     .grade-chip {
         display: inline-flex; align-items: center; gap: 4px;
         font-size: 11px; font-weight: 800;
@@ -169,8 +168,6 @@
     .badge-creator { background: var(--primary); color: white; font-size: 10px; padding: 1px 8px; border-radius: 10px; }
 
     .lobby-empty .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
-    .locked-btn { opacity: 0.7; cursor: pointer; position: relative; }
-    .locked-btn .lock-icon { font-size: 12px; margin-right: 4px; }
 
     .lobby-pagination-wrap {
         display: flex; justify-content: space-between; align-items: center;
@@ -228,19 +225,10 @@
             <p>{{ _('live_quiz.lobby.subtitle') }}</p>
         </div>
         <div class="actions">
-            {% if can_create %}
-                <a href="{{ url_for('live_quiz.create') }}" class="btn btn-primary">
-                    <i class="fas fa-plus"></i> {{ _('live_quiz.lobby.create_quiz') }}
-                </a>
-            {% else %}
-                <button class="btn btn-secondary locked-btn"
-                        data-tier-locked
-                        data-feature="create_live_quiz"
-                        data-required-tier="premium"
-                        title="{{ _('live_quiz.lobby.create_locked_title') }}">
-                    <i class="fas fa-lock lock-icon"></i> {{ _('live_quiz.lobby.create_quiz_upgrade') }}
-                </button>
-            {% endif %}
+            {# Hosting is available to all tiers — no upgrade gate. #}
+            <a href="{{ url_for('live_quiz.create') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> {{ _('live_quiz.lobby.create_quiz') }}
+            </a>
             <a href="{{ url_for('live_quiz.join') }}" class="btn btn-secondary">
                 <i class="fas fa-key"></i> {{ _('live_quiz.lobby.join_with_code') }}
             </a>
@@ -330,11 +318,12 @@ const I18N = {
     delete_error: "{{ _('live_quiz.lobby.delete_error') }}"
 };
 
-// ─── Grade-locked prompt: opens the platform upgrade sheet ───
+// Grade-locked prompt — opens the platform upgrade sheet.
+// Free users who select a grade they don't own see this.
 window.showGradeLocked = function(requiredGrade) {
     var msg = requiredGrade
-        ? 'This quiz is for ' + requiredGrade + ' grade.'
-        : 'This quiz is for a different grade.';
+        ? 'This competition is for ' + requiredGrade + ' grade.'
+        : 'This competition is for a different grade.';
     if (typeof window.openUpgradeSheet === 'function') {
         window.openUpgradeSheet({
             feature: 'live_quiz_grade',
@@ -342,7 +331,6 @@ window.showGradeLocked = function(requiredGrade) {
             message: msg
         });
     } else {
-        // Fallback — the platform upgrade page
         window.location.href = '/upgrade/?feature=live_quiz_grade&tier=premium';
     }
 };

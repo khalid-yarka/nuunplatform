@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/groups.css') }}" />
 <style>
     /* ============================================
-       GROUP CARD LOCKING (unchanged)
+       GROUP CARD LOCKING
        ============================================ */
     .group-card { position: relative; transition: all 0.25s ease; cursor: pointer; }
     .group-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
@@ -143,7 +143,6 @@
         padding: 14px 16px;
     }
 
-    /* Actions live INSIDE the scroll container, at the end. */
     .join-modal .jm-actions {
         display: flex;
         gap: 10px;
@@ -156,7 +155,6 @@
         justify-content: center;
     }
 
-    /* Floating scroll hint that fades once the user scrolls. */
     .join-modal .jm-scroll-hint {
         position: absolute;
         left: 0;
@@ -360,20 +358,15 @@
 
 <!-- ============================================
      JOIN CONFIRMATION MODAL — READ-THEN-ACCEPT
-     Actions live at the end of the scroll area
-     so the user must scroll through the rules
-     to reach them.
      ============================================ -->
 <div class="modal-overlay join-modal" id="joinModal">
     <div class="modal-content">
 
-        {# Fixed header — always visible #}
         <div class="jm-header">
             <span class="jm-icon" id="joinModalIcon">📚</span>
             <h3 class="jm-title" id="joinModalTitle">{{ _('groups.modal_group_name') }}</h3>
         </div>
 
-        {# Scrollable body — details, rules, and actions #}
         <div class="jm-scroll" id="joinModalScroll">
 
             <div class="jm-details">
@@ -396,8 +389,6 @@
             </div>
             <div class="jm-rules" id="joinModalRules">{{ join_rules }}</div>
 
-            {# Actions INSIDE the scroll area, at the very end.
-               The user reaches these only after scrolling the rules. #}
             <div class="jm-actions">
                 <button type="button" onclick="closeJoinModal()" class="btn btn-secondary">
                     {{ _('common.cancel') }}
@@ -409,10 +400,9 @@
 
         </div>
 
-        {# Floating scroll hint — fades once the user scrolls #}
         <div class="jm-scroll-hint" id="joinModalScrollHint">
             <i class="fas fa-chevron-down"></i>
-            <span>{{ _('groups.modal_scroll_hint') if _('groups.modal_scroll_hint') != 'groups.modal_scroll_hint' else 'Scroll to see buttons' }}</span>
+            <span>{{ _('groups.modal_scroll_hint') }}</span>
         </div>
 
     </div>
@@ -518,7 +508,6 @@ document.addEventListener('DOMContentLoaded', function() {
         joinModal.classList.add('active');
         document.body.style.overflow = 'hidden';
 
-        // Reset scroll to top + show hint every time
         if (joinModalScroll) joinModalScroll.scrollTop = 0;
         if (joinModalHint) joinModalHint.classList.remove('hidden');
     }
@@ -530,7 +519,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.closeJoinModal = closeJoinModal;
 
-    // Track scrolling — hide the hint once the user moves down
     if (joinModalScroll && joinModalHint) {
         joinModalScroll.addEventListener('scroll', function() {
             var scrolled = joinModalScroll.scrollTop > 20;
@@ -538,7 +526,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, { passive: true });
     }
 
-    // Click-backdrop and Escape close
     joinModal.addEventListener('click', function(e) {
         if (e.target === this) closeJoinModal();
     });
@@ -559,16 +546,18 @@ document.addEventListener('DOMContentLoaded', function() {
         if (locked) {
             let feature = 'group_join';
             let message = '';
-            let slideTarget = requiredTier;
+            // Two-tier model: coerce anything unexpected to 'premium'.
+            let slideTarget = (requiredTier === 'pro' || !requiredTier)
+                ? 'premium'
+                : requiredTier;
 
             if (lockReason === 'curriculum') {
                 feature = 'curriculum_access';
                 message = I18N.curriculum_lock_msg;
                 slideTarget = 'premium';
             } else {
-                slideTarget = requiredTier;
                 message = I18N.tier_lock_msg.replace('{tier}',
-                    requiredTier.charAt(0).toUpperCase() + requiredTier.slice(1));
+                    slideTarget.charAt(0).toUpperCase() + slideTarget.slice(1));
             }
 
             if (typeof openUpgradeSheet === 'function') {
@@ -604,8 +593,4 @@ document.addEventListener('DOMContentLoaded', function() {
     applyFilters();
 });
 </script>
-
-{# Optional translation key — add to translations/{en,so}.json:
-   "groups.modal_scroll_hint": "Scroll down to see buttons"
-   The template falls back gracefully if the key is missing. #}
 {% endblock %}

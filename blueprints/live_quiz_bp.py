@@ -1,5 +1,9 @@
 # blueprints/live_quiz_bp.py
 # Live quiz lifecycle — grade-aware, with join-grade gating for free users.
+#
+# Tier model: free / premium only. No pro.
+# Free tier can host competitions. Premium gates private + scheduled +
+# host analytics + grade override.
 
 import json
 import random
@@ -149,9 +153,9 @@ def _grade_choices():
 def _is_grade_locked_for_viewer(quiz_row, user_id, user_tier):
     """
     True when the viewer is free and the quiz grade doesn't match their
-    profile grade. Premium/pro always get False.
+    profile grade. Premium always gets False.
     """
-    if user_tier in ('premium', 'pro'):
+    if user_tier == 'premium':
         return False
     quiz_grade = normalize_grade(quiz_row.get('grade') if quiz_row else None)
     if quiz_grade not in UI_GRADES:
@@ -586,8 +590,11 @@ def create():
         )
         return redirect(url_for('dashboard.profile'))
 
+    # Free tier can now host competitions. This check remains as a
+    # defensive guard only — can_create_live_quiz() should return True
+    # for every tier today.
     if not can_create_live_quiz():
-        flash('Upgrade to Premium or Pro to create live quizzes.', 'error')
+        flash('You do not have permission to create competitions.', 'error')
         return redirect(url_for('live_quiz.lobby'))
 
     settings = session.get('settings', {})
@@ -700,7 +707,7 @@ def create():
         privacy = 1
 
     if privacy == 0 and not can_create_private_live_quiz():
-        flash('Upgrade to Premium or Pro to create private live quizzes.', 'error')
+        flash('Upgrade to Premium to create private competitions.', 'error')
         return _render_error(
             subject_code=subject_code, title=title, is_public=1,
         )
@@ -713,7 +720,7 @@ def create():
         schedule_minutes = 0
 
     if schedule_minutes > 0 and not can_schedule_live_quiz():
-        flash('Upgrade to Premium or Pro to schedule live quizzes.', 'error')
+        flash('Upgrade to Premium to schedule competitions.', 'error')
         return _render_error(
             subject_code=subject_code, title=title, is_public=privacy,
         )
@@ -817,7 +824,7 @@ def create_with_available():
         return redirect(url_for('live_quiz.create'))
 
     if not can_create_live_quiz():
-        flash('Upgrade to Premium or Pro to create live quizzes.', 'error')
+        flash('You do not have permission to create competitions.', 'error')
         return redirect(url_for('live_quiz.lobby'))
 
     user_id = session['user_id']
@@ -862,7 +869,7 @@ def create_with_available():
         is_public = 1
 
     if is_public == 0 and not can_create_private_live_quiz():
-        flash('Upgrade to Premium or Pro to create private live quizzes.', 'error')
+        flash('Upgrade to Premium to create private competitions.', 'error')
         return redirect(url_for('live_quiz.create'))
 
     user_subjects = get_user_subject_list(user_id)
@@ -1691,7 +1698,7 @@ def interaction_save(quiz_id):
     p = quiz_state.get_participant(user_id)
     already_saved = (p is not None and question_id in p.saves)
 
-    if limit is not None and not already_saved:
+    if limit is not None and limit < 999 and not already_saved:
         try:
             from services.interaction_service import count_user_saves
             db_count = count_user_saves(user_id)
@@ -1972,7 +1979,7 @@ def analysis(quiz_id):
         return jsonify({'error': 'Only the creator can view analysis'}), 403
 
     if not has_feature("live_quiz_analytics"):
-        return jsonify({'error': 'Upgrade to Premium or Pro to access host analytics.'}), 403
+        return jsonify({'error': 'Upgrade to Premium to access host analytics.'}), 403
 
     question_ids = quiz.get('question_ids', [])
     participants = get_live_quiz_participants(quiz_id)

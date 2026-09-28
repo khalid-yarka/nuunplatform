@@ -1155,12 +1155,12 @@
     <div id="focusBanner" class="focus-focus-banner" aria-live="polite">
         <span class="ff-icon">🎯</span>
         <div class="ff-text">
-            <span class="ff-label">From your Focus suggestions</span>
+            <span class="ff-label">{{ _('pdfs.focus_banner.label') }}</span>
             <span class="ff-title" id="focusBannerTitle">—</span>
-            <span class="ff-sub" id="focusBannerSub">Highlighted below</span>
+            <span class="ff-sub" id="focusBannerSub">{{ _('pdfs.focus_banner.sub') }}</span>
         </div>
         <button type="button" class="ff-close" onclick="clearFocusHighlight()">
-            <i class="fas fa-times"></i> Clear highlight
+            <i class="fas fa-times"></i> {{ _('pdfs.focus_banner.clear') }}
         </button>
     </div>
 
@@ -1169,28 +1169,22 @@
         <div class="lib-shared-banner" role="status">
             <span class="lsb-icon">📤</span>
             <div class="lsb-text">
-                <span class="lsb-label">Shared with you</span>
-                <span class="lsb-title">
-                    You're viewing a shared PDF link — the card below is
-                    highlighted.
-                </span>
+                <span class="lsb-label">{{ _('pdfs.shared_banner.label') }}</span>
+                <span class="lsb-title">{{ _('pdfs.shared_banner.msg') }}</span>
             </div>
             <a href="{{ url_for('pdfs.list_pdfs') }}" class="lsb-cta">
-                <i class="fas fa-th-large"></i> See all PDFs
+                <i class="fas fa-th-large"></i> {{ _('pdfs.shared_banner.see_all') }}
             </a>
         </div>
     {% elif shared_not_found %}
         <div class="lib-shared-banner is-error" role="alert">
             <span class="lsb-icon">⚠️</span>
             <div class="lsb-text">
-                <span class="lsb-label">Not found</span>
-                <span class="lsb-title">
-                    That shared PDF isn't available anymore. It may have
-                    been removed or the link is incorrect.
-                </span>
+                <span class="lsb-label">{{ _('pdfs.shared_not_found.label') }}</span>
+                <span class="lsb-title">{{ _('pdfs.shared_not_found.msg') }}</span>
             </div>
             <a href="{{ url_for('pdfs.list_pdfs') }}" class="lsb-cta">
-                <i class="fas fa-th-large"></i> See all PDFs
+                <i class="fas fa-th-large"></i> {{ _('pdfs.shared_banner.see_all') }}
             </a>
         </div>
     {% endif %}
@@ -1221,14 +1215,19 @@
             </p>
         </div>
         <div class="lib-header__right">
-            {% if remaining_downloads is not none and is_logged_in %}
+            {% if is_logged_in and remaining_downloads is not none %}
                 <span class="lib-quota">
                     <i class="fas fa-download"></i>
-                    {% if remaining_downloads == 999 %}
+                    {% if downloads_unlimited %}
                         {{ _('pdfs.unlimited_downloads') }}
                     {% else %}
                         {{ _('pdfs.downloads_remaining', n=remaining_downloads) }}
                     {% endif %}
+                </span>
+            {% elif is_logged_in and downloads_unlimited %}
+                <span class="lib-quota">
+                    <i class="fas fa-infinity"></i>
+                    {{ _('pdfs.unlimited_downloads') }}
                 </span>
             {% endif %}
         </div>
@@ -1247,10 +1246,10 @@
                    class="lib-search lib-search--locked">
                     <i class="fas fa-search"></i>
                     <input type="text" disabled
-                           placeholder="Search title, code, subject…"
+                           placeholder="{{ _('pdfs.search_locked_placeholder') }}"
                            aria-label="Search (login required)">
                     <span class="lib-search__lock-pill">
-                        <i class="fas fa-lock"></i> Login
+                        <i class="fas fa-lock"></i> {{ _('pdfs.login_link') }}
                     </span>
                 </a>
             {% else %}
@@ -1260,7 +1259,7 @@
                         data-required-tier="premium">
                     <i class="fas fa-search"></i>
                     <input type="text" disabled
-                           placeholder="Search title, code, subject…"
+                           placeholder="{{ _('pdfs.search_locked_placeholder') }}"
                            aria-label="Search (premium required)">
                     <span class="lib-search__lock-pill">
                         <i class="fas fa-lock"></i> Premium
@@ -1313,7 +1312,7 @@
         <div class="lib-results">
             <div class="lib-results__count">
                 {% if showing_shared %}
-                    Shared PDF
+                    {{ _('pdfs.shared_banner.label') }}
                 {% else %}
                     Showing <strong>{{ range_start }}–{{ range_end }}</strong>
                     of <strong>{{ total }}</strong>
@@ -1335,7 +1334,7 @@
                            class="lib-saved-tab {% if not saved_filter %}is-active{% endif %}"
                            role="tab"
                            aria-selected="{{ 'true' if not saved_filter else 'false' }}">
-                            All
+                            {{ _('pdfs.tabs.all') }}
                             {% if not saved_filter %}
                                 <span class="lib-saved-tab__count">{{ total }}</span>
                             {% endif %}
@@ -1345,7 +1344,7 @@
                            role="tab"
                            aria-selected="{{ 'true' if saved_filter else 'false' }}">
                             <i class="fas fa-bookmark"></i>
-                            Saved
+                            {{ _('pdfs.tabs.saved') }}
                             <span class="lib-saved-tab__count" id="savedCountBadge">
                                 {{ (saved_pdf_ids|default([], true))|length }}
                             </span>
@@ -1387,11 +1386,10 @@
                      data-share-url="{{ pdf._share_url or '' }}"
                      id="pdf-{{ pdf.code }}">
 
-                    {# Top-right: badge + menu #}
                     <div class="pdf-card__top-right">
                         {% if is_premium %}
                             <span class="pdf-card__badge">
-                                <i class="fas fa-crown"></i> PREMIUM
+                                <i class="fas fa-crown"></i> {{ _('pdfs.premium_badge')|upper }}
                             </span>
                         {% endif %}
                         <button type="button" class="pdf-card__menu-btn"
@@ -1401,7 +1399,6 @@
                         </button>
                     </div>
 
-                    {# Menu dropdown — Save + Report only #}
                     <div class="pdf-card__menu-dropdown" hidden>
                         <button type="button"
                                 class="pdf-card__menu-item {% if is_saved %}is-saved{% endif %}"
@@ -1410,7 +1407,7 @@
                                 data-pdf-code="{{ pdf.code }}">
                             <i class="fas fa-bookmark"></i>
                             <span class="js-save-label">
-                                {% if is_saved %}Saved{% else %}Save{% endif %}
+                                {% if is_saved %}{{ _('reactions.saved') }}{% else %}{{ _('reactions.save') }}{% endif %}
                             </span>
                         </button>
                         <button type="button"
@@ -1421,7 +1418,7 @@
                                 data-pdf-title="{{ pdf.title }}">
                             <i class="fas fa-flag"></i>
                             <span class="js-report-label">
-                                {% if is_reported %}Reported{% else %}Report{% endif %}
+                                {% if is_reported %}{{ _('reactions.reported') }}{% else %}{{ _('reactions.report') }}{% endif %}
                             </span>
                         </button>
                     </div>
@@ -1450,30 +1447,28 @@
                         <span><i class="fas fa-calendar"></i> {{ (pdf.uploaded_at or '')[:10] }}</span>
                     </div>
 
-                    {# ── Actions: Read / Preview / Get / Share ── #}
                     <div class="pdf-card__actions">
                         {% set read_locked = (not logged_in) or (has_url and locked) %}
                         {% set preview_locked = (not logged_in) or locked %}
                         {% set get_locked = not logged_in %}
 
-                        {# READ (only when file_url exists) #}
                         {% if has_url %}
                             {% if read_locked %}
                                 {% if not logged_in %}
                                     <a href="{{ url_for('auth.login', next=request.url) }}"
                                        class="pdf-card__btn pdf-card__btn--locked"
-                                       title="Login to read">
+                                       title="{{ _('pdfs.lock_login') }}">
                                         <i class="fas fa-lock"></i>
-                                        <span>Read</span>
+                                        <span>{{ _('pdfs.read_btn') }}</span>
                                     </a>
                                 {% else %}
                                     <button type="button"
                                             class="pdf-card__btn pdf-card__btn--locked js-upgrade"
                                             data-feature="premium_resources"
                                             data-required-tier="premium"
-                                            title="Upgrade to read">
+                                            title="{{ _('pdfs.premium_lock_upgrade') }}">
                                         <i class="fas fa-lock"></i>
-                                        <span>Read</span>
+                                        <span>{{ _('pdfs.read_btn') }}</span>
                                     </button>
                                 {% endif %}
                             {% else %}
@@ -1481,28 +1476,27 @@
                                    class="pdf-card__btn pdf-card__btn--accent"
                                    title="{{ _('pdfs.read_online_title') }}">
                                     <i class="fas fa-book-open"></i>
-                                    <span>Read</span>
+                                    <span>{{ _('pdfs.read_btn') }}</span>
                                 </a>
                             {% endif %}
                         {% endif %}
 
-                        {# PREVIEW #}
                         {% if preview_locked %}
                             {% if not logged_in %}
                                 <a href="{{ url_for('auth.login', next=request.url) }}"
                                    class="pdf-card__btn pdf-card__btn--locked"
-                                   title="Login to preview">
+                                   title="{{ _('pdfs.lock_login') }}">
                                     <i class="fas fa-lock"></i>
-                                    <span>Preview</span>
+                                    <span>{{ _('pdfs.preview_btn') }}</span>
                                 </a>
                             {% else %}
                                 <button type="button"
                                         class="pdf-card__btn pdf-card__btn--locked js-upgrade"
                                         data-feature="premium_resources"
                                         data-required-tier="premium"
-                                        title="Upgrade to preview">
+                                        title="{{ _('pdfs.premium_lock_upgrade') }}">
                                     <i class="fas fa-lock"></i>
-                                    <span>Preview</span>
+                                    <span>{{ _('pdfs.preview_btn') }}</span>
                                 </button>
                             {% endif %}
                         {% else %}
@@ -1511,17 +1505,16 @@
                                class="pdf-card__btn"
                                title="{{ _('pdfs.preview_telegram_title') }}">
                                 <i class="fas fa-eye"></i>
-                                <span>Preview</span>
+                                <span>{{ _('pdfs.preview_btn') }}</span>
                             </a>
                         {% endif %}
 
-                        {# GET #}
                         {% if get_locked %}
                             <a href="{{ url_for('auth.login', next=request.url) }}"
                                class="pdf-card__btn pdf-card__btn--locked"
-                               title="Login to get">
+                               title="{{ _('pdfs.lock_login') }}">
                                 <i class="fas fa-lock"></i>
-                                <span>Get</span>
+                                <span>{{ _('pdfs.get_pdf_btn') }}</span>
                             </a>
                         {% else %}
                             <a href="https://t.me/{{ bot_username }}?start={{ pdf.code }}"
@@ -1529,11 +1522,10 @@
                                class="pdf-card__btn pdf-card__btn--telegram"
                                title="{{ _('pdfs.get_telegram_title') }}">
                                 <i class="fab fa-telegram-plane"></i>
-                                <span>Get</span>
+                                <span>{{ _('pdfs.get_pdf_btn') }}</span>
                             </a>
                         {% endif %}
 
-                        {# SHARE — always visible, blue icon-only #}
                         <button type="button"
                                 class="pdf-card__btn pdf-card__btn--share"
                                 data-action="share"
@@ -1549,7 +1541,6 @@
             {% endfor %}
         </div>
 
-        {# ─── Pagination (hidden on shared view) ─── #}
         {% if total_pages > 1 and not showing_shared %}
             <nav class="lib-pagination" aria-label="Pagination">
                 {% set base_args = {
@@ -1606,13 +1597,10 @@
         {% if saved_filter %}
             <div class="lib-empty lib-empty--saved">
                 <span class="lib-empty__icon">🔖</span>
-                <h3>You haven't saved any PDFs yet</h3>
-                <p>
-                    Tap the <strong>⋮</strong> menu on any PDF and choose
-                    <strong>Save</strong> to bookmark it here.
-                </p>
+                <h3>{{ _('pdfs.saves_empty.title') }}</h3>
+                <p>{{ _('pdfs.saves_empty.desc') }}</p>
                 <a href="{{ url_for('pdfs.list_pdfs') }}" class="lib-btn lib-btn--primary">
-                    <i class="fas fa-th-large"></i> Browse all PDFs
+                    <i class="fas fa-th-large"></i> {{ _('pdfs.saves_empty.cta') }}
                 </a>
             </div>
         {% else %}
@@ -1625,7 +1613,6 @@
     {% endif %}
 </div>
 
-{# ─── Report modal mount point ─── #}
 <div id="reportModalContainer"></div>
 
 <script>
@@ -1636,15 +1623,35 @@ window.NUUN_PDF = {
     reportReasons: {{ (report_reasons|default([], true))|tojson }},
     saveUrlTemplate: '/pdfs/__ID__/save',
     unsaveUrlTemplate: '/pdfs/__ID__/unsave',
-    reportUrlTemplate: '/pdfs/__ID__/report'
+    reportUrlTemplate: '/pdfs/__ID__/report',
+    labels: {
+        save:      {{ _('reactions.save')|tojson }},
+        saved:     {{ _('reactions.saved')|tojson }},
+        report:    {{ _('reactions.report')|tojson }},
+        reported:  {{ _('reactions.reported')|tojson }},
+        copyOk:    "Link copied to clipboard.",
+        shareOk:   "Shared.",
+        networkErr: "Network error.",
+        quotaErr:  "Save limit reached. Upgrade to save more.",
+        reportTitle: {{ _('reactions.report_title')|tojson }},
+        reportSub:   {{ _('reactions.report_subtitle')|tojson }},
+        reportReasonLabel: {{ _('reactions.report_reason')|tojson }},
+        reportReasonSelect: {{ _('reactions.report_reason_select')|tojson }},
+        reportComment: {{ _('reactions.report_comment')|tojson }},
+        reportCommentPh: {{ _('reactions.report_comment_placeholder')|tojson }},
+        reportCancel: {{ _('reactions.report_cancel')|tojson }},
+        reportSubmit: {{ _('reactions.report_submit')|tojson }},
+        reportSuccess: {{ _('reactions.report_success')|tojson }},
+        reportDuplicate: {{ _('reactions.report_duplicate')|tojson }}
+    }
 };
 
 (function () {
     'use strict';
 
     var CFG = window.NUUN_PDF;
+    var L = CFG.labels;
 
-    // ─── View toggle ─────────────────────────────────────
     var grid = document.getElementById('pdfGrid');
     var gridBtn = document.getElementById('viewGridBtn');
     var listBtn = document.getElementById('viewListBtn');
@@ -1663,7 +1670,6 @@ window.NUUN_PDF = {
         if (localStorage.getItem(STORAGE_KEY) === 'list') applyView('list');
     } catch (e) {}
 
-    // ─── Saved count badge ───────────────────────────────
     var savedCountBadge = document.getElementById('savedCountBadge');
     var savedCount = {{ (saved_pdf_ids|default([], true))|length }};
 
@@ -1672,7 +1678,6 @@ window.NUUN_PDF = {
         if (savedCountBadge) savedCountBadge.textContent = String(savedCount);
     }
 
-    // ─── Toast ───────────────────────────────────────────
     var toastTimer = null;
     function showToast(msg, kind) {
         var existing = document.querySelector('.lib-toast');
@@ -1686,7 +1691,6 @@ window.NUUN_PDF = {
         toastTimer = setTimeout(function () { t.remove(); }, 3200);
     }
 
-    // ─── Menu ────────────────────────────────────────────
     function closeAllMenus() {
         document.querySelectorAll('.pdf-card__menu-dropdown').forEach(function (d) {
             d.hidden = true;
@@ -1694,7 +1698,6 @@ window.NUUN_PDF = {
     }
 
     document.addEventListener('click', function (e) {
-        // Menu toggle
         var btn = e.target.closest && e.target.closest('[data-menu-toggle]');
         if (btn) {
             e.preventDefault();
@@ -1708,7 +1711,6 @@ window.NUUN_PDF = {
             return;
         }
 
-        // Menu item click
         var item = e.target.closest && e.target.closest('.pdf-card__menu-item');
         if (item) {
             e.preventDefault();
@@ -1726,7 +1728,6 @@ window.NUUN_PDF = {
             return;
         }
 
-        // Standalone share button
         var shareBtn = e.target.closest && e.target.closest('.pdf-card__btn--share');
         if (shareBtn) {
             e.preventDefault();
@@ -1738,7 +1739,6 @@ window.NUUN_PDF = {
             return;
         }
 
-        // Click outside → close menus
         if (!e.target.closest || !e.target.closest('.pdf-card__menu-dropdown')) {
             closeAllMenus();
         }
@@ -1752,7 +1752,6 @@ window.NUUN_PDF = {
         }
     });
 
-    // ─── Share ───────────────────────────────────────────
     function handleShare(card, pdfId, pdfTitle, shareUrl) {
         if (!shareUrl) {
             var u = new URL(window.location.origin + '/pdfs/');
@@ -1768,7 +1767,7 @@ window.NUUN_PDF = {
 
         if (navigator.share) {
             navigator.share(shareData).then(function () {
-                showToast('Shared.', 'ok');
+                showToast(L.shareOk, 'ok');
             }).catch(function (err) {
                 if (err && err.name === 'AbortError') return;
                 copyToClipboard(shareUrl);
@@ -1782,7 +1781,7 @@ window.NUUN_PDF = {
     function copyToClipboard(text) {
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(function () {
-                showToast('Link copied to clipboard.', 'ok');
+                showToast(L.copyOk, 'ok');
             }).catch(function () {
                 promptFallback(text);
             });
@@ -1799,7 +1798,6 @@ window.NUUN_PDF = {
         }
     }
 
-    // ─── Save toggle ─────────────────────────────────────
     function handleSaveToggle(card, pdfId, item) {
         if (!CFG.isLoggedIn) {
             window.location.href = CFG.loginUrl;
@@ -1828,17 +1826,17 @@ window.NUUN_PDF = {
                     return;
                 }
                 if (res.data && res.data.reason === 'quota') {
-                    showToast('Save limit reached. Upgrade to save more.', 'err');
+                    showToast(L.quotaErr, 'err');
                     return;
                 }
-                showToast((res.data && res.data.error) || 'Could not save.', 'err');
+                showToast((res.data && res.data.error) || L.networkErr, 'err');
                 return;
             }
 
             var saved = !!res.data.saved;
             item.classList.toggle('is-saved', saved);
             var label = item.querySelector('.js-save-label');
-            if (label) label.textContent = saved ? 'Saved' : 'Save';
+            if (label) label.textContent = saved ? L.saved : L.save;
 
             if (card) {
                 card.dataset.saved = saved ? 'true' : 'false';
@@ -1858,17 +1856,16 @@ window.NUUN_PDF = {
                 }
             }
 
-            showToast(saved ? 'PDF saved.' : 'PDF removed from saves.', 'ok');
+            showToast(saved ? L.saved : L.save, 'ok');
         })
         .catch(function () {
-            showToast('Network error.', 'err');
+            showToast(L.networkErr, 'err');
         })
         .finally(function () {
             item.disabled = false;
         });
     }
 
-    // ─── Report modal ────────────────────────────────────
     function handleReportOpen(card, pdfId, pdfCode, pdfTitle) {
         if (!CFG.isLoggedIn) {
             window.location.href = CFG.loginUrl;
@@ -1876,7 +1873,7 @@ window.NUUN_PDF = {
         }
 
         if (card.classList.contains('is-reported')) {
-            showToast('You already reported this PDF.', 'err');
+            showToast(L.reportDuplicate, 'err');
             return;
         }
 
@@ -1891,7 +1888,7 @@ window.NUUN_PDF = {
             + '<div class="report-modal-overlay">'
             +   '<div class="report-modal" role="dialog" aria-modal="true">'
             +     '<div class="report-modal__header">'
-            +       '<h3><i class="fas fa-flag"></i> Report this PDF</h3>'
+            +       '<h3><i class="fas fa-flag"></i> ' + L.reportTitle + '</h3>'
             +       '<button type="button" class="report-modal__close" data-close>'
             +         '<i class="fas fa-times"></i>'
             +       '</button>'
@@ -1903,22 +1900,22 @@ window.NUUN_PDF = {
             +           '<br><span style="font-family:monospace;font-size:12px;">' + escapeHtml(pdfCode) + '</span>'
             +         '</div>'
             +         '<div class="report-modal__field">'
-            +           '<label>Reason <span style="color:#DC2626;">*</span></label>'
+            +           '<label>' + L.reportReasonLabel + ' <span style="color:#DC2626;">*</span></label>'
             +           '<select name="reason" required>'
-            +             '<option value="">Select a reason...</option>'
+            +             '<option value="">' + L.reportReasonSelect + '</option>'
             +             reasonOptions
             +           '</select>'
             +         '</div>'
             +         '<div class="report-modal__field">'
-            +           '<label>Additional details (optional)</label>'
+            +           '<label>' + L.reportComment + '</label>'
             +           '<textarea name="comment" maxlength="500" '
-            +             'placeholder="Tell us what\'s wrong..."></textarea>'
+            +             'placeholder="' + L.reportCommentPh + '"></textarea>'
             +         '</div>'
             +       '</div>'
             +       '<div class="report-modal__footer">'
-            +         '<button type="button" class="report-modal__btn report-modal__btn--ghost" data-close>Cancel</button>'
+            +         '<button type="button" class="report-modal__btn report-modal__btn--ghost" data-close>' + L.reportCancel + '</button>'
             +         '<button type="submit" class="report-modal__btn report-modal__btn--danger">'
-            +           '<i class="fas fa-flag"></i> Submit report'
+            +           '<i class="fas fa-flag"></i> ' + L.reportSubmit
             +         '</button>'
             +       '</div>'
             +     '</form>'
@@ -1944,12 +1941,12 @@ window.NUUN_PDF = {
             var comment = form.comment.value.trim();
 
             if (!reason) {
-                showToast('Please select a reason.', 'err');
+                showToast(L.reportReasonSelect, 'err');
                 return;
             }
 
             submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + L.reportSubmit;
 
             var url = CFG.reportUrlTemplate.replace('__ID__', pdfId);
             fetch(url, {
@@ -1970,9 +1967,9 @@ window.NUUN_PDF = {
                         window.location.href = CFG.loginUrl;
                         return;
                     }
-                    showToast((res.data && res.data.error) || 'Could not submit report.', 'err');
+                    showToast((res.data && res.data.error) || L.networkErr, 'err');
                     submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<i class="fas fa-flag"></i> Submit report';
+                    submitBtn.innerHTML = '<i class="fas fa-flag"></i> ' + L.reportSubmit;
                     return;
                 }
 
@@ -1981,16 +1978,16 @@ window.NUUN_PDF = {
                 if (reportMenuItem) {
                     reportMenuItem.classList.add('is-reported');
                     var label = reportMenuItem.querySelector('.js-report-label');
-                    if (label) label.textContent = 'Reported';
+                    if (label) label.textContent = L.reported;
                 }
 
                 close();
-                showToast('Report submitted. Thank you.', 'ok');
+                showToast(L.reportSuccess, 'ok');
             })
             .catch(function () {
-                showToast('Network error.', 'err');
+                showToast(L.networkErr, 'err');
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fas fa-flag"></i> Submit report';
+                submitBtn.innerHTML = '<i class="fas fa-flag"></i> ' + L.reportSubmit;
             });
         });
     }
@@ -2004,7 +2001,6 @@ window.NUUN_PDF = {
             .replace(/'/g, '&#39;');
     }
 
-    // ─── Upgrade sheet ───────────────────────────────────
     document.addEventListener('click', function (e) {
         var el = e.target.closest && e.target.closest('.js-upgrade');
         if (!el) return;
@@ -2025,7 +2021,6 @@ window.NUUN_PDF = {
                                '&tier=' + encodeURIComponent(requiredTier);
     });
 
-    // ─── Shared-PDF card highlight ───────────────────────
     var sharedCard = document.querySelector('.pdf-card.is-shared-highlight');
     if (sharedCard) {
         setTimeout(function () {
@@ -2041,7 +2036,6 @@ window.NUUN_PDF = {
         }, 6000);
     }
 
-    // ─── Focus highlight ─────────────────────────────────
     var params = new URLSearchParams(window.location.search);
     var highlightCode = params.get('highlight');
     if (!highlightCode) return;

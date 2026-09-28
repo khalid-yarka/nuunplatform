@@ -9,7 +9,7 @@ import secrets
 import logging
 import atexit
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from logging.handlers import RotatingFileHandler
 
 from flask import (
@@ -64,6 +64,7 @@ from docs import docs_bp
 
 from blueprints.auth_bp import auth_bp
 from blueprints.dashboard_bp import dashboard_bp
+from blueprints.onboarding_bp import onboarding_bp
 from blueprints.groups_bp import groups_bp
 from blueprints.pdfs_bp import pdfs_bp
 from blueprints.quiz_bp import quiz_bp
@@ -113,6 +114,11 @@ if not os.path.exists(USER_STATE_FLAG):
             f.write('0')
     except Exception:
         pass
+
+# ============================================
+# ONBOARDING / DISCOUNT WINDOW
+# ============================================
+DISCOUNT_WINDOW_DAYS = 7
 
 
 # ============================================
@@ -595,6 +601,11 @@ def refresh_user_state_if_needed():
             session['is_admin'] = bool(student.get('is_admin', 0))
             session['session_version'] = int(student.get('session_version', 0) or 0)
             session['user_state_loaded_at'] = time.time()
+            session['created_at'] = student.get('created_at')
+            try:
+                session['first_discount_used'] = int(student.get('first_discount_used') or 0)
+            except (TypeError, ValueError):
+                session['first_discount_used'] = 0
             session.modified = True
     except Exception as e:
         logger.warning(f"Failed to refresh user state: {e}")
@@ -697,6 +708,7 @@ def _kick_deferred_work():
 # ============================================
 # REGISTER BLUEPRINTS
 # ============================================
+app.register_blueprint(onboarding_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(groups_bp)
@@ -1006,11 +1018,82 @@ def _docs_help_url_context():
 # ============================================
 # CONTEXT PROCESSOR
 # ============================================
+def _parse_dt_loose(raw, tz):
+    """
+    Accept any of these and return a tz-aware datetime:
+      '2026-09-27T14:30:00+03:00'
+      '2026-09-27T14:30:00'
+      '2026-09-27 14:30:00'
+      '2026-09-27'
+    Returns None if unparseable.
+    """
+    if not raw:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    try:
+        dt = datetime.fromisoformat(s.replace('Z', '+00:00'))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tz)
+        return dt
+    except (ValueError, TypeError):
+        pass
+    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d'):
+        try:
+            dt = datetime.strptime(s[:19], fmt)
+            return dt.replace(tzinfo=tz)
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
 @app.context_processor
 def utility_processor():
     token = ensure_csrf_token()
     settings = {}
     accent_colours = {'hex': '#FF3138', 'hover': '#E62B32', 'light': '#FFEBE8'}
+
+    # ── Discount chip + trial banner data ──
+    discount_chip = None
+    trial_banner = None
+
+    if 'user_id' in session:
+        try:
+            _now = datetime.now(SOMALI_TIMEZONE)
+
+            # Discount window: N days from registration, until first payment.
+            try:
+                first_used = int(session.get('first_discount_used') or 0)
+            except (TypeError, ValueError):
+                first_used = 0
+
+            created_dt = _parse_dt_loose(session.get('created_at'), SOMALI_TIMEZONE)
+            if not first_used and created_dt:
+                disc_exp = created_dt + timedelta(days=DISCOUNT_WINDOW_DAYS)
+                if disc_exp > _now:
+                    discount_chip = {
+                        'expires_at': disc_exp.isoformat(),
+                    }
+
+            # Trial / limited premium grant
+            tier = (session.get('tier') or 'free')
+            if tier == 'premium':
+                exp_dt = _parse_dt_loose(
+                    session.get('tier_expires_at'), SOMALI_TIMEZONE
+                )
+                if exp_dt and exp_dt > _now:
+                    total_hours = 24.0
+                    remaining_hours = (exp_dt - _now).total_seconds() / 3600.0
+                    trial_banner = {
+                        'expires_at': exp_dt.isoformat(),
+                        'remaining_hours': round(remaining_hours, 1),
+                        'is_trial': (first_used == 0 and total_hours >= remaining_hours),
+                    }
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                f"Discount/trial compute failed: {e}"
+            )
 
     if 'user_id' in session:
         if 'settings' in session:
@@ -1083,6 +1166,8 @@ def utility_processor():
         'social_youtube': social_youtube,
         'whatsapp_group_url': whatsapp_group_url,
         'push_enabled': Config.PUSH_ENABLED,
+        'discount_chip': discount_chip,
+        'trial_banner': trial_banner,
     }
 
 

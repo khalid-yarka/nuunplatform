@@ -50,7 +50,6 @@
     }
     .tier-badge-h.free    { background: #F3F4F6; color: #4B5563; }
     .tier-badge-h.premium { background: var(--primary-light); color: var(--primary); }
-    .tier-badge-h.pro     { background: linear-gradient(135deg, var(--primary), #B91C1C); color: white; }
 
     .hist-tier-panel {
         background: var(--surface);
@@ -78,9 +77,7 @@
         gap: 8px;
     }
 
-    .hist-quota {
-        margin-bottom: 18px;
-    }
+    .hist-quota { margin-bottom: 18px; }
     .hist-quota .q-head {
         display: flex;
         justify-content: space-between;
@@ -97,9 +94,7 @@
         font-weight: 700;
         font-variant-numeric: tabular-nums;
     }
-    .hist-quota .q-head .q-value.unlimited {
-        color: #10B981;
-    }
+    .hist-quota .q-head .q-value.unlimited { color: #10B981; }
     .hist-quota .q-bar {
         width: 100%;
         height: 8px;
@@ -396,9 +391,7 @@
 
     .hist-timeline { display: flex; flex-direction: column; gap: 0; }
 
-    .hist-day-group {
-        margin-bottom: 24px;
-    }
+    .hist-day-group { margin-bottom: 24px; }
     .hist-day-group:last-child { margin-bottom: 0; }
 
     .hist-day-header {
@@ -663,9 +656,8 @@
                 <i class="fas fa-history" style="color: var(--primary);"></i>
                 {{ _('history.title') }}
                 <span class="tier-badge-h {{ t }}">
-                    {% if t == 'free' %}🔓 {{ _('tier.free') }}
-                    {% elif t == 'premium' %}🔑 {{ _('tier.premium') }}
-                    {% else %}⭐ {{ _('tier.pro') }}{% endif %}
+                    {% if t == 'premium' %}🔑 {{ _('tier.premium') }}
+                    {% else %}🔓 {{ _('tier.free') }}{% endif %}
                 </span>
             </h2>
             <p>{{ _('history.subtitle') }}</p>
@@ -692,9 +684,8 @@
                 {{ _('history.plan_title') }}
             </h3>
             <span class="tier-badge-h {{ t }}">
-                {% if t == 'free' %}🔓 {{ _('tier.free') }}
-                {% elif t == 'premium' %}🔑 {{ _('tier.premium') }}
-                {% else %}⭐ {{ _('tier.pro') }}{% endif %}
+                {% if t == 'premium' %}🔑 {{ _('tier.premium') }}
+                {% else %}🔓 {{ _('tier.free') }}{% endif %}
             </span>
         </div>
 
@@ -761,7 +752,7 @@
                     <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
                 {% else %}
                     <span class="lock-icon" data-tier-locked
-                          data-feature="history_search" data-required-tier="pro"
+                          data-feature="history_search" data-required-tier="premium"
                           title="{{ _('history.upgrade_to_pro_title') }}">🔒</span>
                 {% endif %}
             </div>
@@ -771,8 +762,7 @@
                 <div class="ft">
                     <span class="name">{{ _('history.feature_export') }}</span>
                     <span class="val">
-                        {% if can_export %}
-                            {% if t == 'premium' %}{{ _('history.feature_export_premium') }}{% else %}{{ _('history.feature_export_pro') }}{% endif %}
+                        {% if can_export %}{{ _('history.feature_export_premium') }}
                         {% else %}{{ _('history.feature_premium_plus') }}{% endif %}
                     </span>
                 </div>
@@ -797,7 +787,7 @@
                     <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
                 {% else %}
                     <span class="lock-icon" data-tier-locked
-                          data-feature="history_trends" data-required-tier="pro"
+                          data-feature="history_trends" data-required-tier="premium"
                           title="{{ _('history.upgrade_to_pro_title') }}">🔒</span>
                 {% endif %}
             </div>
@@ -814,20 +804,20 @@
                     <span class="ok-icon"><i class="fas fa-check-circle"></i></span>
                 {% else %}
                     <span class="lock-icon" data-tier-locked
-                          data-feature="history_delete" data-required-tier="pro"
+                          data-feature="history_delete" data-required-tier="premium"
                           title="{{ _('history.upgrade_to_pro_title') }}">🔒</span>
                 {% endif %}
             </div>
         </div>
 
-        {% if t != 'pro' and upgrade_benefits %}
+        {% if t == 'free' and upgrade_benefits %}
             <div class="hist-upgrade-cta">
                 <div class="cta-text">
-                    <strong>{{ _('history.upgrade_to', tier=_('tier.' ~ ('premium' if t == 'free' else 'pro'))) }}</strong> {{ _('history.upgrade_unlock') }}
+                    <strong>{{ _('history.upgrade_to', tier=_('tier.premium')) }}</strong> {{ _('history.upgrade_unlock') }}
                     {{ upgrade_benefits | join(' · ') }}
                 </div>
                 <button type="button" class="btn-upgrade"
-                        onclick="openUpgradeSheet({ requiredTier: '{{ 'premium' if t == 'free' else 'pro' }}' })">
+                        onclick="openUpgradeSheet({ requiredTier: 'premium' })">
                     ⬆ {{ _('history.upgrade_now') }}
                 </button>
             </div>
@@ -889,7 +879,7 @@
                    {% if not can_search %}disabled{% endif %}>
             {% if not can_search %}
                 <span class="lock-icon" data-tier-locked
-                      data-feature="history_search" data-required-tier="pro"
+                      data-feature="history_search" data-required-tier="premium"
                       title="{{ _('history.upgrade_to_pro_to_search') }}">🔒</span>
             {% endif %}
         </div>
@@ -945,7 +935,6 @@ window.historyConfig = {
 };
 
 window.I18N_HISTORY = {
-    // Entry titles
     quiz_completed_prefix: "{{ _('history.entry.quiz_completed_prefix') }}",
     live_quiz_prefix: "{{ _('history.entry.live_quiz_prefix') }}",
     achievement_unlocked_prefix: "{{ _('history.entry.achievement_unlocked_prefix') }}",
@@ -958,7 +947,6 @@ window.I18N_HISTORY = {
     report_added: "{{ _('history.entry.report_added') }}",
     unknown_event: "{{ _('history.entry.unknown_event') }}",
 
-    // Meta labels
     practice: "{{ _('history.entry.practice') }}",
     live: "{{ _('history.entry.live') }}",
     achievement: "{{ _('history.entry.achievement') }}",
@@ -968,12 +956,10 @@ window.I18N_HISTORY = {
     saved_item_prefix: "{{ _('history.entry.saved_item_prefix') }}",
     subject_icon: "📚",
 
-    // Date headers
     date_today: "{{ _('history.date.today') }}",
     date_yesterday: "{{ _('history.date.yesterday') }}",
     date_unknown: "{{ _('history.date.unknown') }}",
 
-    // Empty states
     empty_title: "{{ _('history.empty.title') }}",
     empty_desc: "{{ _('history.empty.desc') }}",
     empty_filtered_title: "{{ _('history.empty.filtered_title') }}",
@@ -984,7 +970,6 @@ window.I18N_HISTORY = {
     empty_retry: "{{ _('history.empty.retry') }}",
     empty_clear_filters: "{{ _('history.empty.clear_filters') }}",
 
-    // Load more
     load_more: "{{ _('history.load_more') }}",
     loading: "{{ _('common.loading') }}"
 };

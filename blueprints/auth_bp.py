@@ -640,6 +640,11 @@ def login():
     session['tier_loaded_at'] = time.time()
     session['session_version'] = int(student.get('session_version', 0) or 0)
     session['user_state_loaded_at'] = time.time()
+    session['created_at'] = student.get('created_at')
+    try:
+        session['first_discount_used'] = int(student.get('first_discount_used') or 0)
+    except (TypeError, ValueError):
+        session['first_discount_used'] = 0
     session['csrf_token'] = secrets.token_hex(32)
     session.permanent = True
     session.modified = True
@@ -660,7 +665,18 @@ def login():
         session['settings'] = {}
 
     session.modified = True
-
+    
+    # ── First-login onboarding gate ──
+    try:
+        onboarding_done = int(student.get('onboarding_dismissed') or 0)
+    except (TypeError, ValueError):
+        onboarding_done = 0
+    
+    session['onboarding_dismissed'] = onboarding_done
+    
+    if not onboarding_done:
+        return redirect(url_for('onboarding.welcome'))
+    
     if next_url:
         return redirect(next_url)
     return redirect(url_for('dashboard.home'))

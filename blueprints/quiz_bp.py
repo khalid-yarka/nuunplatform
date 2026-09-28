@@ -1,5 +1,5 @@
 # blueprints/quiz_bp.py
-# Regular quiz blueprint — grade-aware, ID-based session storage.
+# Regular practice blueprint — grade-aware, ID-based session storage.
 #
 # Session layout (small — stays under the 4KB cookie limit):
 #   session['quiz'] = {
@@ -15,6 +15,9 @@
 #
 # Actual question rows are re-fetched from the DB on demand via
 # db.get_questions_by_ids(). This removes the 4.5KB cookie payload.
+#
+# Tier model: free / premium only. No pro.
+# Unlimited is normalised to None before it reaches any template.
 
 import json
 import logging
@@ -85,6 +88,16 @@ def _fetch_question(qid):
     return fetched[0] if fetched else None
 
 
+def _normalise_remaining(raw):
+    """
+    Convert the 999 sentinel used by get_remaining_quota() into None.
+    Templates check `is none` for unlimited.
+    """
+    if raw is None or raw >= 999:
+        return None
+    return raw
+
+
 # ============================================
 # SETUP / START
 # ============================================
@@ -97,14 +110,17 @@ def index():
 
     quiz_data = session.get('quiz')
     if quiz_data and quiz_data.get('question_ids'):
-        flash('Resuming your quiz...', 'info')
+        flash('Resuming your practice…', 'info')
         return redirect(url_for('quiz.play'))
 
     user_id = session['user_id']
     subjects = get_user_subject_list(user_id)
     if not subjects:
-        flash('Please set your location and curriculum in your profile to access quizzes.',
-              'error')
+        flash(
+            'Please set your location and curriculum in your profile '
+            'to access practice.',
+            'error',
+        )
         return redirect(url_for('dashboard.profile'))
 
     settings = session.get('settings', {})
@@ -114,10 +130,12 @@ def index():
 
     allowed_counts = get_allowed_question_counts(user_id)
     tier = get_current_user_tier()
-    remaining_attempts = get_remaining_quota(user_id, 'quiz_attempt')
+    remaining_attempts = _normalise_remaining(
+        get_remaining_quota(user_id, 'quiz_attempt')
+    )
 
     user_grade = _profile_grade(user_id)
-    can_change_grade = tier in ('premium', 'pro')
+    can_change_grade = (tier == 'premium')
     grade_choices = [
         {'code': g, 'label': grade_label(g)} for g in UI_GRADES
     ]
@@ -175,31 +193,37 @@ def start_quiz():
         flash('Question count not allowed for your tier.', 'error')
         return redirect(url_for('quiz.index'))
 
-    remaining = get_remaining_quota(user_id, 'quiz_attempt')
-    if remaining <= 0:
-        flash('You have used all your quiz attempts for today. Come back tomorrow!', 'error')
+    remaining = _normalise_remaining(get_remaining_quota(user_id, 'quiz_attempt'))
+    if remaining is not None and remaining <= 0:
+        flash(
+            'You have used all your practice attempts for today. '
+            'Come back tomorrow!',
+            'error',
+        )
         return redirect(url_for('quiz.index'))
 
     # ── Grade resolution ─────────────────────────────────
     # The form only ever emits F4 / F3 (UI_GRADES). Anything else is
-    # rejected and the profile grade is used instead.
+    # rejected and the profile grade is used instead. Premium may pick
+    # any grade; free is locked to their profile grade.
     profile_grade = _profile_grade(user_id)
     form_grade = (request.form.get('grade') or '').strip().upper()
     tier = get_current_user_tier()
 
-    if tier in ('premium', 'pro') and form_grade in UI_GRADES:
+    if tier == 'premium' and form_grade in UI_GRADES:
         effective_grade = form_grade
     else:
         effective_grade = profile_grade
 
-    questions = get_questions_by_subject(subject_code, question_count,
-                                         grade=effective_grade)
+    questions = get_questions_by_subject(
+        subject_code, question_count, grade=effective_grade
+    )
     if not questions:
         flash('No questions available for this subject yet.', 'error')
         return redirect(url_for('quiz.index'))
 
     if not check_and_consume_quota(user_id, 'quiz_attempt'):
-        flash('Failed to start quiz. Try again.', 'error')
+        flash('Failed to start practice. Try again.', 'error')
         return redirect(url_for('quiz.index'))
 
     session['quiz'] = {
@@ -229,7 +253,7 @@ def play():
 
     quiz_data = session.get('quiz')
     if not quiz_data or not quiz_data.get('question_ids'):
-        flash('No quiz in progress. Start a new quiz.', 'error')
+        flash('No practice in progress. Start a new session.', 'error')
         return redirect(url_for('quiz.index'))
 
     if 'reactions' not in quiz_data:
@@ -261,14 +285,18 @@ def play():
     auto_skip_enabled = settings.get('quiz.auto_skip_enabled', False)
     show_correct_immediately = settings.get('quiz.show_correct_immediately', True)
 
-    return render_template('dashboard/quiz/play.html',
-                           question=question,
-                           current=current_index,
-                           total=total,
-                           score=score,
-                           user_settings={'auto_skip_enabled': auto_skip_enabled,
-                                          'show_correct_immediately': show_correct_immediately},
-                           user_tier=get_user_tier(user_id))
+    return render_template(
+        'dashboard/quiz/play.html',
+        question=question,
+        current=current_index,
+        total=total,
+        score=score,
+        user_settings={
+            'auto_skip_enabled': auto_skip_enabled,
+            'show_correct_immediately': show_correct_immediately,
+        },
+        user_tier=get_user_tier(user_id),
+    )
 
 
 # ============================================
@@ -285,12 +313,12 @@ def submit_answer():
 
     quiz_data = session.get('quiz')
     if not quiz_data or not quiz_data.get('question_ids'):
-        return jsonify({'error': 'No quiz in progress'}), 400
+        return jsonify({'error': 'No practice in progress'}), 400
 
     question_ids = quiz_data['question_ids']
     current_index = quiz_data['current_index']
     if current_index >= len(question_ids):
-        return jsonify({'error': 'Quiz already completed'}), 400
+        return jsonify({'error': 'Practice already completed'}), 400
 
     qid = question_ids[current_index]
     question = _fetch_question(qid)
@@ -336,7 +364,7 @@ def submit_answer():
 
 
 # ============================================
-# ADVANCE (was skip_rating)
+# ADVANCE
 # ============================================
 
 @quiz_bp.route('/skip_rating', methods=['POST'])
@@ -349,12 +377,12 @@ def skip_rating():
 
     quiz_data = session.get('quiz')
     if not quiz_data or not quiz_data.get('question_ids'):
-        return jsonify({'error': 'No quiz in progress'}), 400
+        return jsonify({'error': 'No practice in progress'}), 400
 
     question_ids = quiz_data['question_ids']
     current_index = quiz_data['current_index']
     if current_index >= len(question_ids):
-        return jsonify({'error': 'Quiz already completed'}), 400
+        return jsonify({'error': 'Practice already completed'}), 400
 
     quiz_data['current_index'] += 1
     session['quiz'] = quiz_data
@@ -364,7 +392,9 @@ def skip_rating():
         user_id = session['user_id']
         score = quiz_data['score']
         total = len(question_ids)
-        check_and_award_achievements(user_id, 'quiz_completed', {'score': score, 'total': total})
+        check_and_award_achievements(
+            user_id, 'quiz_completed', {'score': score, 'total': total}
+        )
         return jsonify({'complete': True})
 
     return jsonify({'complete': False, 'next': quiz_data['current_index']})
@@ -383,7 +413,7 @@ def end_quiz():
 
     quiz_data = session.get('quiz')
     if not quiz_data or not quiz_data.get('question_ids'):
-        return jsonify({'error': 'No quiz in progress'}), 400
+        return jsonify({'error': 'No practice in progress'}), 400
 
     user_id = session['user_id']
     question_ids = quiz_data['question_ids']
@@ -426,7 +456,9 @@ def end_quiz():
         logger.error(f"end_quiz: history entry failed: {e}")
 
     try:
-        check_and_award_achievements(user_id, 'quiz_completed', {'score': score, 'total': total})
+        check_and_award_achievements(
+            user_id, 'quiz_completed', {'score': score, 'total': total}
+        )
     except Exception:
         pass
 
@@ -453,13 +485,12 @@ def results():
 
     quiz_data = session.pop('quiz', None)
     if not quiz_data or not quiz_data.get('question_ids'):
-        flash('No quiz completed.', 'error')
+        flash('No practice completed.', 'error')
         return redirect(url_for('quiz.index'))
 
     question_ids = quiz_data['question_ids']
     fetched = get_questions_by_ids(question_ids)
     by_id = {q['id']: q for q in fetched}
-    # Preserve original order; skip any questions that no longer exist
     questions = [by_id[qid] for qid in question_ids if qid in by_id]
 
     answers = quiz_data['answers']
@@ -493,11 +524,16 @@ def results():
         current_points = student.get('total_points', 0) or 0
         update_student_points(user_id, current_points + score)
 
-    return render_template('dashboard/quiz/results.html',
-                           score=score, total=total,
-                           percentage=round((score / total) * 100) if total > 0 else 0,
-                           answers=answers, ratings=ratings,
-                           reactions=reactions, questions=questions)
+    return render_template(
+        'dashboard/quiz/results.html',
+        score=score,
+        total=total,
+        percentage=round((score / total) * 100) if total > 0 else 0,
+        answers=answers,
+        ratings=ratings,
+        reactions=reactions,
+        questions=questions,
+    )
 
 
 # ============================================
@@ -567,6 +603,9 @@ def leaderboard():
 
     level = get_feature_level("detailed_ranking_stats", user_id=session['user_id'])
 
-    return render_template('dashboard/quiz/leaderboard.html',
-                           leaders=leaders, user_rank=user_rank,
-                           ranking_level=level)
+    return render_template(
+        'dashboard/quiz/leaderboard.html',
+        leaders=leaders,
+        user_rank=user_rank,
+        ranking_level=level,
+    )

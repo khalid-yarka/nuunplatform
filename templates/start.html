@@ -1,14 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ get_current_language() if get_current_language is defined else 'en' }}">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NuunPlatform — Learn · Practice · Grow</title>
+    <title>{{ _('start.meta.title') }}</title>
 
-    <meta name="description" content="NuunPlatform is a free learning platform for Somali secondary school students. Practice quizzes, access PDFs, and join study groups." />
+    <meta name="description" content="{{ _('start.meta.description') }}" />
 
-    <meta property="og:title" content="NuunPlatform — Learn · Practice · Grow" />
-    <meta property="og:description" content="Free quizzes, PDFs, and study groups for Somali students." />
+    <meta property="og:title" content="{{ _('start.meta.title') }}" />
+    <meta property="og:description" content="{{ _('start.meta.description') }}" />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="{{ url_for('static', filename='images/icon-512.png', _external=True) }}" />
 
@@ -34,7 +34,7 @@
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/start.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/start.css') }}?v=2" />
 
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#FF3138">
@@ -51,8 +51,8 @@
             <span class="start-brand__text">Nuun<span>Platform</span></span>
         </a>
         <nav class="start-nav">
-            <a href="{{ url_for('auth.login') }}" class="start-nav__login">Login</a>
-            <a href="{{ url_for('auth.register') }}" class="start-nav__cta">Get Started</a>
+            <a href="{{ url_for('auth.login') }}" class="start-nav__login">{{ _('start.header.login') }}</a>
+            <a href="{{ url_for('auth.register') }}" class="start-nav__cta">{{ _('start.header.get_started') }}</a>
         </nav>
     </header>
 
@@ -66,26 +66,25 @@
                  alt="NuunPlatform logo" />
 
             <h1 class="start-hero__wordmark">Nuun<span>Platform</span></h1>
-            <p class="start-hero__dots">Learn · Practice · Grow</p>
+            <p class="start-hero__dots">{{ _('start.hero.tagline') }}</p>
 
             <h2 class="start-hero__motto">
-                Knowledge<br>
-                is <span class="start-underline">Power</span>
+                {{ _('start.hero.motto_line1') }}<br>
+                {{ _('start.hero.motto_line2_before') }} <span class="start-underline">{{ _('start.hero.motto_line2_emphasis') }}</span>
             </h2>
 
             <p class="start-hero__sub">
-                Free quizzes, PDFs and study groups built for Somali
-                secondary school students. Your learning journey matters.
+                {{ _('start.hero.subtitle') }}
             </p>
 
             <a href="{{ url_for('auth.register') }}" class="start-hero__cta">
-                Get Started
+                {{ _('start.hero.cta') }}
                 <i class="fas fa-arrow-right" aria-hidden="true"></i>
             </a>
 
             <p class="start-hero__secondary">
-                Already have an account?
-                <a href="{{ url_for('auth.login') }}">Login</a>
+                {{ _('start.hero.already_have') }}
+                <a href="{{ url_for('auth.login') }}">{{ _('start.hero.login_link') }}</a>
             </p>
         </div>
     </section>
@@ -94,29 +93,29 @@
     <!-- FEATURES -->
     <!-- ============================================ -->
     <section class="start-features">
-        <h2 class="start-features__title">Everything you need to succeed</h2>
-        <p class="start-features__sub">Three tools. One platform. Zero cost.</p>
+        <h2 class="start-features__title">{{ _('start.features.title') }}</h2>
+        <p class="start-features__sub">{{ _('start.features.subtitle') }}</p>
 
         <div class="start-features__grid">
             <a href="{{ url_for('auth.register') }}"
                class="start-feature start-feature--red">
                 <span class="start-feature__icon"><i class="fas fa-file-pdf" aria-hidden="true"></i></span>
-                <h3 class="start-feature__title">PDFs</h3>
-                <p class="start-feature__sub">Study materials from your curriculum, ready when you are.</p>
+                <h3 class="start-feature__title">{{ _('start.feature.pdfs.title') }}</h3>
+                <p class="start-feature__sub">{{ _('start.feature.pdfs.desc') }}</p>
             </a>
 
             <a href="{{ url_for('auth.register') }}"
                class="start-feature start-feature--yellow">
                 <span class="start-feature__icon"><i class="fas fa-pencil-alt" aria-hidden="true"></i></span>
-                <h3 class="start-feature__title">Quizzes</h3>
-                <p class="start-feature__sub">Test your knowledge and track your progress as you learn.</p>
+                <h3 class="start-feature__title">{{ _('start.feature.practice.title') }}</h3>
+                <p class="start-feature__sub">{{ _('start.feature.practice.desc') }}</p>
             </a>
 
             <a href="{{ url_for('auth.register') }}"
                class="start-feature start-feature--purple">
                 <span class="start-feature__icon"><i class="fas fa-users" aria-hidden="true"></i></span>
-                <h3 class="start-feature__title">Groups</h3>
-                <p class="start-feature__sub">Join study groups and learn together with other students.</p>
+                <h3 class="start-feature__title">{{ _('start.feature.groups.title') }}</h3>
+                <p class="start-feature__sub">{{ _('start.feature.groups.desc') }}</p>
             </a>
         </div>
     </section>
@@ -128,9 +127,9 @@
         <div class="start-strip__inner">
             <span class="start-strip__icon" aria-hidden="true">🎓</span>
             <h2 class="start-strip__title">
-                Better Students,<br><strong>Brighter Future</strong>
+                {{ _('start.strip.title_line1') }}<br><strong>{{ _('start.strip.title_line2') }}</strong>
             </h2>
-            <p class="start-strip__sub">Every quiz, every PDF, every group — built to help you succeed.</p>
+            <p class="start-strip__sub">{{ _('start.strip.subtitle') }}</p>
         </div>
     </section>
 
@@ -139,22 +138,22 @@
     <!-- ============================================ -->
     <footer class="start-footer">
         <div class="start-footer__links">
-            <a href="{{ url_for('auth.help') }}">Help</a>
-            <a href="{{ url_for('auth.login') }}">Login</a>
-            <a href="{{ url_for('auth.register') }}">Create Account</a>
+            <a href="{{ url_for('auth.help') }}">{{ _('start.footer.help') }}</a>
+            <a href="{{ url_for('auth.login') }}">{{ _('start.footer.login') }}</a>
+            <a href="{{ url_for('auth.register') }}">{{ _('start.footer.create') }}</a>
         </div>
         <div class="start-footer__copy">
-            © 2026 NuunPlatform · Made with <span class="heart" aria-hidden="true">❤️</span> for Somali students
+            {{ _('start.footer.copy') }}
         </div>
     </footer>
 
     <!-- ============================================ -->
-    <!-- FLOATING THEME TOGGLE -->
+    <!-- FLOATING THEME TOGGLE (simple on/off)        -->
     <!-- ============================================ -->
     <button type="button"
             class="start-theme-toggle"
             id="startThemeToggle"
-            aria-label="Toggle theme">
+            aria-label="{{ _('navbar.toggle_theme') }}">
         <i class="fas fa-moon" id="startThemeIcon" aria-hidden="true"></i>
     </button>
 

@@ -119,6 +119,9 @@ ENTITLEMENTS_SEED_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     'entitlements_seed.json'
 )
+# Bump this when the seed structure changes. Any DB with a lower
+# user_version will be wiped and reseeded on the next boot.
+TARGET_SEED_VERSION = 2
 
 
 def _get_user_version(conn: sqlite3.Connection) -> int:
@@ -147,11 +150,15 @@ def _count_features(conn: sqlite3.Connection) -> int:
 
 def bootstrap_entitlements() -> Tuple[bool, str]:
     """
-    First-run bootstrap of the entitlement tables.
+    Bootstrap the entitlement tables from the seed JSON.
 
-    - If PRAGMA user_version >= 1: skip (DB is authoritative).
-    - If PRAGMA user_version == 0: load seed JSON, insert features + policies,
-      set user_version = 1.
+    Behaviour:
+      - user_version == 0: fresh install. Insert every feature + policy.
+      - user_version  < TARGET_SEED_VERSION: upgrade path. Wipe the
+        entitlement tables and re-insert from the new seed. This is
+        safe for the current two-tier migration because the operator
+        has confirmed no real users yet.
+      - user_version >= TARGET_SEED_VERSION: no-op, DB is authoritative.
 
     Returns (ok, message).
     """
@@ -180,20 +187,38 @@ def bootstrap_entitlements() -> Tuple[bool, str]:
     try:
         version = _get_user_version(conn)
 
-        if version >= 1:
+        if version >= TARGET_SEED_VERSION:
             existing = _count_features(conn)
             conn.close()
-            return True, f"Entitlements already seeded (user_version={version}, {existing} features)"
+            return True, (
+                f"Entitlements already seeded "
+                f"(user_version={version}, {existing} features)"
+            )
 
-        # ---- First install: seed ----
-        logger.info(f"Bootstrapping entitlements ({len(features)} features)...")
-
-        # Defensive: verify tables exist
+        # Defensive: verify the entitlement tables exist
         try:
             conn.execute("SELECT 1 FROM entitlement_features LIMIT 1")
         except sqlite3.OperationalError:
             conn.close()
             return False, "Entitlement tables not found. Check schema.sql."
+
+        # ── Upgrade path: wipe and reseed ──
+        if version > 0:
+            logger.info(
+                f"Reseeding entitlements: user_version {version} -> "
+                f"{TARGET_SEED_VERSION}"
+            )
+            # Cascade deletes policies; overrides use feature_key strings
+            # and are wiped explicitly.
+            conn.execute("DELETE FROM entitlement_overrides")
+            conn.execute("DELETE FROM entitlement_policies")
+            conn.execute("DELETE FROM entitlement_features")
+            conn.commit()
+        else:
+            logger.info(
+                f"Bootstrapping entitlements fresh "
+                f"({len(features)} features)..."
+            )
 
         inserted_features = 0
         inserted_policies = 0
@@ -208,41 +233,26 @@ def bootstrap_entitlements() -> Tuple[bool, str]:
             sort_order = feat.get('sort_order', 0)
             notes = feat.get('notes', '')
 
-            cursor = conn.execute(
-                "SELECT id FROM entitlement_features WHERE feature_key = ?",
-                (feature_key,)
-            )
-            row = cursor.fetchone()
-            if row:
-                feature_id = row['id']
-            else:
-                cursor = conn.execute("""
-                    INSERT INTO entitlement_features (
-                        feature_key, display_name, description, category,
-                        policy_type, unit_hint, is_global_active,
-                        sort_order, notes
-                    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
-                """, (
+            cursor = conn.execute("""
+                INSERT INTO entitlement_features (
                     feature_key, display_name, description, category,
-                    policy_type, unit_hint, sort_order, notes
-                ))
-                feature_id = cursor.lastrowid
-                inserted_features += 1
+                    policy_type, unit_hint, is_global_active,
+                    sort_order, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+            """, (
+                feature_key, display_name, description, category,
+                policy_type, unit_hint, sort_order, notes
+            ))
+            feature_id = cursor.lastrowid
+            inserted_features += 1
 
             policies = feat.get('policies', {})
-            for tier in ('free', 'premium', 'pro'):
+            for tier in ('free', 'premium'):
                 p = policies.get(tier, {})
                 is_enabled = 1 if p.get('is_enabled', 0) else 0
                 level_value = p.get('level_value')
                 limit_value = p.get('limit_value')
                 limit_unit = p.get('limit_unit')
-
-                cursor = conn.execute(
-                    "SELECT id FROM entitlement_policies WHERE feature_id = ? AND tier = ?",
-                    (feature_id, tier)
-                )
-                if cursor.fetchone():
-                    continue
 
                 conn.execute("""
                     INSERT INTO entitlement_policies (
@@ -256,13 +266,15 @@ def bootstrap_entitlements() -> Tuple[bool, str]:
                 inserted_policies += 1
 
         conn.commit()
-        _set_user_version(conn, 1)
+        _set_user_version(conn, TARGET_SEED_VERSION)
 
         total_features = _count_features(conn)
         conn.close()
 
-        msg = (f"Entitlements seeded: {inserted_features} features, "
-               f"{inserted_policies} policies ({total_features} total features)")
+        msg = (
+            f"Entitlements seeded: {inserted_features} features, "
+            f"{inserted_policies} policies ({total_features} total features)"
+        )
         logger.info(msg)
         return True, msg
 

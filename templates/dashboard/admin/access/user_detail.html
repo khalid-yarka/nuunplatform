@@ -1,7 +1,5 @@
 {# ============================================================
    templates/dashboard/admin/access/user_detail.html
-   Advanced single-user profile with integrated password
-   management, editable identity form, and verification controls.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -249,7 +247,6 @@
         flex-shrink: 0;
     }
 
-    /* Verification banner */
     .verify-banner {
         display: flex; align-items: center; gap: 14px;
         padding: 14px 18px; margin-top: 16px;
@@ -274,6 +271,33 @@
         font-size: 12px; color: #B45309; margin-top: 2px; line-height: 1.4;
     }
     .verify-banner.verified .vb-sub { color: #047857; }
+
+    /* ─── Tier expiry chip ─── */
+    .tier-expiry-chip {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 11px; font-weight: 700;
+        padding: 2px 9px; border-radius: 10px;
+        letter-spacing: 0.3px;
+        white-space: nowrap;
+    }
+    .tier-expiry-chip.permanent {
+        background: #ECFDF5; color: #065F46;
+    }
+    .tier-expiry-chip.limited {
+        background: #FFFBEB; color: #92400E;
+    }
+    .tier-expiry-chip.expired {
+        background: #FEF2F2; color: #991B1B;
+    }
+    [data-theme="dark"] .tier-expiry-chip.permanent {
+        background: #1A3A2E; color: #34D399;
+    }
+    [data-theme="dark"] .tier-expiry-chip.limited {
+        background: #3A2E1A; color: #FBBF24;
+    }
+    [data-theme="dark"] .tier-expiry-chip.expired {
+        background: #3A1A1A; color: #FCA5A5;
+    }
 </style>
 {% endblock %}
 
@@ -281,6 +305,11 @@
 {% block admin_content %}
 
 {% set tier = normalize_tier(user.tier or 'free') %}
+
+{# ─── Compute expiry state ─── #}
+{% set expires_raw = user.tier_expires_at %}
+{% set has_expiry = (tier == 'premium' and expires_raw) %}
+{% set is_permanent = (tier == 'premium' and not expires_raw) %}
 
 {# ═══════════ HERO ═══════════ #}
 <div class="um-hero">
@@ -302,7 +331,21 @@
             {% else %}
                 <span class="admin-chip amber">⏳ Pending ID</span>
             {% endif %}
+
+            {# Tier pill + expiry chip #}
             <span class="admin-pill {{ tier }}">{{ tier }}</span>
+            {% if tier == 'premium' %}
+                {% if has_expiry %}
+                    <span class="tier-expiry-chip limited" title="Premium expires {{ expires_raw|somali_dt }}">
+                        ⏳ until {{ expires_raw[:10] }}
+                    </span>
+                {% elif is_permanent %}
+                    <span class="tier-expiry-chip permanent" title="Premium is permanent">
+                        ∞ Permanent
+                    </span>
+                {% endif %}
+            {% endif %}
+
             {% if user.is_verified %}
                 <span class="admin-chip green">✅ Verified</span>
             {% else %}
@@ -375,7 +418,7 @@
     <div class="admin-stat tone-blue">
         <div class="stat-head"><span class="stat-icon"><i class="fas fa-pencil-alt"></i></span></div>
         <span class="stat-value">{{ total_quizzes }}</span>
-        <span class="stat-label">Recent quizzes</span>
+        <span class="stat-label">Recent practices</span>
     </div>
     <div class="admin-stat tone-green">
         <div class="stat-head"><span class="stat-icon"><i class="fas fa-bullseye"></i></span></div>
@@ -385,7 +428,7 @@
     <div class="admin-stat tone-purple">
         <div class="stat-head"><span class="stat-icon"><i class="fas fa-bolt"></i></span></div>
         <span class="stat-value">{{ live_quizzes|length }}</span>
-        <span class="stat-label">Live quizzes</span>
+        <span class="stat-label">Competitions</span>
     </div>
 </div>
 
@@ -534,9 +577,9 @@
         <div class="pw-preset">
             <span class="preset-icon">⚡</span>
             <div class="preset-body">
-                <div class="preset-title">Quick reset to default</div>
+                <div class="preset-title">Quick reset to random password</div>
                 <div>
-                    <span class="preset-value">{{ default_password_preset }}</span>
+                    <span class="preset-value">{{ suggested_password }}</span>
                 </div>
                 <div class="preset-desc">
                     Use this when a student has forgotten their password and needs
@@ -545,10 +588,10 @@
             </div>
             <form method="POST"
                   action="{{ url_for('admin_users.reset_password_to_default', user_id=user.id) }}"
-                  onsubmit="return confirm('Reset {{ user.first_name }} to {{ default_password_preset }}?\n\nThey will be logged out immediately.');">
+                  onsubmit="return confirm('Reset {{ user.first_name }}\'s password to a random value?\n\nThey will be logged out immediately.');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="admin-btn primary">
-                    <i class="fas fa-undo"></i> Reset to {{ default_password_preset }}
+                    <i class="fas fa-undo"></i> Reset to random
                 </button>
             </form>
         </div>
@@ -667,6 +710,18 @@
             <div class="um-kv">
                 <div class="row"><span class="k">Public ID</span><span class="v">{{ user.public_id or '—' }}</span></div>
                 <div class="row"><span class="k">Tier</span><span class="v">{{ tier|upper }}</span></div>
+                {% if tier == 'premium' %}
+                    <div class="row">
+                        <span class="k">Expires</span>
+                        <span class="v">
+                            {% if expires_raw %}
+                                {{ expires_raw|somali_dt }}
+                            {% else %}
+                                Permanent
+                            {% endif %}
+                        </span>
+                    </div>
+                {% endif %}
                 <div class="row"><span class="k">Admin</span><span class="v">{{ 'Yes' if user.is_admin else 'No' }}</span></div>
                 <div class="row"><span class="k">Verified</span><span class="v">{{ 'Yes' if user.is_verified else 'No' }}</span></div>
                 <div class="row"><span class="k">Joined</span><span class="v">{{ user.created_at|somali_dt }}</span></div>
@@ -781,7 +836,7 @@
 {# ═══════════ RECENT QUIZZES ═══════════ #}
 <section class="um-section">
     <div class="um-section-head">
-        <h3><i class="fas fa-pencil-alt"></i> Recent Quizzes</h3>
+        <h3><i class="fas fa-pencil-alt"></i> Recent Practices</h3>
         <span class="hint">{{ quizzes|length }} shown</span>
     </div>
     <div class="um-section-body" style="padding:0;">
@@ -815,7 +870,7 @@
         </div>
         {% else %}
         <div style="text-align:center;padding:30px 20px;color:var(--text-muted);font-size:13px;">
-            No quiz attempts recorded.
+            No practice attempts recorded.
         </div>
         {% endif %}
     </div>
@@ -911,7 +966,7 @@
     <div class="um-section-body">
         <p style="font-size:13px;color:#991B1B;margin:0 0 14px;line-height:1.5;">
             Deleting a user moves them to <strong>Deleted Users</strong> where they can be
-            restored. Quiz attempts will be removed unless you uncheck the option.
+            restored. Practice attempts will be removed unless you uncheck the option.
         </p>
         <form method="POST" action="{{ url_for('admin_users.delete_user', user_id=user.id) }}"
               onsubmit="return confirm('Delete {{ user.first_name }} {{ user.last_name }}?\n\nThis moves them to Deleted Users.');">
@@ -923,7 +978,7 @@
                 </label>
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
                     <input type="checkbox" name="delete_attempts" checked>
-                    <span>Delete quiz attempts and scores</span>
+                    <span>Delete practice attempts and scores</span>
                 </label>
             </div>
             <button type="submit" class="admin-btn danger">

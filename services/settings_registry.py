@@ -1,4 +1,3 @@
-# services/settings_registry.py
 """
 Central registry for all user-configurable settings.
 
@@ -9,7 +8,7 @@ Each entry describes:
     category      — grouping (for UI)
     label         — human label
     description   — short help text
-    tier_required — legacy gate: 'premium' | 'pro' | None
+    tier_required — legacy gate: 'premium' | None
     feature_key   — entitlement gate (preferred). When set, the
                     setting is controlled by the entitlement system
                     and can be re-configured by admins at any time.
@@ -93,9 +92,9 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "sensitive": False,
     },
     # Language: gated by the entitlement feature `language_somali`.
-    # Admins control access by editing the feature's per-tier policy
-    # in the entitlement table — no code change required to allow/deny
-    # Somali for any tier.
+    # The seed enables this feature for both free and premium, so every
+    # user can switch freely. Admins can still restrict it per tier by
+    # editing the feature policy — no code change required.
     "appearance.language": {
         "type": "enum",
         "default": "en",
@@ -109,14 +108,14 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "sensitive": False,
     },
 
-    # ----- Quiz -----
+    # ----- Practice -----
     "quiz.default_question_count": {
         "type": "integer",
         "default": 10,
         "allowed_values": [5, 10, 15, 20, 25, 30],
         "category": "quiz",
         "label": "Default Question Count",
-        "description": "Default number of questions per quiz.",
+        "description": "Default number of questions per practice.",
         "tier_required": None,
         "live": True,
         "requires_confirmation": False,
@@ -128,7 +127,7 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "allowed_values": [1, 2, 3, 4, 5],
         "category": "quiz",
         "label": "Default Difficulty",
-        "description": "Default difficulty level for new quizzes.",
+        "description": "Default difficulty level for new practices.",
         "tier_required": None,
         "live": True,
         "requires_confirmation": False,
@@ -139,7 +138,7 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "default": "",
         "category": "quiz",
         "label": "Default Subject",
-        "description": "Pre-select a subject when starting a new quiz.",
+        "description": "Pre-select a subject when starting a new practice.",
         "tier_required": None,
         "live": True,
         "requires_confirmation": False,
@@ -173,8 +172,8 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": "boolean",
         "default": True,
         "category": "notifications",
-        "label": "Quiz Complete",
-        "description": "When you finish a quiz.",
+        "label": "Practice Complete",
+        "description": "When you finish a practice.",
         "tier_required": None,
         "live": True,
         "requires_confirmation": False,
@@ -184,8 +183,8 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": "boolean",
         "default": True,
         "category": "notifications",
-        "label": "Live Quiz Starts",
-        "description": "When a live quiz you're in begins.",
+        "label": "Competition Starts",
+        "description": "When a competition you're in begins.",
         "tier_required": None,
         "live": True,
         "requires_confirmation": False,
@@ -195,8 +194,8 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": "boolean",
         "default": True,
         "category": "notifications",
-        "label": "Live Quiz Results",
-        "description": "When a live quiz ends.",
+        "label": "Competition Results",
+        "description": "When a competition ends.",
         "tier_required": None,
         "live": True,
         "requires_confirmation": False,
@@ -217,8 +216,8 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": "boolean",
         "default": True,
         "category": "notifications",
-        "label": "Participant Joined Your Quiz",
-        "description": "When someone joins your hosted quiz.",
+        "label": "Participant Joined Your Competition",
+        "description": "When someone joins a competition you host.",
         "tier_required": None,
         "live": True,
         "requires_confirmation": False,
@@ -261,20 +260,22 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": "boolean",
         "default": True,
         "category": "notifications",
-        "label": "Live Quiz Reminder",
-        "description": "5-minute reminder before a scheduled live quiz.",
+        "label": "Competition Reminder",
+        "description": "5-minute reminder before a scheduled competition.",
         "tier_required": "premium",
         "live": True,
         "requires_confirmation": False,
         "sensitive": False,
     },
+    # Feature not implemented anywhere yet — preference-only storage.
+    # Kept ungated so users can toggle it without hitting a dead tier gate.
     "notifications.weekly_summary": {
         "type": "boolean",
         "default": False,
         "category": "notifications",
         "label": "Weekly Summary",
         "description": "Get a weekly wrap-up of your progress.",
-        "tier_required": "pro",
+        "tier_required": None,
         "live": True,
         "requires_confirmation": False,
         "sensitive": False,
@@ -304,14 +305,14 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "sensitive": False,
     },
 
-    # ----- Live Quiz -----
+    # ----- Competition (defaults for the create form) -----
     "live_quiz.default_time_per_question": {
         "type": "integer",
         "default": 30,
         "allowed_values": [30, 45, 60],
         "category": "live_quiz",
         "label": "Default Time per Question (seconds)",
-        "description": "Default time allowed per question when creating a live quiz.",
+        "description": "Default time allowed per question when creating a competition.",
         "tier_required": "premium",
         "live": True,
         "requires_confirmation": False,

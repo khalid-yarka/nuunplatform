@@ -1,4 +1,7 @@
 # blueprints/settings_bp.py
+# Tier model: free / premium only. No pro.
+# Language is not gated — every user can switch freely.
+
 from flask import Blueprint, render_template, request, session, jsonify
 from functools import wraps
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -36,10 +39,9 @@ def index():
     can_create = can_create_live_quiz()
     user_subjects = get_user_subject_list(user_id)
 
-    # Language is gated by the entitlement feature `language_somali`.
-    # Resolved here so the template can disable the selector and show
-    # the upgrade hint for users who don't currently have access.
-    language_allowed = entitlement_service.check(user_id, "language_somali")
+    # Language switching is available to every user regardless of tier.
+    # This flag exists only so the template can keep its current shape.
+    language_allowed = True
 
     # Build the "Plan & Features" grid. Entries with `feature_key` are
     # resolved through the entitlement service; entries with only
@@ -171,10 +173,6 @@ def api_password():
     if not student:
         return jsonify({'error': 'Account not found.'}), 404
 
-    # Correct verification: compare the submitted plaintext against the
-    # stored werkzeug hash. The previous version compared the plaintext
-    # to the hash directly — which could never match — and then wrote
-    # the new password back in PLAINTEXT. Both are fixed here.
     if not check_password_hash(student.get('password', ''), current):
         logger.warning(f"Password change failed: wrong current password (user {user_id})")
         return jsonify({'error': 'Current password is incorrect.'}), 400
@@ -182,9 +180,6 @@ def api_password():
     new_hash = generate_password_hash(new)
 
     try:
-        # Bump session_version so every other active session is
-        # invalidated. The browser is redirected to /logout right after
-        # this call anyway, so the current session dying is expected.
         execute_with_retry(
             "UPDATE students "
             "SET password = ?, "
@@ -205,15 +200,14 @@ def api_password():
 
 
 # ============================================
-# TEST ENDPOINT (for debugging)
+# TEST ENDPOINT (debug only)
 # ============================================
 @settings_bp.route('/test-save', methods=['GET'])
 @login_required
 def test_save():
     """
     DEBUG ONLY. Gated behind Config.DEBUG so it can never be reached
-    in production. Previously this endpoint accepted a GET request
-    from any logged-in user and mutated their settings.
+    in production.
     """
     from config import Config
     if not Config.DEBUG:

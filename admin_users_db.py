@@ -1,6 +1,8 @@
 # admin_users_db.py
 # Advanced user management helpers for the admin panel.
 # Auto-adds missing columns/tables on first use — no manual migration.
+#
+# Tier model: free / premium only. No pro.
 
 import csv
 import io
@@ -122,7 +124,7 @@ SORT_MAP = {
     'name_za': 'first_name DESC, last_name DESC',
     'points_high': 'total_points DESC',
     'points_low': 'total_points ASC',
-    'tier_high': "CASE tier WHEN 'pro' THEN 3 WHEN 'premium' THEN 2 ELSE 1 END DESC, total_points DESC",
+    'tier_high': "CASE tier WHEN 'premium' THEN 2 ELSE 1 END DESC, total_points DESC",
 }
 
 
@@ -148,7 +150,7 @@ def _build_user_filter_sql(
 
     if tier_filter:
         canonical = normalize_tier(tier_filter)
-        if canonical in ('free', 'premium', 'pro'):
+        if canonical in ('free', 'premium'):
             where.append("tier = ?")
             params.append(canonical)
 
@@ -296,7 +298,6 @@ def get_users_admin_stats() -> Dict[str, int]:
                 SUM(CASE WHEN is_verified = 0 THEN 1 ELSE 0 END) AS unverified,
                 SUM(CASE WHEN tier = 'free'    THEN 1 ELSE 0 END) AS free,
                 SUM(CASE WHEN tier = 'premium' THEN 1 ELSE 0 END) AS premium,
-                SUM(CASE WHEN tier = 'pro'     THEN 1 ELSE 0 END) AS pro,
                 SUM(CASE WHEN created_at >= datetime('now', '-7 days') THEN 1 ELSE 0 END) AS this_week,
                 SUM(CASE WHEN created_at >= datetime('now', '-1 day')  THEN 1 ELSE 0 END) AS today
             FROM students
@@ -309,7 +310,7 @@ def get_users_admin_stats() -> Dict[str, int]:
     return {
         'total': 0, 'admins': 0,
         'verified': 0, 'unverified': 0,
-        'free': 0, 'premium': 0, 'pro': 0,
+        'free': 0, 'premium': 0,
         'this_week': 0, 'today': 0,
     }
 
@@ -596,27 +597,75 @@ def set_user_admin_note(user_id: int, note: str, admin_id: int) -> bool:
         return False
 
 
-def set_user_tier_admin(user_id: int, new_tier: str, admin_id: int) -> bool:
+def set_user_tier_admin(
+    user_id: int,
+    new_tier: str,
+    admin_id: int,
+    expires_at: Optional[str] = None,
+    reason: Optional[str] = None,
+) -> bool:
+    """
+    Set a user's tier, optionally with a custom expiry.
+
+    Args:
+        user_id: target user
+        new_tier: 'free' or 'premium' (legacy aliases auto-normalized)
+        admin_id: acting admin
+        expires_at: ISO-8601 string for a time-limited premium grant,
+                    or None for permanent. Ignored when tier is 'free'.
+        reason: optional free-text note stored on the audit row
+
+    Returns True on success (including a no-op when the value is unchanged).
+    """
     ensure_admin_user_schema()
 
     new_tier = normalize_tier(new_tier)
-    if new_tier not in ('free', 'premium', 'pro'):
+    if new_tier not in ('free', 'premium'):
         return False
+
+    # 'free' is always permanent — no expiry.
+    if new_tier == 'free':
+        expires_at = None
+    else:
+        # Normalize the expires_at string if provided
+        if expires_at is not None:
+            expires_at = str(expires_at).strip() or None
 
     try:
         user = get_student_by_id(user_id)
         if not user:
             return False
 
-        old = normalize_tier(user.get('tier') or 'free')
-        if old == new_tier:
+        old_tier = normalize_tier(user.get('tier') or 'free')
+        old_exp = user.get('tier_expires_at') or None
+
+        tier_changed = (old_tier != new_tier)
+        exp_changed = (str(old_exp or '') != str(expires_at or ''))
+
+        if not (tier_changed or exp_changed):
             return True
 
         execute_with_retry(
-            "UPDATE students SET tier = ?, tier_updated_at = ? WHERE id = ?",
-            (new_tier, now(), user_id), commit=True
+            "UPDATE students "
+            "SET tier = ?, tier_expires_at = ?, tier_updated_at = ? "
+            "WHERE id = ?",
+            (new_tier, expires_at, now(), user_id),
+            commit=True,
         )
-        log_admin_user_action(admin_id, user_id, 'set_tier', old, new_tier)
+
+        # Log the change with reason
+        new_value_repr = new_tier
+        if new_tier == 'premium' and expires_at:
+            new_value_repr = f"premium (until {expires_at[:10]})"
+        elif new_tier == 'premium':
+            new_value_repr = "premium (permanent)"
+
+        log_admin_user_action(
+            admin_id, user_id, 'set_tier',
+            old_value=f"{old_tier}" + (f" (until {old_exp[:10]})" if old_exp else ""),
+            new_value=new_value_repr,
+            note=(reason or None),
+        )
 
         try:
             from services.entitlement_service import refresh_user
@@ -807,18 +856,27 @@ def bulk_user_action(
 
             if action == 'set_tier':
                 new_tier = normalize_tier(extra.get('tier') or '')
-                if new_tier not in ('free', 'premium', 'pro'):
+                if new_tier not in ('free', 'premium'):
                     failed += 1
                     continue
+                # Bulk grants are always permanent — per-user custom
+                # expiry is done through the individual tier page.
+                expires_at = None
                 old = normalize_tier(user.get('tier') or 'free')
-                if old == new_tier:
+                if old == new_tier and not user.get('tier_expires_at'):
                     failed += 1
                     continue
                 execute_with_retry(
-                    "UPDATE students SET tier = ?, tier_updated_at = ? WHERE id = ?",
-                    (new_tier, now(), uid), commit=True
+                    "UPDATE students "
+                    "SET tier = ?, tier_expires_at = ?, tier_updated_at = ? "
+                    "WHERE id = ?",
+                    (new_tier, expires_at, now(), uid), commit=True
                 )
-                log_admin_user_action(admin_id, uid, 'set_tier', old, new_tier)
+                log_admin_user_action(
+                    admin_id, uid, 'set_tier',
+                    old_value=old,
+                    new_value=f"{new_tier} (bulk)",
+                )
                 try:
                     from services.entitlement_service import refresh_user
                     refresh_user(uid)

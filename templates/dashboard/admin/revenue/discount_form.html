@@ -101,7 +101,6 @@
                     <select name="applies_to" class="admin-select">
                         <option value="all"     {% if not discount or discount.applies_to == 'all' %}selected{% endif %}>All tiers</option>
                         <option value="premium" {% if discount and discount.applies_to == 'premium' %}selected{% endif %}>Premium only</option>
-                        <option value="pro"     {% if discount and discount.applies_to == 'pro' %}selected{% endif %}>Pro only</option>
                     </select>
                 </div>
 

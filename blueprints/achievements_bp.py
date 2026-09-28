@@ -3,10 +3,16 @@
 
 from flask import Blueprint, render_template, session, abort
 from functools import wraps
-from services.achievement_service import get_visible_achievements, get_showcase_badges, get_user_achievement_ids, get_all_achievements
+from services.achievement_service import (
+    get_visible_achievements,
+    get_showcase_badges,
+    get_user_achievement_ids,
+    get_all_achievements,
+)
 from services.tier_service import get_achievement_history_level, get_badge_showcase_level
 
 achievements_bp = Blueprint('achievements', __name__, url_prefix='/achievements')
+
 
 def login_required(f):
     @wraps(f)
@@ -15,6 +21,7 @@ def login_required(f):
             abort(401)
         return f(*args, **kwargs)
     return decorated
+
 
 @achievements_bp.route('/')
 @login_required

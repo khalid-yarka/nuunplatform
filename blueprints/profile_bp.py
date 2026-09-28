@@ -1,17 +1,46 @@
 # blueprints/profile_bp.py
+# Profile view + edit + public-ID management.
+#
+# Tier model: free / premium only. No pro.
+#
+# Public ID rules (two-tier):
+#   free     — cannot manage the public ID at all
+#   premium  — can regenerate (random) or edit (custom, must be unique)
+#
+# Public ID format: exactly 4 uppercase letters or digits.
+
 from flask import (
     Blueprint, render_template, request, session, jsonify,
     redirect, url_for, flash,
 )
 from functools import wraps
-from db import get_student_by_id, execute_with_retry, get_student_by_public_id
-from services.tier_service import get_current_user_tier
 import re
 import secrets
 import string
 
+from db import (
+    get_student_by_id,
+    execute_with_retry,
+    get_student_by_public_id,
+)
+from services.tier_service import get_current_user_tier
+
 profile_bp = Blueprint('profile', __name__, url_prefix='/profile')
 
+
+# ============================================================
+# CONSTANTS
+# ============================================================
+
+# Public-ID charset: A-Z plus digits 1-9 (zero excluded to avoid
+# confusion with O). Matches the admin generator in admin_users_db.py.
+_PUBLIC_ID_CHARS = string.ascii_uppercase + '123456789'
+_PUBLIC_ID_REGEX = re.compile(r'[A-Z0-9]{4}')
+
+
+# ============================================================
+# DECORATORS
+# ============================================================
 
 def login_required(f):
     @wraps(f)
@@ -23,13 +52,39 @@ def login_required(f):
     return decorated
 
 
+# ============================================================
+# HELPERS
+# ============================================================
+
+def _generate_unique_public_id(max_attempts: int = 10):
+    """
+    Return a fresh 4-character public ID not currently in use,
+    or None if the retry budget is exhausted.
+    """
+    for _ in range(max_attempts):
+        candidate = ''.join(
+            secrets.choice(_PUBLIC_ID_CHARS) for _ in range(4)
+        )
+        if not get_student_by_public_id(candidate):
+            return candidate
+    return None
+
+
+# ============================================================
+# ROUTES
+# ============================================================
+
 @profile_bp.route('/')
 @login_required
 def index():
     user_id = session['user_id']
     student = get_student_by_id(user_id)
     tier = get_current_user_tier()
-    return render_template('dashboard/profile.html', student=student, tier=tier)
+    return render_template(
+        'dashboard/profile.html',
+        student=student,
+        tier=tier,
+    )
 
 
 @profile_bp.route('/edit', methods=['POST'])
@@ -104,52 +159,46 @@ def edit():
 @profile_bp.route('/public-id', methods=['POST'])
 @login_required
 def public_id():
+    """
+    Manage the user's public ID.
+
+    Two-tier rules:
+      free     → blocked
+      premium  → 'regenerate' (random unique) or 'edit' (custom, unique)
+    """
     user_id = session['user_id']
     tier = get_current_user_tier()
     data = request.get_json() or {}
-    action = data.get('action')
-    new_id = data.get('public_id', '').strip().upper()
+    action = (data.get('action') or '').strip().lower()
+    requested_id = (data.get('public_id') or '').strip().upper()
 
-    if tier == 'free':
-        return jsonify({'error': 'Public ID management requires Premium or Pro.'}), 403
+    if tier != 'premium':
+        return jsonify({
+            'error': 'Public ID management requires Premium.'
+        }), 403
 
-    if tier == 'premium':
-        if action != 'regenerate':
-            return jsonify({'error': 'Premium tier can only regenerate a random ID.'}), 400
-        attempts = 0
-        while attempts < 10:
-            candidate = ''.join(
-                secrets.choice(string.ascii_uppercase + '123456789') for _ in range(4)
-            )
-            if not get_student_by_public_id(candidate):
-                new_id = candidate
-                break
-            attempts += 1
-        else:
-            return jsonify({'error': 'Could not generate unique ID.'}), 500
+    new_id = None
 
-    elif tier == 'pro':
-        if action == 'regenerate':
-            attempts = 0
-            while attempts < 10:
-                candidate = ''.join(
-                    secrets.choice(string.ascii_uppercase + '123456789') for _ in range(4)
-                )
-                if not get_student_by_public_id(candidate):
-                    new_id = candidate
-                    break
-                attempts += 1
-            else:
-                return jsonify({'error': 'Could not generate unique ID.'}), 500
-        elif action == 'edit':
-            if not re.fullmatch(r'[A-Z0-9]{4}', new_id):
-                return jsonify({'error': 'ID must be exactly 4 uppercase letters/digits.'}), 400
-            if get_student_by_public_id(new_id):
-                return jsonify({'error': 'This ID is already taken.'}), 400
-        else:
-            return jsonify({'error': 'Invalid action.'}), 400
+    if action == 'regenerate':
+        new_id = _generate_unique_public_id()
+        if not new_id:
+            return jsonify({
+                'error': 'Could not generate a unique ID. Please try again.'
+            }), 500
+
+    elif action == 'edit':
+        if not _PUBLIC_ID_REGEX.fullmatch(requested_id):
+            return jsonify({
+                'error': 'ID must be exactly 4 uppercase letters or digits.'
+            }), 400
+        if get_student_by_public_id(requested_id):
+            return jsonify({
+                'error': 'This ID is already taken.'
+            }), 400
+        new_id = requested_id
+
     else:
-        return jsonify({'error': 'Invalid tier.'}), 403
+        return jsonify({'error': 'Invalid action.'}), 400
 
     execute_with_retry(
         "UPDATE students SET public_id = ? WHERE id = ?",
@@ -157,4 +206,9 @@ def public_id():
         commit=True,
     )
     session['public_id'] = new_id
-    return jsonify({'success': True, 'public_id': new_id, 'message': 'Public ID updated.'})
+    session.modified = True
+    return jsonify({
+        'success': True,
+        'public_id': new_id,
+        'message': 'Public ID updated.',
+    })

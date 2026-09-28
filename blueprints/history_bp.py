@@ -1,4 +1,10 @@
 # blueprints/history_bp.py – Tier-aware history page + API
+#
+# Tier model: free / premium only. No pro.
+# Premium keeps 180 days / 500 entries; free keeps 30 days / 50 entries.
+# Retention window (what a user can query) is shorter than retention (what
+# is kept on disk) — that is intentional: free users see the last 7 days
+# per query, premium the last 30. Older rows are still stored.
 
 import csv
 import json
@@ -59,7 +65,7 @@ def validate_date(date_str: str) -> Optional[str]:
 
 
 # -------------------------------------------------------------------
-# PAGE: History Dashboard (tier-aware)
+# PAGE: History Dashboard
 # -------------------------------------------------------------------
 
 @history_bp.route('')
@@ -103,22 +109,19 @@ def index():
         usage_pct = 0
     stats['usage_pct'] = usage_pct
 
-    upgrade_benefits = []
+    # What a Free user gains from upgrading. Premium has nothing left to
+    # upgrade to in this two-tier model, so the list is only shown on Free.
     if tier == 'free':
         upgrade_benefits = [
             '180-day retention (vs 30)',
             'Up to 500 entries (vs 50)',
             'CSV export of your history',
-            'Extended activity types',
-        ]
-    elif tier == 'premium':
-        upgrade_benefits = [
-            'Unlimited retention',
-            'Unlimited entries',
             'Search inside your history',
             'Progress trends & charts',
             'Delete individual entries',
         ]
+    else:
+        upgrade_benefits = []
 
     return render_template(
         'dashboard/history.html',
@@ -164,29 +167,23 @@ def get_entries():
     if order not in ('asc', 'desc'):
         order = 'desc'
 
-    max_per_page = 20 if tier == 'free' else 50 if tier == 'premium' else 100
+    # Per-page cap by tier.
+    max_per_page = 20 if tier == 'free' else 50
     if per_page > max_per_page:
         per_page = max_per_page
 
+    # Default query window by tier.
     somali_now = get_somali_time()
-    if tier == 'free':
-        if not start_date or not end_date:
-            end_date = somali_now.isoformat()
-            start_date = (somali_now - timedelta(days=7)).isoformat()
-        else:
-            start_dt = datetime.fromisoformat(start_date)
-            end_dt = datetime.fromisoformat(end_date)
-            if (end_dt - start_dt).days > 7:
-                start_date = (end_dt - timedelta(days=7)).isoformat()
-    elif tier == 'premium':
-        if not start_date or not end_date:
-            end_date = somali_now.isoformat()
-            start_date = (somali_now - timedelta(days=30)).isoformat()
-        else:
-            start_dt = datetime.fromisoformat(start_date)
-            end_dt = datetime.fromisoformat(end_date)
-            if (end_dt - start_dt).days > 30:
-                start_date = (end_dt - timedelta(days=30)).isoformat()
+    default_window_days = 7 if tier == 'free' else 30
+
+    if not start_date or not end_date:
+        end_date = somali_now.isoformat()
+        start_date = (somali_now - timedelta(days=default_window_days)).isoformat()
+    else:
+        start_dt = datetime.fromisoformat(start_date)
+        end_dt = datetime.fromisoformat(end_date)
+        if (end_dt - start_dt).days > default_window_days:
+            start_date = (end_dt - timedelta(days=default_window_days)).isoformat()
 
     if search and not can_search_history(user_id):
         return jsonify({'error': 'Search not available for your tier.'}), 403
@@ -335,7 +332,7 @@ def export():
 
 
 # -------------------------------------------------------------------
-# API: Trends (Pro only)
+# API: Trends (Premium only)
 # -------------------------------------------------------------------
 
 @history_bp.route('/api/trends')

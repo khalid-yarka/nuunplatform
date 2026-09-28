@@ -22,13 +22,15 @@ CREATE TABLE IF NOT EXISTS students (
     is_admin INTEGER DEFAULT 0,
     is_verified INTEGER NOT NULL DEFAULT 0,
     curriculum TEXT,
-    tier TEXT NOT NULL DEFAULT 'free' CHECK (tier IN ('free', 'premium', 'pro')),
+    tier TEXT NOT NULL DEFAULT 'free' CHECK (tier IN ('free', 'premium')),
     tier_expires_at TEXT,
     tier_updated_at TEXT,
     last_login_at TEXT,
     last_login_ip TEXT,
     session_version INTEGER DEFAULT 0,
     admin_note TEXT DEFAULT '',
+    onboarding_dismissed INTEGER NOT NULL DEFAULT 0,
+    first_discount_used INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
@@ -81,9 +83,6 @@ CREATE INDEX IF NOT EXISTS idx_questions_grade_subject ON questions(grade, subje
 -- ============================================
 -- QUESTION DUPLICATE DISMISSALS
 -- ============================================
--- A permanent record of duplicate pairs the admin has marked as
--- "not a duplicate". Future duplicate checks skip these pairs.
--- a_id is always the lower question id, b_id the higher.
 
 CREATE TABLE IF NOT EXISTS question_duplicate_dismissals (
     a_id INTEGER NOT NULL,
@@ -99,8 +98,6 @@ CREATE INDEX IF NOT EXISTS idx_qdd_b ON question_duplicate_dismissals(b_id);
 -- ============================================
 -- QUESTION MISS STATS (materialized)
 -- ============================================
--- Rebuilt by refresh_question_miss_stats() from quiz_attempts.answers.
--- Powers the "high miss rate" admin view and the miss-rate sort.
 
 CREATE TABLE IF NOT EXISTS question_miss_stats (
     question_id     INTEGER PRIMARY KEY,
@@ -153,12 +150,14 @@ CREATE TABLE IF NOT EXISTS groups (
     curriculum TEXT DEFAULT '',
     subjects TEXT DEFAULT '',
     tier_required TEXT NOT NULL DEFAULT 'free'
-        CHECK (tier_required IN ('free', 'premium', 'pro')),
+        CHECK (tier_required IN ('free', 'premium')),
     group_type TEXT DEFAULT 'community',
     icon TEXT DEFAULT '📚',
     display_order INTEGER DEFAULT 0,
     is_active INTEGER DEFAULT 1,
     is_featured INTEGER DEFAULT 0,
+    is_visible INTEGER NOT NULL DEFAULT 1,
+    requires_verified INTEGER NOT NULL DEFAULT 0,
     click_count INTEGER DEFAULT 0,
     created_by INTEGER,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
@@ -173,15 +172,6 @@ CREATE INDEX IF NOT EXISTS idx_groups_click_count ON groups(click_count DESC);
 
 -- ============================================
 -- MAIN PDFs — Published library
--- Location: nuunplatform.db (main DB)
---
--- The bot's staging `pdfs` table (with file_id / file_unique_id /
--- original_filename) lives in bot_data.db and is created by
--- bot/db.py::init_bot_db(). Do NOT add the bot schema here.
---
--- The `file_id` and `file_unique_id` columns below are COPIED from
--- the bot staging row at publish time, so main is self-sufficient
--- and the staging row can remain as a permanent backup.
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS pdfs (
@@ -231,8 +221,6 @@ CREATE INDEX IF NOT EXISTS idx_unverified_pdfs_published
 -- ============================================
 -- PDF REPORTS (user-submitted issues)
 -- ============================================
--- Distinct from question_interactions. A PDF can be reported many times,
--- each by a different user. One report per user per PDF.
 
 CREATE TABLE IF NOT EXISTS pdf_reports (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -547,7 +535,7 @@ CREATE TABLE IF NOT EXISTS achievements (
     name TEXT NOT NULL,
     description TEXT,
     icon TEXT,
-    tier_required TEXT DEFAULT 'free' CHECK (tier_required IN ('free', 'premium', 'pro')),
+    tier_required TEXT DEFAULT 'free' CHECK (tier_required IN ('free', 'premium')),
     unlock_condition TEXT,
     created_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
@@ -658,7 +646,7 @@ CREATE TABLE IF NOT EXISTS discount_codes (
     code TEXT UNIQUE NOT NULL,
     discount_type TEXT NOT NULL CHECK (discount_type IN ('percentage', 'fixed')),
     discount_value INTEGER NOT NULL,
-    applies_to TEXT NOT NULL CHECK (applies_to IN ('all', 'premium', 'pro')),
+    applies_to TEXT NOT NULL CHECK (applies_to IN ('all', 'premium')),
     max_uses INTEGER,
     used_count INTEGER DEFAULT 0,
     expires_at TEXT,
@@ -680,7 +668,7 @@ CREATE TABLE IF NOT EXISTS upgrade_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     request_id TEXT UNIQUE NOT NULL,
     user_id INTEGER NOT NULL,
-    requested_tier TEXT NOT NULL CHECK (requested_tier IN ('premium', 'pro')),
+    requested_tier TEXT NOT NULL CHECK (requested_tier IN ('premium')),
     duration TEXT NOT NULL CHECK (duration IN ('monthly', 'term', 'yearly')),
     original_price_cents INTEGER NOT NULL,
     discount_code_id INTEGER,
@@ -742,7 +730,7 @@ CREATE INDEX IF NOT EXISTS idx_group_audit_log_group
     ON group_audit_log(group_id, created_at DESC);
 
 -- ============================================
--- ENTITLEMENT SYSTEM (Phase 1c)
+-- ENTITLEMENT SYSTEM
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS entitlement_features (
@@ -768,7 +756,7 @@ CREATE INDEX IF NOT EXISTS idx_entitlement_features_category
 CREATE TABLE IF NOT EXISTS entitlement_policies (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     feature_id   INTEGER NOT NULL,
-    tier         TEXT NOT NULL CHECK (tier IN ('free','premium','pro')),
+    tier         TEXT NOT NULL CHECK (tier IN ('free','premium')),
     is_enabled   INTEGER NOT NULL DEFAULT 1,
     level_value  INTEGER,
     limit_value  INTEGER,
@@ -805,18 +793,9 @@ CREATE INDEX IF NOT EXISTS idx_entitlement_audit_feature
 CREATE INDEX IF NOT EXISTS idx_entitlement_audit_admin
     ON entitlement_audit(admin_id, created_at DESC);
 
--- ============================================
--- ENTITLEMENT OVERRIDE SYSTEM (Phase A)
--- ============================================
--- The entitlement registry (entitlements_seed.json)
--- defines default policies per feature per tier.
--- These tables store only what the super admin
--- has explicitly changed (registry + override pattern).
--- ============================================
-
 CREATE TABLE IF NOT EXISTS entitlement_overrides (
     feature_key  TEXT     NOT NULL,
-    tier         TEXT     NOT NULL CHECK (tier IN ('free', 'premium', 'pro')),
+    tier         TEXT     NOT NULL CHECK (tier IN ('free', 'premium')),
     field        TEXT     NOT NULL CHECK (field IN (
                               'is_enabled', 'level_value',
                               'limit_value', 'limit_unit'
@@ -839,12 +818,7 @@ CREATE TABLE IF NOT EXISTS entitlement_version (
 INSERT OR IGNORE INTO entitlement_version (id, version) VALUES (1, 1);
 
 -- ============================================
--- ADMIN CAPABILITY SYSTEM (Phase A)
--- ============================================
--- The capability registry lives in Python code
--- (services/admin/registry.py). These tables hold
--- only the runtime state: what is enabled, what
--- overrides exist, and the audit trail.
+-- ADMIN CAPABILITY SYSTEM
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS admin_capability_grants (
@@ -903,11 +877,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_capability_audit_created
     ON admin_capability_audit(created_at DESC);
 
 -- ============================================
--- UNIFIED ADMIN AUDIT LOG (Phase A)
--- ============================================
--- Every write action by any admin goes here.
--- Written by the @admin_action decorator
--- (services/admin/audit.py::write_audit).
+-- UNIFIED ADMIN AUDIT LOG
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS admin_audit_log (
@@ -943,10 +913,6 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_log_created
 -- ============================================
 -- PUSH SUBSCRIPTIONS (Web Push)
 -- ============================================
--- One row per user per browser/device. A user with three browsers has
--- three rows. `endpoint` is the URL the push service gave the browser
--- and is the unique delivery target. Rows are deleted when the push
--- service reports the endpoint is gone (HTTP 410 / 404).
 
 CREATE TABLE IF NOT EXISTS push_subscriptions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -966,9 +932,6 @@ CREATE INDEX IF NOT EXISTS idx_push_subs_endpoint ON push_subscriptions(endpoint
 -- ============================================
 -- CONTENT BATCHES (super-admin only)
 -- ============================================
--- A batch groups questions and/or PDFs so they can be bulk-edited
--- together later. Batches never own their items — deleting a batch
--- or removing items from it leaves the library untouched.
 
 CREATE TABLE IF NOT EXISTS content_batches (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

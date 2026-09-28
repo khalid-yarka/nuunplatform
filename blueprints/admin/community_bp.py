@@ -2,21 +2,7 @@
 # blueprints/admin/community_bp.py
 # Community domain — groups, reports, achievements, leaderboard.
 #
-# Routes (groups):
-#   GET  /admin/groups                             → list
-#   GET  /admin/groups/new                         → create form
-#   GET  /admin/groups/<id>/edit                   → edit form
-#   GET  /admin/groups/analytics                   → analytics
-#   GET  /admin/groups/audit                       → audit log
-#   POST /admin/groups/api                         → create (JSON)
-#   POST /admin/groups/api/<id>                    → update (JSON)
-#   DELETE /admin/groups/api/<id>                  → delete
-#   GET  /admin/groups/api/<id>                    → get single
-#   POST /admin/groups/api/<id>/toggle-active      → toggle active
-#   POST /admin/groups/api/<id>/toggle-featured    → toggle featured
-#   POST /admin/groups/api/bulk                    → bulk action
-#
-# Reports / Achievements / Leaderboard unchanged from prior version.
+# Tier model: free / premium only. No pro.
 # ============================================================
 
 from flask import (
@@ -82,7 +68,6 @@ CURRICULUM_OPTIONS = [
 TIER_OPTIONS = [
     {'code': 'free',    'label': 'Free',    'icon': '🔓'},
     {'code': 'premium', 'label': 'Premium', 'icon': '🔑'},
-    {'code': 'pro',     'label': 'Pro',     'icon': '⭐'},
 ]
 
 
@@ -459,7 +444,7 @@ def group_api_bulk():
 
 
 # ============================================================
-# REPORTS (unchanged)
+# REPORTS
 # ============================================================
 
 @admin_community_bp.route('/reports', methods=['GET'], endpoint='reports')
@@ -562,7 +547,7 @@ def report_dismiss(report_id):
 
 
 # ============================================================
-# ACHIEVEMENTS (unchanged)
+# ACHIEVEMENTS
 # ============================================================
 
 @admin_community_bp.route('/achievements', methods=['GET'],
@@ -616,7 +601,7 @@ def achievement_create():
         flash('Achievement name is required.', 'error')
         return redirect(url_for('admin_community.achievement_new'))
 
-    if tier_required not in ('free', 'premium', 'pro'):
+    if tier_required not in ('free', 'premium'):
         tier_required = 'free'
 
     try:
@@ -690,7 +675,7 @@ def achievement_update(achievement_id):
         return redirect(url_for('admin_community.achievement_edit',
                                 achievement_id=achievement_id))
 
-    if tier_required not in ('free', 'premium', 'pro'):
+    if tier_required not in ('free', 'premium'):
         tier_required = 'free'
 
     try:
@@ -761,7 +746,7 @@ def achievement_delete(achievement_id):
 
 
 # ============================================================
-# LEADERBOARD (unchanged)
+# LEADERBOARD
 # ============================================================
 
 @admin_community_bp.route('/leaderboard', methods=['GET'],

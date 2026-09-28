@@ -98,7 +98,7 @@ CAPABILITY_REGISTRY: tuple[Capability, ...] = (
         key='users.set_tier',
         group='Users',
         label="Change a user's tier",
-        description='Promote or demote between free, premium, and pro.',
+        description='Promote or demote between free and premium.',
         default_for_admin=False,
         reserved=False,
     ),

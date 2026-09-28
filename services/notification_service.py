@@ -196,7 +196,6 @@ def _query_push_eligible_users(
     """
     from db import execute_with_retry
 
-    # Over-fetch: some candidates will fail the settings check below.
     cursor = execute_with_retry(
         "SELECT DISTINCT user_id FROM push_subscriptions LIMIT ?",
         (max_recipients * 3,),
@@ -297,7 +296,6 @@ def broadcast_announcement(
             push_result['pruned']     += r.get('pruned', 0)
             push_result['recipients'] += r.get('users_reached', 0)
 
-            # Pause between chunks (rate-limit friendly), but not after last.
             if i + _BROADCAST_CHUNK_SIZE < len(user_ids):
                 time.sleep(_BROADCAST_CHUNK_DELAY)
     except Exception:

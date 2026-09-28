@@ -10,6 +10,44 @@
 {% block dashboard_content %}
 
 {# ============================================
+   TRIAL / LIMITED PREMIUM BANNER
+   ============================================ #}
+{% if trial_banner %}
+<div class="trial-banner" id="trialBanner"
+     data-countdown-until="{{ trial_banner.expires_at }}">
+    <span class="trial-banner__icon" aria-hidden="true">🎁</span>
+    <div class="trial-banner__body">
+        <div class="trial-banner__title">
+            {% if trial_banner.is_trial %}
+                Premium trial active
+            {% else %}
+                Premium access active
+            {% endif %}
+        <span class="trial-banner__countdown" data-countdown-text>—</span>
+        </div>
+        <div class="trial-banner__sub">
+            {% if discount_chip %}
+                Enjoy full access. Lock in <strong>50% off</strong> before the discount ends.
+            {% else %}
+                Enjoy full access while it lasts.
+            {% endif %}
+        </div>
+    </div>
+    <button type="button" class="trial-banner__cta"
+            onclick="if (window.openUpgradeSheet) window.openUpgradeSheet({});">
+        {% if discount_chip %}
+            Upgrade · $0.50
+        {% else %}
+            Keep Premium
+        {% endif %}
+    </button>
+    <button type="button" class="trial-banner__close"
+            onclick="var b=document.getElementById('trialBanner'); if(b) b.style.display='none';"
+            aria-label="{{ _('common.close') if _ is defined else 'Close' }}">✕</button>
+</div>
+{% endif %}
+
+{# ============================================
    UNVERIFIED ACCOUNT BANNER
    ============================================ #}
 {% if not session.get('is_verified') and not session.get('is_admin') %}
@@ -459,6 +497,22 @@
 
 {% block dashboard_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% if show_upgrade %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        setTimeout(function () {
+            if (typeof window.openUpgradeSheet === 'function') {
+                window.openUpgradeSheet({});
+            }
+            // Clean the URL without reloading
+            if (history.replaceState && window.location.search) {
+                var clean = window.location.pathname;
+                history.replaceState({}, '', clean);
+            }
+        }, 300);
+    });
+</script>
+{% endif %}
 <script id="dhData" type="application/json">
 {
   "labels": {{ chart_labels|tojson }},

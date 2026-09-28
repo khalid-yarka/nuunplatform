@@ -81,6 +81,24 @@
                     </div>
                 </div>
             </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>{{ _('settings.appearance.language') }}</label>
+                    <div class="lang-toggle" id="lang-toggle" role="radiogroup" aria-label="Language">
+                        <button type="button" class="lang-option" data-lang="en" role="radio" aria-checked="false">
+                            <span class="lang-flag" aria-hidden="true">🇬🇧</span>
+                            <span class="lang-name">English</span>
+                        </button>
+                        <button type="button" class="lang-option" data-lang="so" role="radio" aria-checked="false">
+                            <span class="lang-flag" aria-hidden="true">🇸🇴</span>
+                            <span class="lang-name">Soomaali</span>
+                        </button>
+                    </div>
+                    <p class="toggle-desc" style="color: var(--text-muted); margin-top: 6px;">
+                        {{ _('settings.appearance.language.desc') }}
+                    </p>
+                </div>
+            </div>
             <div class="form-row two-col">
                 <div class="form-group">
                     <label>{{ _('settings.appearance.accent') }}</label>
@@ -99,25 +117,6 @@
                         <option value="medium" {% if settings['appearance.font_size'] == 'medium' or not settings['appearance.font_size'] %}selected{% endif %}>{{ _('settings.appearance.font_size.medium') }}</option>
                         <option value="large" {% if settings['appearance.font_size'] == 'large' %}selected{% endif %}>{{ _('settings.appearance.font_size.large') }}</option>
                     </select>
-                </div>
-            </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label>{{ _('settings.appearance.language') }}</label>
-                    <select id="language" name="language">
-                        <option value="en" {% if settings['appearance.language'] == 'en' or not settings['appearance.language'] %}selected{% endif %}>{{ _('settings.appearance.language.en') }}</option>
-                        <option value="so" {% if settings['appearance.language'] == 'so' %}selected{% endif %} {% if not language_allowed %}disabled{% endif %}>{{ _('settings.appearance.language.so') }}</option>
-                    </select>
-                    {% if not language_allowed %}
-                        <p class="toggle-desc" style="color: var(--text-muted); margin-top: 6px;">
-                            <i class="fas fa-lock"></i>
-                            {{ _('settings.appearance.language.locked') }}
-                        </p>
-                    {% else %}
-                        <p class="toggle-desc" style="color: var(--text-muted); margin-top: 6px;">
-                            {{ _('settings.appearance.language.desc') }}
-                        </p>
-                    {% endif %}
                 </div>
             </div>
             <div class="form-row toggle-group">
@@ -145,13 +144,13 @@
 <section id="quiz" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
-            <h3><i class="fas fa-pencil-alt"></i> Quiz Preferences</h3>
-            <p>Customise your default quiz settings.</p>
+            <h3><i class="fas fa-pencil-alt"></i> {{ _('settings.category.quiz') }}</h3>
+            <p>{{ _('settings.category.quiz.desc') }}</p>
         </div>
         <form id="quiz-prefs-form" class="settings-form">
             <div class="form-row two-col">
                 <div class="form-group">
-                    <label>Default Question Count</label>
+                    <label>{{ _('quiz.setup.question_count') }}</label>
                     <select id="default_question_count" name="default_question_count">
                         {% for count in [5,10,15,20,25,30] %}
                             <option value="{{ count }}" {% if settings['quiz.default_question_count'] == count %}selected{% endif %}>{{ count }}</option>
@@ -159,7 +158,7 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Default Difficulty</label>
+                    <label>{{ _('quiz.setup.difficulty') }}</label>
                     <select id="default_difficulty" name="default_difficulty">
                         {% for i in range(1,6) %}
                             <option value="{{ i }}" {% if settings['quiz.default_difficulty'] == i %}selected{% endif %}>
@@ -171,9 +170,9 @@
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Default Subject</label>
+                    <label>{{ _('quiz.setup.subject') }}</label>
                     <select id="default_subject" name="default_subject">
-                        <option value="">None</option>
+                        <option value="">{{ _('quiz.setup.select_subject') }}</option>
                         {% for subject in user_subjects %}
                             <option value="{{ subject.code }}" {% if settings['quiz.default_subject'] == subject.code %}selected{% endif %}>{{ subject.name }}</option>
                         {% endfor %}
@@ -183,39 +182,28 @@
             <div class="form-row toggle-group">
                 <div class="toggle-item">
                     <label class="toggle-label">
-                        <span class="toggle-text">Show correct answer immediately</span>
+                        <span class="toggle-text">{{ _('quiz.play.feedback_correct_was') }}</span>
                         <span class="toggle-switch">
                             <input type="checkbox" id="show_correct_immediately" {% if settings['quiz.show_correct_immediately'] %}checked{% endif %}>
                             <span class="slider"></span>
                         </span>
                     </label>
-                    <p class="toggle-desc">If off, you'll see the correct answer only at the end.</p>
                 </div>
             </div>
             <div class="form-row toggle-group">
-                <div class="toggle-item {% if t == 'free' %}locked{% endif %}">
+                <div class="toggle-item">
                     <label class="toggle-label">
-                        <span class="toggle-text">🚀 Auto-advance after answering</span>
+                        <span class="toggle-text">{{ _('quiz.play.help_auto_advance_on') }}</span>
                         <span class="toggle-switch">
                             <input type="checkbox" id="auto_skip_enabled" {% if settings['quiz.auto_skip_enabled'] %}checked{% endif %}>
                             <span class="slider"></span>
                         </span>
                     </label>
-                    <p class="toggle-desc">
-                        {% if t == 'free' %}
-                            <span class="locked-hint"><i class="fas fa-lock"></i> Upgrade to Premium or Pro to enable.</span>
-                        {% else %}
-                            Smoothly move to the next question after answering.
-                        {% endif %}
-                    </p>
-                    {% if t == 'free' %}
-                        <button class="btn btn-sm btn-secondary upgrade-btn" data-feature="auto_skip" data-required-tier="premium">Upgrade</button>
-                    {% endif %}
                 </div>
             </div>
             <div class="form-row">
                 <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i> Save Preferences
+                    <i class="fas fa-save"></i> {{ _('common.save_changes') }}
                     <span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span>
                 </button>
             </div>
@@ -224,274 +212,72 @@
 </section>
 
 <section id="notifications" class="settings-section">
-
-    <!-- ═══════════ HERO CARD — Device Push Notifications ═══════════ -->
     <div class="notif-hero" id="push-card">
         <div class="notif-hero__header">
             <div class="notif-hero__badge">
                 <i class="fas fa-mobile-alt"></i>
             </div>
             <div class="notif-hero__intro">
-                <h3>Device notifications</h3>
-                <p>Get alerts on this phone or tablet — even when NuunPlatform is closed.</p>
+                <h3>{{ _('settings.notifications.push.title') }}</h3>
+                <p>{{ _('settings.notifications.push.desc') }}</p>
             </div>
         </div>
-
         <div class="notif-state" id="push-state-loading">
             <div class="notif-spinner-row">
                 <span class="notif-spinner"></span>
-                <span>Checking this device…</span>
+                <span>{{ _('common.loading') }}</span>
             </div>
-        </div>
-
-        <div class="notif-state" id="push-state-unsupported" hidden>
-            <div class="notif-note notif-note--info">
-                <i class="fas fa-info-circle"></i>
-                <div>
-                    <strong>Not supported in this browser</strong>
-                    <p>Try the latest Chrome, Firefox, Edge, or Safari. On iPhone and iPad, notifications only work when the app is added to your Home Screen.</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="notif-state" id="push-state-ios" hidden>
-            <div class="notif-note notif-note--info">
-                <i class="fas fa-mobile-alt"></i>
-                <div>
-                    <strong>One more step on iPhone &amp; iPad</strong>
-                    <p>Apple only allows notifications for websites installed to the Home Screen.</p>
-                    <ol class="notif-steps">
-                        <li>Tap the <b>Share</b> button in Safari</li>
-                        <li>Scroll down → <b>Add to Home Screen</b></li>
-                        <li>Open NuunPlatform from the new Home Screen icon</li>
-                        <li>Come back to this page and turn the switch on</li>
-                    </ol>
-                </div>
-            </div>
-        </div>
-
-        <div class="notif-state" id="push-state-denied" hidden>
-            <div class="notif-note notif-note--warn">
-                <i class="fas fa-lock"></i>
-                <div>
-                    <strong>Blocked in this browser</strong>
-                    <p>You previously denied permission. To turn notifications back on:</p>
-                    <ol class="notif-steps">
-                        <li>Open your browser's site settings for NuunPlatform</li>
-                        <li>Set <b>Notifications</b> to <b>Allow</b></li>
-                        <li>Reload this page</li>
-                    </ol>
-                </div>
-            </div>
-        </div>
-
-        <div class="notif-state" id="push-state-disabled" hidden>
-            <div class="notif-note notif-note--warn">
-                <i class="fas fa-server"></i>
-                <div>
-                    <strong>Not yet configured on the server</strong>
-                    <p>An administrator needs to finish setting up push notifications. Everything else on this page still works.</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="notif-state" id="push-state-active" hidden>
-
-            <div class="notif-master">
-                <div class="notif-master__icon" id="push-master-icon">
-                    <i class="fas fa-bell-slash"></i>
-                </div>
-                <div class="notif-master__text">
-                    <div class="notif-master__title">Notifications on this device</div>
-                    <div class="notif-master__status" id="push-master-status">Off</div>
-                </div>
-                <label class="notif-master__switch">
-                    <input type="checkbox" id="push-toggle">
-                    <span class="notif-master__slider"></span>
-                </label>
-            </div>
-
-            <div class="notif-details" id="push-actions" hidden>
-                <button type="button" class="notif-test-btn" id="push-test-btn">
-                    <i class="fas fa-paper-plane"></i>
-                    Send test notification
-                </button>
-                <span class="notif-device-pill" id="push-device-label"></span>
-                <span class="notif-device-pill" id="push-device-count"></span>
-            </div>
-
-            <div class="notif-types" id="push-types" hidden>
-                <div class="notif-types__header">
-                    <i class="fas fa-sliders-h"></i>
-                    <div>
-                        <strong>Which alerts to receive</strong>
-                        <span>Turn off anything that would be noise for you.</span>
-                    </div>
-                </div>
-
-                <div class="notif-types__list">
-                    <label class="notif-type-row">
-                        <span class="notif-type-row__text">
-                            <span class="notif-type-row__title">Live quiz is starting</span>
-                            <span class="notif-type-row__desc">A quiz you joined is about to begin.</span>
-                        </span>
-                        <span class="notif-type-row__switch">
-                            <input type="checkbox" id="push-type-live-start">
-                            <span class="notif-type-row__slider"></span>
-                        </span>
-                    </label>
-
-                    <label class="notif-type-row">
-                        <span class="notif-type-row__text">
-                            <span class="notif-type-row__title">Live quiz finished</span>
-                            <span class="notif-type-row__desc">Your results and ranking are ready.</span>
-                        </span>
-                        <span class="notif-type-row__switch">
-                            <input type="checkbox" id="push-type-live-result">
-                            <span class="notif-type-row__slider"></span>
-                        </span>
-                    </label>
-
-                    <label class="notif-type-row">
-                        <span class="notif-type-row__text">
-                            <span class="notif-type-row__title">Someone joined your quiz</span>
-                            <span class="notif-type-row__desc">Only when you're hosting a live quiz.</span>
-                        </span>
-                        <span class="notif-type-row__switch">
-                            <input type="checkbox" id="push-type-participant">
-                            <span class="notif-type-row__slider"></span>
-                        </span>
-                    </label>
-
-                    <label class="notif-type-row">
-                        <span class="notif-type-row__text">
-                            <span class="notif-type-row__title">Platform announcements</span>
-                            <span class="notif-type-row__desc">Important news from the NuunPlatform team.</span>
-                        </span>
-                        <span class="notif-type-row__switch">
-                            <input type="checkbox" id="push-type-announcement">
-                            <span class="notif-type-row__slider"></span>
-                        </span>
-                    </label>
-
-                    <label class="notif-type-row">
-                        <span class="notif-type-row__text">
-                            <span class="notif-type-row__title">Quiz results saved</span>
-                            <span class="notif-type-row__desc">After every quiz you complete. Usually noisy — leave off.</span>
-                        </span>
-                        <span class="notif-type-row__switch">
-                            <input type="checkbox" id="push-type-quiz-complete">
-                            <span class="notif-type-row__slider"></span>
-                        </span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="notif-result" id="push-result" hidden></div>
         </div>
     </div>
-
-    <!-- ═══════════ SECONDARY CARD — In-app notifications ═══════════ -->
     <div class="notif-secondary">
         <div class="notif-secondary__header">
-            <div class="notif-secondary__badge">
-                <i class="fas fa-inbox"></i>
-            </div>
+            <div class="notif-secondary__badge"><i class="fas fa-inbox"></i></div>
             <div class="notif-secondary__intro">
-                <h3>In-app notifications</h3>
-                <p>These appear in the <b>bell icon inside NuunPlatform only</b>. They do not reach your phone.</p>
+                <h3>{{ _('settings.category.notifications') }}</h3>
+                <p>{{ _('settings.category.notifications.desc') }}</p>
             </div>
         </div>
-
         <form id="notif-form" class="settings-form">
             <div class="notif-secondary__grid">
-                <label class="notif-check">
-                    <input type="checkbox" id="notify_quiz_complete" {% if settings['notifications.quiz_complete'] %}checked{% endif %}>
-                    <span class="notif-check__label">Quiz Complete</span>
-                </label>
-                <label class="notif-check">
-                    <input type="checkbox" id="notify_new_pdf" {% if settings['notifications.new_pdf'] %}checked{% endif %}>
-                    <span class="notif-check__label">New PDF Uploaded</span>
-                </label>
-                <label class="notif-check">
-                    <input type="checkbox" id="notify_live_quiz_start" {% if settings['notifications.live_quiz_start'] %}checked{% endif %}>
-                    <span class="notif-check__label">Live Quiz Starts</span>
-                </label>
-                <label class="notif-check">
-                    <input type="checkbox" id="notify_live_quiz_result" {% if settings['notifications.live_quiz_result'] %}checked{% endif %}>
-                    <span class="notif-check__label">Live Quiz Results</span>
-                </label>
-                <label class="notif-check">
-                    <input type="checkbox" id="notify_participant_joined" {% if settings['notifications.participant_joined'] %}checked{% endif %}>
-                    <span class="notif-check__label">Participant Joined</span>
-                </label>
-                <label class="notif-check">
-                    <input type="checkbox" id="notify_admin_announcement" {% if settings['notifications.admin_announcement'] %}checked{% endif %}>
-                    <span class="notif-check__label">Admin Announcements</span>
-                </label>
-                <label class="notif-check">
-                    <input type="checkbox" id="notify_achievement_unlock" {% if settings['notifications.achievement_unlock'] %}checked{% endif %}>
-                    <span class="notif-check__label">Achievement Unlock</span>
-                </label>
-                <label class="notif-check">
-                    <input type="checkbox" id="notify_live_quiz_reminder" {% if settings['notifications.live_quiz_reminder'] %}checked{% endif %}>
-                    <span class="notif-check__label">Live Quiz Reminder</span>
-                </label>
-                <label class="notif-check">
-                    <input type="checkbox" id="notify_daily_digest" {% if settings['notifications.daily_digest'] %}checked{% endif %}>
-                    <span class="notif-check__label">Daily Digest</span>
-                </label>
-                <label class="notif-check">
-                    <input type="checkbox" id="notify_weekly_summary" {% if settings['notifications.weekly_summary'] %}checked{% endif %}>
-                    <span class="notif-check__label">Weekly Summary</span>
-                </label>
+                <label class="notif-check"><input type="checkbox" id="notify_quiz_complete" {% if settings['notifications.quiz_complete'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.quiz_complete') }}</span></label>
+                <label class="notif-check"><input type="checkbox" id="notify_new_pdf" {% if settings['notifications.new_pdf'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.new_pdf') }}</span></label>
+                <label class="notif-check"><input type="checkbox" id="notify_live_quiz_start" {% if settings['notifications.live_quiz_start'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.live_start') }}</span></label>
+                <label class="notif-check"><input type="checkbox" id="notify_live_quiz_result" {% if settings['notifications.live_quiz_result'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.live_result') }}</span></label>
+                <label class="notif-check"><input type="checkbox" id="notify_participant_joined" {% if settings['notifications.participant_joined'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.participant') }}</span></label>
+                <label class="notif-check"><input type="checkbox" id="notify_admin_announcement" {% if settings['notifications.admin_announcement'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.announcement') }}</span></label>
             </div>
-
             <div class="form-row">
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i> Save preferences
-                    <span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span>
-                </button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {{ _('common.save_changes') }}<span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span></button>
             </div>
         </form>
     </div>
-
 </section>
 
 <section id="privacy" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
-            <h3><i class="fas fa-lock"></i> Privacy</h3>
-            <p>Control your visibility and data sharing.</p>
+            <h3><i class="fas fa-lock"></i> {{ _('settings.category.privacy') }}</h3>
+            <p>{{ _('settings.category.privacy.desc') }}</p>
         </div>
         <form id="privacy-form" class="settings-form">
             <div class="form-row toggle-group">
                 <div class="toggle-item">
                     <label class="toggle-label">
                         <span class="toggle-text">Show on Leaderboard</span>
-                        <span class="toggle-switch">
-                            <input type="checkbox" id="show_on_leaderboard" {% if settings['privacy.show_on_leaderboard'] %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </span>
+                        <span class="toggle-switch"><input type="checkbox" id="show_on_leaderboard" {% if settings['privacy.show_on_leaderboard'] %}checked{% endif %}><span class="slider"></span></span>
                     </label>
                     <p class="toggle-desc">If off, your name appears as "Anonymous".</p>
                 </div>
                 <div class="toggle-item">
                     <label class="toggle-label">
                         <span class="toggle-text">Show Public ID</span>
-                        <span class="toggle-switch">
-                            <input type="checkbox" id="show_public_id" {% if settings['privacy.show_public_id'] %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </span>
+                        <span class="toggle-switch"><input type="checkbox" id="show_public_id" {% if settings['privacy.show_public_id'] %}checked{% endif %}><span class="slider"></span></span>
                     </label>
                     <p class="toggle-desc">If off, your public ID is hidden on your profile.</p>
                 </div>
             </div>
             <div class="form-row">
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i> Save Privacy Settings
-                    <span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span>
-                </button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {{ _('common.save_changes') }}<span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span></button>
             </div>
         </form>
     </div>
@@ -501,13 +287,13 @@
 <section id="live_quiz" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
-            <h3><i class="fas fa-bolt"></i> Live Quiz Defaults</h3>
-            <p>Preset values for creating new live quizzes.</p>
+            <h3><i class="fas fa-bolt"></i> {{ _('settings.category.live_quiz') }}</h3>
+            <p>{{ _('settings.category.live_quiz.desc') }}</p>
         </div>
         <form id="livequiz-form" class="settings-form">
             <div class="form-row two-col">
                 <div class="form-group">
-                    <label>Default Time per Question (seconds)</label>
+                    <label>{{ _('live_quiz.create.schedule_start') }}</label>
                     <select id="default_time_per_question" name="default_time_per_question">
                         <option value="30" {% if settings['live_quiz.default_time_per_question'] == 30 %}selected{% endif %}>30</option>
                         <option value="45" {% if settings['live_quiz.default_time_per_question'] == 45 %}selected{% endif %}>45</option>
@@ -515,7 +301,7 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Default Max Participants</label>
+                    <label>{{ _('live_quiz.create.question_count') }}</label>
                     <select id="default_max_participants" name="default_max_participants">
                         <option value="20" {% if settings['live_quiz.default_max_participants'] == 20 %}selected{% endif %}>20</option>
                         <option value="50" {% if settings['live_quiz.default_max_participants'] == 50 %}selected{% endif %}>50</option>
@@ -525,18 +311,15 @@
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Default Privacy</label>
+                    <label>{{ _('live_quiz.create.privacy_settings') }}</label>
                     <div style="display:flex; gap:16px;">
-                        <label><input type="radio" name="default_privacy" value="1" {% if settings['live_quiz.default_privacy'] != 0 %}checked{% endif %}> Public</label>
-                        <label><input type="radio" name="default_privacy" value="0" {% if settings['live_quiz.default_privacy'] == 0 %}checked{% endif %}> Private</label>
+                        <label><input type="radio" name="default_privacy" value="1" {% if settings['live_quiz.default_privacy'] != 0 %}checked{% endif %}> {{ _('live_quiz.create.public') }}</label>
+                        <label><input type="radio" name="default_privacy" value="0" {% if settings['live_quiz.default_privacy'] == 0 %}checked{% endif %}> {{ _('live_quiz.create.private') }}</label>
                     </div>
                 </div>
             </div>
             <div class="form-row">
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i> Save Live Quiz Defaults
-                    <span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span>
-                </button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {{ _('common.save_changes') }}<span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span></button>
             </div>
         </form>
     </div>
@@ -546,8 +329,8 @@
 <section id="security" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
-            <h3><i class="fas fa-shield-alt"></i> Security</h3>
-            <p>Change your password.</p>
+            <h3><i class="fas fa-shield-alt"></i> {{ _('settings.category.security') }}</h3>
+            <p>{{ _('settings.category.security.desc') }}</p>
         </div>
         <form id="password-form" class="settings-form">
             <div class="form-row">
@@ -578,31 +361,31 @@
 <section id="tier" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
-            <h3><i class="fas fa-crown"></i> Your Plan & Features</h3>
-            <p>Current tier: <strong class="tier-label {{ t }}">{{ t|capitalize }}</strong></p>
+            <h3><i class="fas fa-crown"></i> {{ _('settings.category.tier') }}</h3>
+            <p>{{ _('home.limits.tier_label', tier=_('tier.' ~ t)) }}</p>
         </div>
-
         <div class="tier-summary">
             <div class="tier-info-box">
-                <div class="tier-icon">
-                    {% if t == 'free' %}🔓{% elif t == 'premium' %}🔑{% else %}⭐{% endif %}
-                </div>
+                <div class="tier-icon">{% if t == 'premium' %}🔑{% else %}🔓{% endif %}</div>
                 <div>
-                    <h4>{{ t|capitalize }}</h4>
+                    <h4>{{ _('tier.' ~ t) }}</h4>
                     <p class="tier-desc">
-                        {% if t == 'free' %}Basic access with essential features.
-                        {% elif t == 'premium' %}Advanced features, more quotas, and live quiz hosting.
-                        {% else %}Complete access with unlimited features and premium resources.{% endif %}
+                        {% if t == 'free' %}
+                            Unlimited practice, competitions, groups, and free PDFs (3 downloads/day).
+                        {% else %}
+                            Everything in Free, plus premium PDFs, analytics, and higher limits.
+                        {% endif %}
                     </p>
                 </div>
             </div>
-            {% if t != 'pro' %}
+            {% if t == 'free' %}
                 <div class="upgrade-prompt">
-                    <button class="btn btn-primary upgrade-btn" data-feature="upgrade" data-required-tier="pro">Upgrade Now</button>
+                    <button class="btn btn-primary upgrade-btn" data-feature="upgrade" data-required-tier="premium">
+                        {{ _('home.tier.upgrade_to', tier=_('tier.premium')) }}
+                    </button>
                 </div>
             {% endif %}
         </div>
-
         <div class="features-grid">
             {% for feature in tier_features %}
                 <div class="feature-card {% if not feature.available %}locked{% endif %}"
@@ -615,23 +398,18 @@
                         <div class="feature-desc">{{ feature.description }}</div>
                     </div>
                     <div class="feature-status">
-                        {% if feature.available %}
-                            <span class="status-badge available">✅</span>
-                        {% else %}
-                            <span class="status-badge locked">🔒</span>
-                        {% endif %}
+                        {% if feature.available %}<span class="status-badge available">✅</span>
+                        {% else %}<span class="status-badge locked">🔒</span>{% endif %}
                     </div>
                     <div class="feature-popup">
                         <div class="popup-content">
                             <strong>{{ feature.label }}</strong>
                             <p>{{ feature.description }}</p>
-                            {% if not feature.available %}
-                                {% if feature.tier_required %}
-                                    <p class="upgrade-hint">Requires <strong>{{ feature.tier_required|capitalize }}</strong></p>
-                                    <button class="btn btn-sm btn-primary upgrade-btn" data-feature="{{ feature.key }}" data-required-tier="{{ feature.tier_required }}">Upgrade</button>
-                                {% else %}
-                                    <p class="upgrade-hint">Unavailable on your current plan.</p>
-                                {% endif %}
+                            {% if not feature.available and feature.tier_required %}
+                                <p class="upgrade-hint">Requires <strong>{{ _('tier.' ~ feature.tier_required) }}</strong></p>
+                                <button class="btn btn-sm btn-primary upgrade-btn" data-feature="{{ feature.key }}" data-required-tier="{{ feature.tier_required }}">
+                                    Upgrade
+                                </button>
                             {% endif %}
                         </div>
                     </div>
@@ -644,14 +422,12 @@
 <section id="data" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
-            <h3><i class="fas fa-database"></i> Data Management</h3>
-            <p>Manage your history and personal data.</p>
+            <h3><i class="fas fa-database"></i> {{ _('settings.category.data') }}</h3>
+            <p>{{ _('settings.category.data.desc') }}</p>
         </div>
         <div class="data-actions">
-            <p><a href="{{ url_for('history.index') }}" class="btn btn-secondary"><i class="fas fa-history"></i> View Full History</a></p>
-            <p><button class="btn btn-secondary" id="exportDataBtn"><i class="fas fa-download"></i> Export My Data</button></p>
-            <p><button class="btn btn-danger" id="deleteAccountBtn"><i class="fas fa-trash"></i> Delete Account</button></p>
-            <p class="text-muted" style="font-size:12px;">Deleting your account is permanent and cannot be undone.</p>
+            <p><a href="{{ url_for('history.index') }}" class="btn btn-secondary"><i class="fas fa-history"></i> {{ _('history.title') }}</a></p>
+            <p><button class="btn btn-secondary" id="exportDataBtn"><i class="fas fa-download"></i> {{ _('history.export_csv') }}</button></p>
         </div>
     </div>
 </section>
@@ -659,27 +435,20 @@
 <section id="accessibility" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
-            <h3><i class="fas fa-universal-access"></i> Accessibility</h3>
-            <p>Adjust settings for a better experience.</p>
+            <h3><i class="fas fa-universal-access"></i> {{ _('settings.category.accessibility') }}</h3>
+            <p>{{ _('settings.category.accessibility.desc') }}</p>
         </div>
         <form id="accessibility-form" class="settings-form">
             <div class="form-row toggle-group">
                 <div class="toggle-item">
                     <label class="toggle-label">
-                        <span class="toggle-text">Reduced Motion</span>
-                        <span class="toggle-switch">
-                            <input type="checkbox" id="reduced_motion" {% if settings['appearance.reduced_motion'] %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </span>
+                        <span class="toggle-text">{{ _('settings.appearance.reduced_motion') }}</span>
+                        <span class="toggle-switch"><input type="checkbox" id="reduced_motion" {% if settings['appearance.reduced_motion'] %}checked{% endif %}><span class="slider"></span></span>
                     </label>
-                    <p class="toggle-desc">Minimise animations and transitions.</p>
                 </div>
             </div>
             <div class="form-row">
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i> Save Accessibility Settings
-                    <span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span>
-                </button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {{ _('common.save_changes') }}<span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span></button>
             </div>
         </form>
     </div>
@@ -688,65 +457,31 @@
 <section id="logout" class="settings-section">
     <div class="settings-card">
         <div class="card-header">
-            <h3><i class="fas fa-sign-out-alt" style="color: #DC2626;"></i> Logout</h3>
-            <p>Sign out of your account securely.</p>
+            <h3><i class="fas fa-sign-out-alt" style="color: #DC2626;"></i> {{ _('settings.category.logout') }}</h3>
+            <p>{{ _('settings.category.logout.desc') }}</p>
         </div>
         <div class="logout-section">
             <button class="btn btn-danger btn-block" id="openLogoutModalBtn">
-                <i class="fas fa-sign-out-alt"></i> Logout
+                <i class="fas fa-sign-out-alt"></i> {{ _('nav.logout') }}
             </button>
         </div>
     </div>
 </section>
 
 <div class="modal-overlay" id="logoutModal">
-    <div class="modal-content" style="max-width: 560px;">
+    <div class="modal-content" style="max-width: 480px;">
         <div style="text-align: center; margin-bottom: 16px;">
             <div style="font-size: 48px; margin-bottom: 4px;">🚪</div>
             <h3 class="modal-title" style="color: #DC2626;">Confirm Logout</h3>
-            <p class="modal-body">You are about to log out. The following unsaved data will be permanently lost:</p>
+            <p class="modal-body">You are about to log out. Any unsaved changes will be lost.</p>
         </div>
-
-        <div style="background: var(--surface-alt); border-radius: var(--radius-sm); padding: 16px 20px; margin-bottom: 16px; border: 1px solid var(--border);">
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-                <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text);">
-                    <span style="font-size: 18px;">⚙️</span>
-                    <span><strong>Unsaved settings</strong> – Any changes you made in settings that haven't been saved.</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text);">
-                    <span style="font-size: 18px;">📝</span>
-                    <span><strong>In-progress quizzes</strong> – Any quiz you started but didn't complete or submit.</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text);">
-                    <span style="font-size: 18px;">⚡</span>
-                    <span><strong>Live quiz session</strong> – If you are currently in a live quiz, your progress will be lost.</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text);">
-                    <span style="font-size: 18px;">📋</span>
-                    <span><strong>Unsaved form data</strong> – Any text or selections you entered on the current page.</span>
-                </div>
-            </div>
-        </div>
-
-        <div style="background: #FEF2F2; border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 16px; border: 1px solid #FCA5A5; font-size: 13px; color: #991B1B; display: flex; align-items: center; gap: 10px;">
-            <i class="fas fa-exclamation-triangle" style="font-size: 18px;"></i>
-            <span>This action cannot be undone. You will need to log in again.</span>
-        </div>
-
         <div class="modal-actions">
             <button onclick="closeLogoutModal()" class="btn btn-secondary">Cancel</button>
-            <a href="{{ url_for('auth.logout') }}" id="confirmLogoutBtn" class="btn btn-danger">
+            <a href="{{ url_for('auth.logout') }}" class="btn btn-danger">
                 <i class="fas fa-sign-out-alt"></i> Logout Anyway
             </a>
         </div>
     </div>
-</div>
-
-<div id="unsavedIndicator" class="unsaved-indicator">
-    <span class="indicator-icon">⚠️</span>
-    <span class="indicator-text">You have unsaved changes in your settings.</span>
-    <button id="unsavedSaveNow" class="btn-save-now"><i class="fas fa-save"></i> Save Now</button>
-    <button id="unsavedDiscard" class="btn-discard"><i class="fas fa-times"></i> Discard</button>
 </div>
 
 <style>
@@ -755,7 +490,6 @@
         padding-top: 24px;
         border-top: 1px solid var(--border);
     }
-
     .btn-danger {
         background: #DC2626;
         color: white;
@@ -771,24 +505,11 @@
         gap: 8px;
         width: 100%;
     }
-
     .btn-danger:hover {
         background: #B91C1C;
         transform: translateY(-2px);
         box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35);
     }
-
-    .settings-category-card[data-section="logout"]:hover {
-        border-color: #DC2626;
-    }
-
-    .modal-content .modal-body {
-        color: var(--text-secondary);
-        font-size: 14px;
-        margin-bottom: 16px;
-        line-height: 1.6;
-    }
-
     .settings-saved-note {
         display: inline-block;
         padding: 2px 10px;
@@ -797,503 +518,49 @@
         color: #065F46;
         font-weight: 700;
         font-size: 11px;
-        transition: opacity 0.3s ease;
     }
     [data-theme="dark"] .settings-saved-note {
         background: #1A3A2E;
         color: #34D399;
     }
 
-    /* ═══════════════════════════════════════════════════════
-       NOTIFICATIONS SECTION
-       ═══════════════════════════════════════════════════════ */
-
-    .notif-hero {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-top: 3px solid var(--primary);
-        border-radius: var(--radius-md);
-        padding: 24px;
-        margin-bottom: 24px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    /* Language segmented toggle */
+    .lang-toggle {
+        display: inline-flex;
+        background: var(--background);
+        border: 1.5px solid var(--border);
+        border-radius: 14px;
+        padding: 4px;
+        gap: 4px;
     }
-
-    .notif-hero__header {
-        display: flex;
-        gap: 16px;
-        align-items: flex-start;
-        margin-bottom: 20px;
-    }
-    .notif-hero__badge {
-        width: 48px;
-        height: 48px;
-        border-radius: 12px;
-        background: linear-gradient(135deg, var(--primary), var(--primary-hover, var(--primary)));
-        color: #fff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 20px;
-        flex-shrink: 0;
-        box-shadow: 0 4px 12px rgba(255, 49, 56, 0.2);
-    }
-    .notif-hero__intro { flex: 1; min-width: 0; }
-    .notif-hero__intro h3 {
-        font-size: 18px;
-        font-weight: 700;
-        color: var(--text);
-        margin: 0 0 4px;
-    }
-    .notif-hero__intro p {
-        font-size: 14px;
-        color: var(--text-secondary);
-        margin: 0;
-        line-height: 1.5;
-    }
-
-    .notif-state { margin-top: 4px; }
-    .notif-state[hidden] { display: none; }
-
-    .notif-spinner-row {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px 0;
-        color: var(--text-muted);
-        font-size: 14px;
-    }
-    .notif-spinner {
-        display: inline-block;
-        width: 18px;
-        height: 18px;
-        border: 2px solid var(--border);
-        border-top-color: var(--primary);
-        border-radius: 50%;
-        animation: notif-spin 0.7s linear infinite;
-    }
-    @keyframes notif-spin { to { transform: rotate(360deg); } }
-
-    .notif-note {
-        display: flex;
-        gap: 14px;
-        align-items: flex-start;
-        padding: 16px 18px;
-        border-radius: var(--radius-sm);
-        border: 1px solid var(--border);
-        background: var(--surface-alt);
-        font-size: 14px;
-        line-height: 1.55;
-    }
-    .notif-note > i {
-        font-size: 20px;
-        margin-top: 1px;
-        flex-shrink: 0;
-    }
-    .notif-note strong {
-        display: block;
-        color: var(--text);
-        font-weight: 600;
-        margin-bottom: 4px;
-    }
-    .notif-note p {
-        margin: 0;
-        color: var(--text-secondary);
-    }
-    .notif-note--info > i { color: #3B82F6; }
-    .notif-note--warn {
-        background: #FFFBEB;
-        border-color: #FDE68A;
-    }
-    .notif-note--warn > i { color: #D97706; }
-    [data-theme="dark"] .notif-note--warn {
-        background: #3A2E15;
-        border-color: #6B5320;
-    }
-    [data-theme="dark"] .notif-note--warn > i { color: #FBBF24; }
-
-    .notif-steps {
-        margin: 12px 0 0 0;
-        padding-left: 22px;
-        color: var(--text-secondary);
-        font-size: 13px;
-    }
-    .notif-steps li { margin-bottom: 6px; }
-    .notif-steps b { color: var(--text); }
-
-    .notif-master {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        padding: 20px;
-        background: var(--surface-alt);
-        border-radius: var(--radius-md);
-        transition: var(--transition);
-    }
-    .notif-master__icon {
-        width: 44px;
-        height: 44px;
-        border-radius: 50%;
-        background: var(--bg);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 18px;
-        color: var(--text-muted);
-        flex-shrink: 0;
-        transition: var(--transition);
-    }
-    .notif-master--on .notif-master__icon {
-        background: linear-gradient(135deg, #10B981, #059669);
-        color: #fff;
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
-    }
-    .notif-master__text { flex: 1; min-width: 0; }
-    .notif-master__title {
-        font-size: 15px;
-        font-weight: 600;
-        color: var(--text);
-        margin-bottom: 2px;
-    }
-    .notif-master__status {
-        font-size: 13px;
-        color: var(--text-muted);
-        transition: color 0.2s;
-    }
-    .notif-master--on .notif-master__status { color: #059669; }
-    .notif-master__switch {
-        position: relative;
-        display: inline-block;
-        width: 54px;
-        height: 30px;
-        flex-shrink: 0;
-        cursor: pointer;
-    }
-    .notif-master__switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-    }
-    .notif-master__slider {
-        position: absolute;
-        inset: 0;
-        background: #D1D5DB;
-        border-radius: 30px;
-        transition: background 0.25s ease;
-    }
-    .notif-master__slider::before {
-        content: '';
-        position: absolute;
-        height: 24px;
-        width: 24px;
-        left: 3px;
-        bottom: 3px;
-        background: #fff;
-        border-radius: 50%;
-        transition: transform 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
-    }
-    .notif-master__switch input:checked + .notif-master__slider {
-        background: linear-gradient(135deg, #10B981, #059669);
-    }
-    .notif-master__switch input:checked + .notif-master__slider::before {
-        transform: translateX(24px);
-    }
-    .notif-master__switch input:disabled + .notif-master__slider {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-    [data-theme="dark"] .notif-master__slider { background: #4B5563; }
-
-    .notif-details {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        flex-wrap: wrap;
-        margin-top: 16px;
-        padding-top: 16px;
-        border-top: 1px solid var(--border);
-    }
-    .notif-details[hidden] { display: none; }
-
-    .notif-test-btn {
+    .lang-option {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        padding: 9px 16px;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--primary);
+        padding: 10px 20px;
+        border-radius: 10px;
+        border: none;
         background: transparent;
-        border: 1.5px solid var(--primary);
-        border-radius: 20px;
-        cursor: pointer;
-        transition: var(--transition);
+        color: var(--text-secondary);
         font-family: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.18s ease;
+        line-height: 1;
     }
-    .notif-test-btn:hover {
+    .lang-option:hover {
+        color: var(--text);
+        background: var(--surface);
+    }
+    .lang-option.active {
         background: var(--primary);
         color: #fff;
-        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(255, 49, 56, 0.25);
     }
-    .notif-test-btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        transform: none;
-    }
-
-    .notif-device-pill {
-        display: inline-flex;
-        align-items: center;
-        font-size: 12px;
-        color: var(--text-muted);
-        padding: 4px 11px;
-        border-radius: 20px;
-        background: var(--surface-alt);
-        border: 1px solid var(--border);
-        font-weight: 500;
-    }
-    .notif-device-pill:empty { display: none; }
-
-    .notif-types {
-        margin-top: 18px;
-        padding-top: 18px;
-        border-top: 1px solid var(--border);
-    }
-    .notif-types[hidden] { display: none; }
-
-    .notif-types__header {
-        display: flex;
-        gap: 12px;
-        align-items: flex-start;
-        margin-bottom: 14px;
-    }
-    .notif-types__header > i {
-        font-size: 16px;
-        color: var(--primary);
-        margin-top: 2px;
-        flex-shrink: 0;
-    }
-    .notif-types__header strong {
-        display: block;
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--text);
-        margin-bottom: 2px;
-    }
-    .notif-types__header span {
-        display: block;
-        font-size: 12px;
-        color: var(--text-muted);
-        line-height: 1.4;
-    }
-
-    .notif-types__list {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-    }
-    .notif-type-row {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px 14px;
-        background: transparent;
-        border-radius: var(--radius-sm);
-        cursor: pointer;
-        transition: background 0.15s;
-    }
-    .notif-type-row:hover { background: var(--surface-alt); }
-    .notif-type-row__text { flex: 1; min-width: 0; }
-    .notif-type-row__title {
-        display: block;
-        font-size: 14px;
-        font-weight: 500;
-        color: var(--text);
-        margin-bottom: 2px;
-    }
-    .notif-type-row__desc {
-        display: block;
-        font-size: 12px;
-        color: var(--text-muted);
-        line-height: 1.4;
-    }
-    .notif-type-row__switch {
-        position: relative;
-        display: inline-block;
-        width: 40px;
-        height: 22px;
-        flex-shrink: 0;
-    }
-    .notif-type-row__switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-    }
-    .notif-type-row__slider {
-        position: absolute;
-        inset: 0;
-        background: #D1D5DB;
-        border-radius: 22px;
-        transition: background 0.2s;
-    }
-    .notif-type-row__slider::before {
-        content: '';
-        position: absolute;
-        height: 18px;
-        width: 18px;
-        left: 2px;
-        bottom: 2px;
-        background: #fff;
-        border-radius: 50%;
-        transition: transform 0.2s;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-    }
-    .notif-type-row__switch input:checked + .notif-type-row__slider {
-        background: var(--primary);
-    }
-    .notif-type-row__switch input:checked + .notif-type-row__slider::before {
-        transform: translateX(18px);
-    }
-    .notif-type-row__switch input:disabled + .notif-type-row__slider {
-        opacity: 0.5;
-    }
-    [data-theme="dark"] .notif-type-row__slider { background: #4B5563; }
-
-    .notif-result {
-        margin-top: 14px;
-        padding: 11px 16px;
-        border-radius: var(--radius-sm);
-        font-size: 13px;
-        font-weight: 500;
-        border: 1px solid transparent;
-    }
-    .notif-result.ok {
-        background: #ECFDF5;
-        color: #065F46;
-        border-color: #A7F3D0;
-    }
-    .notif-result.err {
-        background: #FEF2F2;
-        color: #991B1B;
-        border-color: #FCA5A5;
-    }
-    [data-theme="dark"] .notif-result.ok {
-        background: #1A3A2E;
-        color: #34D399;
-        border-color: #065F46;
-    }
-    [data-theme="dark"] .notif-result.err {
-        background: #3A1A1A;
-        color: #FCA5A5;
-        border-color: #7F1D1D;
-    }
-
-    .notif-secondary {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        padding: 22px 24px;
-    }
-    .notif-secondary__header {
-        display: flex;
-        gap: 14px;
-        align-items: flex-start;
-        margin-bottom: 18px;
-        padding-bottom: 18px;
-        border-bottom: 1px solid var(--border);
-    }
-    .notif-secondary__badge {
-        width: 38px;
-        height: 38px;
-        border-radius: 10px;
-        background: var(--surface-alt);
-        color: var(--text-muted);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 16px;
-        flex-shrink: 0;
-    }
-    .notif-secondary__intro { flex: 1; min-width: 0; }
-    .notif-secondary__intro h3 {
-        font-size: 15px;
-        font-weight: 600;
-        color: var(--text);
-        margin: 0 0 3px;
-    }
-    .notif-secondary__intro p {
-        font-size: 12px;
-        color: var(--text-muted);
-        margin: 0;
-        line-height: 1.5;
-    }
-    .notif-secondary__intro b { color: var(--text-secondary); font-weight: 600; }
-
-    .notif-secondary__grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 4px 20px;
-        margin-bottom: 20px;
-    }
-    @media (max-width: 640px) {
-        .notif-secondary__grid { grid-template-columns: 1fr; }
-    }
-
-    .notif-check {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px 4px;
-        cursor: pointer;
-        border-radius: var(--radius-sm);
-        transition: background 0.15s;
-    }
-    .notif-check:hover { background: var(--surface-alt); }
-    .notif-check input[type="checkbox"] {
-        appearance: none;
-        -webkit-appearance: none;
-        width: 20px;
-        height: 20px;
-        border: 1.5px solid var(--border);
-        border-radius: 5px;
-        background: var(--bg);
-        cursor: pointer;
-        position: relative;
-        flex-shrink: 0;
-        transition: var(--transition);
-    }
-    .notif-check input[type="checkbox"]:checked {
-        background: var(--primary);
-        border-color: var(--primary);
-    }
-    .notif-check input[type="checkbox"]:checked::after {
-        content: '';
-        position: absolute;
-        left: 6px;
-        top: 2px;
-        width: 5px;
-        height: 10px;
-        border: solid #fff;
-        border-width: 0 2px 2px 0;
-        transform: rotate(45deg);
-    }
-    .notif-check__label {
-        font-size: 13px;
-        color: var(--text);
-        font-weight: 500;
-    }
-
+    .lang-option .lang-flag { font-size: 16px; }
     @media (max-width: 480px) {
-        .notif-hero { padding: 18px; }
-        .notif-hero__header { gap: 12px; }
-        .notif-hero__badge { width: 40px; height: 40px; font-size: 17px; }
-        .notif-hero__intro h3 { font-size: 16px; }
-        .notif-master { padding: 16px; gap: 12px; }
-        .notif-master__icon { width: 38px; height: 38px; font-size: 15px; }
-        .notif-master__title { font-size: 14px; }
-        .notif-details { flex-direction: column; align-items: stretch; }
-        .notif-device-pill { justify-content: center; }
-        .notif-secondary { padding: 18px; }
+        .lang-option { padding: 8px 14px; font-size: 13px; }
     }
 </style>
 
@@ -1307,7 +574,6 @@
     // ================================================================
     var FIELD_TO_SETTING = {
         'font_size':                   'appearance.font_size',
-        'language':                    'appearance.language',
         'compact_mode':                'appearance.compact_mode',
         'reduced_motion':              'appearance.reduced_motion',
         'default_question_count':      'quiz.default_question_count',
@@ -1342,36 +608,28 @@
 
     window.applySettingsToForm = function (settings) {
         if (!settings || typeof settings !== 'object') return;
-
         Object.keys(FIELD_TO_SETTING).forEach(function (fieldId) {
             var key = FIELD_TO_SETTING[fieldId];
             if (!(key in settings)) return;
             var el = document.getElementById(fieldId);
             if (!el) return;
             var val = settings[key];
-            if (el.type === 'checkbox') {
-                el.checked = isTruthy(val);
-            } else if (el.tagName === 'SELECT') {
-                el.value = (val == null) ? '' : String(val);
-            } else {
-                el.value = (val == null) ? '' : String(val);
-            }
+            if (el.type === 'checkbox') el.checked = isTruthy(val);
+            else if (el.tagName === 'SELECT') el.value = (val == null) ? '' : String(val);
+            else el.value = (val == null) ? '' : String(val);
         });
-
         if ('live_quiz.default_privacy' in settings) {
             var want = String(settings['live_quiz.default_privacy']);
             document.querySelectorAll('input[name="default_privacy"]').forEach(function (r) {
                 r.checked = (r.value === want);
             });
         }
-
         if ('appearance.theme' in settings) {
             var theme = settings['appearance.theme'];
             document.querySelectorAll('.theme-option').forEach(function (o) {
                 o.classList.toggle('active', o.dataset.theme === theme);
             });
         }
-
         if ('appearance.accent' in settings) {
             var accent = settings['appearance.accent'];
             document.querySelectorAll('.accent-option').forEach(function (o) {
@@ -1417,7 +675,6 @@
         form.addEventListener('input', function () { showUnsavedIndicator(form); });
         form.addEventListener('change', function () { showUnsavedIndicator(form); });
     }
-
     if (saveNowBtn) {
         saveNowBtn.addEventListener('click', function () {
             var form = lastActiveForm;
@@ -1507,13 +764,11 @@
             var accent = activeAccent ? activeAccent.dataset.accent : 'red';
             var fontSize = document.getElementById('font_size')?.value || 'medium';
             var compactMode = document.getElementById('compact_mode')?.checked || false;
-            var language = document.getElementById('language')?.value || 'en';
             var payload = {
                 'appearance.theme': theme,
                 'appearance.accent': accent,
                 'appearance.font_size': fontSize,
-                'appearance.compact_mode': compactMode,
-                'appearance.language': language
+                'appearance.compact_mode': compactMode
             };
             submitForm(appearanceForm, '/settings/api', payload, 'Appearance updated!');
         });
@@ -1546,11 +801,7 @@
                 'notifications.live_quiz_start':     document.getElementById('notify_live_quiz_start').checked,
                 'notifications.live_quiz_result':    document.getElementById('notify_live_quiz_result').checked,
                 'notifications.participant_joined':  document.getElementById('notify_participant_joined').checked,
-                'notifications.admin_announcement':  document.getElementById('notify_admin_announcement').checked,
-                'notifications.achievement_unlock':  document.getElementById('notify_achievement_unlock').checked,
-                'notifications.live_quiz_reminder':  document.getElementById('notify_live_quiz_reminder').checked,
-                'notifications.daily_digest':        document.getElementById('notify_daily_digest').checked,
-                'notifications.weekly_summary':      document.getElementById('notify_weekly_summary').checked
+                'notifications.admin_announcement':  document.getElementById('notify_admin_announcement').checked
             };
             submitForm(notifForm, '/settings/api', payload, 'Notification preferences saved!');
         });
@@ -1588,9 +839,7 @@
         attachTracking(accessibilityForm);
         accessibilityForm.addEventListener('submit', function (e) {
             e.preventDefault();
-            var payload = {
-                'appearance.reduced_motion': document.getElementById('reduced_motion').checked
-            };
+            var payload = { 'appearance.reduced_motion': document.getElementById('reduced_motion').checked };
             submitForm(accessibilityForm, '/settings/api', payload, 'Accessibility settings saved!');
         });
     }
@@ -1602,21 +851,12 @@
             var current = document.getElementById('current_password').value;
             var newPw = document.getElementById('new_password').value;
             var confirm = document.getElementById('confirm_password').value;
-            if (newPw !== confirm) {
-                if (typeof window.showToast === 'function') window.showToast('Passwords do not match.', 'error');
-                return;
-            }
-            if (newPw.length < 8) {
-                if (typeof window.showToast === 'function') window.showToast('New password must be at least 8 characters.', 'error');
-                return;
-            }
+            if (newPw !== confirm) { if (typeof window.showToast === 'function') window.showToast('Passwords do not match.', 'error'); return; }
+            if (newPw.length < 8) { if (typeof window.showToast === 'function') window.showToast('New password must be at least 8 characters.', 'error'); return; }
             if (!confirm('Change your password? You will be logged out.')) return;
             fetch('/settings/api/password', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': getCsrfToken()
-                },
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken() },
                 body: JSON.stringify({ current_password: current, new_password: newPw, confirm_password: confirm })
             })
             .then(function (response) { return response.json(); })
@@ -1634,6 +874,46 @@
         });
     }
 
+    // ─── Language toggle ─────────────────────────────────────
+    var langToggle = document.getElementById('lang-toggle');
+    var currentLang = 'en';
+    try {
+        var serverLang = {{ (settings.get("appearance.language") or "en")|tojson }};
+        currentLang = (serverLang === 'so') ? 'so' : 'en';
+    } catch (e) { currentLang = 'en'; }
+
+    function updateLangUI(lang) {
+        if (!langToggle) return;
+        langToggle.querySelectorAll('.lang-option').forEach(function (btn) {
+            var isActive = btn.dataset.lang === lang;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-checked', isActive ? 'true' : 'false');
+        });
+    }
+    updateLangUI(currentLang);
+
+    if (langToggle) {
+        langToggle.querySelectorAll('.lang-option').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var newLang = btn.dataset.lang;
+                if (newLang === currentLang) return;
+                currentLang = newLang;
+                updateLangUI(newLang);
+                fetch('/settings/api', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken() },
+                    body: JSON.stringify({ 'appearance.language': newLang })
+                })
+                .then(function (r) { return r.json(); })
+                .then(function () { window.location.reload(); })
+                .catch(function () {
+                    currentLang = (newLang === 'so') ? 'en' : 'so';
+                    updateLangUI(currentLang);
+                });
+            });
+        });
+    }
+
     // ─── Visual selectors ────────────────────────────────────
     document.querySelectorAll('.theme-option').forEach(function (opt) {
         opt.addEventListener('click', function () {
@@ -1642,7 +922,7 @@
             if (typeof NuunSettings !== 'undefined') NuunSettings.applyTheme(this.dataset.theme);
         });
     });
-    document.querySelectorAll('.accent-option:not(.locked)').forEach(function (btn) {
+    document.querySelectorAll('.accent-option').forEach(function (btn) {
         btn.addEventListener('click', function () {
             document.querySelectorAll('.accent-option').forEach(function (b) { b.classList.remove('active'); });
             this.classList.add('active');
@@ -1670,11 +950,8 @@
         newPwInput.addEventListener('input', function () {
             var val = this.value;
             var strength = 'weak';
-            if (val.length >= 8 && /[A-Z]/.test(val) && /[a-z]/.test(val) && /\d/.test(val) && /[^A-Za-z0-9]/.test(val)) {
-                strength = 'strong';
-            } else if (val.length >= 8) {
-                strength = 'medium';
-            }
+            if (val.length >= 8 && /[A-Z]/.test(val) && /[a-z]/.test(val) && /\d/.test(val) && /[^A-Za-z0-9]/.test(val)) strength = 'strong';
+            else if (val.length >= 8) strength = 'medium';
             var bar = document.getElementById('password-strength');
             if (bar) bar.innerHTML = '<div class="fill ' + strength + '"></div>';
             checkPasswordMatch();
@@ -1687,13 +964,8 @@
         var match = document.getElementById('password-match');
         if (!a || !b || !match) return;
         if (!b.value) { match.textContent = ''; match.className = 'password-match'; return; }
-        if (a.value === b.value) {
-            match.textContent = '✅ Passwords match';
-            match.className = 'password-match match';
-        } else {
-            match.textContent = '❌ Passwords do not match';
-            match.className = 'password-match no-match';
-        }
+        if (a.value === b.value) { match.textContent = '✅ Passwords match'; match.className = 'password-match match'; }
+        else { match.textContent = '❌ Passwords do not match'; match.className = 'password-match no-match'; }
     }
 
     // ─── Upgrade buttons ─────────────────────────────────────
@@ -1708,30 +980,11 @@
         });
     });
 
-    // ─── Locked toggles ──────────────────────────────────────
-    document.querySelectorAll('.toggle-item.locked input[type="checkbox"]').forEach(function (cb) {
-        cb.disabled = true;
-        cb.closest('.toggle-item').addEventListener('click', function (e) {
-            if (e.target.tagName !== 'INPUT') {
-                var upgradeBtn = this.querySelector('.upgrade-btn');
-                if (upgradeBtn) upgradeBtn.click();
-            }
-        });
-    });
-
     // ─── Data buttons ────────────────────────────────────────
     var exportBtn = document.getElementById('exportDataBtn');
     if (exportBtn) {
         exportBtn.addEventListener('click', function () {
             if (typeof window.showToast === 'function') window.showToast('Data export will be available soon.', 'info');
-        });
-    }
-    var deleteAccountBtn = document.getElementById('deleteAccountBtn');
-    if (deleteAccountBtn) {
-        deleteAccountBtn.addEventListener('click', function () {
-            if (confirm('Are you sure you want to delete your account? This action is permanent.')) {
-                if (typeof window.showToast === 'function') window.showToast('Account deletion is not implemented yet.', 'error');
-            }
         });
     }
 
@@ -1759,7 +1012,9 @@
         }
     });
 
-    // ─── Navigation ──────────────────────────────────────────
+    // ================================================================
+    // NAVIGATION
+    // ================================================================
     var landing = document.getElementById('landing');
     var sections = document.querySelectorAll('.settings-section');
     var navItems = document.querySelectorAll('.settings-nav-item');
@@ -1770,9 +1025,7 @@
         if (landing) landing.style.display = 'block';
         sections.forEach(function (sec) { sec.classList.remove('active'); });
         if (sidebar) sidebar.style.display = 'none';
-        if (breadcrumb) {
-            breadcrumb.innerHTML = '<a href="#" class="breadcrumb-link" id="breadcrumbHome">Settings</a>';
-        }
+        if (breadcrumb) breadcrumb.innerHTML = '<a href="#" class="breadcrumb-link" id="breadcrumbHome">Settings</a>';
         var title = document.querySelector('.settings-page-title');
         if (title) title.textContent = 'Settings';
         navItems.forEach(function (item) { item.classList.remove('active'); });
@@ -1838,237 +1091,6 @@
         });
         card.classList.toggle('active');
     };
-
-    // ================================================================
-    // PUSH NOTIFICATIONS
-    // ================================================================
-    (function () {
-        if (!window.NuunPush) return;
-
-        var loading       = document.getElementById('push-state-loading');
-        var unsup         = document.getElementById('push-state-unsupported');
-        var ios           = document.getElementById('push-state-ios');
-        var denied        = document.getElementById('push-state-denied');
-        var disabled      = document.getElementById('push-state-disabled');
-        var active        = document.getElementById('push-state-active');
-        var master        = document.querySelector('.notif-master');
-        var masterIcon    = document.getElementById('push-master-icon');
-        var masterStatus  = document.getElementById('push-master-status');
-        var toggle        = document.getElementById('push-toggle');
-        var actions       = document.getElementById('push-actions');
-        var testBtn       = document.getElementById('push-test-btn');
-        var countEl       = document.getElementById('push-device-count');
-        var deviceEl      = document.getElementById('push-device-label');
-        var resultEl      = document.getElementById('push-result');
-        var typesWrap     = document.getElementById('push-types');
-
-        var typeLiveStart    = document.getElementById('push-type-live-start');
-        var typeLiveResult   = document.getElementById('push-type-live-result');
-        var typeParticipant  = document.getElementById('push-type-participant');
-        var typeAnnouncement = document.getElementById('push-type-announcement');
-        var typeQuizComplete = document.getElementById('push-type-quiz-complete');
-
-        var TYPE_MAP = [
-            { el: typeLiveStart,    key: 'notifications.push_live_quiz_start' },
-            { el: typeLiveResult,   key: 'notifications.push_live_quiz_result' },
-            { el: typeParticipant,  key: 'notifications.push_participant_joined' },
-            { el: typeAnnouncement, key: 'notifications.push_admin_announcement' },
-            { el: typeQuizComplete, key: 'notifications.push_quiz_complete' }
-        ];
-
-        var ALL_STATES = [loading, unsup, ios, denied, disabled, active];
-
-        function show(el) {
-            ALL_STATES.forEach(function (n) { if (n) n.hidden = true; });
-            if (el) el.hidden = false;
-        }
-
-        function showResult(msg, ok) {
-            if (!resultEl) return;
-            resultEl.hidden = false;
-            resultEl.textContent = msg;
-            resultEl.className = 'notif-result ' + (ok ? 'ok' : 'err');
-            clearTimeout(resultEl._hideTimer);
-            resultEl._hideTimer = setTimeout(function () {
-                resultEl.hidden = true;
-            }, 6000);
-        }
-
-        function setMasterVisual(isOn) {
-            if (master) {
-                master.classList.toggle('notif-master--on', isOn);
-            }
-            if (masterIcon) {
-                masterIcon.innerHTML = isOn
-                    ? '<i class="fas fa-bell"></i>'
-                    : '<i class="fas fa-bell-slash"></i>';
-            }
-            if (masterStatus) {
-                masterStatus.textContent = isOn
-                    ? 'Enabled — you\'ll receive alerts on this device'
-                    : 'Off';
-            }
-        }
-
-        function deviceLabel() {
-            var ua = navigator.userAgent || '';
-            if (/iPhone/.test(ua))    return 'This iPhone';
-            if (/iPad/.test(ua))      return 'This iPad';
-            if (/iPod/.test(ua))      return 'This iPod';
-            if (/Android/.test(ua))   return 'This Android';
-            if (/Macintosh/.test(ua)) return 'This Mac';
-            if (/Windows/.test(ua))   return 'This PC';
-            if (/Linux/.test(ua))     return 'This device';
-            return '';
-        }
-
-        function renderCount(n) {
-            if (!countEl) return;
-            countEl.textContent = (n > 0)
-                ? (n + ' ' + (n === 1 ? 'device' : 'devices') + ' connected')
-                : '';
-        }
-
-        function loadTypePrefs() {
-            return fetch('/settings/api', { credentials: 'same-origin' })
-                .then(function (r) { return r.ok ? r.json() : {}; })
-                .catch(function () { return {}; })
-                .then(function (s) {
-                    TYPE_MAP.forEach(function (t) {
-                        if (!t.el) return;
-                        t.el.checked = !!s[t.key];
-                    });
-                });
-        }
-
-        function saveTypePrefs() {
-            var payload = {};
-            TYPE_MAP.forEach(function (t) {
-                if (t.el) payload[t.key] = t.el.checked ? 1 : 0;
-            });
-            var token = '';
-            if (window.NuunPush && window.NuunPush.csrfToken) {
-                token = window.NuunPush.csrfToken();
-            }
-            if (!token) {
-                var m = document.querySelector('meta[name="csrf-token"]');
-                if (m) token = m.content;
-            }
-            if (!token) {
-                var i = document.querySelector('input[name="csrf_token"]');
-                if (i) token = i.value;
-            }
-            return fetch('/settings/api', {
-                method: 'PATCH',
-                credentials: 'same-origin',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': token
-                },
-                body: JSON.stringify(payload)
-            }).then(function (r) {
-                if (!r.ok) {
-                    return r.text().then(function (txt) {
-                        throw new Error('HTTP ' + r.status + ' — ' + txt);
-                    });
-                }
-                return r.json();
-            });
-        }
-
-        function refresh() {
-            show(loading);
-            return window.NuunPush.getStatus().then(function (s) {
-                if (!s.supported)              { show(unsup); return; }
-                if (!s.configured)             { show(disabled); return; }
-                if (s.iosNeedsInstall)         { show(ios); return; }
-                if (s.permission === 'denied') { show(denied); return; }
-
-                show(active);
-                toggle.checked = !!s.subscribed;
-                setMasterVisual(!!s.subscribed);
-                actions.hidden = !s.subscribed;
-                if (typesWrap) typesWrap.hidden = !s.subscribed;
-                if (s.subscribed) loadTypePrefs();
-                renderCount(s.serverCount);
-                if (deviceEl) deviceEl.textContent = deviceLabel();
-            }).catch(function () {
-                show(unsup);
-            });
-        }
-
-        if (toggle) {
-            toggle.addEventListener('change', function () {
-                var wantOn = toggle.checked;
-                toggle.disabled = true;
-                setMasterVisual(wantOn);
-
-                var promise = wantOn
-                    ? window.NuunPush.subscribe()
-                    : window.NuunPush.unsubscribe();
-
-                promise.then(function (r) {
-                    if (wantOn && !r.success) {
-                        toggle.checked = false;
-                        setMasterVisual(false);
-                        var msg = 'Could not enable notifications.';
-                        if (r.reason === 'denied')                 msg = 'Permission denied in the browser.';
-                        else if (r.reason === 'ios-needs-install') msg = 'Add to Home Screen first.';
-                        else if (r.reason === 'no-csrf-token')     msg = 'Page token missing — refresh and try again.';
-                        else if (r.reason === 'server-rejected')   msg = 'Server rejected the subscription: ' + (r.detail || '');
-                        else if (r.reason === 'subscribe-failed')  msg = 'Browser refused to subscribe: ' + (r.detail || '');
-                        showResult(msg, false);
-                    } else if (!wantOn) {
-                        showResult('Notifications disabled on this device.', true);
-                    } else {
-                        showResult('Notifications enabled on this device.', true);
-                    }
-                }).catch(function (e) {
-                    toggle.checked = !wantOn;
-                    setMasterVisual(!wantOn);
-                    showResult('Something went wrong: ' + e, false);
-                }).then(function () {
-                    toggle.disabled = false;
-                    return refresh();
-                });
-            });
-        }
-
-        if (testBtn) {
-            testBtn.addEventListener('click', function () {
-                testBtn.disabled = true;
-                window.NuunPush.sendTest().then(function (r) {
-                    if (r.ok) {
-                        showResult('Test sent. Check your device.', true);
-                    } else {
-                        var msg = (r.data && r.data.error) || 'Test failed.';
-                        showResult(msg, false);
-                    }
-                }).catch(function () {
-                    showResult('Network error.', false);
-                }).then(function () {
-                    testBtn.disabled = false;
-                });
-            });
-        }
-
-        TYPE_MAP.forEach(function (t) {
-            if (!t.el) return;
-            t.el.addEventListener('change', function () {
-                t.el.disabled = true;
-                saveTypePrefs().then(function () {
-                    // silent success
-                }).catch(function (e) {
-                    t.el.checked = !t.el.checked;
-                    showResult('Could not save preference: ' + e.message, false);
-                }).then(function () {
-                    t.el.disabled = false;
-                });
-            });
-        });
-
-        refresh();
-    })();
 })();
 </script>
 {% endblock %}

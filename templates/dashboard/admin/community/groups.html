@@ -1,13 +1,13 @@
 {# ============================================================
    templates/dashboard/admin/community/groups.html
-   Admin groups list — filters, stats, table, actions.
+   Admin group list — 2-tier badges, new access columns.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
 {% block admin_title_icon %}<i class="fas fa-users header-icon"></i>{% endblock %}
-{% block admin_title %}Groups{% endblock %}
+{% block admin_title %}Study Groups{% endblock %}
 {% block admin_subtitle %}
-    WhatsApp and Telegram study groups. {{ total }} total.
+    Manage WhatsApp and Telegram groups available to students.
 {% endblock %}
 
 {% block admin_breadcrumb %}
@@ -16,188 +16,318 @@
 {% endblock %}
 
 {% block admin_actions %}
-    {% if admin_can('groups.create') %}
-        <a href="{{ url_for('admin_community.group_new') }}" class="admin-btn primary">
-            <i class="fas fa-plus"></i> New Group
-        </a>
-    {% endif %}
     <a href="{{ url_for('admin_community.groups_analytics') }}" class="admin-btn secondary">
         <i class="fas fa-chart-bar"></i> Analytics
     </a>
     <a href="{{ url_for('admin_community.groups_audit') }}" class="admin-btn secondary">
         <i class="fas fa-history"></i> Audit
     </a>
+    <a href="{{ url_for('admin_community.group_new') }}" class="admin-btn primary">
+        <i class="fas fa-plus"></i> New Group
+    </a>
 {% endblock %}
+
 
 {% block admin_content %}
 
 <div class="admin-stats">
     <div class="admin-stat tone-blue">
         <div class="stat-head"><span class="stat-icon"><i class="fas fa-users"></i></span></div>
-        <span class="stat-value">{{ stats.total_groups or 0 }}</span>
+        <span class="stat-value">{{ stats.total or 0 }}</span>
         <span class="stat-label">Total groups</span>
-        <span class="stat-sub">{{ stats.active_groups or 0 }} active</span>
     </div>
     <div class="admin-stat tone-green">
-        <div class="stat-head"><span class="stat-icon"><i class="fas fa-mouse-pointer"></i></span></div>
-        <span class="stat-value">{{ stats.total_clicks or 0 }}</span>
-        <span class="stat-label">Total clicks</span>
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-check-circle"></i></span></div>
+        <span class="stat-value">{{ stats.active or 0 }}</span>
+        <span class="stat-label">Active</span>
     </div>
     <div class="admin-stat tone-amber">
         <div class="stat-head"><span class="stat-icon"><i class="fas fa-star"></i></span></div>
-        <span class="stat-value">{{ stats.featured_groups or 0 }}</span>
+        <span class="stat-value">{{ stats.featured or 0 }}</span>
         <span class="stat-label">Featured</span>
+    </div>
+    <div class="admin-stat tone-purple">
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-hand-pointer"></i></span></div>
+        <span class="stat-value">{{ stats.total_clicks or 0 }}</span>
+        <span class="stat-label">Total clicks</span>
     </div>
 </div>
 
-<form method="GET" class="admin-toolbar" style="margin:16px 0;">
-    <div class="admin-search">
-        <i class="fas fa-search"></i>
-        <input type="text" name="search" value="{{ search or '' }}"
-               placeholder="Search name, description, category…"
-               autocomplete="off" spellcheck="false">
-    </div>
-    <select name="platform" class="admin-select">
+<form method="GET" class="admin-filter-bar" style="margin-top:16px;">
+    <input type="text" name="search" class="admin-input" placeholder="Search by name or description…"
+           value="{{ search }}" style="flex:1;min-width:200px;">
+
+    <select name="platform" class="admin-select" style="min-width:130px;">
         <option value="">All platforms</option>
-        <option value="whatsapp" {% if platform == 'whatsapp' %}selected{% endif %}>WhatsApp</option>
-        <option value="telegram" {% if platform == 'telegram' %}selected{% endif %}>Telegram</option>
+        <option value="whatsapp" {% if platform_filter == 'whatsapp' %}selected{% endif %}>WhatsApp</option>
+        <option value="telegram" {% if platform_filter == 'telegram' %}selected{% endif %}>Telegram</option>
     </select>
-    <select name="category" class="admin-select">
+
+    <select name="category" class="admin-select" style="min-width:150px;">
         <option value="">All categories</option>
         {% for c in categories %}
-            <option value="{{ c.category }}" {% if category == c.category %}selected{% endif %}>
-                {{ c.category }} ({{ c.count }})
-            </option>
+            <option value="{{ c }}" {% if category_filter == c %}selected{% endif %}>{{ c }}</option>
         {% endfor %}
     </select>
-    <select name="status" class="admin-select">
+
+    <select name="status" class="admin-select" style="min-width:120px;">
         <option value="">All statuses</option>
-        <option value="active"   {% if status == 'active' %}selected{% endif %}>Active</option>
-        <option value="inactive" {% if status == 'inactive' %}selected{% endif %}>Inactive</option>
-        <option value="featured" {% if status == 'featured' %}selected{% endif %}>Featured</option>
+        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+        <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inactive</option>
     </select>
-    <button type="submit" class="admin-btn secondary">
-        <i class="fas fa-filter"></i> Filter
+
+    <button type="submit" class="admin-btn primary">
+        <i class="fas fa-search"></i> Filter
     </button>
+
+    {% if search or platform_filter or category_filter or status_filter %}
+        <a href="{{ url_for('admin_community.groups') }}" class="admin-btn secondary">
+            <i class="fas fa-times"></i> Clear
+        </a>
+    {% endif %}
 </form>
 
-{% if groups %}
-<section class="admin-table-wrap">
-    <div class="admin-table-scroll">
+<form method="POST" action="{{ url_for('admin_community.group_bulk') }}" id="bulkForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" id="bulkActionInput" value="">
+
+    {% if groups %}
+    <div class="admin-bulk-bar" id="bulkBar" style="display:none;">
+        <span><strong id="bulkCount">0</strong> selected</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="admin-btn secondary sm" onclick="bulkDo('activate')">
+                <i class="fas fa-check"></i> Activate
+            </button>
+            <button type="button" class="admin-btn secondary sm" onclick="bulkDo('deactivate')">
+                <i class="fas fa-pause"></i> Deactivate
+            </button>
+            <button type="button" class="admin-btn secondary sm" onclick="bulkDo('feature')">
+                <i class="fas fa-star"></i> Feature
+            </button>
+            <button type="button" class="admin-btn secondary sm" onclick="bulkDo('unfeature')">
+                <i class="fas fa-star-half-alt"></i> Unfeature
+            </button>
+            <button type="button" class="admin-btn danger sm"
+                    onclick="if(confirm('Delete selected groups?')) bulkDo('delete')">
+                <i class="fas fa-trash"></i> Delete
+            </button>
+        </div>
+    </div>
+
+    <div class="admin-table-scroll" style="margin-top:16px;">
         <table class="admin-table">
             <thead>
                 <tr>
-                    <th style="width:40px;"></th>
+                    <th style="width:32px;"><input type="checkbox" id="checkAll"></th>
                     <th>Name</th>
-                    <th class="hide-mobile">Platform</th>
-                    <th class="hide-mobile">Category</th>
-                    <th class="hide-mobile">Curriculum</th>
-                    <th style="text-align:center;">Tier</th>
-                    <th style="text-align:right;">Clicks</th>
-                    <th style="text-align:center;">Status</th>
+                    <th>Platform</th>
+                    <th>Category</th>
+                    <th>Curriculum</th>
+                    <th>Tier</th>
+                    <th>Status</th>
+                    <th>Clicks</th>
                     <th style="text-align:right;">Actions</th>
                 </tr>
             </thead>
             <tbody>
-                {% for g in groups %}
+                {% for grp in groups %}
                 <tr>
-                    <td style="font-size:20px;">{{ g.icon or '📚' }}</td>
                     <td>
-                        <div style="font-weight:600;font-size:13px;">{{ g.name }}</div>
-                        {% if g.description %}
-                            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
-                                {{ g.description[:60] }}{% if g.description|length > 60 %}…{% endif %}
+                        <input type="checkbox" name="group_ids" value="{{ grp.id }}"
+                               class="grp-checkbox">
+                    </td>
+                    <td>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="font-size:18px;">{{ grp.icon or '📚' }}</span>
+                            <div style="min-width:0;">
+                                <div style="font-weight:700;color:var(--text);">
+                                    {{ grp.name }}
+                                </div>
+                                {% if grp.is_featured %}
+                                    <span class="admin-chip amber" style="font-size:10px;margin-top:2px;">
+                                        ⭐ Featured
+                                    </span>
+                                {% endif %}
                             </div>
-                        {% endif %}
-                        {% if g.is_featured %}
-                            <span class="admin-chip amber" style="margin-top:4px;">⭐ Featured</span>
-                        {% endif %}
+                        </div>
                     </td>
-                    <td class="hide-mobile">
-                        {% if g.platform == 'whatsapp' %}
-                            <i class="fab fa-whatsapp" style="color:#25D366;"></i> WhatsApp
-                        {% elif g.platform == 'telegram' %}
-                            <i class="fab fa-telegram-plane" style="color:#0088CC;"></i> Telegram
-                        {% else %}{{ g.platform }}{% endif %}
-                    </td>
-                    <td class="hide-mobile">{{ g.category or '—' }}</td>
-                    <td class="hide-mobile">{{ g.curriculum or 'Any' }}</td>
-                    <td style="text-align:center;">
-                        {% if g.tier_required == 'pro' %}
-                            <span class="admin-chip purple">Pro</span>
-                        {% elif g.tier_required == 'premium' %}
-                            <span class="admin-chip blue">Premium</span>
+                    <td>
+                        {% if grp.platform == 'whatsapp' %}
+                            <span class="admin-chip" style="background:#E7F9EE;color:#065F46;">
+                                <i class="fab fa-whatsapp"></i> WhatsApp
+                            </span>
                         {% else %}
-                            <span class="admin-chip neutral">Free</span>
+                            <span class="admin-chip" style="background:#E7F0FF;color:#1E40AF;">
+                                <i class="fab fa-telegram"></i> Telegram
+                            </span>
                         {% endif %}
                     </td>
-                    <td style="text-align:right;font-variant-numeric:tabular-nums;">{{ g.click_count or 0 }}</td>
-                    <td style="text-align:center;">
-                        {% if g.is_active %}
-                            <span class="admin-chip green">Active</span>
+                    <td>{{ grp.category or '—' }}</td>
+                    <td>
+                        {% if not grp.curriculum %}
+                            <span class="admin-chip green" style="font-size:11px;">All</span>
                         {% else %}
-                            <span class="admin-chip neutral">Inactive</span>
+                            <span class="admin-chip" style="font-size:11px;">{{ grp.curriculum }}</span>
                         {% endif %}
                     </td>
-                    <td style="text-align:right;white-space:nowrap;">
-                        {% if admin_can('groups.edit') %}
-                            <a href="{{ url_for('admin_community.group_edit', group_id=g.id) }}"
-                               class="admin-btn secondary sm" title="Edit">
+                    <td>
+                        {% if (grp.tier_required or 'free') == 'premium' %}
+                            <span class="admin-pill premium" style="font-size:10px;">Premium</span>
+                        {% else %}
+                            <span class="admin-pill free" style="font-size:10px;">Free</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if grp.is_active %}
+                            <span class="admin-chip green" style="font-size:11px;">Active</span>
+                        {% else %}
+                            <span class="admin-chip red" style="font-size:11px;">Inactive</span>
+                        {% endif %}
+                        {% if not grp.is_visible %}
+                            <span class="admin-chip" style="font-size:10px;background:#F3F4F6;color:#6B7280;">
+                                Hidden
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <strong>{{ grp.click_count or 0 }}</strong>
+                    </td>
+                    <td style="text-align:right;">
+                        <div style="display:inline-flex;gap:6px;">
+                            <button type="button"
+                                    class="admin-btn secondary sm"
+                                    onclick="toggleActive({{ grp.id }}, this)"
+                                    title="Toggle active">
+                                <i class="fas fa-{{ 'pause' if grp.is_active else 'play' }}"></i>
+                            </button>
+                            <button type="button"
+                                    class="admin-btn secondary sm"
+                                    onclick="toggleFeatured({{ grp.id }}, this)"
+                                    title="Toggle featured">
+                                <i class="fas fa-star"></i>
+                            </button>
+                            <a href="{{ url_for('admin_community.group_edit', group_id=grp.id) }}"
+                               class="admin-btn primary sm">
                                 <i class="fas fa-pen"></i>
                             </a>
-                            <button type="button" class="admin-btn secondary sm"
-                                    data-toggle-active="{{ g.id }}" title="Toggle active">
-                                <i class="fas fa-{% if g.is_active %}pause{% else %}play{% endif %}"></i>
-                            </button>
-                            <button type="button" class="admin-btn secondary sm"
-                                    data-toggle-featured="{{ g.id }}" title="Toggle featured">
-                                <i class="fas fa-star" {% if not g.is_featured %}style="opacity:0.4;"{% endif %}></i>
-                            </button>
-                        {% endif %}
-                        {% if admin_can('groups.delete') %}
-                            <button type="button" class="admin-btn danger sm"
-                                    data-delete-group="{{ g.id }}"
-                                    data-group-name="{{ g.name }}" title="Delete">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        {% endif %}
+                            <form method="POST"
+                                  action="{{ url_for('admin_community.group_delete', group_id=grp.id) }}"
+                                  style="display:inline;"
+                                  onsubmit="return confirm('Delete this group?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit" class="admin-btn danger sm">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-</section>
 
-{% if total_pages > 1 %}
-<div class="admin-pagination">
-    {% set qs = 'search=' ~ search ~ '&platform=' ~ platform ~ '&category=' ~ category ~ '&status=' ~ status %}
-    <a href="?page=1&{{ qs }}" class="{% if page == 1 %}disabled{% endif %}"><i class="fas fa-angle-double-left"></i></a>
-    <a href="?page={{ page - 1 }}&{{ qs }}" class="{% if page == 1 %}disabled{% endif %}"><i class="fas fa-angle-left"></i></a>
-    {% for p in range(1, total_pages + 1) %}
-        {% if p == page %}<span class="active">{{ p }}</span>
-        {% elif p <= page + 2 and p >= page - 2 %}<a href="?page={{ p }}&{{ qs }}">{{ p }}</a>{% endif %}
-    {% endfor %}
-    <a href="?page={{ page + 1 }}&{{ qs }}" class="{% if page == total_pages %}disabled{% endif %}"><i class="fas fa-angle-right"></i></a>
-    <a href="?page={{ total_pages }}&{{ qs }}" class="{% if page == total_pages %}disabled{% endif %}"><i class="fas fa-angle-double-right"></i></a>
-</div>
-{% endif %}
+    {% if total_pages > 1 %}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;flex-wrap:wrap;gap:10px;">
+        <span style="font-size:13px;color:var(--text-secondary);">
+            Showing {{ (page - 1) * per_page + 1 }}–{{ page * per_page if page * per_page < total else total }}
+            of {{ total }}
+        </span>
+        <div style="display:flex;gap:6px;">
+            {% if page > 1 %}
+                <a href="{{ url_for('admin_community.groups', page=page-1, search=search, platform=platform_filter, category=category_filter, status=status_filter) }}"
+                   class="admin-btn secondary sm">
+                    <i class="fas fa-chevron-left"></i> Prev
+                </a>
+            {% endif %}
+            <span style="align-self:center;font-size:13px;padding:0 8px;">
+                Page <strong>{{ page }}</strong> / {{ total_pages }}
+            </span>
+            {% if page < total_pages %}
+                <a href="{{ url_for('admin_community.groups', page=page+1, search=search, platform=platform_filter, category=category_filter, status=status_filter) }}"
+                   class="admin-btn secondary sm">
+                    Next <i class="fas fa-chevron-right"></i>
+                </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 
-{% else %}
-<div class="admin-empty">
-    <span class="empty-icon">👥</span>
-    <h3>No groups found</h3>
-    <p>{% if search or platform or category or status %}Try adjusting your filters.{% else %}Create your first group to get started.{% endif %}</p>
-    {% if admin_can('groups.create') %}
+    {% else %}
+    <div class="admin-empty" style="margin-top:16px;">
+        <span class="empty-icon">👥</span>
+        <h3>No groups yet</h3>
+        <p>Create the first group to give students somewhere to connect.</p>
         <a href="{{ url_for('admin_community.group_new') }}" class="admin-btn primary">
             <i class="fas fa-plus"></i> New Group
         </a>
+    </div>
     {% endif %}
-</div>
-{% endif %}
 
-{% endblock %}
+</form>
 
-{% block admin_js %}
-<script src="{{ url_for('static', filename='js/admin/community.js') }}"></script>
+<script>
+(function () {
+    'use strict';
+
+    var checkAll = document.getElementById('checkAll');
+    var checkboxes = document.querySelectorAll('.grp-checkbox');
+    var bulkBar = document.getElementById('bulkBar');
+    var bulkCount = document.getElementById('bulkCount');
+    var bulkActionInput = document.getElementById('bulkActionInput');
+    var bulkForm = document.getElementById('bulkForm');
+
+    function updateBulkBar() {
+        var n = document.querySelectorAll('.grp-checkbox:checked').length;
+        if (bulkCount) bulkCount.textContent = n;
+        if (bulkBar) bulkBar.style.display = n > 0 ? 'flex' : 'none';
+    }
+
+    if (checkAll) {
+        checkAll.addEventListener('change', function () {
+            checkboxes.forEach(function (cb) { cb.checked = checkAll.checked; });
+            updateBulkBar();
+        });
+    }
+    checkboxes.forEach(function (cb) {
+        cb.addEventListener('change', updateBulkBar);
+    });
+
+    window.bulkDo = function (action) {
+        if (bulkActionInput) bulkActionInput.value = action;
+        if (bulkForm) bulkForm.submit();
+    };
+
+    window.toggleActive = function (id, btn) {
+        var token = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+        btn.disabled = true;
+        fetch('/admin/groups/api/' + id + '/toggle-active', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRF-Token': token},
+            body: '{}'
+        }).then(function (r) { return r.json(); })
+          .then(function (d) {
+              if (d.success) location.reload();
+              else alert('Failed');
+          }).catch(function () { alert('Network error'); })
+          .finally(function () { btn.disabled = false; });
+    };
+
+    window.toggleFeatured = function (id, btn) {
+        var token = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+        btn.disabled = true;
+        fetch('/admin/groups/api/' + id + '/toggle-featured', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRF-Token': token},
+            body: '{}'
+        }).then(function (r) { return r.json(); })
+          .then(function (d) {
+              if (d.success) location.reload();
+              else alert('Failed');
+          }).catch(function () { alert('Network error'); })
+          .finally(function () { btn.disabled = false; });
+    };
+})();
+</script>
+
 {% endblock %}

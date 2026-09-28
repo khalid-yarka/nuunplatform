@@ -1,328 +1,432 @@
 {# ============================================================
    templates/dashboard/admin/community/group_edit.html
-   Create or edit a study group. Two-column layout with a live
-   preview of the student-facing card.
+   Create / edit a study group. Includes the new Access block.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
-{% set is_new = (group is none) %}
+{% set is_new = is_new or false %}
+{% set g = form if form else (group if group else {}) %}
 
 {% block admin_title_icon %}<i class="fas fa-users header-icon"></i>{% endblock %}
 {% block admin_title %}{{ 'New Group' if is_new else 'Edit Group' }}{% endblock %}
 {% block admin_subtitle %}
-    {% if is_new %}
-        Add a WhatsApp or Telegram group. It goes live the moment you save.
-    {% else %}
-        Editing <strong>{{ group.name }}</strong> · #{{ group.id }}
-    {% endif %}
+    {{ 'Create a new study group' if is_new else 'Update details and access controls' }}
 {% endblock %}
 
 {% block admin_breadcrumb %}
     <span class="sep">/</span>
     <a href="{{ url_for('admin_community.groups') }}">Groups</a>
     <span class="sep">/</span>
-    <span class="current">{{ 'New' if is_new else group.name }}</span>
+    <span class="current">{{ 'New' if is_new else (g.name or 'Edit') }}</span>
 {% endblock %}
 
 {% block admin_actions %}
     <a href="{{ url_for('admin_community.groups') }}" class="admin-btn secondary">
-        <i class="fas fa-arrow-left"></i> Back to list
+        <i class="fas fa-arrow-left"></i> Back
     </a>
 {% endblock %}
 
+
+{% block admin_css %}
+<style>
+    .ge-wrap { max-width: 860px; margin: 0 auto; }
+
+    .ge-section {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 22px 24px;
+        margin-bottom: 16px;
+    }
+    .ge-section h3 {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text);
+        margin: 0 0 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .ge-section h3 i { color: var(--primary); }
+    .ge-section .section-hint {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: -8px;
+        margin-bottom: 14px;
+        line-height: 1.5;
+    }
+
+    .ge-grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+    }
+    @media (max-width: 640px) {
+        .ge-grid-2 { grid-template-columns: 1fr; }
+    }
+
+    .ge-field { margin-bottom: 14px; }
+    .ge-field:last-child { margin-bottom: 0; }
+    .ge-field label {
+        display: block;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+    .ge-field label .req { color: var(--primary); margin-left: 2px; }
+    .ge-field .hint {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 5px;
+        line-height: 1.4;
+    }
+
+    /* --- Radio card row (curriculum) --- */
+    .ge-radios {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 8px;
+    }
+    .ge-radio {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        background: var(--background);
+        border: 1.5px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        cursor: pointer;
+        transition: all 0.15s ease;
+        line-height: 1.3;
+    }
+    .ge-radio:hover {
+        border-color: var(--primary);
+    }
+    .ge-radio input { display: none; }
+    .ge-radio.selected {
+        background: var(--primary-light);
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+    .ge-radio .dot {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 2px solid var(--border);
+        flex-shrink: 0;
+        position: relative;
+    }
+    .ge-radio.selected .dot {
+        border-color: var(--primary);
+    }
+    .ge-radio.selected .dot::after {
+        content: '';
+        position: absolute;
+        inset: 3px;
+        border-radius: 50%;
+        background: var(--primary);
+    }
+
+    /* --- Checkbox rows --- */
+    .ge-check {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 12px 14px;
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        color: var(--text);
+        cursor: pointer;
+        line-height: 1.4;
+        margin-bottom: 8px;
+        transition: all 0.15s ease;
+    }
+    .ge-check:last-child { margin-bottom: 0; }
+    .ge-check:hover { border-color: var(--primary); }
+    .ge-check input[type="checkbox"] {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        border: 1.5px solid var(--border);
+        border-radius: 5px;
+        background: var(--surface);
+        cursor: pointer;
+        position: relative;
+        flex-shrink: 0;
+        margin-top: 1px;
+        transition: all 0.15s ease;
+    }
+    .ge-check input[type="checkbox"]:checked {
+        background: var(--primary);
+        border-color: var(--primary);
+    }
+    .ge-check input[type="checkbox"]:checked::after {
+        content: '';
+        position: absolute;
+        left: 5px;
+        top: 1px;
+        width: 5px;
+        height: 10px;
+        border: solid #fff;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+    }
+    .ge-check .chk-title {
+        font-weight: 700;
+        display: block;
+        margin-bottom: 2px;
+    }
+    .ge-check .chk-desc {
+        font-size: 12px;
+        color: var(--text-secondary);
+        display: block;
+    }
+</style>
+{% endblock %}
+
+
 {% block admin_content %}
 
-<form id="groupForm"
-      data-is-new="{{ '1' if is_new else '0' }}"
-      data-group-id="{{ group.id if group else '' }}">
+<div class="ge-wrap">
+<form method="POST" action="{% if is_new %}{{ url_for('admin_community.group_new') }}{% else %}{{ url_for('admin_community.group_edit', group_id=g.id) }}{% endif %}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-    <div class="gr-edit-layout">
+    {# ═══════════ IDENTITY ═══════════ #}
+    <section class="ge-section">
+        <h3><i class="fas fa-info-circle"></i> Identity</h3>
 
-        {# ═══════════ LEFT COLUMN — FORM ═══════════ #}
-        <div class="gr-edit-form">
-
-            {# ── Section: Identity ── #}
-            <section class="admin-card">
-                <div class="admin-card-head">
-                    <h3><i class="fas fa-id-badge"></i> Identity</h3>
-                </div>
-                <div class="admin-card-body">
-
-                    <div class="admin-form-group">
-                        <label>Group name <span style="color:var(--primary);">*</span></label>
-                        <input type="text" name="name" id="grName" class="admin-input"
-                               required minlength="3" maxlength="120"
-                               value="{{ group.name if group else '' }}"
-                               placeholder="e.g. Form 4 Physics — Weekly">
-                        <div class="hint">Shown to students. Keep it short and clear.</div>
-                    </div>
-
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-                        <div class="admin-form-group">
-                            <label>Icon (emoji)</label>
-                            <input type="text" name="icon" id="grIcon" class="admin-input"
-                                   maxlength="4"
-                                   value="{{ group.icon if group else '📚' }}"
-                                   placeholder="📚"
-                                   style="font-size:22px;text-align:center;">
-                        </div>
-                        <div class="admin-form-group">
-                            <label>Category</label>
-                            <input type="text" name="category" id="grCategory"
-                                   class="admin-input"
-                                   list="grCategoryList"
-                                   maxlength="60"
-                                   value="{{ group.category if group else '' }}"
-                                   placeholder="e.g. Science">
-                            <datalist id="grCategoryList">
-                                {% for c in categories %}
-                                    <option value="{{ c.category }}"></option>
-                                {% endfor %}
-                            </datalist>
-                        </div>
-                    </div>
-
-                    <div class="admin-form-group" style="margin-bottom:0;">
-                        <label>Description</label>
-                        <textarea name="description" id="grDescription"
-                                  class="admin-textarea" rows="3"
-                                  maxlength="300"
-                                  placeholder="Short summary for students…">{{ group.description if group else '' }}</textarea>
-                        <div class="hint">Up to 300 characters.</div>
-                    </div>
-
-                </div>
-            </section>
-
-            {# ── Section: Access ── #}
-            <section class="admin-card">
-                <div class="admin-card-head">
-                    <h3><i class="fas fa-link"></i> Platform &amp; invite link</h3>
-                </div>
-                <div class="admin-card-body">
-
-                    <div class="admin-form-group">
-                        <label>Platform <span style="color:var(--primary);">*</span></label>
-                        <div class="gr-platform-picker" id="grPlatformPicker">
-                            <label class="gr-platform-opt">
-                                <input type="radio" name="platform" value="whatsapp"
-                                       {% if not group or group.platform == 'whatsapp' %}checked{% endif %}>
-                                <span class="gr-platform-face">
-                                    <i class="fab fa-whatsapp" style="color:#25D366;"></i>
-                                    <span>WhatsApp</span>
-                                </span>
-                            </label>
-                            <label class="gr-platform-opt">
-                                <input type="radio" name="platform" value="telegram"
-                                       {% if group and group.platform == 'telegram' %}checked{% endif %}>
-                                <span class="gr-platform-face">
-                                    <i class="fab fa-telegram-plane" style="color:#0088CC;"></i>
-                                    <span>Telegram</span>
-                                </span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="admin-form-group" style="margin-bottom:0;">
-                        <label>Invite link <span style="color:var(--primary);">*</span></label>
-                        <input type="url" name="invite_link" id="grInviteLink"
-                               class="admin-input" required
-                               value="{{ group.invite_link if group else '' }}"
-                               placeholder="https://chat.whatsapp.com/… or https://t.me/…">
-                        <div class="hint" id="grInviteHint">
-                            Must start with <code>https://</code>.
-                        </div>
-                    </div>
-
-                </div>
-            </section>
-
-            {# ── Section: Visibility ── #}
-            <section class="admin-card">
-                <div class="admin-card-head">
-                    <h3><i class="fas fa-eye"></i> Visibility &amp; gating</h3>
-                </div>
-                <div class="admin-card-body">
-
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-
-                        <div class="admin-form-group">
-                            <label>Curriculum</label>
-                            <select name="curriculum" id="grCurriculum" class="admin-select">
-                                {% for c in curricula %}
-                                    <option value="{{ c.code }}"
-                                            {% if group and group.curriculum == c.code %}selected{% endif %}
-                                            {% if not group and c.code == '' %}selected{% endif %}>
-                                        {{ c.flag }} {{ c.label }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                            <div class="hint">Groups with a curriculum only show to matching students.</div>
-                        </div>
-
-                        <div class="admin-form-group">
-                            <label>Tier required</label>
-                            <select name="tier_required" id="grTier" class="admin-select">
-                                {% for t in tier_options %}
-                                    <option value="{{ t.code }}"
-                                            {% if group and group.tier_required == t.code %}selected{% endif %}
-                                            {% if not group and t.code == 'free' %}selected{% endif %}>
-                                        {{ t.icon }} {{ t.label }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                            <div class="hint">Lower-tier students see it as locked.</div>
-                        </div>
-
-                    </div>
-
-                    <div class="admin-form-group">
-                        <label>Subjects covered (optional)</label>
-                        <input type="text" name="subjects" id="grSubjects"
-                               class="admin-input"
-                               maxlength="200"
-                               value="{{ group.subjects if group else '' }}"
-                               placeholder="e.g. physics,mathematics">
-                        <div class="hint">Comma-separated subject codes.</div>
-                    </div>
-
-                    <div class="admin-form-group">
-                        <label>Group type</label>
-                        <select name="group_type" id="grGroupType" class="admin-select">
-                            <option value="community" {% if group and group.group_type == 'community' %}selected{% endif %}>Community</option>
-                            <option value="class"     {% if group and group.group_type == 'class' %}selected{% endif %}>Class</option>
-                            <option value="study"     {% if group and group.group_type == 'study' %}selected{% endif %}>Study</option>
-                        </select>
-                    </div>
-
-                    <div class="admin-form-group">
-                        <label>Display order</label>
-                        <input type="number" name="display_order" id="grDisplayOrder"
-                               class="admin-input" min="0" max="999"
-                               value="{{ group.display_order if group and group.display_order is not none else 0 }}">
-                        <div class="hint">Lower = appears higher in the student list.</div>
-                    </div>
-
-                    <div class="gr-toggle-list">
-
-                        <label class="gr-toggle-item">
-                            <input type="checkbox" name="is_active" id="grIsActive"
-                                   {% if not group or group.is_active %}checked{% endif %}>
-                            <div class="gr-toggle-body">
-                                <div class="gr-toggle-title">Active</div>
-                                <div class="gr-toggle-desc">
-                                    When off, the group is hidden from the student page.
-                                </div>
-                            </div>
-                        </label>
-
-                        <label class="gr-toggle-item">
-                            <input type="checkbox" name="is_featured" id="grIsFeatured"
-                                   {% if group and group.is_featured %}checked{% endif %}>
-                            <div class="gr-toggle-body">
-                                <div class="gr-toggle-title">Featured</div>
-                                <div class="gr-toggle-desc">
-                                    Highlighted at the top of the student list.
-                                </div>
-                            </div>
-                        </label>
-
-                    </div>
-
-                </div>
-            </section>
-
-            {# ── Actions ── #}
-            <div class="gr-edit-actions">
-                <a href="{{ url_for('admin_community.groups') }}"
-                   class="admin-btn secondary lg">
-                    Cancel
-                </a>
-                <button type="submit" class="admin-btn primary lg" id="grSubmitBtn">
-                    <i class="fas fa-save"></i>
-                    {{ 'Create group' if is_new else 'Save changes' }}
-                </button>
-            </div>
-
+        <div class="ge-field">
+            <label>Group name <span class="req">*</span></label>
+            <input type="text" name="name" class="admin-input"
+                   value="{{ g.name or '' }}"
+                   required maxlength="120"
+                   placeholder="e.g. Physics Study Group — Form 4">
         </div>
 
-        {# ═══════════ RIGHT COLUMN — PREVIEW ═══════════ #}
-        <aside class="gr-edit-preview">
-            <div class="admin-card">
-                <div class="admin-card-head">
-                    <h3><i class="fas fa-eye"></i> Student preview</h3>
-                    <span class="hint">How it appears in the list</span>
-                </div>
-                <div class="admin-card-body">
-                    <div class="gr-preview-card" id="grPreview">
-                        <div class="gr-preview-top">
-                            <div class="gr-preview-icon" id="grPreviewIcon">📚</div>
-                            <div class="gr-preview-title">
-                                <div class="gr-preview-name" id="grPreviewName">Group name</div>
-                                <div class="gr-preview-platform" id="grPreviewPlatform">
-                                    <span class="gr-platform-tag whatsapp">
-                                        <i class="fab fa-whatsapp"></i> WhatsApp
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="gr-preview-desc" id="grPreviewDesc">
-                            Description will appear here…
-                        </div>
-                        <div class="gr-preview-meta" id="grPreviewMeta">
-                            <span><i class="fas fa-folder"></i> Category</span>
-                        </div>
-                        <div class="gr-preview-badges" id="grPreviewBadges">
-                            <!-- filled by JS -->
-                        </div>
-                    </div>
-                </div>
+        <div class="ge-grid-2">
+            <div class="ge-field">
+                <label>Category</label>
+                <input type="text" name="category" class="admin-input"
+                       value="{{ g.category or '' }}"
+                       maxlength="60" placeholder="e.g. Science, Languages">
             </div>
-
-            {% if not is_new %}
-            <div class="admin-card" style="margin-top:16px;">
-                <div class="admin-card-head">
-                    <h3><i class="fas fa-chart-simple"></i> Stats</h3>
-                </div>
-                <div class="admin-card-body">
-                    <div class="gr-preview-stat">
-                        <span class="lbl">Clicks</span>
-                        <span class="val">{{ group.click_count or 0 }}</span>
-                    </div>
-                    <div class="gr-preview-stat">
-                        <span class="lbl">Created</span>
-                        <span class="val">{{ (group.created_at or '')[:10] }}</span>
-                    </div>
-                    <div class="gr-preview-stat">
-                        <span class="lbl">Last updated</span>
-                        <span class="val">{{ (group.updated_at or '')[:10] or '—' }}</span>
-                    </div>
-                </div>
+            <div class="ge-field">
+                <label>Icon (emoji)</label>
+                <input type="text" name="icon" class="admin-input"
+                       value="{{ g.icon or '📚' }}"
+                       maxlength="4" placeholder="📚">
             </div>
-            {% endif %}
+        </div>
 
-            {# ── Tips ── #}
-            <div class="gr-tip">
-                <div class="gr-tip-icon">💡</div>
-                <div class="gr-tip-body">
-                    <strong>Tips for a good group</strong>
-                    <ul>
-                        <li>Use a clear name (Form 4 Physics, not "Group 1").</li>
-                        <li>Write a one-line description that says what's inside.</li>
-                        <li>Test the invite link yourself before saving.</li>
-                        <li>Use curriculum + tier gates sparingly — start permissive.</li>
-                    </ul>
-                </div>
+        <div class="ge-field">
+            <label>Description</label>
+            <textarea name="description" class="admin-textarea" rows="3"
+                      maxlength="500"
+                      placeholder="Short description shown to students…">{{ g.description or '' }}</textarea>
+        </div>
+    </section>
+
+    {# ═══════════ PLATFORM & LINK ═══════════ #}
+    <section class="ge-section">
+        <h3><i class="fas fa-link"></i> Platform &amp; Link</h3>
+
+        <div class="ge-field">
+            <label>Platform</label>
+            <div class="ge-radios">
+                <label class="ge-radio {% if (g.platform or 'whatsapp') == 'whatsapp' %}selected{% endif %}"
+                       data-group="platform">
+                    <input type="radio" name="platform" value="whatsapp"
+                           {% if (g.platform or 'whatsapp') == 'whatsapp' %}checked{% endif %}>
+                    <span class="dot"></span>
+                    <i class="fab fa-whatsapp" style="color:#25D366;"></i> WhatsApp
+                </label>
+                <label class="ge-radio {% if g.platform == 'telegram' %}selected{% endif %}"
+                       data-group="platform">
+                    <input type="radio" name="platform" value="telegram"
+                           {% if g.platform == 'telegram' %}checked{% endif %}>
+                    <span class="dot"></span>
+                    <i class="fab fa-telegram" style="color:#0088CC;"></i> Telegram
+                </label>
             </div>
+        </div>
 
-        </aside>
+        <div class="ge-field">
+            <label>Invite link <span class="req">*</span></label>
+            <input type="url" name="invite_link" class="admin-input"
+                   value="{{ g.invite_link or '' }}"
+                   required
+                   placeholder="https://chat.whatsapp.com/... or https://t.me/...">
+            <div class="hint">Must start with https:// — this is what students click to join.</div>
+        </div>
+    </section>
 
+    {# ═══════════ ACCESS ═══════════ #}
+    <section class="ge-section">
+        <h3><i class="fas fa-shield-alt"></i> Access</h3>
+        <div class="section-hint">
+            Control who can see and join this group.
+        </div>
+
+        {# Curriculum #}
+        <div class="ge-field">
+            <label>Curriculum</label>
+            <div class="ge-radios">
+                <label class="ge-radio {% if not g.curriculum %}selected{% endif %}"
+                       data-group="curriculum">
+                    <input type="radio" name="curriculum" value=""
+                           {% if not g.curriculum %}checked{% endif %}>
+                    <span class="dot"></span>
+                    All curricula
+                </label>
+                <label class="ge-radio {% if g.curriculum == 'SO' %}selected{% endif %}"
+                       data-group="curriculum">
+                    <input type="radio" name="curriculum" value="SO"
+                           {% if g.curriculum == 'SO' %}checked{% endif %}>
+                    <span class="dot"></span>
+                    Somalia only
+                </label>
+                <label class="ge-radio {% if g.curriculum == 'PL' %}selected{% endif %}"
+                       data-group="curriculum">
+                    <input type="radio" name="curriculum" value="PL"
+                           {% if g.curriculum == 'PL' %}checked{% endif %}>
+                    <span class="dot"></span>
+                    Puntland only
+                </label>
+                <label class="ge-radio {% if g.curriculum == 'SL' %}selected{% endif %}"
+                       data-group="curriculum">
+                    <input type="radio" name="curriculum" value="SL"
+                           {% if g.curriculum == 'SL' %}checked{% endif %}>
+                    <span class="dot"></span>
+                    Somaliland only
+                </label>
+            </div>
+            <div class="hint">
+                <strong>All curricula</strong> = every student sees this group and can join regardless of their curriculum.
+            </div>
+        </div>
+
+        {# Tier #}
+        <div class="ge-field">
+            <label>Who can join</label>
+            <div class="ge-radios">
+                <label class="ge-radio {% if (g.tier_required or 'free') == 'free' %}selected{% endif %}"
+                       data-group="tier_required">
+                    <input type="radio" name="tier_required" value="free"
+                           {% if (g.tier_required or 'free') == 'free' %}checked{% endif %}>
+                    <span class="dot"></span>
+                    Everyone (Free)
+                </label>
+                <label class="ge-radio {% if g.tier_required == 'premium' %}selected{% endif %}"
+                       data-group="tier_required">
+                    <input type="radio" name="tier_required" value="premium"
+                           {% if g.tier_required == 'premium' %}checked{% endif %}>
+                    <span class="dot"></span>
+                    Premium only
+                </label>
+            </div>
+        </div>
+
+        {# Verified gate #}
+        <div class="ge-field">
+            <label>Account requirement</label>
+            <label class="ge-check">
+                <input type="checkbox" name="requires_verified" value="1"
+                       {% if g.requires_verified %}checked{% endif %}>
+                <span>
+                    <span class="chk-title">Verified accounts only</span>
+                    <span class="chk-desc">Only students whose accounts have been verified by an admin can join.</span>
+                </span>
+            </label>
+        </div>
+    </section>
+
+    {# ═══════════ VISIBILITY & DISPLAY ═══════════ #}
+    <section class="ge-section">
+        <h3><i class="fas fa-eye"></i> Visibility &amp; Display</h3>
+
+        <label class="ge-check">
+            <input type="checkbox" name="is_visible" value="1"
+                   {% if g.is_visible is not defined or g.is_visible %}checked{% endif %}>
+            <span>
+                <span class="chk-title">Visible in the public group list</span>
+                <span class="chk-desc">Turn off to keep the group hidden from everyone except admins.</span>
+            </span>
+        </label>
+
+        <label class="ge-check">
+            <input type="checkbox" name="is_active" value="1"
+                   {% if g.is_active is not defined or g.is_active %}checked{% endif %}>
+            <span>
+                <span class="chk-title">Active</span>
+                <span class="chk-desc">Inactive groups are hidden from the join flow.</span>
+            </span>
+        </label>
+
+        <label class="ge-check">
+            <input type="checkbox" name="is_featured" value="1"
+                   {% if g.is_featured %}checked{% endif %}>
+            <span>
+                <span class="chk-title">Featured</span>
+                <span class="chk-desc">Shown at the top of the group list in a highlighted section.</span>
+            </span>
+        </label>
+
+        <div class="ge-grid-2" style="margin-top:14px;">
+            <div class="ge-field">
+                <label>Display order</label>
+                <input type="number" name="display_order" class="admin-input"
+                       value="{{ g.display_order or 0 }}"
+                       min="0" max="9999">
+                <div class="hint">Lower numbers appear first.</div>
+            </div>
+            <div class="ge-field">
+                <label>Subjects (optional)</label>
+                <input type="text" name="subjects" class="admin-input"
+                       value="{{ g.subjects or '' }}"
+                       maxlength="200"
+                       placeholder="e.g. physics,chemistry">
+                <div class="hint">Comma-separated subject codes.</div>
+            </div>
+        </div>
+    </section>
+
+    {# ═══════════ ACTIONS ═══════════ #}
+    <div style="display:flex;gap:12px;margin-bottom:24px;">
+        <a href="{{ url_for('admin_community.groups') }}"
+           class="admin-btn secondary lg" style="flex:1;justify-content:center;">
+            <i class="fas fa-times"></i> Cancel
+        </a>
+        <button type="submit" class="admin-btn primary lg" style="flex:1;justify-content:center;">
+            <i class="fas fa-save"></i> {{ 'Create Group' if is_new else 'Save Changes' }}
+        </button>
     </div>
 
 </form>
+</div>
 
-{% endblock %}
+<script>
+(function () {
+    'use strict';
 
-{% block admin_js %}
-<script src="{{ url_for('static', filename='js/admin/community.js') }}"></script>
+    // Radio-card visual selection
+    document.querySelectorAll('.ge-radio').forEach(function (el) {
+        el.addEventListener('click', function () {
+            var group = el.dataset.group;
+            document.querySelectorAll('.ge-radio[data-group="' + group + '"]')
+                .forEach(function (sib) { sib.classList.remove('selected'); });
+            el.classList.add('selected');
+        });
+    });
+})();
+</script>
+
 {% endblock %}

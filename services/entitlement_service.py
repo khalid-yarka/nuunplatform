@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # CONSTANTS
 # ============================================
 
-VALID_TIERS = ('free', 'premium', 'pro')
+VALID_TIERS = ('free', 'premium')
 VALID_POLICY_TYPES = ('permission', 'level', 'quota', 'content')
 
 # Canonical fields that can appear on a per-tier policy row, both in

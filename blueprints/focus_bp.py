@@ -7,6 +7,9 @@
 #   - Bookmarks (saved + liked questions)
 #   - Analytics (charts)
 #   - Tips (level 3)
+#
+# Tier model: free / premium only. No pro.
+# Unlimited is represented as None; templates check `is none`.
 # ---------------------------------------------------------------
 
 from flask import Blueprint, render_template, session, redirect, url_for, flash
@@ -39,8 +42,12 @@ def index():
     bookmarks_quota = entitlement_service.get_limit(user_id, 'focus_bookmarks')
     analytics_level = entitlement_service.get_level(user_id, 'focus_analytics')
 
-    sources_unlimited = sources_quota is None
-    bookmarks_unlimited = bookmarks_quota is None
+    # A quota of None, 0, or 999 means "unlimited" in this codebase.
+    def _unlimited(v):
+        return v is None or v >= 999
+
+    sources_unlimited = _unlimited(sources_quota)
+    bookmarks_unlimited = _unlimited(bookmarks_quota)
 
     has_sources_access = sources_unlimited or (sources_quota or 0) > 0
     has_bookmarks_access = bookmarks_unlimited or (bookmarks_quota or 0) > 0
@@ -100,14 +107,14 @@ def index():
         sources_total=sources_total,
         sources_displayed=sources_displayed,
         sources_more_count=sources_more_count,
-        sources_quota=sources_quota,
+        sources_quota=None if sources_unlimited else sources_quota,
         sources_unlimited=sources_unlimited,
 
         bookmarks=bookmarks,
         bookmark_stats=bookmark_stats,
         bookmarks_displayed=bookmarks_displayed,
         bookmarks_more_count=bookmarks_more_count,
-        bookmarks_quota=bookmarks_quota,
+        bookmarks_quota=None if bookmarks_unlimited else bookmarks_quota,
         bookmarks_unlimited=bookmarks_unlimited,
 
         analytics=analytics,

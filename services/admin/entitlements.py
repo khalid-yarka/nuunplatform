@@ -156,7 +156,7 @@ def build_feature_catalog() -> list[dict]:
         modified = len(overrides) > 0
 
         summary_parts = []
-        for tier in ('free', 'premium', 'pro'):
+        for tier in ('free', 'premium'):
             tp = feature['policies'].get(tier, {})
             if not tp.get('is_enabled'):
                 summary_parts.append('—')
@@ -201,7 +201,7 @@ def build_feature_detail(feature_key: str) -> Optional[dict]:
     overrides = list_overrides_for_feature(feature_key)
 
     tiers_out = {}
-    for tier in ('free', 'premium', 'pro'):
+    for tier in ('free', 'premium'):
         tp = feature['policies'].get(tier, {})
         tier_out = {
             'is_enabled':  bool(tp.get('is_enabled')),
@@ -294,7 +294,7 @@ def save_feature_detail(
             changed += 1
 
     # ---------- Per-tier fields ----------
-    for tier in ('free', 'premium', 'pro'):
+    for tier in ('free', 'premium'):
         submitted_tier = payload.get('tiers', {}).get(tier)
         if not submitted_tier:
             continue

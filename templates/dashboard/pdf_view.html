@@ -3,7 +3,6 @@
 {% block title %}{{ pdf.title }} - {{ _('pdf_view.reading_title') }}{% endblock %}
 
 {% block extra_css %}
-<!-- Override dashboard layout for clean reading mode -->
 <style>
     /* ============================================
        HIDE SIDEBAR & TOP NAVBAR
@@ -30,7 +29,6 @@
         flex-direction: column !important;
     }
 
-    /* Remove footer */
     footer {
         display: none !important;
     }
@@ -48,7 +46,6 @@
         position: relative;
     }
 
-    /* Minimal Top Bar */
     .pdf-topbar {
         display: flex;
         align-items: center;
@@ -138,7 +135,6 @@
         box-shadow: 0 4px 12px rgba(0, 136, 204, 0.30);
     }
 
-    /* PDF Container */
     .pdf-container {
         flex: 1;
         background: #e8e6e4;
@@ -170,7 +166,6 @@
         background: white;
         position: relative;
         touch-action: pan-y pinch-zoom;
-        max-width: 100%;
     }
 
     .pdf-container .page-wrapper:last-child {
@@ -186,7 +181,6 @@
         touch-action: pan-y pinch-zoom;
     }
 
-    /* Loading State */
     .pdf-loading {
         position: absolute;
         top: 50%;
@@ -241,10 +235,6 @@
         100% { transform: rotate(360deg); }
     }
 
-    /* ============================================
-       CONTROLS - FIXED AT BOTTOM
-       ============================================ */
-
     .pdf-controls {
         position: fixed;
         bottom: 0;
@@ -262,6 +252,7 @@
         z-index: 100;
         box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06);
         min-height: 56px;
+        padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
     }
 
     .pdf-controls .group {
@@ -345,63 +336,49 @@
         -webkit-appearance: none;
     }
 
-    /* ============================================
-       RESPONSIVE
-       ============================================ */
-
     @media (max-width: 768px) {
         .pdf-topbar {
             padding: 8px 12px;
             min-height: 40px;
         }
-
         .pdf-topbar .left .title {
             font-size: 13px;
             max-width: 150px;
         }
-
         .pdf-topbar .right .views {
             font-size: 12px;
         }
-
         .pdf-topbar .right .btn-telegram {
             padding: 4px 10px;
             font-size: 12px;
         }
-
         .pdf-container {
             padding: 12px 12px 70px 12px;
             height: calc(100vh - 95px);
         }
-
         .pdf-container .page-wrapper {
             margin-bottom: 12px;
         }
-
         .pdf-controls {
             padding: 8px 10px;
             gap: 4px;
             min-height: 48px;
         }
-
         .pdf-controls button {
             padding: 3px 8px;
             font-size: 12px;
             height: 28px;
             min-width: 26px;
         }
-
         .pdf-controls .page-info {
             font-size: 12px;
             min-width: 50px;
         }
-
         .pdf-controls .page-input {
             width: 34px;
             font-size: 12px;
             height: 28px;
         }
-
         .pdf-controls .zoom-level {
             font-size: 12px;
             min-width: 36px;
@@ -413,50 +390,41 @@
             font-size: 12px;
             max-width: 100px;
         }
-
         .pdf-topbar .left .back-link {
             font-size: 12px;
             padding: 2px 6px;
         }
-
         .pdf-container {
             padding: 8px 8px 60px 8px;
             height: calc(100vh - 85px);
         }
-
         .pdf-container .page-wrapper {
             margin-bottom: 8px;
         }
-
         .pdf-controls {
             padding: 6px 6px;
             gap: 2px;
             min-height: 42px;
         }
-
         .pdf-controls button {
             padding: 2px 6px;
             font-size: 11px;
             height: 26px;
             min-width: 22px;
         }
-
         .pdf-controls .page-info {
             font-size: 11px;
             min-width: 40px;
         }
-
         .pdf-controls .page-input {
             width: 30px;
             font-size: 11px;
             height: 26px;
         }
-
         .pdf-controls .zoom-level {
             font-size: 11px;
             min-width: 30px;
         }
-
         .pdf-controls .group .divider {
             height: 18px;
             margin: 0 3px;
@@ -466,10 +434,8 @@
 {% endblock %}
 
 {% block dashboard_content %}
-<!-- Clean PDF Viewer - No Sidebar, No Navbar -->
 <div class="pdf-reader-wrapper">
 
-    <!-- Minimal Top Bar -->
     <div class="pdf-topbar">
         <div class="left">
             <a href="{{ url_for('pdfs.list_pdfs') }}" class="back-link">
@@ -488,9 +454,7 @@
         </div>
     </div>
 
-    <!-- PDF Container -->
     <div class="pdf-container" id="pdfContainer">
-        <!-- Loading State -->
         <div class="pdf-loading" id="pdfLoading">
             <div class="spinner"></div>
             <p>{{ _('pdf_view.loading') }}</p>
@@ -498,11 +462,9 @@
                 <div class="fill"></div>
             </div>
         </div>
-        <!-- Pages will be inserted here -->
         <div id="pdfPagesContainer" style="width:100%;"></div>
     </div>
 
-    <!-- Controls - FIXED AT BOTTOM -->
     <div class="pdf-controls" id="pdfControls" style="display: none;">
         <div class="group">
             <button id="prevPageBtn" disabled><i class="fas fa-chevron-left"></i></button>
@@ -530,22 +492,22 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- PDF.js CDN -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <script>
 const I18N = {
-    pdf_not_available:    "{{ _('pdf_view.not_available') }}",
-    pdf_telegram_hint:    "{{ _('pdf_view.telegram_hint') }}",
-    pdf_failed_load:      "{{ _('pdf_view.failed_load') }}",
+    pdf_not_available:      "{{ _('pdf_view.not_available') }}",
+    pdf_telegram_hint:      "{{ _('pdf_view.telegram_hint') }}",
+    pdf_failed_load:        "{{ _('pdf_view.failed_load') }}",
     fullscreen_unsupported: "{{ _('pdf_view.fullscreen_unsupported') }}",
-    saving_disabled:      "{{ _('pdf_view.saving_disabled') }}"
+    saving_disabled:        "{{ _('pdf_view.saving_disabled') }}",
+    get_pdf_btn:            "{{ _('pdf_view.get_pdf_btn') }}"
 };
 
 document.addEventListener('DOMContentLoaded', function() {
     let PDF_URL = null;
     {% if pdf.file_url %}
-        PDF_URL = "{{ pdf.file_url }}";
+        PDF_URL = {{ pdf.file_url|tojson }};
     {% else %}
         PDF_URL = "{{ url_for('pdfs.stream_pdf', code=pdf.code) }}";
     {% endif %}
@@ -559,7 +521,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </p>
             <a href="{{ url_for('pdfs.telegram_download', code=pdf.code) }}" target="_blank"
                style="display:inline-block; margin-top:16px; padding:10px 24px; background:#0088CC; color:white; border-radius:8px; text-decoration:none; font-weight:600;">
-                <i class="fab fa-telegram-plane"></i> {{ _('pdf_view.get_pdf_btn') }}
+                <i class="fab fa-telegram-plane"></i> ${I18N.get_pdf_btn}
             </a>
         `;
         document.getElementById('pdfControls').style.display = 'none';
@@ -669,7 +631,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <p style="font-size:14px; color:var(--text-secondary);">${error.message}</p>
                     <a href="{{ url_for('pdfs.telegram_download', code=pdf.code) }}" target="_blank"
                        style="display:inline-block; margin-top:12px; padding:8px 20px; background:#0088CC; color:white; border-radius:8px; text-decoration:none; font-weight:600;">
-                        <i class="fab fa-telegram-plane"></i> {{ _('pdf_view.get_pdf_btn') }}
+                        <i class="fab fa-telegram-plane"></i> ${I18N.get_pdf_btn}
                     </a>
                 `;
                 controls.style.display = 'none';

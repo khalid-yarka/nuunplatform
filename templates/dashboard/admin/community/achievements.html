@@ -43,11 +43,11 @@
         <span class="stat-label">Premium tier</span>
     </div>
     <div class="admin-stat tone-green">
-        <div class="stat-head"><span class="stat-icon"><i class="fas fa-crown"></i></span></div>
+        <div class="stat-head"><span class="stat-icon"><i class="fas fa-unlock"></i></span></div>
         <span class="stat-value">
-            {{ achievements | selectattr('tier_required', 'equalto', 'pro') | list | length }}
+            {{ achievements | selectattr('tier_required', 'equalto', 'free') | list | length }}
         </span>
-        <span class="stat-label">Pro tier</span>
+        <span class="stat-label">Free tier</span>
     </div>
 </div>
 

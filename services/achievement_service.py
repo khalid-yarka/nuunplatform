@@ -1,4 +1,5 @@
 # services/achievement_service.py
+# Tier model: free / premium only. No pro.
 
 import logging
 from typing import List, Dict, Optional
@@ -9,35 +10,34 @@ from history_logger import add_history_entry
 logger = logging.getLogger(__name__)
 
 # -------------------------------------------------------------------
-# Achievements Definition (pre‑populated)
-# Vocabulary: free / premium / pro (canonical)
+# Achievements Definition (pre-populated)
 # -------------------------------------------------------------------
 
 ACHIEVEMENTS = [
     {
         "name": "First Quiz",
-        "description": "Complete your first quiz.",
+        "description": "Complete your first practice.",
         "icon": "🏁",
         "tier_required": "free",
         "unlock_condition": "complete_quiz_count >= 1",
     },
     {
         "name": "Quiz Master",
-        "description": "Complete 10 quizzes.",
+        "description": "Complete 10 practices.",
         "icon": "🎓",
         "tier_required": "free",
         "unlock_condition": "complete_quiz_count >= 10",
     },
     {
         "name": "Perfect Score",
-        "description": "Get 100% on a quiz.",
+        "description": "Get 100% on a practice.",
         "icon": "💯",
         "tier_required": "free",
         "unlock_condition": "perfect_quiz",
     },
     {
         "name": "Live Participant",
-        "description": "Join your first live quiz.",
+        "description": "Join your first competition.",
         "icon": "⚡",
         "tier_required": "free",
         "unlock_condition": "live_quiz_joined",
@@ -49,17 +49,12 @@ ACHIEVEMENTS = [
         "tier_required": "premium",
         "unlock_condition": "achievement_count >= 5",
     },
-    {
-        "name": "Premium Learner",
-        "description": "Access premium resources.",
-        "icon": "💎",
-        "tier_required": "premium",
-        "unlock_condition": "premium_resource_access",
-    },
 ]
+
 
 def get_achievement_definitions():
     return ACHIEVEMENTS
+
 
 # -------------------------------------------------------------------
 # Database Helpers
@@ -83,10 +78,12 @@ def ensure_achievements_seeded():
     except Exception as e:
         logger.error(f"Failed to seed achievements: {e}")
 
+
 def get_all_achievements() -> List[Dict]:
     cursor = execute_with_retry("SELECT * FROM achievements ORDER BY id")
     rows = cursor.fetchall()
     return [dict(row) for row in rows]
+
 
 def get_user_achievement_ids(user_id: int) -> List[int]:
     cursor = execute_with_retry(
@@ -94,6 +91,7 @@ def get_user_achievement_ids(user_id: int) -> List[int]:
         (user_id,)
     )
     return [row['achievement_id'] for row in cursor.fetchall()]
+
 
 def award_achievement(user_id: int, achievement_id: int) -> bool:
     """Award an achievement if not already earned."""
@@ -109,7 +107,6 @@ def award_achievement(user_id: int, achievement_id: int) -> bool:
         (user_id, achievement_id), commit=True
     )
 
-    # ***** ADD HISTORY ENTRY *****
     ach_cursor = execute_with_retry(
         "SELECT name, icon FROM achievements WHERE id = ?", (achievement_id,)
     )
@@ -136,6 +133,7 @@ def award_achievement(user_id: int, achievement_id: int) -> bool:
 
     return True
 
+
 def get_user_achievements(user_id: int) -> List[Dict]:
     cursor = execute_with_retry("""
         SELECT a.*, ua.unlocked_at
@@ -146,6 +144,7 @@ def get_user_achievements(user_id: int) -> List[Dict]:
     """, (user_id,))
     return [dict(row) for row in cursor.fetchall()]
 
+
 # -------------------------------------------------------------------
 # Condition Evaluation
 # -------------------------------------------------------------------
@@ -155,8 +154,6 @@ def evaluate_conditions(user_id: int, event: str, data: Dict) -> List[int]:
     Given an event (e.g., 'quiz_completed') and associated data,
     return a list of achievement IDs that should be awarded.
     """
-    from db import execute_with_retry
-
     cursor = execute_with_retry(
         "SELECT COUNT(*) as cnt FROM quiz_attempts WHERE student_id = ?",
         (user_id,)
@@ -178,8 +175,6 @@ def evaluate_conditions(user_id: int, event: str, data: Dict) -> List[int]:
     achievements = get_user_achievement_ids(user_id)
     ach_count = len(achievements)
 
-    premium_access = False
-
     to_award = []
     all_ach = get_all_achievements()
     for ach in all_ach:
@@ -196,9 +191,8 @@ def evaluate_conditions(user_id: int, event: str, data: Dict) -> List[int]:
             to_award.append(ach['id'])
         elif condition == 'achievement_count >= 5' and ach_count >= 5:
             to_award.append(ach['id'])
-        elif condition == 'premium_resource_access' and premium_access:
-            to_award.append(ach['id'])
     return to_award
+
 
 def check_and_award_achievements(user_id: int, event: str, data: Dict):
     """Evaluate conditions and award any new achievements."""
@@ -209,8 +203,9 @@ def check_and_award_achievements(user_id: int, event: str, data: Dict):
             awarded.append(ach_id)
     return awarded
 
+
 # -------------------------------------------------------------------
-# Tier‑aware Display Helpers
+# Tier-aware Display Helpers
 # -------------------------------------------------------------------
 
 def get_visible_achievements(user_id: int) -> List[Dict]:
@@ -223,6 +218,7 @@ def get_visible_achievements(user_id: int) -> List[Dict]:
         return all_user_ach[:50]
     else:
         return all_user_ach
+
 
 def get_showcase_badges(user_id: int) -> List[Dict]:
     """Return badges for showcase, limited by tier."""

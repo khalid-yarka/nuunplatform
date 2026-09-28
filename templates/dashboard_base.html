@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - Student Platform{% endblock %}
+{% block title %}Dashboard - NuunPlatform{% endblock %}
 
 {% block extra_head %}
 {{ super() }}
@@ -240,6 +240,70 @@
 
     /* Honour reduced motion */
     .reduced-motion .whatsapp-fab::before { animation: none; }
+
+    /* ============================================
+       NAVBAR LANGUAGE SWITCH (EN | SO)
+       ============================================ */
+    .navbar-right .lang-switch {
+        display: inline-flex;
+        align-items: center;
+        height: 34px;
+        padding: 2px;
+        gap: 1px;
+        background: var(--background);
+        border: 1.5px solid var(--border);
+        border-radius: 18px;
+        transition: border-color 0.2s ease;
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+    }
+    .navbar-right .lang-switch:hover {
+        border-color: var(--primary);
+    }
+    .navbar-right .lang-switch__opt {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 34px;
+        height: 26px;
+        padding: 0 8px;
+        border: none;
+        border-radius: 14px;
+        background: transparent;
+        color: var(--text-secondary);
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        line-height: 1;
+    }
+    .navbar-right .lang-switch__opt:hover {
+        color: var(--text);
+        background: var(--surface);
+    }
+    .navbar-right .lang-switch__opt.active {
+        background: var(--primary);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(255, 49, 56, 0.25);
+    }
+    .navbar-right .lang-switch__opt:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    @media (max-width: 480px) {
+        .navbar-right .lang-switch {
+            height: 30px;
+            padding: 2px;
+        }
+        .navbar-right .lang-switch__opt {
+            min-width: 28px;
+            height: 22px;
+            padding: 0 6px;
+            font-size: 10px;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -248,6 +312,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/upgrade.css') }}" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/prompt-cards.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/discount-chip.css') }}?v=3" />
 {% block dashboard_css %}{% endblock %}
 {% endblock %}
 
@@ -339,9 +404,7 @@
             <div class="avatar avatar-primary">
                 {{ session.user_name[0] if session.user_name else 'U' }}
                 {% set current_tier = normalize_tier(session.tier) %}
-                {% if current_tier == 'pro' %}
-                    <span class="tier-badge tier-pro" title="{{ _('sidebar.tier.pro') }}"><i class="fas fa-crown"></i></span>
-                {% elif current_tier == 'premium' %}
+                {% if current_tier == 'premium' %}
                     <span class="tier-badge tier-premium" title="{{ _('sidebar.tier.premium') }}"><i class="fas fa-key"></i></span>
                 {% endif %}
             </div>
@@ -398,7 +461,7 @@
                    data-title="{{ _('nav.focus') }}" title="{{ _('nav.focus') }}">
                     <span class="nav-icon"><i class="fas fa-bullseye"></i></span>
                     <span class="nav-text">{{ _('nav.focus') }}</span>
-                    {% if not has_focus_access %}<span class="nav-badge">🔒</span>{% endif %}
+                    {% if has_focus_access is defined and not has_focus_access %}<span class="nav-badge">🔒</span>{% endif %}
                 </a>
 
                 <a href="{{ url_for('pdfs.list_pdfs') }}"
@@ -543,6 +606,38 @@
                 <span class="page-title">{% block page_title %}Dashboard{% endblock %}</span>
             </div>
             <div class="navbar-right">
+
+                {# ── Language switch (EN | SO) ── #}
+                {% set current_lang = (settings.get('appearance.language') or 'en') %}
+                <div class="lang-switch" id="langSwitch" role="radiogroup" aria-label="Language">
+                    <button type="button"
+                            class="lang-switch__opt {% if current_lang == 'en' %}active{% endif %}"
+                            data-lang="en"
+                            role="radio"
+                            aria-checked="{{ 'true' if current_lang == 'en' else 'false' }}">EN</button>
+                    <button type="button"
+                            class="lang-switch__opt {% if current_lang == 'so' %}active{% endif %}"
+                            data-lang="so"
+                            role="radio"
+                            aria-checked="{{ 'true' if current_lang == 'so' else 'false' }}">SO</button>
+                </div>
+
+                {# ── Discount countdown chip ── #}
+                {% if discount_chip %}
+                <button type="button"
+                        class="discount-chip"
+                        id="discountChip"
+                        data-countdown-until="{{ discount_chip.expires_at }}"
+                        onclick="if (window.openUpgradeSheet) window.openUpgradeSheet({});"
+                        aria-label="50% off your first month of Premium. Tap to upgrade.">
+                    <span class="dc-icon" aria-hidden="true">⏳</span>
+                    <span class="dc-body">
+                        <span class="dc-label">50% off · first month</span>
+                        <span class="dc-time" data-countdown-text>—</span>
+                    </span>
+                </button>
+                {% endif %}
+
                 <button class="theme-toggle" id="themeToggle" aria-label="{{ _('navbar.toggle_theme') }}">
                     <i class="fas fa-sun" id="themeIcon"></i>
                 </button>
@@ -709,7 +804,7 @@
 <!-- UPGRADE SHEET                                -->
 <!-- ============================================ -->
 <div class="upgrade-sheet__backdrop" id="upgradeBackdrop"></div>
-<div class="upgrade-sheet" id="upgradeSheet" role="dialog" aria-modal="true" aria-label="Upgrade Tiers Preview">
+<div class="upgrade-sheet" id="upgradeSheet" role="dialog" aria-modal="true" aria-label="Upgrade to Premium">
     <div class="upgrade-sheet__handle" id="upgradeHandle"></div>
     <button class="upgrade-sheet__close" id="upgradeClose" aria-label="Close preview">&times;</button>
     <div class="upgrade-sheet__content">
@@ -720,8 +815,6 @@
         </div>
         <div class="upgrade-pagination" id="upgradePagination" style="display:none;">
             <button class="upgrade-pagination__dot active" data-slide="0" aria-label="Slide 1"></button>
-            <button class="upgrade-pagination__dot" data-slide="1" aria-label="Slide 2"></button>
-            <button class="upgrade-pagination__dot" data-slide="2" aria-label="Slide 3"></button>
         </div>
     </div>
 </div>
@@ -754,6 +847,7 @@
 <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
 <script src="{{ url_for('static', filename='js/upgrade.js') }}"></script>
 <script src="{{ url_for('static', filename='js/font-size-fix.js') }}"></script>
+<script src="{{ url_for('static', filename='js/discount-chip.js') }}?v=3" defer></script>
 {% block dashboard_js %}{% endblock %}
 
 <!-- Settings bootstrap for authenticated pages -->
@@ -783,6 +877,69 @@
     window.userPhone = "{{ session.user_phone or '' }}";
     window.upgradeAdminPhone = "{{ super_admin_phone or '' }}";
     window.baseUrl = "{{ request.url_root.rstrip('/') }}";
+    window.upgradeState = {
+        hasDiscount: {{ 'true' if discount_chip else 'false' }},
+        publicId: "{{ session.public_id or '' }}",
+        userId: "{{ session.user_id or '' }}",
+        tier: "{{ normalize_tier(session.tier) if session.tier else 'free' }}"
+    };
+</script>
+
+<!-- ============================================ -->
+<!-- NAVBAR LANGUAGE SWITCH — JS                  -->
+<!-- ============================================ -->
+<script>
+(function () {
+    'use strict';
+    var box = document.getElementById('langSwitch');
+    if (!box) return;
+
+    var current = box.querySelector('.lang-switch__opt.active');
+    var currentLang = current ? current.dataset.lang : 'en';
+
+    box.querySelectorAll('.lang-switch__opt').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var newLang = btn.dataset.lang;
+            if (newLang === currentLang) return;
+
+            box.querySelectorAll('.lang-switch__opt').forEach(function (b) {
+                b.classList.remove('active');
+                b.setAttribute('aria-checked', 'false');
+                b.disabled = true;
+            });
+            btn.classList.add('active');
+            btn.setAttribute('aria-checked', 'true');
+
+            var token = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+            fetch('/settings/api', {
+                method: 'PATCH',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': token,
+                },
+                body: JSON.stringify({ 'appearance.language': newLang }),
+            })
+            .then(function (r) {
+                if (!r.ok) throw new Error('save failed');
+                return r.json();
+            })
+            .then(function () {
+                window.location.reload();
+            })
+            .catch(function () {
+                // Revert on failure
+                currentLang = (newLang === 'so') ? 'en' : 'so';
+                box.querySelectorAll('.lang-switch__opt').forEach(function (b) {
+                    var isActive = b.dataset.lang === currentLang;
+                    b.classList.toggle('active', isActive);
+                    b.setAttribute('aria-checked', isActive ? 'true' : 'false');
+                    b.disabled = false;
+                });
+            });
+        });
+    });
+})();
 </script>
 
 <!-- ============================================ -->

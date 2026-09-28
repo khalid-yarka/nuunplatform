@@ -7,33 +7,14 @@
 # Blueprint name is 'upgrade' so existing templates that call
 # url_for('upgrade.*') keep working unchanged.
 #
-# Routes (admin):
-#   GET  /upgrade/admin/upgrade-requests
-#   GET  /upgrade/admin/upgrade-requests/<request_id>
-#   POST /upgrade/admin/upgrade-requests/<request_id>/approve
-#   POST /upgrade/admin/upgrade-requests/<request_id>/reject
-#   POST /upgrade/admin/upgrade-requests/<request_id>/delete
-#   POST /upgrade/admin/upgrade-requests/bulk
-#   GET  /upgrade/admin/upgrade-requests/export
-#   GET  /upgrade/admin/revenue
-#   GET  /upgrade/admin/discounts
-#   GET  /upgrade/admin/discounts/create
-#   POST /upgrade/admin/discounts/create
-#   GET  /upgrade/admin/discounts/<id>/edit
-#   POST /upgrade/admin/discounts/<id>/edit
-#   POST /upgrade/admin/discounts/<id>/delete
-#   POST /upgrade/admin/discounts/bulk
-#
-# Routes (user-facing):
-#   GET  /upgrade/                      → redirect
-#   GET  /upgrade/admin/                → redirect
-#   POST /upgrade/api/validate-discount
-#   POST /upgrade/api/request
+# Two-tier model (free / premium). Pro removed entirely.
+# Premium is monthly-only ($1.00). First payment gets 50% off.
 # ============================================================
 
 import csv
 import io
 import logging
+import secrets
 import sqlite3
 import time
 from datetime import datetime, timedelta
@@ -45,7 +26,7 @@ from flask import (
 )
 
 from db import get_student_by_id, is_admin, execute_with_retry
-from services.tier_service import set_user_tier
+from admin_users_db import set_user_tier_admin
 from utils import validate_csrf, get_somali_time, get_somali_time_db, SOMALI_TIMEZONE
 from config import Config
 from services.admin.guards import admin_can
@@ -60,14 +41,17 @@ upgrade_bp = Blueprint('upgrade', __name__, url_prefix='/upgrade')
 # ============================================================
 # CONSTANTS / PRICING
 # ============================================================
+# Prices are in cents (integers). Dollars are only used at display.
 
 PRICES = {
-    'premium': {'monthly': 1.25, 'term': 3.00, 'yearly': 5.00},
-    'pro':     {'monthly': 2.00, 'term': 4.50, 'yearly': 7.00},
+    'premium': {'monthly': 100},   # $1.00
 }
 
-UPGRADE_TIERS = ('premium', 'pro')
-UPGRADE_DURATIONS = ('monthly', 'term', 'yearly')
+UPGRADE_TIERS = ('premium',)
+UPGRADE_DURATIONS = ('monthly',)
+
+# Automatic discount for the first-ever payment.
+FIRST_PAYMENT_DISCOUNT_PERCENT = 50   # → $0.50
 
 
 # ============================================================
@@ -131,20 +115,16 @@ def generate_request_id():
 
 
 def calculate_expiry(duration):
+    """Return ISO expiry string for the requested duration."""
     now = get_somali_time()
     if duration == 'monthly':
         return (now + timedelta(days=30)).isoformat()
-    elif duration == 'term':
+    # Tolerance: keep term/yearly as forward-compat if they sneak through
+    if duration == 'term':
         return (now + timedelta(days=120)).isoformat()
-    elif duration == 'yearly':
+    if duration == 'yearly':
         return (now + timedelta(days=365)).isoformat()
     return now.isoformat()
-
-
-def _discount_message(discount_type, discount_value):
-    if discount_type == 'percentage':
-        return f"{discount_value}% OFF applied!"
-    return f"${discount_value / 100:.2f} OFF applied!"
 
 
 def _get_request_stats():
@@ -207,11 +187,6 @@ def _get_discount_stats():
     return {'total': 0, 'active': 0, 'expired': 0, 'exhausted': 0, 'total_uses': 0}
 
 
-def _csrf_ok():
-    token = request.form.get('csrf_token') or request.headers.get('X-CSRF-Token')
-    return bool(token) and token == session.get('csrf_token')
-
-
 # ============================================================
 # ROOT REDIRECTS
 # ============================================================
@@ -232,19 +207,22 @@ def admin_root():
 
 
 # ============================================================
-# API: Validate Discount Code (user-facing)
+# API: Validate Discount Code (optional, admin codes only)
 # ============================================================
+# The upgrade sheet no longer uses this route — first-payment
+# discounts are automatic. Kept for admin-created promo codes
+# that a user might still enter manually elsewhere.
 
 @upgrade_bp.route('/api/validate-discount', methods=['POST'])
 @login_required
 def validate_discount():
     data = request.get_json() or {}
     code = (data.get('code') or '').strip().upper()
-    tier = data.get('tier')
-    duration = data.get('duration')
+    tier = (data.get('tier') or 'premium').strip().lower()
+    duration = (data.get('duration') or 'monthly').strip().lower()
 
-    if not code or not tier or not duration:
-        return jsonify({'valid': False, 'message': 'Missing parameters'}), 400
+    if not code or tier not in UPGRADE_TIERS or duration not in UPGRADE_DURATIONS:
+        return jsonify({'valid': False, 'message': 'Invalid parameters'}), 400
 
     cursor = execute_with_retry(
         "SELECT * FROM discount_codes WHERE code = ? AND is_active = 1",
@@ -266,28 +244,32 @@ def validate_discount():
     if applies != 'all' and applies != tier:
         return jsonify({'valid': False, 'message': f'This code does not apply to {tier}'})
 
-    if tier not in PRICES or duration not in PRICES[tier]:
-        return jsonify({'valid': False, 'message': 'Invalid tier or duration'})
-
     original = PRICES[tier][duration]
     if row['discount_type'] == 'percentage':
         discount_amount = original * (row['discount_value'] / 100)
     else:
-        discount_amount = row['discount_value'] / 100
+        discount_amount = row['discount_value']    # fixed amount already in cents
     final_price = max(0, original - discount_amount)
 
     return jsonify({
         'valid': True,
-        'discount_amount': round(discount_amount, 2),
-        'final_price': round(final_price, 2),
+        'discount_amount': round(discount_amount / 100, 2),
+        'final_price': round(final_price / 100, 2),
         'code_id': row['id'],
-        'message': _discount_message(row['discount_type'], row['discount_value']),
+        'message': f"{row['discount_value']}% OFF applied!"
+                   if row['discount_type'] == 'percentage'
+                   else f"${row['discount_value'] / 100:.2f} OFF applied!",
     })
 
 
 # ============================================================
 # API: Submit Upgrade Request (user-facing)
 # ============================================================
+# Two-tier model:
+#   - tier must be 'premium'
+#   - duration must be 'monthly'
+#   - if students.first_discount_used = 0, apply 50% off automatically
+#   - no discount code required from the user
 
 @upgrade_bp.route('/api/request', methods=['POST'])
 @login_required
@@ -296,45 +278,43 @@ def submit_request():
         return jsonify({'success': False, 'message': 'CSRF validation failed'}), 403
 
     data = request.get_json() or {}
-    tier = data.get('tier')
-    duration = data.get('duration')
-    discount_code = (data.get('discount_code') or '').strip().upper() or None
+    tier = (data.get('tier') or 'premium').strip().lower()
+    duration = (data.get('duration') or 'monthly').strip().lower()
     note = (data.get('note') or '').strip()
 
     if tier not in UPGRADE_TIERS or duration not in UPGRADE_DURATIONS:
-        return jsonify({'success': False, 'message': 'Invalid tier or duration'}), 400
+        return jsonify({
+            'success': False,
+            'message': 'Invalid tier or duration',
+        }), 400
 
     user_id = session['user_id']
-    original_price = PRICES[tier][duration]
+    original_cents = PRICES[tier][duration]    # already in cents
 
-    discount_id = None
-    discount_amount = 0
-    final_price = original_price
+    # ── Look up first_discount_used ──
+    first_used = 1
+    try:
+        row = execute_with_retry(
+            "SELECT first_discount_used FROM students WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        if row is not None:
+            try:
+                first_used = int(row['first_discount_used'] or 0)
+            except (TypeError, ValueError):
+                first_used = 0
+    except Exception as e:
+        logger.warning(f"first_discount_used lookup failed: {e}")
+        first_used = 1    # treat as used to avoid double discounts on failure
 
-    if discount_code:
-        cursor = execute_with_retry(
-            "SELECT * FROM discount_codes WHERE code = ? AND is_active = 1",
-            (discount_code,),
-        )
-        row = cursor.fetchone()
-        if row:
-            expiry_ok = True
-            if row['expires_at']:
-                expiry = _parse_db_datetime(row['expires_at'])
-                if expiry is not None and expiry < get_somali_time():
-                    expiry_ok = False
-            uses_ok = row['max_uses'] is None or row['used_count'] < row['max_uses']
-            applies = row['applies_to']
-            applies_ok = (applies == 'all' or applies == tier)
+    # ── Apply automatic first-payment discount ──
+    discount_cents = 0
+    if first_used == 0:
+        discount_cents = (original_cents * FIRST_PAYMENT_DISCOUNT_PERCENT) // 100
 
-            if expiry_ok and uses_ok and applies_ok:
-                discount_id = row['id']
-                if row['discount_type'] == 'percentage':
-                    discount_amount = original_price * (row['discount_value'] / 100)
-                else:
-                    discount_amount = row['discount_value'] / 100
-                final_price = max(0, original_price - discount_amount)
+    final_cents = max(0, original_cents - discount_cents)
 
+    # ── Reserve a unique request ID and INSERT ──
     max_attempts = 5
     request_id = None
     last_error = None
@@ -353,10 +333,10 @@ def submit_request():
                 user_id,
                 tier,
                 duration,
-                int(original_price * 100),
-                discount_id,
-                int(discount_amount * 100),
-                int(final_price * 100),
+                original_cents,
+                None,                    # no discount_code_id — auto discount
+                discount_cents,
+                final_cents,
                 note,
                 'pending',
                 get_somali_time_db(),
@@ -373,13 +353,20 @@ def submit_request():
                         'user_id': user_id,
                         'tier': tier,
                         'duration': duration,
+                        'final_cents': final_cents,
+                        'discount_cents': discount_cents,
                     },
                     severity='info',
                 )
             except Exception:
                 pass
 
-            return jsonify({'success': True, 'request_id': request_id})
+            return jsonify({
+                'success': True,
+                'request_id': request_id,
+                'original_price': original_cents / 100,
+                'final_price': final_cents / 100,
+            })
 
         except sqlite3.IntegrityError as e:
             last_error = e
@@ -401,7 +388,8 @@ def submit_request():
                 'message': 'Internal error. Please try again.',
             }), 500
 
-    logger.error(f"Upgrade request failed after {max_attempts} attempts: {last_error}", exc_info=True)
+    logger.error(f"Upgrade request failed after {max_attempts} attempts: {last_error}",
+                 exc_info=True)
     return jsonify({
         'success': False,
         'message': 'Could not generate a unique request ID. Please try again.',
@@ -510,6 +498,12 @@ def admin_detail(request_id):
 # ============================================================
 # ADMIN: Approve Request
 # ============================================================
+# Two-tier version:
+#   - Uses set_user_tier_admin() with expires_at so the expiry is
+#     actually stored on students.tier_expires_at (the old flow
+#     wrote expiry_date only to upgrade_requests).
+#   - Marks students.first_discount_used = 1 so the user can't get
+#     the 50% discount again on a later upgrade.
 
 @upgrade_bp.route('/admin/upgrade-requests/<request_id>/approve',
                   methods=['POST'], endpoint='admin_approve')
@@ -532,64 +526,85 @@ def admin_approve(request_id):
     tier = row['requested_tier']
     duration = row['duration']
     admin_note = (request.form.get('admin_note') or '').strip()
+    expiry = calculate_expiry(duration)
 
-    if set_user_tier(user_id, tier, admin_id=session['user_id']):
-        expiry = calculate_expiry(duration)
-        execute_with_retry("""
-            UPDATE upgrade_requests
-            SET status = 'approved',
-                admin_id = ?,
-                admin_note = ?,
-                expiry_date = ?,
-                approved_at = ?
-            WHERE request_id = ?
-        """, (
-            session['user_id'],
-            admin_note,
-            expiry,
-            get_somali_time_db(),
-            request_id,
-        ), commit=True)
+    # ── Set the tier with the computed expiry ──
+    ok = set_user_tier_admin(
+        user_id,
+        tier,
+        session['user_id'],
+        expires_at=expiry,
+        reason=f"Upgrade request {request_id} approved",
+    )
 
-        if row['discount_code_id']:
-            execute_with_retry(
-                "UPDATE discount_codes SET used_count = used_count + 1 WHERE id = ?",
-                (row['discount_code_id'],),
-                commit=True,
-            )
+    if not ok:
+        flash('Failed to update tier.', 'error')
+        return redirect(url_for('upgrade.admin_detail', request_id=request_id))
 
-        try:
-            from db import create_notification
-            create_notification(
-                user_id=user_id,
-                type='tier_upgrade',
-                title='🎉 Tier Upgrade Approved!',
-                body=f'Your account has been upgraded to {tier.upper()}! '
-                     f'Valid until {expiry[:10]}.',
-                link='/dashboard',
-                icon='⭐',
-            )
-        except Exception as e:
-            logger.warning(f"Failed to send approval notification: {e}")
+    # ── Mark first_discount_used = 1 ──
+    try:
+        execute_with_retry(
+            "UPDATE students SET first_discount_used = 1 WHERE id = ?",
+            (user_id,), commit=True,
+        )
+    except Exception as e:
+        logger.warning(f"Could not mark first_discount_used for user {user_id}: {e}")
 
-        write_audit(
-            action='upgrade.approve',
-            target_type='upgrade',
-            target_id=None,
-            before={'status': 'pending', 'request_id': request_id},
-            after={
-                'status': 'approved',
-                'user_id': user_id,
-                'tier': tier,
-                'expiry_date': expiry,
-            },
-            severity='warning',
+    # ── Mark the request as approved ──
+    execute_with_retry("""
+        UPDATE upgrade_requests
+        SET status = 'approved',
+            admin_id = ?,
+            admin_note = ?,
+            expiry_date = ?,
+            approved_at = ?
+        WHERE request_id = ?
+    """, (
+        session['user_id'],
+        admin_note,
+        expiry,
+        get_somali_time_db(),
+        request_id,
+    ), commit=True)
+
+    # ── Increment the discount code use count if one was attached ──
+    if row['discount_code_id']:
+        execute_with_retry(
+            "UPDATE discount_codes SET used_count = used_count + 1 WHERE id = ?",
+            (row['discount_code_id'],),
+            commit=True,
         )
 
-        flash('Request approved. User tier updated.', 'success')
-    else:
-        flash('Failed to update tier.', 'error')
+    # ── Notify the user ──
+    try:
+        from db import create_notification
+        create_notification(
+            user_id=user_id,
+            type='tier_upgrade',
+            title='🎉 Premium activated!',
+            body=f'Your Premium access is active until {expiry[:10]}. '
+                 f'Enjoy everything!',
+            link='/home',
+            icon='⭐',
+        )
+    except Exception as e:
+        logger.warning(f"Failed to send approval notification: {e}")
 
+    write_audit(
+        action='upgrade.approve',
+        target_type='upgrade',
+        target_id=None,
+        before={'status': 'pending', 'request_id': request_id},
+        after={
+            'status': 'approved',
+            'user_id': user_id,
+            'tier': tier,
+            'expiry_date': expiry,
+        },
+        severity='warning',
+    )
+
+    flash('Request approved. Premium activated.', 'success')
     return redirect(url_for('upgrade.admin_detail', request_id=request_id))
 
 
@@ -635,10 +650,10 @@ def admin_reject(request_id):
         create_notification(
             user_id=row['user_id'],
             type='tier_upgrade',
-            title='❌ Upgrade Request Rejected',
-            body=f'Your request for {row["requested_tier"].upper()} was rejected. '
+            title='❌ Upgrade request declined',
+            body=f'Your request for Premium was declined. '
                  f'Reason: {reason or "No reason provided."}',
-            link='/dashboard',
+            link='/home',
             icon='❌',
         )
     except Exception as e:
@@ -741,36 +756,55 @@ def admin_bulk():
             if action == 'approve':
                 tier = row['requested_tier']
                 duration = row['duration']
-                if set_user_tier(row['user_id'], tier, admin_id=session['user_id']):
-                    expiry = calculate_expiry(duration)
-                    execute_with_retry("""
-                        UPDATE upgrade_requests
-                        SET status = 'approved', admin_id = ?, admin_note = ?,
-                            expiry_date = ?, approved_at = ?
-                        WHERE request_id = ?
-                    """, (session['user_id'], admin_note, expiry,
-                          get_somali_time_db(), rid), commit=True)
-                    if row['discount_code_id']:
-                        execute_with_retry(
-                            "UPDATE discount_codes SET used_count = used_count + 1 WHERE id = ?",
-                            (row['discount_code_id'],), commit=True,
-                        )
-                    try:
-                        from db import create_notification
-                        create_notification(
-                            user_id=row['user_id'],
-                            type='tier_upgrade',
-                            title='🎉 Tier Upgrade Approved!',
-                            body=f'Your account has been upgraded to {tier.upper()}! '
-                                 f'Valid until {expiry[:10]}.',
-                            link='/dashboard',
-                            icon='⭐',
-                        )
-                    except Exception:
-                        pass
-                    succeeded += 1
-                else:
+                expiry = calculate_expiry(duration)
+
+                ok = set_user_tier_admin(
+                    row['user_id'],
+                    tier,
+                    session['user_id'],
+                    expires_at=expiry,
+                    reason=f"Bulk approve {rid}",
+                )
+                if not ok:
                     failed += 1
+                    continue
+
+                # Mark first_discount_used
+                try:
+                    execute_with_retry(
+                        "UPDATE students SET first_discount_used = 1 WHERE id = ?",
+                        (row['user_id'],), commit=True,
+                    )
+                except Exception:
+                    pass
+
+                execute_with_retry("""
+                    UPDATE upgrade_requests
+                    SET status = 'approved', admin_id = ?, admin_note = ?,
+                        expiry_date = ?, approved_at = ?
+                    WHERE request_id = ?
+                """, (session['user_id'], admin_note, expiry,
+                      get_somali_time_db(), rid), commit=True)
+
+                if row['discount_code_id']:
+                    execute_with_retry(
+                        "UPDATE discount_codes SET used_count = used_count + 1 WHERE id = ?",
+                        (row['discount_code_id'],), commit=True,
+                    )
+
+                try:
+                    from db import create_notification
+                    create_notification(
+                        user_id=row['user_id'],
+                        type='tier_upgrade',
+                        title='🎉 Premium activated!',
+                        body=f'Your Premium access is active until {expiry[:10]}.',
+                        link='/home',
+                        icon='⭐',
+                    )
+                except Exception:
+                    pass
+                succeeded += 1
 
             elif action == 'reject':
                 execute_with_retry("""
@@ -784,9 +818,9 @@ def admin_bulk():
                     create_notification(
                         user_id=row['user_id'],
                         type='tier_upgrade',
-                        title='❌ Upgrade Request Rejected',
-                        body=f'Your request for {row["requested_tier"].upper()} was rejected.',
-                        link='/dashboard',
+                        title='❌ Upgrade request declined',
+                        body='Your request for Premium was declined.',
+                        link='/home',
                         icon='❌',
                     )
                 except Exception:
@@ -942,7 +976,7 @@ def admin_revenue():
         'total_count': total_count,
     }
 
-    # Per-tier breakdown
+    # Per-tier breakdown (only premium now, but keep the shape)
     tiers = []
     try:
         cursor = execute_with_retry("""
@@ -963,7 +997,7 @@ def admin_revenue():
     except Exception as e:
         logger.warning(f"revenue per-tier query failed: {e}")
 
-    # Per-duration breakdown
+    # Per-duration breakdown (monthly only, but keep the shape)
     durations = []
     try:
         cursor = execute_with_retry("""
@@ -1118,8 +1152,6 @@ def admin_discount_create():
         applies_to = request.form.get('applies_to', 'all')
         max_uses = request.form.get('max_uses')
         expires_at = request.form.get('expires_at')
-        # Checkbox value is "1" (see discount_form.html), so check truthiness —
-        # not equality against 'on'. Unchecked → None → 0.
         is_active = 1 if request.form.get('is_active') else 0
 
         try:
@@ -1129,7 +1161,6 @@ def admin_discount_create():
 
         if not code or discount_type not in ('percentage', 'fixed') or discount_value <= 0:
             flash('Please fill all required fields.', 'error')
-            # Re-render with discount=None so the template behaves.
             return render_template(
                 'dashboard/admin/revenue/discount_form.html',
                 discount=None,
@@ -1142,7 +1173,7 @@ def admin_discount_create():
                 discount=None,
             )
 
-        if applies_to not in ('all', 'premium', 'pro'):
+        if applies_to not in ('all', 'premium'):
             applies_to = 'all'
 
         max_uses_val = None
@@ -1181,8 +1212,6 @@ def admin_discount_create():
             flash('Error creating discount code. Please check the code is unique.',
                   'error')
 
-    # GET — always pass discount=None so the template's `is_new` logic
-    # and any `discount.xxx` access resolve without raising.
     return render_template(
         'dashboard/admin/revenue/discount_form.html',
         discount=None,
@@ -1238,7 +1267,7 @@ def admin_discount_edit(discount_id):
                 discount=discount,
             )
 
-        if applies_to not in ('all', 'premium', 'pro'):
+        if applies_to not in ('all', 'premium'):
             applies_to = 'all'
 
         max_uses_val = None

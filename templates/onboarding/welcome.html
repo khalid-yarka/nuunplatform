@@ -1,0 +1,143 @@
+{# ============================================================
+   templates/onboarding/welcome.html
+   First-login modal — soft gate.
+   ============================================================ #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome — NuunPlatform</title>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+
+    <!-- ANTI-FLASH -->
+    <script>
+        (function () {
+            try {
+                var theme = localStorage.getItem('preferred-theme') || 'light';
+                var resolved = (theme === 'system')
+                    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                    : theme;
+                document.documentElement.setAttribute('data-theme', resolved);
+            } catch (e) {}
+        })();
+    </script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/onboarding.css') }}" />
+</head>
+<body class="onboarding-page">
+
+<div class="onboarding-scrim"></div>
+
+<main class="onboarding-shell" role="dialog" aria-modal="true" aria-labelledby="onbTitle">
+
+    <button type="button"
+            class="onboarding-close"
+            id="onboardingClose"
+            aria-label="Continue on Free">
+        <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+
+    <header class="onboarding-header">
+        <span class="onboarding-icon" aria-hidden="true">👋</span>
+        <h1 id="onbTitle">Welcome, {{ student.first_name or 'student' }}.</h1>
+        <p>Pick how you'd like to start. You can change your mind anytime.</p>
+    </header>
+
+    <div class="onboarding-cards">
+
+        <!-- ═══════════ FREE ═══════════ -->
+        <article class="onb-card onb-card--free" data-tier="free">
+            <div class="onb-card__head">
+                <span class="onb-card__icon" aria-hidden="true">🔓</span>
+                <div class="onb-card__title-block">
+                    <h2 class="onb-card__name">Free</h2>
+                    <p class="onb-card__tagline">Forever · No card needed</p>
+                </div>
+            </div>
+
+            <ul class="onb-card__list">
+                <li><i class="fas fa-check"></i> Unlimited practice</li>
+                <li><i class="fas fa-check"></i> Host competitions</li>
+                <li><i class="fas fa-check"></i> Join any group</li>
+                <li><i class="fas fa-check"></i> Free PDFs · 3 downloads/day</li>
+                <li><i class="fas fa-check"></i> Basic stats &amp; streaks</li>
+            </ul>
+
+            <button type="button"
+                    class="onb-card__cta onb-card__cta--secondary"
+                    data-choice="free">
+                Start free
+            </button>
+        </article>
+
+        <!-- ═══════════ PREMIUM ═══════════ -->
+        <article class="onb-card onb-card--premium" data-tier="premium">
+            <div class="onb-card__ribbon">
+                <span>50% OFF</span>
+                <small>first month</small>
+            </div>
+
+            <div class="onb-card__head">
+                <span class="onb-card__icon" aria-hidden="true">🔑</span>
+                <div class="onb-card__title-block">
+                    <h2 class="onb-card__name">Premium</h2>
+                    <p class="onb-card__tagline">Everything Free has, plus:</p>
+                </div>
+            </div>
+
+            <div class="onb-card__price">
+                <span class="price-original" aria-label="Original price">$1.00</span>
+                <span class="price-current">$0.50</span>
+                <span class="price-period">first month</span>
+                <span class="price-after">then $1.00/month · cancel anytime</span>
+            </div>
+
+            <ul class="onb-card__list">
+                <li><i class="fas fa-check"></i> Everything in Free</li>
+                <li><i class="fas fa-check"></i> Premium PDFs · 20 downloads/day</li>
+                <li><i class="fas fa-check"></i> Progress analytics &amp; charts</li>
+                <li><i class="fas fa-check"></i> History search &amp; export</li>
+                <li><i class="fas fa-check"></i> Personal insights</li>
+                <li><i class="fas fa-check"></i> Advanced focus analytics</li>
+            </ul>
+
+            <button type="button"
+                    class="onb-card__cta onb-card__cta--primary"
+                    data-choice="upgrade">
+                <i class="fas fa-rocket"></i> Upgrade — $0.50 first month
+            </button>
+        </article>
+
+    </div>
+
+    <!-- ═══════════ TRIAL ROW ═══════════ -->
+    <aside class="onboarding-trial">
+        <span class="trial__icon" aria-hidden="true">🎁</span>
+        <div class="trial__text">
+            <strong>Not ready to decide?</strong>
+            <span>Try Premium free for {{ trial_hours }} hours. No card, no commitment.</span>
+        </div>
+        <button type="button"
+                class="trial__cta"
+                data-choice="trial">
+            Try {{ trial_hours }}h trial
+        </button>
+    </aside>
+
+    <footer class="onboarding-footer">
+        <button type="button"
+                class="onboarding-skip"
+                data-choice="free">
+            No thanks, continue on Free
+        </button>
+    </footer>
+
+</main>
+
+<script src="{{ url_for('static', filename='js/onboarding.js') }}"></script>
+
+</body>
+</html>

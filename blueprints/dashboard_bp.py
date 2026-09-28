@@ -1,22 +1,21 @@
 # blueprints/dashboard_bp.py
 # Tier-aware home dashboard.
 #
-# Insights gate (FIX):
-#   Previous code gated insights with `analytics_level >= 3`, where
-#   analytics_level = get_feature_level('basic_statistics').
-#   The seed defines basic_statistics as 2 for both Premium and Pro,
-#   so the ">= 3" check never fired for Pro users — they saw the
-#   "Upgrade" prompt on their own dashboard.
+# Tier model: free / premium only. No pro.
 #
-#   The correct feature is `personal_learning_insights`:
-#       free     level 0  (no insights)
-#       premium  level 1  (basic insights)
-#       pro      level 2  (full insights)
-#   We gate on `insights_level >= 1` and let the level decide the
-#   richness of what we build.
+# Insights gate:
+#   personal_learning_insights seed:
+#       free      level 0  (no insights, upgrade prompt shown)
+#       premium   level 2  (full insights — up to 6 cards)
+#   The home dashboard gates on `insights_level >= 1` and lets the
+#   level decide the richness of the list. A future intermediate tier
+#   (or a custom admin policy) could set level 1 and get a shorter
+#   list without a code change.
 
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, session, flash, redirect, url_for
+from flask import (
+    Blueprint, render_template, session, flash, redirect, url_for, request,
+)
 
 from db import (
     get_student_by_id,
@@ -42,6 +41,10 @@ from utils import get_somali_time
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='')
 
 
+# ============================================================
+# HOME
+# ============================================================
+
 @dashboard_bp.route('/home')
 def home():
     if 'user_id' not in session:
@@ -52,8 +55,7 @@ def home():
     tier = get_current_user_tier()
 
     # ----- Feature levels -----
-    # ----- Feature levels -----
-    analytics_level = get_analytics_level(user_id)   # basic stats
+    analytics_level = get_analytics_level(user_id)   # basic statistics
     insights_level = get_insights_level(user_id)     # personal_learning_insights
 
     student = get_student_by_id(user_id)
@@ -62,7 +64,7 @@ def home():
         flash('Session expired. Please login again.', 'error')
         return redirect(url_for('auth.login'))
 
-    # ---------- Basic stats (all tiers) ----------
+    # ---------- Basic stats ----------
     attempts = get_user_quiz_history(user_id, 50)
     quiz_count = len(attempts)
     total_points = student.get('total_points', 0)
@@ -80,17 +82,20 @@ def home():
 
     if attempts:
         total_questions = sum(a.get('total_questions', 10) or 0 for a in attempts)
-        success_rate = round((total_correct / total_questions) * 100) if total_questions > 0 else 0
+        success_rate = (
+            round((total_correct / total_questions) * 100)
+            if total_questions > 0 else 0
+        )
     else:
         success_rate = 0
 
     # ---------- Subject mastery ----------
     subject_performance = get_user_subject_performance(user_id)
 
-    # ---------- Chart data (tier-limited window) ----------
-    if analytics_level >= 3:
-        chart_limit = 30
-    elif analytics_level >= 2:
+    # ---------- Chart window ----------
+    # basic_statistics is a two-level feature (free=1, premium=2).
+    # Free gets a compact chart; premium gets a fuller window.
+    if analytics_level >= 2:
         chart_limit = 20
     else:
         chart_limit = 5
@@ -111,12 +116,16 @@ def home():
     # ---------- Streak ----------
     streak = _compute_streak(user_id)
 
-    # ---------- Live quiz banner ----------
+    # ---------- Active competition banner ----------
     active_quiz_id = get_user_active_quiz(user_id)
     active_quiz = get_live_quiz_by_id(active_quiz_id) if active_quiz_id else None
 
     # ---------- Recent activity ----------
-    limit = 5 if analytics_level == 1 else 10 if analytics_level == 2 else 20
+    if analytics_level >= 2:
+        limit = 10
+    else:
+        limit = 5
+
     recent_activity = []
     for q in attempts[:limit]:
         subject_name = 'Unknown'
@@ -132,13 +141,13 @@ def home():
             'type': 'quiz',
             'icon': '📝',
             'color': 'green' if pct >= 70 else 'amber' if pct >= 40 else 'red',
-            'title': f'Completed a <strong>{subject_name}</strong> quiz',
+            'title': f'Completed a <strong>{subject_name}</strong> practice',
             'meta': f'Score: {score}/{total_q} ({pct}%)',
             'points': f'+{score} XP',
             'time': (q.get('completed_at') or '')[:16],
         })
 
-    # ---------- Insights (FIX: gate on insights_level, not analytics_level) ----------
+    # ---------- Insights ----------
     insights = []
     if insights_level >= 1:
         insights = _build_insights(
@@ -167,24 +176,33 @@ def home():
         greeting_icon = '🌙'
 
     # ---------- Tier upgrade hint ----------
+    # Premium is the top tier in the two-tier model; only Free sees a
+    # hint. The strip is hidden entirely for premium users.
     next_tier = None
     upgrade_hint = None
     if tier == 'free':
         next_tier = 'premium'
-        upgrade_hint = 'Unlock analytics, live quiz hosting, and 3× more quiz attempts.'
-    elif tier == 'premium':
-        next_tier = 'pro'
-        upgrade_hint = 'Get unlimited access, premium PDFs, and full live quiz hosting.'
-    # ---- Tour banner for brand-new users ----
-    _show_tour_banner = (
+        upgrade_hint = (
+            'Unlock premium PDFs, analytics, and higher limits.'
+        )
+
+    # ---------- Tour banner for brand-new users ----------
+    show_tour_banner = (
         not session.get('docs_tour_dismissed', False)
         and (total_points or 0) == 0
         and (quiz_count or 0) == 0
     )
 
+    # ---------- Onboarding hand-off ----------
+    # If the user came from the welcome modal having chosen
+    # "Upgrade now", the JS opens the tier sheet automatically and
+    # strips the query param via history.replaceState.
+    show_upgrade = (request.args.get('show_upgrade') == '1')
+
     return render_template(
         'dashboard/home.html',
-        show_tour_banner=_show_tour_banner,
+        show_tour_banner=show_tour_banner,
+        show_upgrade=show_upgrade,
         student=student,
         greeting=greeting,
         greeting_icon=greeting_icon,
@@ -216,6 +234,10 @@ def home():
     )
 
 
+# ============================================================
+# PROFILE
+# ============================================================
+
 @dashboard_bp.route('/profile')
 def profile():
     if 'user_id' not in session:
@@ -231,12 +253,28 @@ def profile():
     return render_template('dashboard/profile.html', student=student)
 
 
-# ============================================
+# ============================================================
+# DISMISS TOUR
+# ============================================================
+
+@dashboard_bp.route('/home/dismiss-tour', methods=['POST'])
+def dismiss_tour():
+    """Mark the guided-tour banner as dismissed for this session."""
+    from flask import jsonify
+    session['docs_tour_dismissed'] = True
+    session.modified = True
+    return jsonify({'success': True})
+
+
+# ============================================================
 # HELPERS
-# ============================================
+# ============================================================
 
 def _compute_streak(user_id: int) -> int:
-    """Count consecutive days with at least one quiz attempt, ending today/yesterday."""
+    """
+    Count consecutive days with at least one practice attempt,
+    ending today or yesterday.
+    """
     try:
         cursor = execute_with_retry("""
             SELECT DISTINCT substr(completed_at, 1, 10) AS day
@@ -276,9 +314,9 @@ def _build_insights(subject_performance, success_rate, quiz_count,
     Build a list of personalized insight dicts.
 
     insights_level:
-        0 → caller does not invoke this function
-        1 (premium) → 2–3 basic insights
-        2 (pro)     → up to 6 richer insights
+        0 → caller does not invoke this function (free tier)
+        1 → 2–3 basic insights (intermediate — currently unused)
+        2 → up to 6 richer insights (premium, current default)
     """
     insights = []
 
@@ -286,7 +324,7 @@ def _build_insights(subject_performance, success_rate, quiz_count,
         # Fresh user — a single welcoming hint
         insights.append({
             'icon': '🚀',
-            'text': 'Take your first quiz to unlock personalized insights here.',
+            'text': 'Take your first practice to unlock personalized insights here.',
         })
         return insights
 
@@ -339,13 +377,13 @@ def _build_insights(subject_performance, success_rate, quiz_count,
             'text': f"You're on a <strong>{streak}-day streak</strong> — keep it alive!",
         })
 
-    # ---- Level 2+ (Pro) — extra nuance ----
+    # ---- Level 2+ (premium default) — extra nuance ----
     if insights_level >= 2:
         if quiz_count >= 20:
             insights.append({
                 'icon': '📚',
                 'text': (
-                    f"You've taken <strong>{quiz_count} quizzes</strong> recently "
+                    f"You've taken <strong>{quiz_count} practices</strong> recently "
                     f"— great habit."
                 ),
             })
@@ -364,11 +402,3 @@ def _build_insights(subject_performance, success_rate, quiz_count,
                 pass
 
     return insights[:6]
-
-@dashboard_bp.route('/home/dismiss-tour', methods=['POST'])
-def dismiss_tour():
-    """Mark the guided-tour banner as dismissed for this session."""
-    from flask import jsonify
-    session['docs_tour_dismissed'] = True
-    session.modified = True
-    return jsonify({'success': True})

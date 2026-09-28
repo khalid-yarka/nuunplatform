@@ -1,181 +1,198 @@
+{# ============================================================
+   templates/dashboard/admin/system/maintenance.html
+   Super-admin control for maintenance mode.
+   Reads maintenance.{enabled,title,message,eta,since}.
+   Saves via POST to admin_system.maintenance_save (JSON).
+   ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
-{% block admin_title_icon %}<i class="fas fa-bullhorn"></i>{% endblock %}
-{% block admin_title %}Send Announcement{% endblock %}
-{% block admin_subtitle %}Broadcast a message to every user on the platform.{% endblock %}
+{% block admin_title_icon %}<i class="fas fa-tools header-icon"></i>{% endblock %}
+{% block admin_title %}Maintenance Mode{% endblock %}
+{% block admin_subtitle %}
+    Take the platform offline for students. Admin sessions are unaffected.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <span class="current">Maintenance</span>
+{% endblock %}
 
 {% block admin_content %}
 
-<div class="admin-page">
+<div class="sys-page">
 
-    <div class="admin-card">
-        <div class="admin-card__header">
-            <h2>Compose</h2>
-            <p class="admin-card__subtitle">
-                Title and message are required. The link field is optional and
-                controls where users land when they tap the notification.
-            </p>
+    {# ─────── STATUS BANNER ─────── #}
+    {% if maintenance.enabled %}
+        <div class="sys-banner warn">
+            <i class="fas fa-triangle-exclamation"></i>
+            <div>
+                <strong>Maintenance mode is ON.</strong>
+                Students are redirected to the maintenance page. Admins can still use the platform.
+                {% if maintenance.since %}
+                    <br>Enabled {{ maintenance.since[:16] }}.
+                {% endif %}
+            </div>
+        </div>
+    {% else %}
+        <div class="sys-banner info">
+            <i class="fas fa-circle-check"></i>
+            <div>
+                <strong>The platform is live.</strong>
+                Enabling maintenance mode will redirect every non-admin user to the
+                maintenance page. Admin sessions remain unaffected.
+            </div>
+        </div>
+    {% endif %}
+
+    <form method="POST" id="maintenanceForm"
+          action="{{ url_for('admin_system.maintenance_save') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        {# ─────── MODE ─────── #}
+        <section class="admin-card">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-power-off"></i> Mode</h3>
+            </div>
+            <div class="admin-card-body">
+                <label class="sys-toggle-row">
+                    <input type="checkbox" name="enabled" value="1"
+                           {% if maintenance.enabled %}checked{% endif %}>
+                    <div class="toggle-body">
+                        <div class="toggle-title">Enable maintenance mode</div>
+                        <div class="toggle-sub">
+                            Non-admin users will see the maintenance page instead of the
+                            app. Admins (and the super admin) keep full access.
+                        </div>
+                    </div>
+                </label>
+            </div>
+        </section>
+
+        {# ─────── PUBLIC MESSAGE ─────── #}
+        <section class="admin-card" style="margin-top:16px;">
+            <div class="admin-card-head">
+                <h3><i class="fas fa-message"></i> Public message</h3>
+                <span class="hint">Shown to students while the platform is offline</span>
+            </div>
+            <div class="admin-card-body">
+
+                <div class="admin-form-group">
+                    <label>Title</label>
+                    <input type="text" name="title" class="admin-input"
+                           maxlength="80"
+                           value="{{ maintenance.title or '' }}"
+                           placeholder="We'll be back soon">
+                    <div class="hint">The big headline on the maintenance page.</div>
+                </div>
+
+                <div class="admin-form-group">
+                    <label>Message</label>
+                    <textarea name="message" class="admin-textarea" rows="4"
+                              maxlength="400"
+                              placeholder="Explain why the platform is offline and what to expect.">{{ maintenance.message or '' }}</textarea>
+                    <div class="hint">Up to 400 characters.</div>
+                </div>
+
+                <div class="admin-form-group" style="margin-bottom:0;">
+                    <label>ETA (optional)</label>
+                    <input type="text" name="eta" class="admin-input"
+                           maxlength="60"
+                           value="{{ maintenance.eta or '' }}"
+                           placeholder="e.g. Back by 3:00 PM">
+                    <div class="hint">Shown as a chip below the message if provided.</div>
+                </div>
+
+            </div>
+        </section>
+
+        {# ─────── ACTIONS ─────── #}
+        <div class="sys-actions">
+            <a href="{{ url_for('admin_system.dashboard') }}" class="admin-btn secondary lg">
+                Cancel
+            </a>
+            <button type="submit" class="admin-btn primary lg primary-2x" id="saveMaintenanceBtn">
+                <i class="fas fa-save"></i> Save changes
+            </button>
         </div>
 
-        <form method="POST" action="{{ url_for('admin_system.announcement_send') }}" class="admin-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="title">Title <span class="required">*</span></label>
-                    <input type="text" id="title" name="title" maxlength="100"
-                           placeholder="e.g. New physics chapter is live"
-                           required autocomplete="off">
-                    <p class="form-hint">Max 100 characters.</p>
-                </div>
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="body">Message <span class="required">*</span></label>
-                    <textarea id="body" name="body" rows="5" maxlength="500"
-                              placeholder="Tell users what changed and why it matters…"
-                              required></textarea>
-                    <p class="form-hint">Max 500 characters.</p>
-                </div>
-            </div>
-
-            <div class="form-row two-col">
-                <div class="form-group">
-                    <label for="link">Link (optional)</label>
-                    <input type="text" id="link" name="link" maxlength="200"
-                           placeholder="/pdfs or /quiz or https://…"
-                           value="/dashboard">
-                    <p class="form-hint">Where users go when they tap the notification.</p>
-                </div>
-
-                <div class="form-group">
-                    <label for="icon">Icon (emoji)</label>
-                    <input type="text" id="icon" name="icon" maxlength="4"
-                           placeholder="📢" value="📢">
-                    <p class="form-hint">A single emoji. Defaults to 📢.</p>
-                </div>
-            </div>
-
-            <div class="form-row toggle-group">
-                <div class="toggle-item">
-                    <label class="toggle-label">
-                        <span class="toggle-text">Also deliver as push notification</span>
-                        <span class="toggle-switch">
-                            <input type="checkbox" name="also_push" id="also_push" value="1">
-                            <span class="slider"></span>
-                        </span>
-                    </label>
-                    <p class="toggle-desc">
-                        Delivers a lock-screen notification to users who have enabled push
-                        in their settings. Users who disabled the "Platform announcements"
-                        push type will not receive it.
-                    </p>
-                </div>
-            </div>
-
-            <div class="form-actions">
-                <a href="{{ url_for('admin_system.dashboard') }}" class="btn btn-secondary">
-                    Cancel
-                </a>
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-paper-plane"></i> Send Announcement
-                </button>
-            </div>
-        </form>
-    </div>
-
-    <div class="admin-card admin-card--muted">
-        <div class="admin-card__header">
-            <h2><i class="fas fa-info-circle"></i> How delivery works</h2>
-        </div>
-        <ul class="admin-help-list">
-            <li>
-                <strong>In-app notification</strong> — always sent to every active user.
-                Appears in the bell menu and on the notifications page.
-            </li>
-            <li>
-                <strong>Web Push</strong> — only sent if the checkbox above is ticked
-                AND the user has push enabled on at least one device
-                AND they have the "Platform announcements" push type on.
-            </li>
-            <li>
-                <strong>Rate cap</strong> — a single broadcast is capped at 500 push
-                recipients to stay within the web worker's CPU budget.
-                Larger audiences will get in-app notifications but only the first
-                500 eligible users receive push.
-            </li>
-            <li>
-                <strong>Chunked delivery</strong> — push is sent in batches of 50
-                with a 1-second pause between batches. A full 500-recipient
-                broadcast takes roughly 20 seconds.
-            </li>
-        </ul>
-    </div>
+    </form>
 
 </div>
 
-<style>
-.admin-page { max-width: 860px; margin: 0 auto; padding: 8px 0 40px; }
-.admin-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 24px;
-    margin-bottom: 20px;
-}
-.admin-card--muted { background: var(--surface-alt); }
-.admin-card__header { margin-bottom: 20px; }
-.admin-card__header h2 {
-    font-size: 18px; font-weight: 600;
-    color: var(--text); margin: 0 0 6px;
-}
-.admin-card__subtitle {
-    font-size: 13px; color: var(--text-muted); margin: 0; line-height: 1.55;
-}
-.admin-form .form-row { margin-bottom: 18px; }
-.admin-form .form-row.two-col {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-}
-@media (max-width: 640px) {
-    .admin-form .form-row.two-col { grid-template-columns: 1fr; }
-}
-.admin-form .form-group label {
-    display: block; font-size: 13px; font-weight: 600;
-    color: var(--text); margin-bottom: 6px;
-}
-.admin-form .form-group .required { color: #DC2626; }
-.admin-form input[type="text"],
-.admin-form textarea {
-    width: 100%; padding: 10px 12px; font-size: 14px;
-    color: var(--text); background: var(--bg);
-    border: 1px solid var(--border); border-radius: var(--radius-sm);
-    font-family: inherit; transition: var(--transition);
-}
-.admin-form input[type="text"]:focus,
-.admin-form textarea:focus {
-    outline: none; border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.15);
-}
-.admin-form textarea { resize: vertical; min-height: 100px; }
-.admin-form .form-hint {
-    font-size: 12px; color: var(--text-muted); margin: 6px 0 0;
-}
-.admin-form .form-actions {
-    display: flex; gap: 12px; justify-content: flex-end;
-    padding-top: 16px; border-top: 1px solid var(--border);
-}
-.admin-help-list {
-    list-style: none; padding: 0; margin: 0;
-    font-size: 14px; line-height: 1.65; color: var(--text-secondary);
-}
-.admin-help-list li {
-    padding: 10px 0; border-bottom: 1px solid var(--border);
-}
-.admin-help-list li:last-child { border-bottom: none; }
-.admin-help-list strong { color: var(--text); }
-</style>
+{% endblock %}
 
+{% block admin_js %}
+<script>
+(function () {
+    'use strict';
+
+    var form = document.getElementById('maintenanceForm');
+    var saveBtn = document.getElementById('saveMaintenanceBtn');
+    var CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    if (!form || !saveBtn) return;
+
+    var wasEnabled = {{ 'true' if maintenance.enabled else 'false' }};
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (saveBtn.disabled) return;
+
+        // Guard: confirm before flipping the platform offline
+        var enabledBox = form.querySelector('input[name="enabled"]');
+        var willEnable = !!(enabledBox && enabledBox.checked);
+        if (willEnable && !wasEnabled) {
+            if (!window.confirm(
+                'Enable maintenance mode?\n\n' +
+                'Non-admin users will be redirected to the maintenance page immediately.'
+            )) return;
+        }
+        if (!willEnable && wasEnabled) {
+            if (!window.confirm('Bring the platform back online?')) return;
+        }
+
+        saveBtn.disabled = true;
+        var original = saveBtn.innerHTML;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
+
+        fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form),
+            credentials: 'same-origin',
+            headers: { 'X-CSRF-Token': CSRF },
+        })
+        .then(function (r) {
+            return r.json().then(function (d) { return { ok: r.ok, data: d }; });
+        })
+        .then(function (res) {
+            if (res.ok && res.data && res.data.success) {
+                var msg = res.data.message || 'Saved.';
+                if (typeof AdminCore !== 'undefined' && AdminCore.toast) {
+                    AdminCore.toast(msg, 'success');
+                } else {
+                    window.alert(msg);
+                }
+                setTimeout(function () { window.location.reload(); }, 900);
+            } else {
+                var err = (res.data && (res.data.error || res.data.message)) || 'Save failed.';
+                if (typeof AdminCore !== 'undefined' && AdminCore.toast) {
+                    AdminCore.toast(err, 'error');
+                } else {
+                    window.alert(err);
+                }
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = original;
+            }
+        })
+        .catch(function () {
+            if (typeof AdminCore !== 'undefined' && AdminCore.toast) {
+                AdminCore.toast('Network error.', 'error');
+            } else {
+                window.alert('Network error.');
+            }
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = original;
+        });
+    });
+})();
+</script>
 {% endblock %}

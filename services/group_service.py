@@ -1,9 +1,17 @@
 # services/group_service.py
-# Updated functions with Pro bypass and lock reason.
-# Vocabulary: free / premium / pro (canonical).
+# Group listing, access rules, and admin operations.
+# Two-tier model (free / premium). No pro bypass.
+#
+# Access rules (all must pass):
+#   1. Group must be is_visible = 1 (or admin viewing)
+#   2. Curriculum: empty group curriculum = everyone; otherwise
+#      the user's curriculum must match
+#   3. Tier: tier_required = 'free' → everyone; 'premium' → premium only
+#   4. Verified: if requires_verified = 1, only verified users can join
 
 import logging
 from typing import Optional, Dict, List, Any
+
 from db import (
     get_group_by_id,
     create_group_advanced,
@@ -17,122 +25,135 @@ from db import (
     get_featured_groups,
     get_active_groups,
     get_student_by_id,
-    execute_with_retry
+    execute_with_retry,
 )
-from services.tier_service import is_tier_at_least, get_current_user_tier
-from subjects_config import get_subject, get_all_subjects
 from tier_config import normalize_tier
 
 logger = logging.getLogger(__name__)
 
 
+# ============================================================
+# HELPERS
+# ============================================================
+
 def get_curriculum_label(curriculum):
     labels = {
         'PL': '🇸🇱 Puntland',
         'SO': '🇸🇴 Somalia',
-        'SL': '🇮🇷 Somaliland'
+        'SL': '🇮🇷 Somaliland',
     }
     return labels.get(curriculum, curriculum or 'All')
 
 
+def _evaluate_access(group: Dict, user: Dict) -> Dict:
+    """
+    Return a dict describing whether `user` can join `group` and why not.
+    `user` is a students row dict, or None for anonymous visitors.
+    """
+    if user is None:
+        return {
+            'can_join': False,
+            'locked': True,
+            'join_block_reason': 'login',
+            'curriculum_match': False,
+            'tier_match': False,
+            'verified_match': False,
+        }
+
+    user_curriculum = user.get('curriculum')
+    user_tier = normalize_tier(user.get('tier') or 'free')
+    user_verified = bool(user.get('is_verified'))
+
+    group_curriculum = (group.get('curriculum') or '').strip()
+    required_tier = normalize_tier(group.get('tier_required') or 'free')
+    requires_verified = bool(group.get('requires_verified', 0))
+
+    # Curriculum: empty = matches everyone
+    curriculum_match = (not group_curriculum) or (group_curriculum == user_curriculum)
+
+    # Tier: free groups are open to all; premium groups require premium
+    tier_match = (required_tier == 'free') or (user_tier == 'premium')
+
+    # Verified gate
+    verified_match = (not requires_verified) or user_verified
+
+    can_join = curriculum_match and tier_match and verified_match
+
+    if can_join:
+        block = None
+    elif not curriculum_match:
+        block = 'curriculum'
+    elif not tier_match:
+        block = 'tier'
+    elif not verified_match:
+        block = 'verified'
+    else:
+        block = None
+
+    return {
+        'can_join': can_join,
+        'locked': not can_join,
+        'join_block_reason': block,
+        'curriculum_match': curriculum_match,
+        'tier_match': tier_match,
+        'verified_match': verified_match,
+        'required_tier': required_tier,
+    }
+
+
+# ============================================================
+# PUBLIC LISTING
+# ============================================================
+
 def get_user_groups(user_id: Optional[int] = None):
     """
-    Get all active groups with join eligibility.
-    - Pro tier bypasses curriculum and tier gates.
-    - All others: curriculum must match and tier must be >= required.
+    Return every visible group with join eligibility attached.
     """
-    user_curriculum = None
-    user_tier = 'free'
-
+    user = None
     if user_id:
-        student = get_student_by_id(user_id)
-        if student:
-            user_curriculum = student.get('curriculum')
-            user_tier = normalize_tier(student.get('tier') or 'free')
-
-    is_pro = (user_tier == 'pro')
+        user = get_student_by_id(user_id)
 
     all_groups = get_active_groups()
-    visible_groups = []
+    result = []
 
     for group in all_groups:
-        group_curriculum = group.get('curriculum', '') or ''
-        required_tier = normalize_tier(group.get('tier_required') or 'free')
+        # Visibility: hidden groups never appear in the public list
+        if not group.get('is_visible', 1):
+            continue
 
-        if is_pro:
-            can_join = True
-            locked = False
-            join_block_reason = None
-            curriculum_match = True
-            tier_match = True
-        else:
-            curriculum_match = (not group_curriculum) or (group_curriculum == user_curriculum)
-            tier_match = is_tier_at_least(user_tier, required_tier)
-            can_join = curriculum_match and tier_match
-            locked = not can_join
-            if not curriculum_match:
-                join_block_reason = 'curriculum'
-            elif not tier_match:
-                join_block_reason = 'tier'
-            else:
-                join_block_reason = None
+        access = _evaluate_access(group, user)
+        group.update(access)
+        result.append(group)
 
-        group['can_join'] = can_join
-        group['locked'] = locked
-        group['join_block_reason'] = join_block_reason
-        group['required_tier'] = required_tier
-        group['curriculum_match'] = curriculum_match
-        group['tier_match'] = tier_match
-
-        visible_groups.append(group)
-
-    return visible_groups
+    return result
 
 
 def get_featured_for_user(user_id: Optional[int] = None):
-    """Featured groups with join eligibility (same rules as get_user_groups)."""
+    """
+    Featured groups with the same access rules, capped at 5.
+    """
     if not user_id:
         return []
-    student = get_student_by_id(user_id)
-    if not student:
+    user = get_student_by_id(user_id)
+    if not user:
         return []
 
-    user_curriculum = student.get('curriculum')
-    user_tier = normalize_tier(student.get('tier') or 'free')
-    is_pro = (user_tier == 'pro')
+    featured = get_featured_groups(limit=10)
+    result = []
 
-    all_featured = get_featured_groups(limit=10)
-    filtered = []
+    for group in featured:
+        if not group.get('is_visible', 1):
+            continue
+        access = _evaluate_access(group, user)
+        group.update(access)
+        result.append(group)
 
-    for group in all_featured:
-        group_curriculum = group.get('curriculum', '') or ''
-        required_tier = normalize_tier(group.get('tier_required') or 'free')
+    return result[:5]
 
-        if is_pro:
-            can_join = True
-            locked = False
-            join_block_reason = None
-        else:
-            curriculum_match = (not group_curriculum) or (group_curriculum == user_curriculum)
-            tier_match = is_tier_at_least(user_tier, required_tier)
-            can_join = curriculum_match and tier_match
-            locked = not can_join
-            if not curriculum_match:
-                join_block_reason = 'curriculum'
-            elif not tier_match:
-                join_block_reason = 'tier'
-            else:
-                join_block_reason = None
 
-        group['can_join'] = can_join
-        group['locked'] = locked
-        group['join_block_reason'] = join_block_reason
-        group['required_tier'] = required_tier
-
-        filtered.append(group)
-
-    return filtered[:5]
-
+# ============================================================
+# ADMIN OPERATIONS
+# ============================================================
 
 def create_group(admin_id: int, data: Dict) -> tuple:
     try:
@@ -141,9 +162,9 @@ def create_group(admin_id: int, data: Dict) -> tuple:
             cursor = execute_with_retry(
                 "SELECT id FROM groups ORDER BY id DESC LIMIT 1"
             )
-            result = cursor.fetchone()
-            if result:
-                group_id = result['id']
+            row = cursor.fetchone()
+            if row:
+                group_id = row['id']
                 log_group_audit(group_id, admin_id, 'create', None)
                 return True, group_id
         return False, None
@@ -164,10 +185,8 @@ def update_group(admin_id: int, group_id: int, data: Dict) -> bool:
                 changes[key] = {'old': old_group[key], 'new': value}
 
         success = update_group_advanced(group_id, data)
-        if success and changes:
-            log_group_audit(group_id, admin_id, 'edit', str(changes))
-        elif success:
-            log_group_audit(group_id, admin_id, 'edit', None)
+        if success:
+            log_group_audit(group_id, admin_id, 'edit', str(changes) if changes else None)
 
         return success
     except Exception as e:
@@ -192,11 +211,8 @@ def toggle_active(admin_id: int, group_id: int) -> bool:
         new_status = 0 if group['is_active'] else 1
         success = toggle_group_active(group_id)
         if success:
-            log_group_audit(
-                group_id, admin_id,
-                'activate' if new_status else 'deactivate',
-                None
-            )
+            log_group_audit(group_id, admin_id,
+                            'activate' if new_status else 'deactivate', None)
         return success
     except Exception as e:
         logger.error(f"Toggle active error: {e}")
@@ -211,11 +227,8 @@ def toggle_featured(admin_id: int, group_id: int) -> bool:
         new_status = 0 if group['is_featured'] else 1
         success = toggle_group_featured(group_id)
         if success:
-            log_group_audit(
-                group_id, admin_id,
-                'feature' if new_status else 'unfeature',
-                None
-            )
+            log_group_audit(group_id, admin_id,
+                            'feature' if new_status else 'unfeature', None)
         return success
     except Exception as e:
         logger.error(f"Toggle featured error: {e}")
@@ -228,26 +241,22 @@ def get_admin_group_list(
     category: str = '',
     status: str = '',
     page: int = 1,
-    per_page: int = 20
+    per_page: int = 20,
 ) -> tuple:
     offset = (page - 1) * per_page
-
     query = "SELECT * FROM groups WHERE 1=1"
-    params = []
+    params: List[Any] = []
 
     if search:
         query += " AND (name LIKE ? OR description LIKE ?)"
         like = f"%{search}%"
         params.extend([like, like])
-
     if platform:
         query += " AND platform = ?"
         params.append(platform)
-
     if category:
         query += " AND category = ?"
         params.append(category)
-
     if status == 'active':
         query += " AND is_active = 1"
     elif status == 'inactive':
@@ -257,10 +266,10 @@ def get_admin_group_list(
     params.extend([per_page, offset])
 
     cursor = execute_with_retry(query, params)
-    groups = [dict(row) for row in cursor.fetchall()]
+    groups = [dict(r) for r in cursor.fetchall()]
 
-    count_query = "SELECT COUNT(*) as total FROM groups WHERE 1=1"
-    count_params = []
+    count_query = "SELECT COUNT(*) AS total FROM groups WHERE 1=1"
+    count_params: List[Any] = []
     if search:
         count_query += " AND (name LIKE ? OR description LIKE ?)"
         count_params.extend([like, like])
@@ -276,9 +285,8 @@ def get_admin_group_list(
         count_query += " AND is_active = 0"
 
     cursor = execute_with_retry(count_query, count_params)
-    result = cursor.fetchone()
-    total = result['total'] if result else 0
-
+    row = cursor.fetchone()
+    total = row['total'] if row else 0
     return groups, total
 
 
@@ -289,6 +297,7 @@ def get_curriculum_subjects(curriculum):
 
 def track_join(group_id: int, user_id: int) -> bool:
     try:
+        from db import track_group_click
         track_group_click(group_id)
         return True
     except Exception as e:

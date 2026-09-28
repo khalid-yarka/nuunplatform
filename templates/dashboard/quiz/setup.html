@@ -1,7 +1,7 @@
 {% extends "dashboard_base.html" %}
 
-{% block title %}{{ _('quiz.setup.page_title') }}{% endblock %}
-{% block page_title %}{{ _('quiz.setup.page_title') }}{% endblock %}
+{% block title %}{{ _('practice.setup.page_title') }}{% endblock %}
+{% block page_title %}{{ _('practice.setup.page_title') }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
@@ -65,6 +65,7 @@
         min-height: 68px;
         user-select: none;
         position: relative;
+        -webkit-tap-highlight-color: transparent;
     }
     .grade-pill:hover {
         border-color: var(--primary);
@@ -98,6 +99,10 @@
     .grade-pills--locked .grade-pill {
         cursor: pointer;
         opacity: 0.7;
+    }
+    /* F4 is universal — never appears locked, never dimmed */
+    .grade-pills--locked .grade-pill[data-universal="true"] {
+        opacity: 1;
     }
     .grade-pills--locked .grade-pill:hover {
         border-color: var(--primary);
@@ -168,6 +173,7 @@
         transition: var(--transition);
         font-weight: 600; font-size: 18px; color: var(--text);
         min-height: 64px; user-select: none;
+        -webkit-tap-highlight-color: transparent;
     }
     .q-option:hover:not(.locked) {
         border-color: var(--primary); background: var(--primary-light);
@@ -208,6 +214,7 @@
         cursor: pointer; transition: var(--transition);
         box-shadow: 0 4px 14px rgba(255, 49, 56, 0.25);
         margin-top: 8px;
+        min-height: 52px;
     }
     .btn-start:hover:not(:disabled) {
         background: var(--primary-hover);
@@ -220,8 +227,12 @@
     .quota-info {
         text-align: center; font-size: 13px;
         color: var(--text-secondary); margin-top: 16px;
+        line-height: 1.6;
     }
     .quota-info strong { color: var(--text); }
+    .quota-info .upgrade-link {
+        color: var(--primary); cursor: pointer; font-weight: 600;
+    }
 
     @media (max-width: 480px) {
         .question-count-options { grid-template-columns: repeat(2, 1fr); }
@@ -229,6 +240,7 @@
         .grade-pill { min-height: 60px; padding: 12px 6px; }
         .grade-pill .gp-code { font-size: 16px; }
         .grade-pill .gp-label { font-size: 10px; }
+        .btn-start { font-size: 16px; }
     }
 </style>
 {% endblock %}
@@ -236,8 +248,8 @@
 {% block dashboard_content %}
 <div class="quiz-setup">
     <div class="setup-card">
-        <h2>📝 {{ _('quiz.setup.title') }}</h2>
-        <p class="sub">{{ _('quiz.setup.subtitle') }}</p>
+        <h2>📝 {{ _('practice.setup.title') }}</h2>
+        <p class="sub">{{ _('practice.setup.subtitle') }}</p>
 
         {% set t = normalize_tier(tier) %}
 
@@ -245,20 +257,23 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
             {# ─── GRADE PILLS ─── #}
+            {# F4 is universal — selectable by any tier, never shows a lock. #}
             <div class="form-group">
-                <label>🎓 Grade</label>
+                <label>🎓 {{ _('practice.setup.grade') }}</label>
                 <div class="grade-pills {% if not can_change_grade %}grade-pills--locked{% endif %}"
                      id="gradePills"
                      data-can-change="{{ 'true' if can_change_grade else 'false' }}">
                     {% for g in grade_choices %}
                         {% set is_active = (g.code == user_grade) %}
+                        {% set is_universal = (g.code == 'F4') %}
                         <label class="grade-pill {% if is_active %}active{% endif %}"
-                               data-grade="{{ g.code }}">
+                               data-grade="{{ g.code }}"
+                               data-universal="{{ 'true' if is_universal else 'false' }}">
                             <input type="radio" name="grade" value="{{ g.code }}"
                                    {% if is_active %}checked{% endif %}>
                             <span class="gp-code">{{ g.code }}</span>
                             <span class="gp-label">{{ g.label }}</span>
-                            {% if not can_change_grade %}
+                            {% if not can_change_grade and not is_universal %}
                                 <span class="gp-lock">🔒</span>
                             {% endif %}
                         </label>
@@ -266,14 +281,14 @@
                 </div>
                 <div class="grade-hint" id="gradeHint">
                     <i class="fas fa-info-circle"></i>
-                    <span>Pick a subject to continue</span>
+                    <span>{{ _('practice.setup.pick_subject_hint') }}</span>
                 </div>
             </div>
 
             <div class="form-group">
-                <label for="subjectSelect">📚 {{ _('quiz.setup.subject') }} <span style="color:var(--primary);">*</span></label>
+                <label for="subjectSelect">📚 {{ _('practice.setup.subject') }} <span style="color:var(--primary);">*</span></label>
                 <select id="subjectSelect" name="subject_code" required>
-                    <option value="">{{ _('quiz.setup.select_subject') }}</option>
+                    <option value="">{{ _('practice.setup.select_subject') }}</option>
                     {% for subject in subjects %}
                         <option value="{{ subject.code }}">{{ subject.icon or '📚' }} {{ subject.name }}</option>
                     {% endfor %}
@@ -281,7 +296,7 @@
             </div>
 
             <div class="form-group">
-                <label>📊 {{ _('quiz.setup.question_count') }}</label>
+                <label>📊 {{ _('practice.setup.question_count') }}</label>
                 <div class="question-count-options" id="countOptions">
                     <label class="q-option {% if allowed_counts['10'] %}{% else %}locked{% endif %}"
                            data-value="10" data-locked="{{ 'false' if allowed_counts['10'] else 'true' }}">
@@ -289,7 +304,7 @@
                         10
                         {% if not allowed_counts['10'] %}
                             <span class="lock-icon">🔒</span>
-                            <span class="badge locked-badge">{{ _('quiz.setup.upgrade') }}</span>
+                            <span class="badge locked-badge">{{ _('practice.setup.upgrade') }}</span>
                         {% endif %}
                     </label>
 
@@ -299,7 +314,7 @@
                         20
                         {% if not allowed_counts['20'] %}
                             <span class="lock-icon">🔒</span>
-                            <span class="badge locked-badge">{{ _('quiz.setup.upgrade') }}</span>
+                            <span class="badge locked-badge">{{ _('practice.setup.upgrade') }}</span>
                         {% endif %}
                     </label>
 
@@ -309,37 +324,39 @@
                         30
                         {% if not allowed_counts['30'] %}
                             <span class="lock-icon">🔒</span>
-                            <span class="badge locked-badge">{{ _('quiz.setup.upgrade') }}</span>
+                            <span class="badge locked-badge">{{ _('practice.setup.upgrade') }}</span>
                         {% endif %}
                     </label>
 
                     <label class="q-option {% if is_custom_allowed %}{% else %}locked{% endif %}"
                            data-value="custom" data-locked="{{ 'false' if is_custom_allowed else 'true' }}">
                         <input type="radio" name="question_count" value="custom">
-                        <span>{{ _('quiz.setup.custom') }}</span>
+                        <span>{{ _('practice.setup.custom') }}</span>
                         {% if is_custom_allowed %}
                             <input type="number" class="custom-input" id="customCount" name="custom_count" min="5" max="100" placeholder="5-100" style="display:none;">
                         {% else %}
                             <span class="lock-icon">🔒</span>
-                            <span class="badge locked-badge">{{ _('quiz.setup.upgrade') }}</span>
+                            <span class="badge locked-badge">{{ _('practice.setup.upgrade') }}</span>
                         {% endif %}
                     </label>
                 </div>
             </div>
 
             <button type="submit" class="btn-start" id="startBtn" disabled>
-                <i class="fas fa-rocket"></i> {{ _('quiz.setup.start_quiz') }}
+                <i class="fas fa-rocket"></i> {{ _('practice.setup.start') }}
             </button>
         </form>
 
         <div class="quota-info">
-            {% if remaining_attempts == 1 %}
-                📅 {{ _('quiz.setup.attempts_left_one', n=remaining_attempts) }}
+            {% if remaining_attempts is none %}
+                <i class="fas fa-infinity"></i> {{ _('practice.setup.attempts_unlimited') }}
+            {% elif remaining_attempts == 1 %}
+                📅 {{ _('practice.setup.attempts_left_one') }}
             {% else %}
-                📅 {{ _('quiz.setup.attempts_left_many', n=remaining_attempts) }}
+                📅 {{ _('practice.setup.attempts_left_many', n=remaining_attempts) }}
             {% endif %}
-            {% if t != 'pro' %}
-                · <span style="color:var(--primary);cursor:pointer;" onclick="openUpgradeSheet({ requiredTier: 'premium' })">{{ _('quiz.setup.upgrade_for_more') }}</span>
+            {% if t == 'free' %}
+                · <span class="upgrade-link" onclick="openUpgradeSheet({ requiredTier: 'premium' })">{{ _('practice.setup.upgrade_cta') }}</span>
             {% endif %}
         </div>
     </div>
@@ -365,10 +382,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ─── Grade pills ───
+    // F4 is universal — always selectable, even when the user is otherwise
+    // locked to their profile grade. Non-F4 pills require premium when locked.
     if (gradePills) {
         gradePills.querySelectorAll('.grade-pill').forEach(function(pill) {
             pill.addEventListener('click', function(e) {
-                if (!canChangeGrade) {
+                const isUniversal = pill.dataset.universal === 'true';
+
+                if (!canChangeGrade && !isUniversal) {
                     e.preventDefault();
                     if (typeof window.openUpgradeSheet === 'function') {
                         window.openUpgradeSheet({
@@ -393,8 +414,9 @@ document.addEventListener('DOMContentLoaded', function() {
     options.forEach(opt => {
         opt.addEventListener('click', function(e) {
             if (this.dataset.locked === 'true') {
-                const requiredTier = this.dataset.value === '10' ? 'free' :
-                                     (this.dataset.value === '20' || this.dataset.value === '30') ? 'premium' : 'pro';
+                const requiredTier = this.dataset.value === '10' ? 'free'
+                                   : (this.dataset.value === '20' || this.dataset.value === '30') ? 'premium'
+                                   : 'premium';
                 if (typeof window.openUpgradeSheet === 'function') {
                     window.openUpgradeSheet({ feature: 'question_count', requiredTier: requiredTier });
                 }
@@ -447,22 +469,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const input = customOpt.querySelector('.custom-input');
             if (!input || !input.value) {
                 e.preventDefault();
-                alert('{{ _("quiz.setup.custom_alert") }}');
+                alert('{{ _("practice.setup.custom_alert") }}');
             }
         }
     });
 
     // ─── Hint — exact count, then fallback ───
-    //
-    // The quiz engine (db.get_questions_by_subject) runs two queries:
-    //   1. WHERE subject_code = ? AND status = 'active' AND grade = ?
-    //   2. if 0 rows: WHERE subject_code = ? AND status = 'active'
-    //
-    // The hint mirrors that. It shows the exact count when there are
-    // questions in the chosen grade, and when there aren't, it tells
-    // the user the quiz will fall back to other grades — and how many
-    // questions that fallback will provide.
-
     var GRADE_LABELS = {
         'F4': 'Form 4',
         'F3': 'Form 3',
@@ -500,7 +512,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const subjectLabel = currentSubjectLabel();
 
         if (!subject) {
-            setHint('', '<i class="fas fa-info-circle"></i><span>Pick a subject to continue</span>');
+            setHint('', '<i class="fas fa-info-circle"></i><span>{{ _("practice.setup.pick_subject_hint") }}</span>');
             return;
         }
 
@@ -530,15 +542,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.error) {
                     setHint('err',
                         '<i class="fas fa-triangle-exclamation"></i>' +
-                        '<span>Server error: <code>' +
-                        String(data.error).slice(0, 120) + '</code></span>');
+                        '<span>Server error</span>');
                     return;
                 }
 
                 var exact = (typeof data.count === 'number') ? data.count : 0;
                 var fallback = (typeof data.total_subject === 'number') ? data.total_subject : 0;
 
-                // ── Case 1: exact grade has questions ──
                 if (exact >= 10) {
                     setHint('ok',
                         '<i class="fas fa-check-circle"></i>' +
@@ -561,17 +571,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
 
-                // ── Case 2: exact is 0, but subject has other grades ──
                 if (fallback > 0) {
                     setHint('info',
                         '<i class="fas fa-circle-info"></i>' +
                         '<span>No <strong>' + gradeLabel + '</strong> questions in <strong>' +
-                        subjectLabel + '</strong>. The quiz will use <strong>' +
+                        subjectLabel + '</strong>. The practice will use <strong>' +
                         fallback + '</strong> from other grades.</span>');
                     return;
                 }
 
-                // ── Case 3: subject has no questions at all ──
                 setHint('err',
                     '<i class="fas fa-times-circle"></i>' +
                     '<span>No questions in <strong>' + subjectLabel +

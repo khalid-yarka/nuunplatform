@@ -7,7 +7,7 @@
 {% block admin_title_icon %}<i class="fas fa-gavel header-icon"></i>{% endblock %}
 {% block admin_title %}Entitlements{% endblock %}
 {% block admin_subtitle %}
-    What each user tier (free / premium / pro) is allowed to do.
+    What each user tier (free / premium) is allowed to do.
     Changes take effect on each user's next request.
 {% endblock %}
 
@@ -104,11 +104,10 @@
         <table class="admin-table pol-table">
             <thead>
                 <tr>
-                    <th style="width:38%;">Feature</th>
-                    <th style="width:10%;">Type</th>
-                    <th style="width:10%;text-align:center;">Free</th>
-                    <th style="width:10%;text-align:center;">Premium</th>
-                    <th style="width:10%;text-align:center;">Pro</th>
+                    <th style="width:42%;">Feature</th>
+                    <th style="width:12%;">Type</th>
+                    <th style="width:12%;text-align:center;">Free</th>
+                    <th style="width:12%;text-align:center;">Premium</th>
                     <th style="width:11%;text-align:center;">Status</th>
                     <th style="width:11%;text-align:right;">Actions</th>
                 </tr>
@@ -153,17 +152,6 @@
                             {%- else %} premium
                             {%- endif %}">
                             {{ per_tier[1] }}
-                        </span>
-                    </td>
-
-                    {# Pro #}
-                    <td style="text-align:center;">
-                        <span class="pol-tier-chip
-                            {%- if per_tier[2] == '—' %} off
-                            {%- elif per_tier[2] == '∞' %} unlimited
-                            {%- else %} pro
-                            {%- endif %}">
-                            {{ per_tier[2] }}
                         </span>
                     </td>
 

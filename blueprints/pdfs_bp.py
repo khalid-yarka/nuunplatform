@@ -15,7 +15,7 @@ from db import (
 )
 from services.tier_service import (
     can_access_premium_resources, get_user_tier, get_feature_level,
-    get_saved_content_limit,
+    get_saved_content_limit, get_resource_downloads_remaining,
 )
 from bot.utils import get_bot
 from bot.db import get_bot_pdf_by_code
@@ -83,6 +83,13 @@ def _current_path_with_query():
     return path + ('?' + qs if qs else '')
 
 
+def _normalise_remaining(raw):
+    """999 / None / negatives mean unlimited — return None."""
+    if raw is None or raw >= 999 or raw < 0:
+        return None
+    return raw
+
+
 # ============================================================
 # LIST
 # ============================================================
@@ -90,8 +97,6 @@ def _current_path_with_query():
 @pdfs_bp.route('/')
 def list_pdfs():
     # ─── Shared-PDF flow (before anything else) ────────────
-    # Guests must log in first so the ?pdf=<id> survives the
-    # round-trip and lands them on the focused view.
     shared_pdf_id_raw = request.args.get('pdf')
     shared_pdf = None
     shared_not_found = False
@@ -122,7 +127,7 @@ def list_pdfs():
         else:
             shared_not_found = True
 
-    # ─── Filter parsing (unchanged) ────────────────────────
+    # ─── Filter parsing ────────────────────────────────────
     subject_filter    = (request.args.get('subject') or '').strip()
     class_filter      = (request.args.get('class') or '').strip()
     curriculum_filter = (request.args.get('curriculum') or '').strip()
@@ -141,20 +146,33 @@ def list_pdfs():
         page = 1
 
     user_id = session.get('user_id')
+    remaining_downloads = None
+    downloads_unlimited = False
+
     if user_id:
         user_tier = get_user_tier(user_id)
         search_level = get_feature_level("resource_search", user_id=user_id)
         can_access_premium = can_access_premium_resources()
+
+        # Downloads remaining — normalised to None for unlimited.
+        try:
+            raw_remaining = get_resource_downloads_remaining(user_id)
+            remaining_downloads = _normalise_remaining(raw_remaining)
+            downloads_unlimited = remaining_downloads is None
+        except Exception as e:
+            logger.warning(f"downloads remaining lookup failed: {e}")
+            remaining_downloads = None
+            downloads_unlimited = False
     else:
         user_tier = 'free'
         search_level = 0
         can_access_premium = False
         saved_only = False
 
-    effective_search     = search_query     if search_level > 0  else ''
-    effective_subject    = subject_filter   if search_level >= 1 else ''
-    effective_curriculum = curriculum_filter if search_level >= 2 else ''
-    effective_class      = class_filter     if search_level >= 2 else ''
+    effective_search     = search_query       if search_level > 0  else ''
+    effective_subject    = subject_filter     if search_level >= 1 else ''
+    effective_curriculum = curriculum_filter  if search_level >= 2 else ''
+    effective_class      = class_filter       if search_level >= 2 else ''
 
     saved_ids    = set()
     reported_ids = set()
@@ -268,6 +286,8 @@ def list_pdfs():
         shared_pdf=shared_pdf,
         shared_not_found=shared_not_found,
         base_url=base_url,
+        remaining_downloads=remaining_downloads,
+        downloads_unlimited=downloads_unlimited,
     )
 
 
@@ -389,11 +409,15 @@ def download_pdf(pdf_id):
         }
     )
 
-    if user_tier == 'pro' and pdf.get('file_url'):
+    # Direct file download for premium when a direct URL is stored.
+    if user_tier == 'premium' and pdf.get('file_url'):
         file_path = pdf['file_url']
         if os.path.exists(file_path):
-            return send_file(file_path, as_attachment=True,
-                             download_name=pdf.get('title', 'document.pdf'))
+            return send_file(
+                file_path,
+                as_attachment=True,
+                download_name=pdf.get('title', 'document.pdf'),
+            )
         return redirect(pdf['file_url'])
 
     return redirect(url_for('pdfs.telegram_download', code=pdf['code']))
@@ -441,8 +465,8 @@ def stream_pdf(code):
     user_id = session['user_id']
     user_tier = get_user_tier(user_id)
 
-    if user_tier not in ['premium', 'pro']:
-        return jsonify({'error': 'Upgrade to access this feature.'}), 403
+    if user_tier != 'premium':
+        return jsonify({'error': 'Upgrade to access inline streaming.'}), 403
 
     main_pdf = get_pdf_by_code(code)
     if not main_pdf:
@@ -506,7 +530,7 @@ def save_pdf(pdf_id):
     already = is_pdf_saved(user_id, pdf_id)
     if not already:
         limit = get_saved_content_limit(user_id)
-        if limit is not None:
+        if limit is not None and limit < 999:
             current = count_user_saved_pdfs(user_id)
             if current >= limit:
                 return jsonify({

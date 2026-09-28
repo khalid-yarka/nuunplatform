@@ -10,6 +10,7 @@ from flask import (
 import logging
 import secrets
 import string
+from datetime import datetime, timedelta
 
 from config import Config
 from db import (
@@ -66,6 +67,57 @@ def _generate_random_password() -> str:
         for _ in range(_RANDOM_PASSWORD_LENGTH)
     )
 
+# ============================================================
+# TIER DURATION PARSING
+# ============================================================
+# The admin tier form sends a `duration` field with one of:
+#   'permanent'   → expires_at = None
+#   '7' / '30' / '90' / '365'  → now + N days
+#   'custom'      → use the `custom_date` field (YYYY-MM-DD)
+# ============================================================
+
+_TIER_DURATION_DAYS = {7, 30, 90, 365}
+
+
+def _parse_tier_duration(form) -> tuple:
+    """
+    Return (expires_at_iso_or_None, error_or_None).
+    """
+    duration = (form.get('duration') or '30').strip()
+
+    if duration == 'permanent':
+        return None, None
+
+    if duration == 'custom':
+        raw = (form.get('custom_date') or '').strip()
+        if not raw:
+            return None, 'Please pick a custom expiry date.'
+        try:
+            # Accept YYYY-MM-DD only
+            dt = datetime.strptime(raw, '%Y-%m-%d')
+        except ValueError:
+            return None, 'Invalid custom date format.'
+        # End of that day in Somali timezone
+        try:
+            from utils import SOMALI_TIMEZONE
+            dt = dt.replace(tzinfo=SOMALI_TIMEZONE,
+                            hour=23, minute=59, second=59)
+        except Exception:
+            pass
+        return dt.isoformat(), None
+
+    try:
+        days = int(duration)
+    except (ValueError, TypeError):
+        return None, 'Invalid duration.'
+    if days not in _TIER_DURATION_DAYS:
+        return None, 'Invalid duration.'
+    try:
+        from utils import SOMALI_TIMEZONE
+        target = datetime.now(SOMALI_TIMEZONE) + timedelta(days=days)
+    except Exception:
+        target = datetime.utcnow() + timedelta(days=days)
+    return target.isoformat(), None 
 
 # ============================================================
 # LIST
@@ -711,31 +763,52 @@ def manage_user_tier(user_id):
         flash('User not found.', 'error')
         return redirect(url_for('admin_users.list_users'))
 
-    current_tier = get_user_tier(user_id)
+    current_tier = normalize_tier(user.get('tier') or 'free')
+    current_expiry = user.get('tier_expires_at') or None
     admin_tier = get_current_user_tier()
 
     if request.method == 'POST':
         validate_csrf()
-        new_tier = request.form.get('tier')
-        if new_tier not in ('free', 'premium', 'pro'):
+        new_tier = normalize_tier(request.form.get('tier') or '')
+        if new_tier not in ('free', 'premium'):
             flash('Invalid tier value.', 'error')
             return redirect(url_for('admin_users.manage_user_tier',
                                     user_id=user_id))
 
-        if set_user_tier(user_id, new_tier, session['user_id']):
-            log_admin_user_action(session['user_id'], user_id, 'set_tier',
-                                  current_tier, new_tier)
+        expires_at = None
+        if new_tier == 'premium':
+            expires_at, err = _parse_tier_duration(request.form)
+            if err:
+                flash(err, 'error')
+                return redirect(url_for('admin_users.manage_user_tier',
+                                        user_id=user_id))
+
+        reason = (request.form.get('reason') or '').strip() or None
+
+        if set_user_tier_admin(
+            user_id, new_tier, session['user_id'],
+            expires_at=expires_at, reason=reason,
+        ):
             log_admin_action(
                 'tier.change',
-                f"Admin {session['user_id']} changed tier of {user_id} "
-                f"from {current_tier} to {new_tier}", 'warning',
+                f"Admin {session['user_id']} set tier of {user_id} "
+                f"to {new_tier}"
+                + (f" (until {expires_at[:10]})" if expires_at else " (permanent)"),
+                'warning',
             )
             write_audit(
                 action='user.set_tier', target_type='user', target_id=user_id,
-                before={'tier': current_tier}, after={'tier': new_tier},
+                before={'tier': current_tier, 'expires_at': current_expiry},
+                after={'tier': new_tier, 'expires_at': expires_at},
                 severity='warning',
             )
-            flash(f"User tier updated to {new_tier.capitalize()}.", 'success')
+            if new_tier == 'premium':
+                if expires_at:
+                    flash(f"Tier set to Premium until {expires_at[:10]}.", 'success')
+                else:
+                    flash("Tier set to Premium (permanent).", 'success')
+            else:
+                flash("Tier set to Free.", 'success')
         else:
             flash('Failed to update tier.', 'error')
 
@@ -743,7 +816,10 @@ def manage_user_tier(user_id):
 
     return render_template(
         'dashboard/admin/access/user_tier.html',
-        user=user, current_tier=current_tier, admin_tier=admin_tier,
+        user=user,
+        current_tier=current_tier,
+        current_expiry=current_expiry,
+        admin_tier=admin_tier,
     )
 
 
@@ -928,19 +1004,57 @@ def user_quick_action(user_id):
         if is_self:
             return jsonify({'success': False, 'error': 'You cannot change your own tier'}), 400
         new_tier = (data.get('tier') or '').strip().lower()
-        if new_tier not in ('free', 'premium', 'pro'):
+        if new_tier not in ('free', 'premium'):
             return jsonify({'success': False, 'error': 'Invalid tier'}), 400
-        if not set_user_tier_admin(user_id, new_tier, session['user_id']):
+    
+        # Optional expiry from JSON payload: 'permanent' | '7' | '30' | ... | ISO
+        expires_at = None
+        raw_exp = data.get('expires_at')
+        if new_tier == 'premium' and raw_exp:
+            raw_exp = str(raw_exp).strip()
+            if raw_exp == 'permanent':
+                expires_at = None
+            elif raw_exp.isdigit():
+                days = int(raw_exp)
+                if days not in _TIER_DURATION_DAYS:
+                    return jsonify({'success': False, 'error': 'Invalid duration'}), 400
+                try:
+                    from utils import SOMALI_TIMEZONE
+                    target = datetime.now(SOMALI_TIMEZONE) + timedelta(days=days)
+                except Exception:
+                    target = datetime.utcnow() + timedelta(days=days)
+                expires_at = target.isoformat()
+            else:
+                expires_at = raw_exp  # assume already-ISO
+    
+        if not set_user_tier_admin(
+            user_id, new_tier, session['user_id'], expires_at=expires_at,
+        ):
             return jsonify({'success': False, 'error': 'Failed to update tier'}), 500
+    
         write_audit(
             action='user.set_tier', target_type='user', target_id=user_id,
-            before={'tier': user.get('tier')}, after={'tier': new_tier},
+            before={'tier': user.get('tier'), 'expires_at': user.get('tier_expires_at')},
+            after={'tier': new_tier, 'expires_at': expires_at},
             severity='warning',
         )
+    
+        # Build a friendly message
+        if new_tier == 'premium':
+            if expires_at:
+                msg = f'Tier updated to PREMIUM until {expires_at[:10]}'
+            else:
+                msg = 'Tier updated to PREMIUM (permanent)'
+        else:
+            msg = 'Tier updated to FREE'
+    
         return jsonify({
             'success': True,
-            'message': f'Tier updated to {new_tier.upper()}',
-            'row_updates': {'tier': new_tier},
+            'message': msg,
+            'row_updates': {
+                'tier': new_tier,
+                'expires_at': expires_at,
+            },
         })
 
     if action == 'notify':

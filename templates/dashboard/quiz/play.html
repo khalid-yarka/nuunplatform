@@ -2,8 +2,8 @@
 
 {% from "macros/reactions.html" import render_reactions %}
 
-{% block title %}{{ _('quiz.play.page_title') }}{% endblock %}
-{% block page_title %}{{ _('quiz.play.page_title') }}{% endblock %}
+{% block title %}{{ _('practice.play.page_title') }}{% endblock %}
+{% block page_title %}{{ _('practice.play.page_title') }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
@@ -11,9 +11,6 @@
 <script>window.csrfToken = "{{ session.get('csrf_token', '') }}";</script>
 <script src="{{ url_for('static', filename='js/reactions.js') }}" defer></script>
 <style>
-    /* ============================================
-       TOP BAR — Question counter, score, End Quiz
-       ============================================ */
     .nuun-quiz-topbar {
         display: flex;
         align-items: center;
@@ -29,18 +26,13 @@
         flex-wrap: wrap;
         font-size: 14px;
     }
-    .nuun-quiz-topbar__counter {
-        color: var(--text-secondary);
-    }
-    .nuun-quiz-topbar__score {
-        color: var(--primary);
-        font-weight: 600;
-    }
+    .nuun-quiz-topbar__counter { color: var(--text-secondary); }
+    .nuun-quiz-topbar__score { color: var(--primary); font-weight: 600; }
     .nuun-quiz-topbar__end {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        padding: 6px 12px;
+        padding: 8px 14px;
         background: transparent;
         border: 1px solid var(--border);
         border-radius: 8px;
@@ -51,45 +43,30 @@
         cursor: pointer;
         transition: all 0.2s ease;
         -webkit-tap-highlight-color: transparent;
+        min-height: 36px;
     }
     .nuun-quiz-topbar__end:hover:not(:disabled) {
         border-color: var(--error);
         color: var(--error);
         background: #FEF2F2;
     }
-    .nuun-quiz-topbar__end:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-    .nuun-quiz-topbar__end-icon {
-        font-size: 13px;
-        line-height: 1;
-    }
-    [data-theme="dark"] .nuun-quiz-topbar__end:hover:not(:disabled) {
-        background: #3A1A1A;
-    }
+    .nuun-quiz-topbar__end:disabled { opacity: 0.5; cursor: not-allowed; }
+    .nuun-quiz-topbar__end-icon { font-size: 13px; line-height: 1; }
+    [data-theme="dark"] .nuun-quiz-topbar__end:hover:not(:disabled) { background: #3A1A1A; }
 
-    /* ============================================
-       PROGRESS BAR
-       ============================================ */
     .nuun-quiz-progress {
-        width: 100%;
-        height: 6px;
+        width: 100%; height: 6px;
         background: var(--border);
         border-radius: 10px;
         margin-bottom: 24px;
         overflow: hidden;
     }
     .nuun-quiz-progress__fill {
-        height: 100%;
-        background: var(--primary);
+        height: 100%; background: var(--primary);
         transition: width 0.5s ease;
         border-radius: 10px;
     }
 
-    /* ============================================
-       QUESTION CARD
-       ============================================ */
     .nuun-question-card {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -106,6 +83,8 @@
         font-size: 16px; color: var(--text);
         width: 100%; text-align: left;
         font-family: inherit;
+        min-height: 52px;
+        -webkit-tap-highlight-color: transparent;
     }
     .option-btn:hover:not(:disabled) {
         border-color: var(--primary); background: var(--primary-light);
@@ -125,9 +104,6 @@
     .feedback-title { font-weight: 600; font-size: 16px; }
     .feedback-explanation { font-size: 14px; margin-top: 6px; color: var(--text-secondary); }
 
-    /* ============================================
-       AUTO-SKIP INDICATOR
-       ============================================ */
     .auto-skip-indicator {
         font-size: 12px; color: var(--text-muted); margin-top: 12px;
         text-align: center; opacity: 0.7;
@@ -140,9 +116,6 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ============================================
-       DARK MODE
-       ============================================ */
     [data-theme="dark"] .option-btn.correct {
         border-color: #10B981 !important; background: #1A3A2E !important; color: #D1FAE5 !important;
     }
@@ -159,14 +132,11 @@
     }
     [data-theme="dark"] .feedback-explanation { color: #B0B0C8 !important; }
 
-    /* ============================================
-       MOBILE
-       ============================================ */
     @media (max-width: 480px) {
-        .option-btn { font-size: 14px; padding: 10px 14px; }
+        .option-btn { font-size: 14px; padding: 12px 14px; }
         .nuun-question-card { padding: 20px 16px; }
         .nuun-quiz-topbar__end-label { display: none; }
-        .nuun-quiz-topbar__end { padding: 6px 10px; }
+        .nuun-quiz-topbar__end { padding: 8px 12px; }
         .nuun-quiz-topbar__meta { font-size: 13px; gap: 12px; }
     }
 </style>
@@ -175,32 +145,27 @@
 {% block dashboard_content %}
 <div id="quiz-container" style="max-width: 680px; margin: 0 auto;">
 
-    <!-- =========================
-         TOP BAR — End Quiz is here
-         ========================= -->
     <div class="nuun-quiz-topbar">
         <div class="nuun-quiz-topbar__meta">
             <span class="nuun-quiz-topbar__counter">
-                {{ _('quiz.play.question_label') }}
+                {{ _('practice.play.question_label') }}
                 <span id="current-num">{{ current + 1 }}</span>/<span id="total-num">{{ total }}</span>
             </span>
             <span class="nuun-quiz-topbar__score">
-                ⭐ <span id="score-display">{{ score }}</span> {{ _('quiz.play.points_label') }}
+                ⭐ <span id="score-display">{{ score }}</span> {{ _('practice.play.points_label') }}
             </span>
         </div>
-        <button class="nuun-quiz-topbar__end" id="endQuizBtn" type="button" title="{{ _('quiz.end_quiz') }}">
+        <button class="nuun-quiz-topbar__end" id="endQuizBtn" type="button" title="{{ _('practice.end.confirm') }}">
             <span class="nuun-quiz-topbar__end-icon" aria-hidden="true">✕</span>
-            <span class="nuun-quiz-topbar__end-label">{{ _('quiz.end_quiz_short') }}</span>
+            <span class="nuun-quiz-topbar__end-label">{{ _('practice.end.short') }}</span>
         </button>
     </div>
 
-    <!-- Progress bar -->
     <div class="nuun-quiz-progress">
         <div class="nuun-quiz-progress__fill" id="progress-bar"
              style="width: {{ ((current + 1) / total * 100)|round(1) }}%;"></div>
     </div>
 
-    <!-- Question card -->
     <div class="nuun-question-card">
         <div id="question-text" style="font-size: 20px; font-weight: 600; color: var(--text); margin-bottom: 20px; line-height: 1.5;">
             {{ question.question_text }}
@@ -222,7 +187,6 @@
             </div>
         </div>
 
-        {# Reaction bar — appears after answering #}
         <div id="reaction-slot" style="display:none;">
             {{ render_reactions(
                 question_id=question.id,
@@ -237,23 +201,19 @@
         </div>
     </div>
 
-    <!-- =============================
-         ADVANCE SLOT — Skip OR Next
-         Only one is visible at a time.
-         ============================= -->
     <div class="nuun-advance-slot" id="advanceSlot">
         <button class="nuun-advance-btn nuun-advance-btn--skip" id="skipBtn" type="button">
             <span class="nuun-advance-btn__icon" aria-hidden="true">⏭️</span>
-            <span>{{ _('quiz.play.skip_question') }}</span>
+            <span>{{ _('practice.play.skip_question') }}</span>
         </button>
         <button class="nuun-advance-btn nuun-advance-btn--next" id="nextBtn" type="button" style="display:none;">
             <span class="nuun-advance-btn__icon" aria-hidden="true">➡️</span>
-            <span>{{ _('quiz.play.next_question') }}</span>
+            <span>{{ _('practice.play.next_question') }}</span>
         </button>
     </div>
 
     <div id="autoSkipIndicator" class="auto-skip-indicator" style="display: none;">
-        <span class="spinner"></span> {{ _('quiz.play.moving_to_next') }}
+        <span class="spinner"></span> {{ _('practice.play.moving_to_next') }}
     </div>
 
 </div>
@@ -265,14 +225,14 @@ const userTier = '{{ normalize_tier(user_tier|default("free")) }}';
 const autoSkipEnabled = {{ user_settings.auto_skip_enabled|default(0)|int }};
 
 const I18N = {
-    correct:          "{{ _('quiz.play.feedback_correct') }}",
-    wrong:            "{{ _('quiz.play.feedback_wrong') }}",
-    correct_was:      "{{ _('quiz.play.feedback_correct_was') }}",
-    loading:          "{{ _('quiz.play.next_loading') }}",
-    error_advance:    "{{ _('quiz.play.error_advance') }}",
-    error_submit:     "{{ _('quiz.play.error_submit') }}",
-    error_network:    "{{ _('quiz.play.error_network') }}",
-    end_quiz_confirm: "{{ _('quiz.end_quiz_confirm') }}"
+    correct:          "{{ _('practice.play.feedback_correct') }}",
+    wrong:            "{{ _('practice.play.feedback_wrong') }}",
+    correct_was:      "{{ _('practice.play.feedback_correct_was') }}",
+    loading:          "{{ _('practice.play.next_loading') }}",
+    error_advance:    "{{ _('practice.play.error_advance') }}",
+    error_submit:     "{{ _('practice.play.error_submit') }}",
+    error_network:    "{{ _('practice.play.error_network') }}",
+    end_quiz_confirm: "{{ _('practice.end.confirm') }}"
 };
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -292,11 +252,9 @@ document.addEventListener('DOMContentLoaded', function () {
     let isSubmitting = false;
     let autoSkipTimer = null;
 
-    // Initialize: Skip visible, Next hidden
     skipBtn.style.display = 'inline-flex';
     nextBtn.style.display = 'none';
 
-    // ---------- Option click ----------
     document.querySelectorAll('.option-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
             if (answered || isSubmitting) return;
@@ -325,15 +283,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     ? '💡 ' + data.explanation
                     : I18N.correct_was + ' ' + data.correct_answer;
 
-                // Show reactions
                 reactionSlot.style.display = 'block';
                 if (window.NuunReactions) window.NuunReactions.init(reactionSlot);
 
-                // Swap Skip → Next
                 skipBtn.style.display = 'none';
                 nextBtn.style.display = 'inline-flex';
 
-                if (autoSkipEnabled && (userTier === 'premium' || userTier === 'pro')) {
+                // Auto-skip is a premium-only convenience. Free users advance manually.
+                if (autoSkipEnabled && userTier === 'premium') {
                     autoSkipIndicator.style.display = 'block';
                     autoSkipTimer = setTimeout(function () {
                         autoSkipIndicator.style.display = 'none';
@@ -351,7 +308,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // ---------- Advance (Next and Skip both hit /skip_rating) ----------
     function advance() {
         if (isSubmitting) return;
         isSubmitting = true;
@@ -384,7 +340,6 @@ document.addEventListener('DOMContentLoaded', function () {
     nextBtn.addEventListener('click', advance);
     skipBtn.addEventListener('click', advance);
 
-    // ---------- End quiz ----------
     endQuizBtn.addEventListener('click', function () {
         if (!confirm(I18N.end_quiz_confirm)) return;
         endQuizBtn.disabled = true;
