@@ -74,6 +74,7 @@ RETENTION_NOTIFICATIONS_DAYS = 30
 RETENTION_ERRORS_DAYS = 30
 RETENTION_ACTIVITY_DAYS = 60
 RETENTION_LIVE_QUIZ_DAYS = 7
+RETENTION_JOIN_GATE_HOURS = 24
 
 LOCK_STALE_SECONDS = 2 * 3600
 MESSAGE_TRIM_THRESHOLD = 3500
@@ -741,6 +742,29 @@ def task_cleanup_activity_logs(ctx):
     return {'items': n}
 
 
+@daily_task('cleanup.join_gates', category='cleanup', order=245)
+def task_cleanup_join_gates(ctx):
+    """
+    Purge force-join gate rows older than RETENTION_JOIN_GATE_HOURS.
+
+    A gate row is created when a user starts the join flow and is
+    deleted when they deliver successfully, when they restart with
+    /start <code>, or when the attempts cutoff is reached. This task
+    is the final safety net for rows that were orphaned by a user
+    who went silent mid-flow.
+    """
+    if ctx.dry_run:
+        return {'items': 0, 'status': 'skipped'}
+    n = 0
+    try:
+        from bot.db import clean_stale_join_gates
+        n = clean_stale_join_gates(hours=RETENTION_JOIN_GATE_HOURS)
+    except Exception as e:
+        ctx.warn(f'Join gate cleanup failed: {e}')
+    ctx.set_metric('cleanup.join_gates_purged', n, 'cleanup', 'count')
+    return {'items': n}
+
+
 @daily_task('cleanup.live_quizzes', category='live_quiz', order=400)
 def task_cleanup_live_quizzes(ctx):
     if ctx.dry_run:
@@ -836,9 +860,6 @@ def task_refetch_pdf_sizes(ctx):
          super-admin chat       deleted immediately after we read
                                 document.file_size
       3. Both fail            — marked -2 (app hides Download/View)
-
-    New PDFs uploaded via the bot automatically enter the NULL
-    state, so this task keeps sizes current without manual work.
     """
     if ctx.dry_run:
         return {'items': 0, 'status': 'skipped'}
@@ -849,7 +870,6 @@ def task_refetch_pdf_sizes(ctx):
         ctx.warn(f'bot.db unavailable: {e}')
         return {'items': 0, 'status': 'skipped'}
 
-    # ── Gather candidates ──
     try:
         conn = bot_conn()
         cur = conn.cursor()
@@ -873,7 +893,6 @@ def task_refetch_pdf_sizes(ctx):
 
     ctx.set_metric('content.pdf_sizes_pending', len(rows), 'content', 'count')
 
-    # ── Bot + admin chat ──
     try:
         from bot.bot import get_bot
         bot = get_bot()
@@ -919,7 +938,6 @@ def task_refetch_pdf_sizes(ctx):
         size = None
         err  = None
 
-        # Pass 1 — direct get_file
         try:
             info = bot.get_file(fid)
             s = getattr(info, 'file_size', None)
@@ -928,7 +946,6 @@ def task_refetch_pdf_sizes(ctx):
         except Exception as e:
             err = str(e)
 
-        # Pass 2 — sendDocument fallback for oversized files
         if size is None and admin_chat and err and \
                 any(tok in err.lower() for tok in PDF_SIZE_TOO_BIG_TOKENS):
             try:
@@ -945,7 +962,6 @@ def task_refetch_pdf_sizes(ctx):
             except Exception as e:
                 err = f'{err} | sendDocument: {e}'
 
-        # Decide outcome
         if size is not None:
             if _set_size(rid, size):
                 resolved += 1
@@ -989,19 +1005,6 @@ def task_refetch_pdf_sizes(ctx):
 # ===============================================================
 # TIER LIFECYCLE TASKS
 # ===============================================================
-#
-# Five stages, all idempotent (re-running the same day is a no-op):
-#
-#   T-3 days  → warn_expiring_3d
-#   T-1 day   → warn_expiring_1d
-#   T-0       → expire_and_notify        (the only mutation of tier)
-#   T+3 days  → followup_3d
-#   T+14 days → winback_14d
-#
-# All notifications are transactional — they bypass user preference
-# toggles. Renewal CTA is /home?show_upgrade=1 which auto-opens the
-# tier sheet on page load.
-# ===============================================================
 
 _RENEWAL_LINK = '/home?show_upgrade=1'
 
@@ -1029,10 +1032,6 @@ def _display_name(row: dict) -> str:
 
 @daily_task('tier.warn_expiring_3d', category='tier', order=205)
 def task_tier_warn_expiring_3d(ctx):
-    """
-    Warn premium users whose tier expires in 2–4 days.
-    Cooldown: 7 days per user, checked via the notifications table.
-    """
     if ctx.dry_run:
         return {'items': 0, 'status': 'skipped'}
 
@@ -1089,10 +1088,6 @@ def task_tier_warn_expiring_3d(ctx):
 
 @daily_task('tier.warn_expiring_1d', category='tier', order=207)
 def task_tier_warn_expiring_1d(ctx):
-    """
-    Warn premium users whose tier expires today or tomorrow.
-    Cooldown: 2 days per user.
-    """
     if ctx.dry_run:
         return {'items': 0, 'status': 'skipped'}
 
@@ -1156,13 +1151,6 @@ def task_tier_warn_expiring_1d(ctx):
 
 @daily_task('tier.expire_and_notify', category='tier', critical=True, order=210)
 def task_tier_expire_and_notify(ctx):
-    """
-    Downgrade premium users whose tier_expires_at has passed.
-    Sends exactly one 'tier_expired' notification per downgrade.
-
-    Grace: TIER_GRACE_HOURS = 0 → hard cutoff. Set > 0 to allow an
-    overhang during which the user is still premium but warned.
-    """
     if TIER_GRACE_HOURS > 0:
         cutoff_expr = f"datetime('now', '-{TIER_GRACE_HOURS} hours')"
     else:
@@ -1235,10 +1223,6 @@ def task_tier_expire_and_notify(ctx):
 
 @daily_task('tier.followup_3d', category='tier', order=215)
 def task_tier_followup_3d(ctx):
-    """
-    3–5 days after a downgrade, send one nudge.
-    Guaranteed once per user, checked against the notifications table.
-    """
     if ctx.dry_run:
         return {'items': 0, 'status': 'skipped'}
 
@@ -1298,11 +1282,6 @@ def task_tier_followup_3d(ctx):
 
 @daily_task('tier.winback_14d', category='tier', order=220)
 def task_tier_winback_14d(ctx):
-    """
-    14–21 days after a downgrade, send one winback.
-    Guaranteed once per user, checked against the notifications table.
-    Skips users who already came back (tier = 'premium').
-    """
     if ctx.dry_run:
         return {'items': 0, 'status': 'skipped'}
 
@@ -1362,16 +1341,10 @@ def task_tier_winback_14d(ctx):
 
 @daily_task('tier.churn_metrics', category='tier', order=225)
 def task_tier_churn_metrics(ctx):
-    """
-    Read-only summary of the tier lifecycle. Feeds the daily brief
-    and the platform_metrics time series.
-    """
-    # Currently premium
     ctx.set_metric('tier.active_premium',
                    _scalar("SELECT COUNT(*) FROM students WHERE tier = 'premium'"),
                    'tier', 'count')
 
-    # Expiring soon
     ctx.set_metric('tier.expiring_7d',
                    _scalar("SELECT COUNT(*) FROM students "
                            "WHERE tier = 'premium' AND tier_expires_at IS NOT NULL "
@@ -1383,7 +1356,6 @@ def task_tier_churn_metrics(ctx):
                            "AND tier_expires_at BETWEEN datetime('now') AND datetime('now', '+30 days')"),
                    'tier', 'count')
 
-    # Recent churn windows
     for label, days in (('7d', 7), ('30d', 30)):
         ctx.set_metric(
             f'tier.expired_{label}',
@@ -1393,8 +1365,6 @@ def task_tier_churn_metrics(ctx):
             'tier', 'count'
         )
 
-    # Renewals after loss (users currently premium who received a tier_expired
-    # notification in the last 30 days — best proxy for a return)
     ctx.set_metric(
         'tier.renewed_after_loss_30d',
         _scalar("""
@@ -1410,14 +1380,12 @@ def task_tier_churn_metrics(ctx):
         'tier', 'count'
     )
 
-    # Churn rate: expired in 30d / (active premium + expired in 30d)
     active = ctx.mv('tier.active_premium') or 0
     expired = ctx.mv('tier.expired_30d') or 0
     denom = active + expired
     churn_pct = round(100.0 * expired / denom, 1) if denom else 0.0
     ctx.set_metric('tier.churn_rate_30d', churn_pct, 'tier', '%')
 
-    # Notifications sent today (from this run's own tasks)
     ctx.set_metric('tier.warned_today',
                    (ctx.mv('tier.warned_3d') or 0) + (ctx.mv('tier.warned_1d') or 0),
                    'tier', 'count')
@@ -1562,7 +1530,6 @@ def task_core_counts(ctx):
                    _scalar("SELECT COUNT(*) FROM groups WHERE is_featured = 1 AND is_active = 1"),
                    'groups', 'count')
 
-    # Tier distribution snapshot (feed from students table, not the run)
     ctx.set_metric('users.tier_free',
                    _scalar("SELECT COUNT(*) FROM students WHERE tier = 'free'"), 'users', 'count')
     ctx.set_metric('users.tier_premium',
@@ -2308,6 +2275,7 @@ def build_report_message(ctx: TaskContext, run_summary: Dict[str, Any]) -> str:
     m.kv('Errors purged', ctx.mv('cleanup.errors_purged'))
     m.kv('Activity purged', ctx.mv('cleanup.activity_purged'))
     m.kv('Orphan live quizzes', ctx.mv('cleanup.live_quizzes_purged'))
+    m.kv('Stale join gates', ctx.mv('cleanup.join_gates_purged'))
     if ctx.mv('content.pdf_sizes_resolved') or ctx.mv('content.pdf_sizes_too_large'):
         m.kv('PDF sizes resolved',
              f'{ctx.mv("content.pdf_sizes_resolved")} '
@@ -2394,7 +2362,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append('---')
     L.append('')
 
-    # 1. Executive Summary
     L.append('## 1. Executive Summary')
     L.append('')
     L.append('| Metric | Value |')
@@ -2417,7 +2384,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append('---')
     L.append('')
 
-    # 2. System Health
     L.append('## 2. System Health')
     L.append('')
     h_db = getattr(ctx, '_health_db', None)
@@ -2441,7 +2407,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append('---')
     L.append('')
 
-    # 3. Users
     L.append('## 3. Users & Demographics')
     L.append('')
     L.append('### 3.1 Headline Numbers')
@@ -2470,7 +2435,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append('---')
     L.append('')
 
-    # 4. Tier Lifecycle
     L.append('## 4. Tier Lifecycle')
     L.append('')
     L.append('### 4.1 Health')
@@ -2506,7 +2470,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append('---')
     L.append('')
 
-    # 5. Quiz Analytics
     L.append('## 5. Quiz Analytics')
     L.append('')
     L.append('| Metric | Value |')
@@ -2522,7 +2485,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append('---')
     L.append('')
 
-    # 6. Live Quiz
     L.append('## 6. Live Quiz Analytics')
     L.append('')
     L.append('| Metric | Value |')
@@ -2537,7 +2499,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append('---')
     L.append('')
 
-    # 7. Content & PDFs
     L.append('## 7. Content & PDFs')
     L.append('')
     L.append('| Metric | Value |')
@@ -2557,7 +2518,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append('---')
     L.append('')
 
-    # 8. Focus & Bookmarks
     L.append('## 8. Focus & Bookmarks')
     L.append('')
     L.append('| Metric | Value |')
@@ -2573,7 +2533,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append('---')
     L.append('')
 
-    # 9. Groups
     L.append('## 9. Groups')
     L.append('')
     L.append('| Metric | Value |')
@@ -2585,7 +2544,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append('---')
     L.append('')
 
-    # 10. Achievements
     L.append('## 10. Achievements')
     L.append('')
     _render_table(ctx, 'achievements.recent', L)
@@ -2593,7 +2551,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append('---')
     L.append('')
 
-    # 11. Revenue
     L.append('## 11. Revenue')
     L.append('')
     L.append('| Metric | Value |')
@@ -2609,7 +2566,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append('---')
     L.append('')
 
-    # 12. Engagement & Growth
     L.append('## 12. Engagement & Growth')
     L.append('')
     _render_kv_section(ctx, 'analytics.engagement', L)
@@ -2618,7 +2574,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append('---')
     L.append('')
 
-    # 13. Notifications
     L.append('## 13. Notifications')
     L.append('')
     L.append('| Metric | Value |')
@@ -2632,7 +2587,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append('---')
     L.append('')
 
-    # 14. Maintenance
     L.append('## 14. Maintenance Actions')
     L.append('')
     L.append('| Action | Items |')
@@ -2643,12 +2597,12 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append(f'| Errors purged | {ctx.mv("cleanup.errors_purged"):,} |')
     L.append(f'| Activity logs purged | {ctx.mv("cleanup.activity_purged"):,} |')
     L.append(f'| Orphan live quizzes removed | {ctx.mv("cleanup.live_quizzes_purged"):,} |')
+    L.append(f'| Stale join gates purged | {ctx.mv("cleanup.join_gates_purged"):,} |')
     L.append('')
     _render_table(ctx, 'cleanup.history_top', L)
     L.append('---')
     L.append('')
 
-    # 15. Task Execution Log
     L.append('## 15. Task Execution Log')
     L.append('')
     L.append('| Task | Status | Items | Duration (ms) |')
@@ -2659,7 +2613,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
         L.append(f'| `{t["name"]}` | {icon} {t["status"]} | {t["items"]} | {t["duration_ms"]} |')
     L.append('')
 
-    # 16. Warnings & Actions
     L.append('## 16. Warnings & Action Items')
     L.append('')
     if ctx.warnings:
@@ -2682,7 +2635,6 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
             L.append(line)
         L.append('')
 
-    # Appendix — Metrics
     L.append('---')
     L.append('')
     L.append('## Appendix — All Metrics')
@@ -2992,7 +2944,7 @@ def main():
     finally:
         release_lock()
         try:
-        close_db_connections()
+            close_db_connections()
         except Exception:
             pass
 

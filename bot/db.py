@@ -97,7 +97,11 @@ def init_bot_db():
 
     conn.commit()
     conn.close()
-    logger.info("Bot database initialized with pending_pdfs and pdfs tables")
+
+    # ---- Join gate (separate connection, idempotent) ----
+    init_join_gate_table()
+
+    logger.info("Bot database initialized with pending_pdfs, pdfs, and join_gate tables")
 
 
 # ============================================================
@@ -484,3 +488,154 @@ def get_bot_pdfs_by_codes(codes):
     except Exception as e:
         logger.warning(f"get_bot_pdfs_by_codes failed: {e}")
     return result
+
+
+# ============================================================
+# JOIN GATE (force-join membership state)
+# ============================================================
+# One row per Telegram user. Tracks the current stage of the
+# force-join gate and the PDF code the user asked for.
+#
+# Upserted on stage transitions. Deleted on successful delivery,
+# on /start <code> re-entry, or on the daily cleanup task.
+#
+# All functions are non-raising. The gate is a courtesy — never
+# let a DB failure block a legitimate delivery.
+# ============================================================
+
+def init_join_gate_table():
+    """Create the join_gate table and its index if missing."""
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS join_gate (
+                user_id     INTEGER PRIMARY KEY,
+                stage       TEXT NOT NULL CHECK (stage IN ('channel', 'group')),
+                code        TEXT,
+                attempts    INTEGER NOT NULL DEFAULT 0,
+                created_at  TEXT DEFAULT (datetime('now', 'localtime')),
+                updated_at  TEXT DEFAULT (datetime('now', 'localtime'))
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_join_gate_updated_at "
+            "ON join_gate(updated_at DESC)"
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"init_join_gate_table failed: {e}")
+
+
+def get_join_gate(user_id):
+    """Return the pending gate row for a user, or None. Non-raising."""
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT user_id, stage, code, attempts, created_at, updated_at "
+            "FROM join_gate WHERE user_id = ?",
+            (int(user_id),),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
+    except Exception as e:
+        logger.warning(f"get_join_gate failed for user {user_id}: {e}")
+        return None
+
+
+def set_join_gate(user_id, stage, code):
+    """
+    Upsert the gate row for a user. `stage` must be 'channel' or 'group'.
+    `code` may be None (e.g. user typed the plain /start with a pending row).
+    Non-raising; returns True on success.
+    """
+    if stage not in ('channel', 'group'):
+        logger.warning(f"set_join_gate: invalid stage {stage!r}")
+        return False
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO join_gate (user_id, stage, code, attempts, created_at, updated_at)
+            VALUES (?, ?, ?, 0, datetime('now','localtime'), datetime('now','localtime'))
+            ON CONFLICT(user_id) DO UPDATE SET
+                stage = excluded.stage,
+                code = excluded.code,
+                updated_at = datetime('now','localtime')
+        """, (int(user_id), stage, code))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.warning(f"set_join_gate failed for user {user_id}: {e}")
+        return False
+
+
+def delete_join_gate(user_id):
+    """Delete the gate row for a user. Non-raising."""
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM join_gate WHERE user_id = ?", (int(user_id),))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.warning(f"delete_join_gate failed for user {user_id}: {e}")
+        return False
+
+
+def bump_join_gate_attempts(user_id):
+    """
+    Increment attempts and return the new count, or None on failure.
+    Non-raising.
+    """
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE join_gate SET attempts = attempts + 1, "
+            "updated_at = datetime('now','localtime') WHERE user_id = ?",
+            (int(user_id),),
+        )
+        affected = cursor.rowcount
+        if affected == 0:
+            conn.close()
+            return None
+        cursor.execute(
+            "SELECT attempts FROM join_gate WHERE user_id = ?",
+            (int(user_id),),
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        conn.close()
+        return row['attempts'] if row else None
+    except Exception as e:
+        logger.warning(f"bump_join_gate_attempts failed for user {user_id}: {e}")
+        return None
+
+
+def clean_stale_join_gates(hours=24):
+    """
+    Delete gate rows older than `hours`. Called from daily_tasks.py.
+    Returns the number of rows deleted (or 0 on failure).
+    """
+    try:
+        hours = max(1, int(hours))
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM join_gate "
+            "WHERE updated_at < datetime('now', 'localtime', ?)",
+            (f'-{hours} hours',),
+        )
+        n = cursor.rowcount or 0
+        conn.commit()
+        conn.close()
+        return n
+    except Exception as e:
+        logger.warning(f"clean_stale_join_gates failed: {e}")
+        return 0

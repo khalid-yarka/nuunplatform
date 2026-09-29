@@ -203,6 +203,29 @@ class Config:
     BASE_URL = os.getenv('BASE_URL', 'https://yourdomain.com')
 
     # ============================================
+    # TELEGRAM FORCE JOIN GATE
+    # ============================================
+    # Before the bot delivers a PDF to a non-admin user, it verifies
+    # the user has joined the configured channel and/or group.
+    #
+    # Requirements (external to this codebase):
+    #   • The bot must be an administrator of the channel.
+    #   • The bot must be an administrator of the group.
+    #   Without admin rights, Telegram rejects get_chat_member for
+    #   these chats and the gate fails open — delivery proceeds.
+    #
+    # If TELEGRAM_FORCE_JOIN_ENABLED is false, or both IDs are unset,
+    # the gate is a no-op. Safe to ship disabled.
+    TELEGRAM_FORCE_JOIN_ENABLED = _env_bool('TELEGRAM_FORCE_JOIN_ENABLED', 'false')
+    TELEGRAM_FORCE_CHANNEL_ID = os.getenv('TELEGRAM_FORCE_CHANNEL_ID', '')
+    TELEGRAM_FORCE_CHANNEL_INVITE = os.getenv('TELEGRAM_FORCE_CHANNEL_INVITE', '')
+    TELEGRAM_FORCE_GROUP_ID = os.getenv('TELEGRAM_FORCE_GROUP_ID', '')
+    TELEGRAM_FORCE_GROUP_INVITE = os.getenv('TELEGRAM_FORCE_GROUP_INVITE', '')
+    TELEGRAM_FORCE_JOIN_MAX_ATTEMPTS = int(
+        os.getenv('TELEGRAM_FORCE_JOIN_MAX_ATTEMPTS', '10')
+    )
+
+    # ============================================
     # SOCIAL LINKS
     # ============================================
     TIKTOK_URL = os.getenv('TIKTOK_URL', 'https://www.tiktok.com/@nuunplatform')
@@ -305,3 +328,4 @@ print(f"   Upload Dir: {Config.UPLOAD_FOLDER}")
 print(f"   Bot Database: {Config.BOT_DATABASE_PATH}")
 print(f"   Super admin phone: {'configured' if Config.SUPER_ADMIN_PHONE else 'NOT configured'}")
 print(f"   Web Push: {'enabled' if Config.PUSH_ENABLED else 'disabled (VAPID keys not set)'}")
+print(f"   Force-join gate: {'enabled' if Config.TELEGRAM_FORCE_JOIN_ENABLED else 'disabled'}")
