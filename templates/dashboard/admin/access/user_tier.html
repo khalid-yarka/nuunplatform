@@ -1,6 +1,7 @@
 {# ============================================================
    templates/dashboard/admin/access/user_tier.html
    Set a user's tier (free / premium) with optional expiry.
+   Includes a live preview of which lifecycle tasks will fire.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -183,6 +184,58 @@
     .tm-preview i { color: var(--primary); }
     .tm-preview strong { color: var(--text); font-weight: 700; }
 
+    /* ─── Task schedule preview ─── */
+    .tm-schedule {
+        margin-top: 16px;
+        padding: 14px 16px;
+        background: var(--background);
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-light);
+    }
+    .tm-schedule__head {
+        font-size: 12px; font-weight: 700;
+        color: var(--text-secondary); text-transform: uppercase;
+        letter-spacing: 0.5px; margin-bottom: 10px;
+        display: flex; align-items: center; gap: 8px;
+    }
+    .tm-schedule__head i { color: var(--primary); }
+    .tm-schedule__list {
+        display: flex; flex-direction: column; gap: 6px;
+    }
+    .tm-schedule__row {
+        display: flex; align-items: center; gap: 10px;
+        padding: 6px 10px;
+        background: var(--surface);
+        border-radius: 6px;
+        font-size: 12.5px;
+        border-left: 3px solid #9CA3AF;
+    }
+    .tm-schedule__row.fires { border-left-color: var(--primary); }
+    .tm-schedule__row.warn  { border-left-color: #F59E0B; }
+    .tm-schedule__row.danger { border-left-color: #EF4444; }
+    .tm-schedule__row.success { border-left-color: #10B981; }
+
+    .tm-schedule__icon { font-size: 15px; flex-shrink: 0; }
+    .tm-schedule__label {
+        flex: 1; min-width: 0;
+        color: var(--text);
+        font-weight: 500;
+    }
+    .tm-schedule__date {
+        font-family: 'Courier New', monospace;
+        font-size: 11.5px;
+        font-weight: 700;
+        color: var(--text-secondary);
+        flex-shrink: 0;
+    }
+    .tm-schedule__note {
+        margin-top: 10px;
+        font-size: 11.5px;
+        color: var(--text-muted);
+        line-height: 1.5;
+        font-style: italic;
+    }
+
     .tm-reason textarea {
         width: 100%;
         padding: 12px 14px;
@@ -294,6 +347,21 @@
                 <i class="fas fa-calendar-check"></i>
                 <span>Expires on <strong id="expiryText">—</strong></span>
             </div>
+
+            {# ─── Task schedule preview ─── #}
+            <div class="tm-schedule" id="taskSchedule">
+                <div class="tm-schedule__head">
+                    <i class="fas fa-calendar-day"></i>
+                    Lifecycle notifications that will fire
+                </div>
+                <div class="tm-schedule__list" id="scheduleList">
+                    {# Populated by JS #}
+                </div>
+                <div class="tm-schedule__note">
+                    The daily task runner sends these automatically. You can also
+                    trigger any of them manually from the user's detail page.
+                </div>
+            </div>
         </div>
 
         {# Reason #}
@@ -329,21 +397,106 @@
     var customDateWrap = document.getElementById('customDateWrap');
     var customDate = document.getElementById('customDate');
     var expiryText = document.getElementById('expiryText');
+    var scheduleList = document.getElementById('scheduleList');
 
     function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+    function formatDate(d) {
+        return d.getFullYear() + '-' +
+            pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    }
 
     function computeExpiry(duration) {
         if (duration === 'permanent') return null;
         var now = new Date();
         if (duration === 'custom') {
             if (!customDate.value) return null;
-            var d = new Date(customDate.value + 'T23:59:59');
-            return d;
+            return new Date(customDate.value + 'T23:59:59');
         }
         var days = parseInt(duration, 10);
         if (!days || days < 1) return null;
-        var target = new Date(now.getTime() + days * 86400000);
-        return target;
+        return new Date(now.getTime() + days * 86400000);
+    }
+
+    // Offset in days from expiry date
+    function offsetFromExpiry(expiry, days) {
+        var d = new Date(expiry.getTime() + days * 86400000);
+        return formatDate(d);
+    }
+
+    // Windows mirror daily_tasks.py:
+    //   T-3 warn: between 2 and 4 days before expiry
+    //   T-1 warn: between 0 and 2 days before expiry
+    //   T-0 expire: on expiry date
+    //   T+3 followup: 3-5 days after downgrade
+    //   T+14 winback: 14-21 days after downgrade
+    function renderSchedule(expiry) {
+        if (!scheduleList) return;
+
+        if (!expiry) {
+            scheduleList.innerHTML =
+                '<div style="text-align:center;padding:14px;font-size:12px;color:var(--text-muted);font-style:italic;">' +
+                    'Permanent premium has no scheduled lifecycle notifications.' +
+                '</div>';
+            return;
+        }
+
+        var rows = [];
+
+        // T-3 warn
+        var t3Date = offsetFromExpiry(expiry, -3);
+        var now = new Date();
+        if (expiry.getTime() - now.getTime() > 4 * 86400000) {
+            rows.push({
+                cls: 'warn',
+                icon: '⏳',
+                label: 'T-3 warning — "Premium ends in 3 days"',
+                date: t3Date,
+            });
+        }
+
+        // T-1 warn
+        var t1Date = offsetFromExpiry(expiry, -1);
+        if (expiry.getTime() - now.getTime() > 2 * 86400000) {
+            rows.push({
+                cls: 'warn',
+                icon: '🚨',
+                label: 'T-1 warning — "Premium ends tomorrow"',
+                date: t1Date,
+            });
+        }
+
+        // T-0 expire
+        rows.push({
+            cls: 'danger',
+            icon: '⏰',
+            label: 'Downgrade + "Premium ended" notice',
+            date: formatDate(expiry),
+        });
+
+        // T+3 followup
+        rows.push({
+            cls: 'fires',
+            icon: '💬',
+            label: '3-day follow-up — "Still thinking about Premium?"',
+            date: offsetFromExpiry(expiry, 3),
+        });
+
+        // T+14 winback
+        rows.push({
+            cls: 'success',
+            icon: '🎁',
+            label: '14-day winback — "Come back to Premium"',
+            date: offsetFromExpiry(expiry, 14),
+        });
+
+        scheduleList.innerHTML = rows.map(function (r) {
+            return '<div class="tm-schedule__row ' + r.cls + '">' +
+                '<span class="tm-schedule__icon">' + r.icon + '</span>' +
+                '<span class="tm-schedule__label">' + r.label + '</span>' +
+                '<span class="tm-schedule__date">' + r.date + '</span>' +
+            '</div>';
+        }).join('');
     }
 
     function updatePreview() {
@@ -358,16 +511,18 @@
 
         if (duration === 'permanent') {
             expiryText.textContent = 'Never — Premium is permanent';
+            renderSchedule(null);
             return;
         }
 
         var target = computeExpiry(duration);
         if (!target) {
             expiryText.textContent = 'Pick a date';
+            renderSchedule(null);
             return;
         }
-        expiryText.textContent = target.getFullYear() + '-' +
-            pad(target.getMonth() + 1) + '-' + pad(target.getDate());
+        expiryText.textContent = formatDate(target);
+        renderSchedule(target);
     }
 
     tierLabels.forEach(function (label) {
@@ -386,10 +541,8 @@
             chip.classList.add('active');
             durationInput.value = chip.dataset.days;
             if (chip.dataset.days === 'custom' && !customDate.value) {
-                // Pre-fill with 30 days from now
                 var d = new Date(Date.now() + 30 * 86400000);
-                customDate.value = d.getFullYear() + '-' +
-                    pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+                customDate.value = formatDate(d);
             }
             updatePreview();
         });

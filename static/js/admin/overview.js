@@ -46,7 +46,6 @@
             return [x, y];
         });
 
-        // Build smooth path
         let path = 'M ' + points[0][0] + ',' + points[0][1];
         for (let i = 1; i < points.length; i++) {
             const [x0, y0] = points[i - 1];
@@ -171,17 +170,25 @@
             });
         }
 
-        // ---- Tier donut ----
+        // ---- Tier donut — two-tier model: free / premium only ----
         const tierCanvas = document.getElementById('ccTierChart');
         if (tierCanvas && data.tiers) {
-            const colors = ['#9CA3AF', '#FF3138', '#8B5CF6'];
+            const tierKeys = ['free', 'premium'];
+            const tierLabels = ['Free', 'Premium'];
+            const tierColors = ['#9CA3AF', '#FF3138'];
+
+            const tierValues = tierKeys.map(function (k) {
+                const v = data.tiers[k];
+                return (typeof v === 'number') ? v : 0;
+            });
+
             new Chart(tierCanvas, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Free', 'Premium', 'Pro'],
+                    labels: tierLabels,
                     datasets: [{
-                        data: [data.tiers.free, data.tiers.premium, data.tiers.pro],
-                        backgroundColor: colors,
+                        data: tierValues,
+                        backgroundColor: tierColors,
                         borderWidth: 0,
                         hoverOffset: 6,
                     }]
@@ -204,12 +211,12 @@
             // Custom legend below
             const legend = document.getElementById('ccTierLegend');
             if (legend) {
-                const total = (data.tiers.free + data.tiers.premium + data.tiers.pro) || 1;
-                legend.innerHTML = ['Free', 'Premium', 'Pro'].map(function (label, i) {
-                    const val = [data.tiers.free, data.tiers.premium, data.tiers.pro][i];
+                const total = tierValues.reduce(function (a, b) { return a + b; }, 0) || 1;
+                legend.innerHTML = tierLabels.map(function (label, i) {
+                    const val = tierValues[i];
                     const pct = Math.round(100 * val / total);
                     return '<div class="cc-donut-legend__item">' +
-                        '<span class="cc-donut-legend__dot" style="background:' + colors[i] + '"></span>' +
+                        '<span class="cc-donut-legend__dot" style="background:' + tierColors[i] + '"></span>' +
                         '<span>' + label + '</span>' +
                         '<span class="cc-donut-legend__count">' + val + ' · ' + pct + '%</span>' +
                     '</div>';
@@ -244,7 +251,6 @@
         });
 
         document.addEventListener('keydown', function (e) {
-            // ⌘K / Ctrl+K
             if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
                 e.preventDefault();
                 modal.classList.contains('is-open') ? close() : open();
@@ -291,7 +297,6 @@
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (data) {
                     if (!data) return;
-                    // Only update errors today (cheap; other values rarely change)
                     const errEl = document.querySelector('[data-ribbon="errors"] .cc-ribbon__value');
                     if (errEl && data.components && data.components.errors) {
                         errEl.textContent = data.components.errors.unresolved || 0;

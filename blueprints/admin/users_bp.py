@@ -10,7 +10,7 @@ from flask import (
 import logging
 import secrets
 import string
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from config import Config
 from db import (
@@ -21,10 +21,12 @@ from db import (
     get_user_subject_list,
     is_admin,
     execute_with_retry,
+    create_notification,
 )
 from services.tier_service import (
     get_user_tier, set_user_tier, get_current_user_tier,
 )
+from tier_config import normalize_tier
 from admin_users_db import (
     ensure_admin_user_schema,
     get_users_admin, get_users_admin_export, get_users_admin_stats,
@@ -36,7 +38,7 @@ from admin_users_db import (
     update_user_profile,
     set_user_verified,
 )
-from utils import validate_csrf
+from utils import validate_csrf, SOMALI_TIMEZONE
 from services.admin.guards import admin_can
 from services.admin.capabilities import admin_can as has_capability
 from services.admin.audit import write_audit
@@ -50,12 +52,6 @@ admin_users_bp = Blueprint('admin_users', __name__, url_prefix='/admin')
 # ============================================================
 # PASSWORD GENERATION
 # ============================================================
-# The previous version hard-coded '12345678' as the reset password.
-# That value is predictable — anyone could log in as any user whose
-# password had been "reset to default". We now generate a random
-# 12-character password per invocation and show it to the admin so
-# they can relay it to the user.
-# ============================================================
 
 _PASSWORD_ALPHABET = string.ascii_letters + string.digits
 _RANDOM_PASSWORD_LENGTH = 12
@@ -67,13 +63,9 @@ def _generate_random_password() -> str:
         for _ in range(_RANDOM_PASSWORD_LENGTH)
     )
 
+
 # ============================================================
 # TIER DURATION PARSING
-# ============================================================
-# The admin tier form sends a `duration` field with one of:
-#   'permanent'   → expires_at = None
-#   '7' / '30' / '90' / '365'  → now + N days
-#   'custom'      → use the `custom_date` field (YYYY-MM-DD)
 # ============================================================
 
 _TIER_DURATION_DAYS = {7, 30, 90, 365}
@@ -93,13 +85,10 @@ def _parse_tier_duration(form) -> tuple:
         if not raw:
             return None, 'Please pick a custom expiry date.'
         try:
-            # Accept YYYY-MM-DD only
             dt = datetime.strptime(raw, '%Y-%m-%d')
         except ValueError:
             return None, 'Invalid custom date format.'
-        # End of that day in Somali timezone
         try:
-            from utils import SOMALI_TIMEZONE
             dt = dt.replace(tzinfo=SOMALI_TIMEZONE,
                             hour=23, minute=59, second=59)
         except Exception:
@@ -113,11 +102,187 @@ def _parse_tier_duration(form) -> tuple:
     if days not in _TIER_DURATION_DAYS:
         return None, 'Invalid duration.'
     try:
-        from utils import SOMALI_TIMEZONE
         target = datetime.now(SOMALI_TIMEZONE) + timedelta(days=days)
     except Exception:
         target = datetime.utcnow() + timedelta(days=days)
-    return target.isoformat(), None 
+    return target.isoformat(), None
+
+
+# ============================================================
+# LIFECYCLE STAGE COMPUTATION
+# ============================================================
+# Mirrors the classification used by daily_tasks.py so the admin
+# sees the same view the automation does.
+#
+# Returns one of:
+#   'expiring_tomorrow'  — premium, expires today or tomorrow
+#   'expiring_soon'      — premium, expires in 2–7 days
+#   'active_premium'     — premium, expiry beyond 7 days or permanent
+#   'churned'            — free, tier_updated_at within last 30 days
+#   'free'               — free, no recent churn (or first-time)
+#   ''                   — unknown / malformed
+# ============================================================
+
+_TIER_EXPIRING_TOMORROW_WINDOW_HOURS = 48
+_TIER_EXPIRING_SOON_WINDOW_DAYS = 7
+_TIER_CHURN_WINDOW_DAYS = 30
+
+
+def _compute_lifecycle_stage(user: dict) -> str:
+    if not user:
+        return ''
+
+    tier = normalize_tier(user.get('tier') or 'free')
+
+    if tier == 'premium':
+        expires_raw = user.get('tier_expires_at')
+        if not expires_raw:
+            # Permanent premium
+            return 'active_premium'
+        try:
+            s = str(expires_raw).replace('Z', '+00:00')
+            target = datetime.fromisoformat(s)
+            if target.tzinfo is None:
+                target = target.replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+            delta = target - now
+            if delta.total_seconds() < 0:
+                # Expired but the daily task hasn't caught it yet
+                return 'churned'
+            if delta.total_seconds() <= _TIER_EXPIRING_TOMORROW_WINDOW_HOURS * 3600:
+                return 'expiring_tomorrow'
+            if delta.days <= _TIER_EXPIRING_SOON_WINDOW_DAYS:
+                return 'expiring_soon'
+            return 'active_premium'
+        except Exception:
+            return 'active_premium'
+
+    # Free tier — check for recent churn
+    updated_raw = user.get('tier_updated_at')
+    if updated_raw:
+        try:
+            s = str(updated_raw).replace('Z', '+00:00')
+            updated = datetime.fromisoformat(s)
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+            if (now - updated).days <= _TIER_CHURN_WINDOW_DAYS:
+                # Only counts as churn if they actually had premium
+                # (evidenced by tier_updated_at being set at all — the
+                # only writers are tier changes).
+                return 'churned'
+        except Exception:
+            pass
+
+    return 'free'
+
+
+# ============================================================
+# LIFECYCLE NOTIFICATION TEMPLATES
+# ============================================================
+# Kept in sync with daily_tasks.py::_send_tier_notification. The
+# manual trigger route uses these; the daily runner uses its own
+# copies. If the wording changes in one, change it in both.
+# ============================================================
+
+TIER_NOTIFICATION_TEMPLATES = {
+    'tier_expiring_soon': {
+        'title': 'Premium ends in {days} day{s}',
+        'body': ('Your Premium access ends in {days} day{s}. '
+                 'Renew for $1.00/month to keep premium PDFs (20/day), '
+                 'progress analytics, history search, and personal insights.'),
+        'icon': '⏳',
+    },
+    'tier_expiring_tomorrow': {
+        'title': 'Premium ends {when}',
+        'body': ('Your Premium access ends {when}. '
+                 'Renew now for $1.00/month — your first month is 50% off '
+                 'if you haven\'t used the discount yet.'),
+        'icon': '🚨',
+    },
+    'tier_expired': {
+        'title': 'Your Premium access has ended',
+        'body': ('You are now on the Free tier. Free still includes '
+                 'unlimited practice, hosting competitions, every group, '
+                 'and 3 PDF downloads per day. To restore premium PDFs '
+                 '(20/day), analytics, history search, and insights, '
+                 'renew for $1.00/month.'),
+        'icon': '⏰',
+    },
+    'tier_expired_followup': {
+        'title': 'Still thinking about Premium?',
+        'body': ('We noticed you haven\'t renewed Premium yet. If cost '
+                 'is the issue, your first month is 50% off ($0.50). '
+                 'If you have questions, reply in the WhatsApp group '
+                 'and we\'ll help.'),
+        'icon': '💬',
+    },
+    'tier_winback': {
+        'title': 'Come back to Premium',
+        'body': ('It\'s been two weeks. Students who use Premium '
+                 'progress faster — unlimited study materials, analytics '
+                 'to spot weak areas, and insights to study smarter. '
+                 'Come back for $1.00/month, cancel anytime.'),
+        'icon': '🎁',
+    },
+}
+
+_TIER_NOTIFICATION_TYPES = tuple(TIER_NOTIFICATION_TEMPLATES.keys())
+
+
+def _build_tier_notification(type_key: str, user: dict) -> dict:
+    """
+    Return {title, body, icon} for a given type + user. Substitutes
+    the {days} / {s} / {when} placeholders where applicable.
+    """
+    tpl = TIER_NOTIFICATION_TEMPLATES.get(type_key)
+    if not tpl:
+        return None
+
+    title = tpl['title']
+    body = tpl['body']
+    icon = tpl['icon']
+
+    if type_key == 'tier_expiring_soon':
+        days = 3
+        expires_raw = user.get('tier_expires_at')
+        if expires_raw:
+            try:
+                s = str(expires_raw).replace('Z', '+00:00')
+                target = datetime.fromisoformat(s)
+                if target.tzinfo is None:
+                    target = target.replace(tzinfo=timezone.utc)
+                delta = target - datetime.now(timezone.utc)
+                days = max(0, int(delta.total_seconds() // 86400))
+            except Exception:
+                pass
+        suffix = 's' if days != 1 else ''
+        title = title.format(days=days, s=suffix)
+        body = body.format(days=days, s=suffix)
+
+    elif type_key == 'tier_expiring_tomorrow':
+        when = 'tomorrow'
+        expires_raw = user.get('tier_expires_at')
+        if expires_raw:
+            try:
+                s = str(expires_raw).replace('Z', '+00:00')
+                target = datetime.fromisoformat(s)
+                if target.tzinfo is None:
+                    target = target.replace(tzinfo=timezone.utc)
+                delta = target - datetime.now(timezone.utc)
+                if delta.total_seconds() <= 0:
+                    when = 'today'
+                elif delta.days == 1:
+                    when = 'tomorrow'
+                else:
+                    when = f'in {delta.days} days'
+            except Exception:
+                pass
+        title = title.format(when=when)
+        body = body.format(when=when)
+
+    return {'title': title, 'body': body, 'icon': icon}
+
 
 # ============================================================
 # LIST
@@ -149,8 +314,11 @@ def list_users():
     total_pages = (total + per_page - 1) // per_page if total > 0 else 1
     stats = get_users_admin_stats()
 
+    # Compute lifecycle stage for each user so the list can show a
+    # small chip next to the tier pill.
     for user in users:
         user['tier'] = user.get('tier') or 'free'
+        user['lifecycle_stage'] = _compute_lifecycle_stage(user)
 
     return render_template(
         'dashboard/admin/access/users.html',
@@ -208,6 +376,7 @@ def user_detail(user_id):
         return redirect(url_for('admin_users.list_users'))
 
     user['tier'] = user.get('tier') or 'free'
+    user['lifecycle_stage'] = _compute_lifecycle_stage(user)
 
     quizzes = get_user_recent_quizzes_admin(user_id, limit=20)
     live_quizzes = get_user_recent_live_quizzes(user_id, limit=10)
@@ -230,9 +399,21 @@ def user_detail(user_id):
     except Exception:
         session_info = None
 
-    # Show a *suggested* random password the admin can copy and give
-    # to the user. This is display-only; the reset routes generate
-    # their own random value at click time.
+    # Lifecycle notification history — 5 most recent tier_* notifications
+    tier_notifications = []
+    try:
+        cursor = execute_with_retry("""
+            SELECT type, title, body, icon, is_read, created_at
+            FROM notifications
+            WHERE user_id = ?
+              AND type LIKE 'tier_%'
+            ORDER BY created_at DESC
+            LIMIT 5
+        """, (user_id,))
+        tier_notifications = [dict(r) for r in cursor.fetchall()]
+    except Exception as e:
+        logger.warning(f"tier notification history failed: {e}")
+
     suggested_password = _generate_random_password()
 
     return render_template(
@@ -245,10 +426,9 @@ def user_detail(user_id):
         avg_score=avg,
         session_info=session_info,
         suggested_password=suggested_password,
-        # Legacy template variable. Kept as an empty string so old
-        # templates don't crash. New templates should use
-        # suggested_password instead.
         default_password_preset='',
+        tier_notifications=tier_notifications,
+        tier_notification_types=_TIER_NOTIFICATION_TYPES,
     )
 
 
@@ -325,7 +505,6 @@ def verify_user(user_id):
             severity='info',
         )
         try:
-            from db import create_notification
             create_notification(
                 user_id=user_id,
                 type='account',
@@ -449,7 +628,6 @@ def notify(user_id):
         flash('Title and message are required.', 'error')
         return redirect(url_for('admin_users.user_detail', user_id=user_id))
 
-    from db import create_notification
     create_notification(user_id, 'admin_direct', title, body, '/dashboard', '📬')
     log_admin_user_action(session['user_id'], user_id, 'notify', None, title[:200])
 
@@ -458,6 +636,67 @@ def notify(user_id):
         before=None, after={'title': title}, severity='info',
     )
     flash('Notification sent.', 'success')
+    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
+
+# ============================================================
+# TRIGGER LIFECYCLE NOTIFICATION (new)
+# ============================================================
+# Manual fire of one of the five tier lifecycle notifications.
+# Useful for support ("resend the winback") and testing without
+# waiting for cron.
+# ============================================================
+
+@admin_users_bp.route('/users/<int:user_id>/trigger-tier-notification/<type_key>',
+                      methods=['POST'], endpoint='trigger_tier_notification')
+@admin_can('users.notify')
+def trigger_tier_notification(user_id, type_key):
+    validate_csrf()
+
+    if type_key not in TIER_NOTIFICATION_TEMPLATES:
+        flash(f'Unknown notification type: {type_key}', 'error')
+        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
+    user = get_student_by_id(user_id)
+    if not user:
+        flash('User not found.', 'error')
+        return redirect(url_for('admin_users.list_users'))
+
+    # Enrich user dict with computed lifecycle stage for template
+    payload = _build_tier_notification(type_key, user)
+    if not payload:
+        flash('Could not build notification payload.', 'error')
+        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
+    try:
+        create_notification(
+            user_id=user_id,
+            type=type_key,
+            title=payload['title'],
+            body=payload['body'],
+            link='/home?show_upgrade=1',
+            icon=payload['icon'],
+        )
+    except Exception as e:
+        logger.error(f"trigger_tier_notification failed for user {user_id}: {e}")
+        flash('Failed to send notification.', 'error')
+        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+
+    log_admin_user_action(
+        session['user_id'], user_id,
+        'trigger_tier_notification', None, type_key,
+    )
+
+    write_audit(
+        action='user.trigger_tier_notification',
+        target_type='user',
+        target_id=user_id,
+        before=None,
+        after={'type': type_key, 'title': payload['title']},
+        severity='info',
+    )
+
+    flash(f'Lifecycle notification sent: {payload["title"]}', 'success')
     return redirect(url_for('admin_users.user_detail', user_id=user_id))
 
 
@@ -516,12 +755,6 @@ def set_password(user_id):
 # ============================================================
 # PASSWORD — random reset
 # ============================================================
-# Replaces the old "reset to 12345678" flow. Generates a random
-# 12-char password per click and displays it to the admin. The
-# password is shown ONLY in the flash message — it is never sent
-# to the user's UI, never logged, and never written to the audit
-# row (audit records that a reset happened, not the value).
-# ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/reset-password-random',
                       methods=['POST'],
@@ -563,7 +796,6 @@ def reset_password_random(user_id):
     return redirect(url_for('admin_users.user_detail', user_id=user_id))
 
 
-# Keep the old URL working — it now delegates to the random flow.
 @admin_users_bp.route('/users/<int:user_id>/reset-password-default',
                       methods=['POST'],
                       endpoint='reset_password_to_default')
@@ -685,14 +917,10 @@ def users_bulk():
         extra['title'] = (request.form.get('bulk_title') or '').strip()
         extra['body'] = (request.form.get('bulk_body') or '').strip()
 
-    # Bulk random-password reset — replaces the old fixed-preset flow.
     if action == 'reset_password_default' or action == 'reset_password_random':
         from werkzeug.security import generate_password_hash
         succeeded = 0
         failed = 0
-        # Generate one shared random password for the whole batch so
-        # the admin has a single value to relay. Bump session_version
-        # on every account so any active sessions are killed.
         batch_password = _generate_random_password()
         pw_hash = generate_password_hash(batch_password)
 
@@ -919,6 +1147,7 @@ def user_json(user_id):
         'curriculum': user.get('curriculum') or '',
         'tier': user.get('tier') or 'free',
         'tier_expires_at': user.get('tier_expires_at'),
+        'lifecycle_stage': _compute_lifecycle_stage(user),
         'is_verified': bool(user.get('is_verified')),
         'is_admin': bool(user.get('is_admin')),
         'total_points': int(user.get('total_points') or 0),
@@ -968,7 +1197,6 @@ def user_quick_action(user_id):
             before={'is_verified': 0}, after={'is_verified': 1}, severity='info',
         )
         try:
-            from db import create_notification
             create_notification(
                 user_id=user_id, type='account',
                 title='✅ Account Verified',
@@ -1006,8 +1234,7 @@ def user_quick_action(user_id):
         new_tier = (data.get('tier') or '').strip().lower()
         if new_tier not in ('free', 'premium'):
             return jsonify({'success': False, 'error': 'Invalid tier'}), 400
-    
-        # Optional expiry from JSON payload: 'permanent' | '7' | '30' | ... | ISO
+
         expires_at = None
         raw_exp = data.get('expires_at')
         if new_tier == 'premium' and raw_exp:
@@ -1019,27 +1246,25 @@ def user_quick_action(user_id):
                 if days not in _TIER_DURATION_DAYS:
                     return jsonify({'success': False, 'error': 'Invalid duration'}), 400
                 try:
-                    from utils import SOMALI_TIMEZONE
                     target = datetime.now(SOMALI_TIMEZONE) + timedelta(days=days)
                 except Exception:
                     target = datetime.utcnow() + timedelta(days=days)
                 expires_at = target.isoformat()
             else:
-                expires_at = raw_exp  # assume already-ISO
-    
+                expires_at = raw_exp
+
         if not set_user_tier_admin(
             user_id, new_tier, session['user_id'], expires_at=expires_at,
         ):
             return jsonify({'success': False, 'error': 'Failed to update tier'}), 500
-    
+
         write_audit(
             action='user.set_tier', target_type='user', target_id=user_id,
             before={'tier': user.get('tier'), 'expires_at': user.get('tier_expires_at')},
             after={'tier': new_tier, 'expires_at': expires_at},
             severity='warning',
         )
-    
-        # Build a friendly message
+
         if new_tier == 'premium':
             if expires_at:
                 msg = f'Tier updated to PREMIUM until {expires_at[:10]}'
@@ -1047,7 +1272,7 @@ def user_quick_action(user_id):
                 msg = 'Tier updated to PREMIUM (permanent)'
         else:
             msg = 'Tier updated to FREE'
-    
+
         return jsonify({
             'success': True,
             'message': msg,
@@ -1064,7 +1289,6 @@ def user_quick_action(user_id):
         body = (data.get('body') or '').strip()[:500]
         if not title or not body:
             return jsonify({'success': False, 'error': 'Title and message required'}), 400
-        from db import create_notification
         create_notification(user_id, 'admin_direct', title, body, '/dashboard', '📬')
         try:
             log_admin_user_action(session['user_id'], user_id, 'notify', None, title[:200])

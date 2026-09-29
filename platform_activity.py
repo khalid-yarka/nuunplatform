@@ -127,14 +127,14 @@ def get_live_quizzes_series(days: int = 30) -> List[Dict[str, Any]]:
 # ============================================
 
 def get_tier_distribution() -> Dict[str, int]:
-    """How many users per tier — canonical vocabulary (free / premium / pro)."""
+    """How many users per tier. Two-tier model: free / premium only."""
     try:
         cursor = execute_with_retry("""
             SELECT tier, COUNT(*) AS count
             FROM students
             GROUP BY tier
         """)
-        dist = {'free': 0, 'premium': 0, 'pro': 0}
+        dist = {'free': 0, 'premium': 0}
         for row in cursor.fetchall():
             t = normalize_tier(row['tier'] or 'free')
             if t in dist:
@@ -142,7 +142,99 @@ def get_tier_distribution() -> Dict[str, int]:
         return dist
     except Exception as e:
         logger.error(f"get_tier_distribution: {e}")
-        return {'free': 0, 'premium': 0, 'pro': 0}
+        return {'free': 0, 'premium': 0}
+
+
+def get_tier_lifecycle_stats() -> Dict[str, Any]:
+    """
+    Tier lifecycle summary.
+
+    All numbers are computed live from the students table plus the
+    notifications table (for the "did they receive the expiry
+    notification" predicate).
+
+    Returns:
+        active_premium         — current premium count
+        expiring_tomorrow      — premium expiring today or tomorrow
+        expiring_7d            — premium expiring within 7 days
+        expiring_30d           — premium expiring within 30 days
+        expired_7d             — downgraded in the last 7 days
+        expired_30d            — downgraded in the last 30 days
+        renewed_after_loss_30d — users who returned to premium within 30d
+        churn_rate_30d         — expired_30d / (active + expired_30d)
+    """
+    stats: Dict[str, Any] = {
+        'active_premium':         0,
+        'expiring_tomorrow':      0,
+        'expiring_7d':            0,
+        'expiring_30d':           0,
+        'expired_7d':             0,
+        'expired_30d':            0,
+        'renewed_after_loss_30d': 0,
+        'churn_rate_30d':         0.0,
+    }
+
+    try:
+        stats['active_premium'] = _scalar(
+            "SELECT COUNT(*) FROM students WHERE tier = 'premium'"
+        )
+
+        # Expiring soon — only counts premium users with a future expiry
+        stats['expiring_tomorrow'] = _scalar(
+            "SELECT COUNT(*) FROM students "
+            "WHERE tier = 'premium' AND tier_expires_at IS NOT NULL "
+            "AND tier_expires_at BETWEEN datetime('now') "
+            "AND datetime('now', '+2 days')"
+        )
+        stats['expiring_7d'] = _scalar(
+            "SELECT COUNT(*) FROM students "
+            "WHERE tier = 'premium' AND tier_expires_at IS NOT NULL "
+            "AND tier_expires_at BETWEEN datetime('now') "
+            "AND datetime('now', '+7 days')"
+        )
+        stats['expiring_30d'] = _scalar(
+            "SELECT COUNT(*) FROM students "
+            "WHERE tier = 'premium' AND tier_expires_at IS NOT NULL "
+            "AND tier_expires_at BETWEEN datetime('now') "
+            "AND datetime('now', '+30 days')"
+        )
+
+        # Recently downgraded — tier_updated_at is written by both
+        # set_user_tier_admin and the daily tier.expire_and_notify task
+        stats['expired_7d'] = _scalar(
+            "SELECT COUNT(*) FROM students "
+            "WHERE tier = 'free' AND tier_updated_at IS NOT NULL "
+            "AND tier_updated_at >= datetime('now', '-7 days')"
+        )
+        stats['expired_30d'] = _scalar(
+            "SELECT COUNT(*) FROM students "
+            "WHERE tier = 'free' AND tier_updated_at IS NOT NULL "
+            "AND tier_updated_at >= datetime('now', '-30 days')"
+        )
+
+        # Renewed after loss — currently premium AND received a
+        # tier_expired notification in the last 30 days
+        stats['renewed_after_loss_30d'] = _scalar("""
+            SELECT COUNT(DISTINCT s.id) FROM students s
+            WHERE s.tier = 'premium'
+              AND EXISTS (
+                  SELECT 1 FROM notifications n
+                  WHERE n.user_id = s.id
+                    AND n.type = 'tier_expired'
+                    AND n.created_at >= datetime('now', '-30 days')
+              )
+        """)
+
+        # Churn rate
+        denom = (stats['active_premium'] or 0) + (stats['expired_30d'] or 0)
+        if denom:
+            stats['churn_rate_30d'] = round(
+                100.0 * stats['expired_30d'] / denom, 1
+            )
+    except Exception as e:
+        logger.error(f"get_tier_lifecycle_stats: {e}")
+
+    return stats
 
 
 def get_location_distribution() -> Dict[str, int]:

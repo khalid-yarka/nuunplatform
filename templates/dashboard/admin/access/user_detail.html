@@ -298,6 +298,113 @@
     [data-theme="dark"] .tier-expiry-chip.expired {
         background: #3A1A1A; color: #FCA5A5;
     }
+
+    /* ─── Lifecycle stage chips ─── */
+    .lifecycle-chip {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 11px; font-weight: 700;
+        padding: 2px 9px; border-radius: 10px;
+        letter-spacing: 0.3px;
+        white-space: nowrap;
+    }
+    .lifecycle-chip.expiring_tomorrow {
+        background: #FEF3C7; color: #92400E;
+        animation: lifecyclePulse 2s ease-in-out infinite;
+    }
+    .lifecycle-chip.expiring_soon {
+        background: #FFFBEB; color: #92400E;
+    }
+    .lifecycle-chip.churned {
+        background: #FEF2F2; color: #991B1B;
+    }
+    .lifecycle-chip.active_premium {
+        background: #ECFDF5; color: #065F46;
+    }
+    @keyframes lifecyclePulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.45); }
+        50%      { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0); }
+    }
+    [data-theme="dark"] .lifecycle-chip.expiring_tomorrow {
+        background: #3A2E1A; color: #FBBF24;
+    }
+    [data-theme="dark"] .lifecycle-chip.expiring_soon {
+        background: #3A2E1A; color: #FCD34D;
+    }
+    [data-theme="dark"] .lifecycle-chip.churned {
+        background: #3A1A1A; color: #FCA5A5;
+    }
+    [data-theme="dark"] .lifecycle-chip.active_premium {
+        background: #1A3A2E; color: #34D399;
+    }
+
+    /* ─── Lifecycle notification history ─── */
+    .lifecycle-history {
+        display: flex; flex-direction: column; gap: 10px;
+    }
+    .lifecycle-history-row {
+        display: flex; gap: 12px; align-items: flex-start;
+        padding: 10px 14px;
+        background: var(--background);
+        border-radius: var(--radius-sm);
+        border-left: 3px solid var(--primary);
+    }
+    .lifecycle-history-row .lh-icon {
+        font-size: 18px; flex-shrink: 0; line-height: 1;
+    }
+    .lifecycle-history-row .lh-body { flex: 1; min-width: 0; }
+    .lifecycle-history-row .lh-title {
+        font-size: 13px; font-weight: 700;
+        color: var(--text); line-height: 1.3;
+    }
+    .lifecycle-history-row .lh-time {
+        font-size: 11px; color: var(--text-muted);
+        margin-top: 2px; font-variant-numeric: tabular-nums;
+    }
+    .lifecycle-history-empty {
+        text-align: center; padding: 20px;
+        font-size: 13px; color: var(--text-muted);
+        font-style: italic;
+    }
+
+    /* ─── Lifecycle trigger dropdown ─── */
+    .lifecycle-trigger {
+        position: relative;
+    }
+    .lifecycle-trigger summary {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 10px 16px;
+        background: var(--background); color: var(--text-2);
+        border: 1px solid var(--border); border-radius: 8px;
+        font-size: 13px; font-weight: 600;
+        cursor: pointer; list-style: none;
+        transition: all 0.15s;
+    }
+    .lifecycle-trigger summary::-webkit-details-marker { display: none; }
+    .lifecycle-trigger summary:hover {
+        border-color: var(--primary); color: var(--primary);
+        background: var(--primary-light);
+    }
+    .lifecycle-trigger__menu {
+        margin-top: 8px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 6px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+        display: flex; flex-direction: column; gap: 2px;
+    }
+    .lifecycle-trigger__item {
+        display: flex; gap: 10px; align-items: center;
+        padding: 8px 12px; border-radius: 7px;
+        background: transparent; border: none;
+        font-family: inherit; font-size: 13px;
+        color: var(--text); cursor: pointer; text-align: left;
+        width: 100%;
+    }
+    .lifecycle-trigger__item:hover {
+        background: var(--primary-light); color: var(--primary);
+    }
+    .lifecycle-trigger__item .lt-icon { font-size: 15px; flex-shrink: 0; }
 </style>
 {% endblock %}
 
@@ -310,6 +417,7 @@
 {% set expires_raw = user.tier_expires_at %}
 {% set has_expiry = (tier == 'premium' and expires_raw) %}
 {% set is_permanent = (tier == 'premium' and not expires_raw) %}
+{% set lifecycle_stage = user.lifecycle_stage or '' %}
 
 {# ═══════════ HERO ═══════════ #}
 <div class="um-hero">
@@ -344,6 +452,25 @@
                         ∞ Permanent
                     </span>
                 {% endif %}
+            {% endif %}
+
+            {# Lifecycle stage chip #}
+            {% if lifecycle_stage == 'expiring_tomorrow' %}
+                <span class="lifecycle-chip expiring_tomorrow" title="Premium ends within 2 days">
+                    ⏳ Expiring soon
+                </span>
+            {% elif lifecycle_stage == 'expiring_soon' %}
+                <span class="lifecycle-chip expiring_soon" title="Premium ends within 7 days">
+                    ⏳ Expiring this week
+                </span>
+            {% elif lifecycle_stage == 'churned' %}
+                <span class="lifecycle-chip churned" title="Premium ended in the last 30 days">
+                    📉 Recently churned
+                </span>
+            {% elif lifecycle_stage == 'active_premium' %}
+                <span class="lifecycle-chip active_premium" title="Active premium">
+                    👑 Active premium
+                </span>
             {% endif %}
 
             {% if user.is_verified %}
@@ -555,6 +682,40 @@
 {% endif %}
 
 
+{# ═══════════ LIFECYCLE NOTIFICATIONS HISTORY ═══════════ #}
+{% if tier_notifications %}
+<section class="um-section">
+    <div class="um-section-head">
+        <h3><i class="fas fa-bell"></i> Lifecycle notifications</h3>
+        <span class="hint">Last {{ tier_notifications|length }}</span>
+    </div>
+    <div class="um-section-body">
+        <div class="lifecycle-history">
+            {% for n in tier_notifications %}
+            <div class="lifecycle-history-row">
+                <span class="lh-icon">{{ n.icon or '⏰' }}</span>
+                <div class="lh-body">
+                    <div class="lh-title">
+                        {{ n.title }}
+                        {% if n.is_read %}
+                            <span style="font-size:10px;color:var(--text-muted);font-weight:500;margin-left:4px;">read</span>
+                        {% else %}
+                            <span style="font-size:10px;color:var(--primary);font-weight:700;margin-left:4px;">unread</span>
+                        {% endif %}
+                    </div>
+                    <div class="lh-time">
+                        <code style="font-family:monospace;font-size:10px;">{{ n.type }}</code>
+                        · {{ n.created_at|somali_dt }}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+
 {# ═══════════ PASSWORD MANAGEMENT ═══════════ #}
 {% if user.id != session.user_id and admin_can('users.reset_password') %}
 <section class="um-section" id="password-panel">
@@ -722,6 +883,19 @@
                         </span>
                     </div>
                 {% endif %}
+                {% if lifecycle_stage %}
+                    <div class="row">
+                        <span class="k">Lifecycle</span>
+                        <span class="v">
+                            {% if lifecycle_stage == 'expiring_tomorrow' %}⏳ Expiring soon
+                            {% elif lifecycle_stage == 'expiring_soon' %}⏳ Expiring this week
+                            {% elif lifecycle_stage == 'churned' %}📉 Recently churned
+                            {% elif lifecycle_stage == 'active_premium' %}👑 Active premium
+                            {% else %}{{ lifecycle_stage }}
+                            {% endif %}
+                        </span>
+                    </div>
+                {% endif %}
                 <div class="row"><span class="k">Admin</span><span class="v">{{ 'Yes' if user.is_admin else 'No' }}</span></div>
                 <div class="row"><span class="k">Verified</span><span class="v">{{ 'Yes' if user.is_verified else 'No' }}</span></div>
                 <div class="row"><span class="k">Joined</span><span class="v">{{ user.created_at|somali_dt }}</span></div>
@@ -828,6 +1002,85 @@
             {% endif %}
 
         </div>
+
+        {# ─── Manual lifecycle notification trigger ─── #}
+        {% if admin_can('users.notify') %}
+        <div style="margin-top:16px;padding-top:16px;border-top:1px dashed var(--border);">
+            <details class="lifecycle-trigger">
+                <summary>
+                    <i class="fas fa-bell"></i> Send lifecycle notification
+                    <i class="fas fa-chevron-down" style="font-size:9px;opacity:.7;margin-left:2px;"></i>
+                </summary>
+                <div class="lifecycle-trigger__menu">
+                    <form method="POST"
+                          action="{{ url_for('admin_users.trigger_tier_notification', user_id=user.id, type_key='tier_expiring_soon') }}"
+                          onsubmit="return confirm('Send \"3-day warning\" notification to {{ user.first_name }}?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="lifecycle-trigger__item">
+                            <span class="lt-icon">⏳</span>
+                            <span>
+                                <strong>T-3 warning</strong>
+                                <span style="display:block;font-size:11px;color:var(--text-muted);">"Premium ends in N days"</span>
+                            </span>
+                        </button>
+                    </form>
+
+                    <form method="POST"
+                          action="{{ url_for('admin_users.trigger_tier_notification', user_id=user.id, type_key='tier_expiring_tomorrow') }}"
+                          onsubmit="return confirm('Send \"Expiring tomorrow\" notification to {{ user.first_name }}?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="lifecycle-trigger__item">
+                            <span class="lt-icon">🚨</span>
+                            <span>
+                                <strong>T-1 warning</strong>
+                                <span style="display:block;font-size:11px;color:var(--text-muted);">"Premium ends tomorrow"</span>
+                            </span>
+                        </button>
+                    </form>
+
+                    <form method="POST"
+                          action="{{ url_for('admin_users.trigger_tier_notification', user_id=user.id, type_key='tier_expired') }}"
+                          onsubmit="return confirm('Send \"Premium ended\" notification to {{ user.first_name }}?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="lifecycle-trigger__item">
+                            <span class="lt-icon">⏰</span>
+                            <span>
+                                <strong>Expiry notice</strong>
+                                <span style="display:block;font-size:11px;color:var(--text-muted);">"Your Premium access has ended"</span>
+                            </span>
+                        </button>
+                    </form>
+
+                    <form method="POST"
+                          action="{{ url_for('admin_users.trigger_tier_notification', user_id=user.id, type_key='tier_expired_followup') }}"
+                          onsubmit="return confirm('Send \"Post-expiry follow-up\" notification to {{ user.first_name }}?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="lifecycle-trigger__item">
+                            <span class="lt-icon">💬</span>
+                            <span>
+                                <strong>3-day follow-up</strong>
+                                <span style="display:block;font-size:11px;color:var(--text-muted);">"Still thinking about Premium?"</span>
+                            </span>
+                        </button>
+                    </form>
+
+                    <form method="POST"
+                          action="{{ url_for('admin_users.trigger_tier_notification', user_id=user.id, type_key='tier_winback') }}"
+                          onsubmit="return confirm('Send \"Winback\" notification to {{ user.first_name }}?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="lifecycle-trigger__item">
+                            <span class="lt-icon">🎁</span>
+                            <span>
+                                <strong>14-day winback</strong>
+                                <span style="display:block;font-size:11px;color:var(--text-muted);">"Come back to Premium"</span>
+                            </span>
+                        </button>
+                    </form>
+                </div>
+            </details>
+        </div>
+        {% endif %}
+
     </div>
 </section>
 {% endif %}

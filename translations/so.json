@@ -1351,5 +1351,10 @@
   "prompt.notif.body": "Daaro Notification ka si aad u hesho update yada, imtixannada, pdf-yada, sualaha iyo ogeysiisyada NuunPlatform. Intaas iyo ka badan si aad u aragto u oggolow in uu daarmo.",
   "prompt.notif.cta": "Daar",
   "prompt.notif.dismiss": "Hadda maya",
-  "prompt.close": "Xir"
+  "prompt.close": "Xir",
+  "offline.title": "Khadka kaa tagsan",
+  "offline.subtitle": "Xiriirka internet-ka kaa go'ay. NuunPlatform wuxuu kaaga sii wadi doonaa halkii uu khadka kaga tagtay markii aad dib u soo noqoto.",
+  "offline.retry": "Isku day mar kale",
+  "offline.home": "Dib ugu labo Dashboard",
+  "offline.tip": "Fariin\\: bogagga aad hore u booqatay waa la heli karaa adigoon online ahayn."
 }

@@ -9,3 +9,4 @@
 {"user_id": 10, "entry_type": "quiz_attempt", "action": "completed", "entry_id": null, "metadata": {"subject": "ict", "score": 0, "total": 10, "percentage": 0.0, "ended_early": true}, "created_at": "2026-09-28T09:29:17.368652+03:00"}
 {"user_id": 10, "entry_type": "achievement", "action": "unlocked", "entry_id": 1, "metadata": {"name": "First Quiz", "icon": "🏁"}, "created_at": "2026-09-28T09:29:17.377881+03:00"}
 {"user_id": 10, "entry_type": "quiz_attempt", "action": "completed", "entry_id": null, "metadata": {"subject": "ict", "score": 0, "total": 10, "percentage": 0.0, "ended_early": true}, "created_at": "2026-09-28T09:29:24.974729+03:00"}
+{"user_id": 50, "entry_type": "pdf_view", "action": "viewed", "entry_id": null, "metadata": {"title": "Book GP F4", "subject": "gp", "code": "R445-UJGX"}, "created_at": "2026-09-28T16:33:08.678948+03:00"}

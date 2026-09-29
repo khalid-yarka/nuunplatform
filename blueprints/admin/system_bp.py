@@ -38,6 +38,8 @@ from services.admin.guards import admin_can
 from services.admin.roles import is_super_admin
 from services.admin.audit import write_audit
 
+from platform_activity import get_tier_lifecycle_stats
+
 logger = logging.getLogger(__name__)
 
 admin_system_bp = Blueprint('admin_system', __name__, url_prefix='/admin')
@@ -388,8 +390,37 @@ def _build_priority(pulse):
     """
     Priority queue — actions that need the current admin's attention.
     Empty when there is no work; the greeting bar adapts accordingly.
+
+    Tier lifecycle items are listed first — they are the most
+    time-sensitive because renewal requires the user's cooperation.
     """
     items = []
+
+    # ---- Users expiring tomorrow (renewal prompt window) ----
+    expiring_tomorrow = pulse.get('tier_expiring_tomorrow', 0)
+    if expiring_tomorrow > 0:
+        items.append({
+            'icon': '⏳',
+            'count': expiring_tomorrow,
+            'label': 'Users expiring soon',
+            'description': 'Premium ends within 2 days — send a renewal nudge.',
+            'cta': 'Review',
+            'link': url_for('admin_users.list_users', tier='premium', sort='newest'),
+            'tone': 'amber',
+        })
+
+    # ---- Users who lapsed this week ----
+    expired_7d = pulse.get('tier_expired_7d', 0)
+    if expired_7d > 0:
+        items.append({
+            'icon': '📉',
+            'count': expired_7d,
+            'label': 'Recently churned',
+            'description': 'Premium ended in the last 7 days — winback window open.',
+            'cta': 'Review',
+            'link': url_for('admin_users.list_users', tier='free', sort='newest'),
+            'tone': 'red',
+        })
 
     # ---- Pending upgrades (super admin only) ----
     if is_super_admin() and pulse.get('upgrades_pending', 0) > 0:
@@ -505,7 +536,6 @@ def _build_priority(pulse):
 
     return {'total': total, 'items': items, 'hint': hint}
 
-
 def _build_sparklines():
     """
     Return 10-point sparkline arrays for each KPI tile.
@@ -566,7 +596,6 @@ def _build_chart_data():
         signups_series = get_signups_series(days=30)
         quizzes_series = get_quizzes_series(days=30)
 
-        # Build a union of all dates across both series
         all_dates = sorted(set(
             [s['date'] for s in signups_series] +
             [s['date'] for s in quizzes_series]
@@ -576,7 +605,6 @@ def _build_chart_data():
         quizzes_map = {s['date']: s['value'] for s in quizzes_series}
 
         for d in all_dates:
-            # Label: short month-day
             try:
                 from datetime import datetime
                 dt = datetime.strptime(d, '%Y-%m-%d')
@@ -588,7 +616,8 @@ def _build_chart_data():
     except Exception as e:
         logger.debug(f"_build_chart_data series failed: {e}")
 
-    tiers = {'free': 0, 'premium': 0, 'pro': 0}
+    # Two-tier model: free / premium only. No pro.
+    tiers = {'free': 0, 'premium': 0}
     try:
         from platform_activity import get_tier_distribution
         tiers = get_tier_distribution()
@@ -599,7 +628,6 @@ def _build_chart_data():
         'series': {'labels': labels, 'signups': signups, 'quizzes': quizzes},
         'tiers': tiers,
     }
-
 
 def _build_user_activity():
     """Recent platform activity (signups, quizzes, upgrades, PDFs)."""
@@ -616,6 +644,8 @@ def _build_pulse(include_revenue=False):
 
     Revenue keys (revenue_today, revenue_month) are ONLY added when
     `include_revenue=True`. Callers must pass True only for super admin.
+
+    Tier lifecycle keys are always added — they are read-only metrics.
     """
     stats = {}
     try:
@@ -635,6 +665,27 @@ def _build_pulse(include_revenue=False):
         'errors_open':      stats.get('errors_open', 0),
         'errors_today':     stats.get('errors_today', 0),
     }
+
+    # ── Tier lifecycle keys (always present, safe for templates) ──
+    try:
+        from platform_activity import get_tier_lifecycle_stats
+        lc = get_tier_lifecycle_stats()
+        pulse['tier_active_premium']   = lc.get('active_premium', 0)
+        pulse['tier_expiring_tomorrow'] = lc.get('expiring_tomorrow', 0)
+        pulse['tier_expiring_7d']      = lc.get('expiring_7d', 0)
+        pulse['tier_expiring_30d']     = lc.get('expiring_30d', 0)
+        pulse['tier_expired_7d']       = lc.get('expired_7d', 0)
+        pulse['tier_expired_30d']      = lc.get('expired_30d', 0)
+        pulse['tier_renewed_30d']      = lc.get('renewed_after_loss_30d', 0)
+        pulse['tier_churn_rate_30d']   = lc.get('churn_rate_30d', 0.0)
+    except Exception as e:
+        logger.debug(f"_build_pulse tier_lifecycle failed: {e}")
+        for k in ('tier_active_premium', 'tier_expiring_tomorrow',
+                  'tier_expiring_7d', 'tier_expiring_30d',
+                  'tier_expired_7d', 'tier_expired_30d',
+                  'tier_renewed_30d'):
+            pulse.setdefault(k, 0)
+        pulse.setdefault('tier_churn_rate_30d', 0.0)
 
     if include_revenue:
         revenue_today_cents = 0
@@ -674,10 +725,8 @@ def _build_pulse(include_revenue=False):
         'disk_used_pct':    disk['used_pct'],
     })
 
-    # Upgrades approved this month (used by the KPI tile)
     pulse['upgrades_approved_month'] = stats.get('upgrades_approved_month', 0)
     return pulse
-
 
 def _build_alerts(pulse):
     """

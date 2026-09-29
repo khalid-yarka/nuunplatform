@@ -1351,5 +1351,10 @@
   "prompt.notif.body": "Daaro Notification ka si aad u hesho update yada, imtixannada, pdf-yada, sualaha iyo ogeysiisyada NuunPlatform. Intaas iyo ka badan si aad u aragto u oggolow in uu daarmo.",
   "prompt.notif.cta": "Daar",
   "prompt.notif.dismiss": "Hadda maya",
-  "prompt.close": "Close"
+  "prompt.close": "Close",
+  "offline.title": "You're offline",
+  "offline.subtitle": "No internet connection. NuunPlatform will pick up where you left off once you're back online.",
+  "offline.retry": "Try again",
+  "offline.home": "Home",
+  "offline.tip": "Tip\\: pages you visited before are available offline."
 }

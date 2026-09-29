@@ -83,7 +83,8 @@ _PDF_CLASSES = ('F4', 'F3', 'G8', 'G7')
 # ============================================================
 
 _PDF_CODE_RE = re.compile(r'^[A-Z0-9]{4}-[A-Z0-9]{4}$')
-_PDF_SIZE_CAP_BYTES = 20 * 1024 * 1024
+# Read the same cap the user-facing library uses so admin preview # matches what students see. Falls back to 19 MB if unset. 
+_PDF_SIZE_CAP_BYTES = int(     getattr(Config, 'PDF_DIRECT_DOWNLOAD_MAX_BYTES', 19 * 1024 * 1024) )
 
 _PDF_SIZE_CACHE = {}
 _PDF_SIZE_CACHE_TTL = 300
@@ -111,12 +112,59 @@ def _normalize_pdf_page(raw):
 
 
 def _get_telegram_file_size(file_id):
+    """
+    Resolve a Telegram file's size.
+
+    Order of operations:
+      1. Read the bot DB column (populated by backfill_pdf_sizes.py and
+         kept current by the pdfs.refetch_sizes daily task).
+         - file_size > 0  → real size
+         - file_size == -2 → known too large; return a sentinel dict
+         - file_size == -1 / NULL → unknown; fall through to (2)
+      2. Call Telegram get_file() and cache the result in memory for 5 min.
+
+    Returns:
+        (size_bytes: int | None, is_known_too_large: bool)
+
+    The caller must not assume the first element is populated; check
+    `is_known_too_large` first.
+    """
     if not file_id:
-        return None
+        return None, False
+
+    # ── Step 1: read the persisted column via the bot DB ──
+    try:
+        from bot.db import _get_connection as bot_conn
+        conn = bot_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT file_size FROM pdfs WHERE file_id = ? LIMIT 1",
+                (file_id,),
+            )
+            row = cur.fetchone()
+            if row is not None:
+                size = row[0] if not hasattr(row, 'keys') else row['file_size']
+                if size is not None:
+                    size = int(size)
+                    if size > 0:
+                        return size, False
+                    if size == -2:
+                        # Permanent sentinel — file is too large for
+                        # any Telegram API path.
+                        return None, True
+                    # -1 (retryable) or NULL → keep going to step 2
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.debug(f"_get_telegram_file_size: DB lookup failed: {e}")
+
+    # ── Step 2: in-memory cache, then Telegram API ──
     now = time.time()
     cached = _PDF_SIZE_CACHE.get(file_id)
     if cached and (now - cached['fetched_at']) < _PDF_SIZE_CACHE_TTL:
-        return cached['size_bytes']
+        return cached['size_bytes'], cached.get('too_large', False)
+
     try:
         from bot.utils import get_bot
         bot = get_bot()
@@ -124,13 +172,27 @@ def _get_telegram_file_size(file_id):
         size = getattr(file_info, 'file_size', None)
         if size:
             size = int(size)
-            _PDF_SIZE_CACHE[file_id] = {'size_bytes': size, 'fetched_at': now}
-            return size
-        return None
+            _PDF_SIZE_CACHE[file_id] = {
+                'size_bytes': size,
+                'too_large': False,
+                'fetched_at': now,
+            }
+            return size, False
+        return None, False
     except Exception as e:
+        # Telegram returns "file is too big" for >20 MB — surface
+        # as a known-too-large so the template can respond accordingly.
+        msg = str(e).lower()
+        too_large = any(tok in msg for tok in ('too big', 'too large', '413'))
+        if too_large:
+            _PDF_SIZE_CACHE[file_id] = {
+                'size_bytes': None,
+                'too_large': True,
+                'fetched_at': now,
+            }
+            return None, True
         logger.warning(f"Could not get Telegram file size: {e}")
-        return None
-
+        return None, False
 
 # ============================================================
 # SAFE FILENAME FOR HTTP HEADERS
@@ -2277,6 +2339,105 @@ def pdf_download(pdf_id):
 # ============================================================
 # PDFs — LIBRARY EDIT / UPDATE / DELETE
 # ============================================================
+@admin_content_bp.route('/pdfs/<int:pdf_id>/refetch-size', methods=['POST'],
+                        endpoint='pdf_refetch_size')
+@admin_can('pdfs.edit')
+def pdf_refetch_size(pdf_id):
+    """
+    Re-resolve a single PDF's file size from Telegram.
+
+    Clears the in-memory cache entry, calls get_file() once, and
+    persists the result into bot_data.db `pdfs.file_size` so future
+    page loads don't need another round-trip.
+
+    The sentinel scheme matches the rest of the app:
+        > 0   → real size
+        -1    → transient failure (retryable)
+        -2    → known too large / gone (never retry)
+    """
+    if not _csrf_ok():
+        return jsonify({'error': 'Invalid session.'}), 403
+
+    pdf = get_pdf_by_id(pdf_id)
+    if not pdf:
+        return jsonify({'error': 'PDF not found'}), 404
+
+    # Look up the bot-side row by code
+    try:
+        from bot.db import get_bot_pdf_by_code, update_bot_pdf_file_size
+        bot_pdf = get_bot_pdf_by_code(pdf.get('code') or '')
+    except Exception as e:
+        return jsonify({'error': f'Bot DB unavailable: {e}'}), 500
+
+    if not bot_pdf or not bot_pdf.get('file_id'):
+        return jsonify({
+            'error': 'No Telegram file stored for this PDF.',
+            'reason': 'no_file',
+        }), 400
+
+    file_id = bot_pdf['file_id']
+
+    # Clear any stale cache entry
+    try:
+        _PDF_SIZE_CACHE.pop(file_id, None)
+    except Exception:
+        pass
+
+    # Call Telegram directly — do not read from cache
+    try:
+        from bot.utils import get_bot
+        bot = get_bot()
+        file_info = bot.get_file(file_id)
+        size = getattr(file_info, 'file_size', None)
+    except Exception as e:
+        msg = str(e).lower()
+        too_large = any(tok in msg for tok in ('too big', 'too large', '413'))
+        sentinel = -2 if too_large else -1
+        try:
+            update_bot_pdf_file_size(bot_pdf['id'], sentinel)
+        except Exception:
+            pass
+        return jsonify({
+            'success': False,
+            'size_mb': None,
+            'sentinel': sentinel,
+            'too_large': too_large,
+            'message': 'File too large for direct download.'
+                       if too_large else
+                       'Telegram could not resolve the file — retry later.',
+        })
+
+    if not size or int(size) <= 0:
+        try:
+            update_bot_pdf_file_size(bot_pdf['id'], -1)
+        except Exception:
+            pass
+        return jsonify({
+            'success': False,
+            'size_mb': None,
+            'sentinel': -1,
+            'too_large': False,
+            'message': 'Telegram returned no size — retry later.',
+        })
+
+    size = int(size)
+    try:
+        update_bot_pdf_file_size(bot_pdf['id'], size)
+    except Exception as e:
+        logger.warning(f"refetch_size: DB write failed: {e}")
+
+    size_mb = round(size / (1024 * 1024), 2)
+    too_large = size > _PDF_SIZE_CAP_BYTES
+
+    return jsonify({
+        'success': True,
+        'size_mb': size_mb,
+        'bytes': size,
+        'too_large': too_large,
+        'message': f'Resolved: {size_mb} MB'
+                   + (' — exceeds direct-download cap.'
+                      if too_large else ''),
+    })
 
 @admin_content_bp.route('/pdfs/<int:pdf_id>/edit', methods=['GET'],
                         endpoint='pdf_edit')
@@ -2287,35 +2448,72 @@ def pdf_edit(pdf_id):
         abort(404)
 
     preview_info = {
-        'available': False,
-        'source': None,
-        'size_mb': None,
-        'has_local_file': False,
-        'has_telegram': False,
+        'available':       False,
+        'source':          None,
+        'size_mb':         None,
+        'size_status':     'missing',   # 'ok' | 'too_large' | 'unknown' | 'missing'
+        'too_large':       False,
+        'has_local_file':  False,
+        'has_telegram':    False,
     }
 
     file_url = pdf.get('file_url')
     if file_url and os.path.exists(file_url):
-        preview_info['available'] = True
-        preview_info['source'] = 'local'
         preview_info['has_local_file'] = True
+        preview_info['source'] = 'local'
         try:
-            preview_info['size_mb'] = round(
-                os.path.getsize(file_url) / (1024 * 1024), 2
-            )
+            size_bytes = os.path.getsize(file_url)
+            preview_info['size_mb'] = round(size_bytes / (1024 * 1024), 2)
+            if size_bytes > _PDF_SIZE_CAP_BYTES:
+                preview_info['too_large'] = True
+                preview_info['size_status'] = 'too_large'
+            else:
+                preview_info['available'] = True
+                preview_info['size_status'] = 'ok'
         except Exception:
-            pass
+            preview_info['size_status'] = 'unknown'
     else:
         try:
             from bot.db import get_bot_pdf_by_code
             bot_pdf = get_bot_pdf_by_code(pdf.get('code') or '')
             if bot_pdf and bot_pdf.get('file_id'):
                 preview_info['has_telegram'] = True
-                size = _get_telegram_file_size(bot_pdf['file_id'])
-                if size:
-                    preview_info['available'] = True
-                    preview_info['source'] = 'telegram'
-                    preview_info['size_mb'] = round(size / (1024 * 1024), 2)
+
+                # Prefer the persisted column (avoids a Telegram round-trip)
+                raw_size = bot_pdf.get('file_size')
+                known_too_large = False
+                if raw_size is not None:
+                    try:
+                        raw_size = int(raw_size)
+                    except (TypeError, ValueError):
+                        raw_size = None
+                if raw_size == -2:
+                    known_too_large = True
+                    size_bytes = None
+                elif raw_size is not None and raw_size > 0:
+                    size_bytes = raw_size
+                else:
+                    # Unknown — resolve via Telegram
+                    size_bytes, known_too_large = _get_telegram_file_size(
+                        bot_pdf['file_id']
+                    )
+
+                if known_too_large:
+                    preview_info['too_large'] = True
+                    preview_info['size_status'] = 'too_large'
+                elif size_bytes:
+                    preview_info['size_mb'] = round(
+                        size_bytes / (1024 * 1024), 2
+                    )
+                    if size_bytes > _PDF_SIZE_CAP_BYTES:
+                        preview_info['too_large'] = True
+                        preview_info['size_status'] = 'too_large'
+                    else:
+                        preview_info['available'] = True
+                        preview_info['source'] = 'telegram'
+                        preview_info['size_status'] = 'ok'
+                else:
+                    preview_info['size_status'] = 'unknown'
         except Exception as e:
             logger.warning(f"pdf_edit: bot lookup failed for {pdf_id}: {e}")
 
@@ -2336,7 +2534,6 @@ def pdf_edit(pdf_id):
         classes=_PDF_CLASSES,
         csrf_token=session.get('csrf_token'),
     )
-
 
 @admin_content_bp.route('/pdfs/<int:pdf_id>/edit', methods=['POST'],
                         endpoint='pdf_update')

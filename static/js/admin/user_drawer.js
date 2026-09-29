@@ -94,7 +94,6 @@
 
         fetchUser(userId);
 
-        // Focus the drawer
         setTimeout(function () {
             const focusTarget = drawerEl.querySelector('.ud-head__close');
             if (focusTarget) focusTarget.focus();
@@ -159,6 +158,40 @@
             '</a>';
     }
 
+    // ------------------------------------------------------------
+    // LIFECYCLE STAGE BADGE
+    // Server provides `user.lifecycle_stage` — one of:
+    //   'expiring_soon' | 'expiring_tomorrow' | 'churned' |
+    //   'active_premium' | 'free' | ''  (unknown)
+    // ------------------------------------------------------------
+    function lifecycleBadge(stage, expiresAt) {
+        if (!stage) return '';
+
+        const expirySuffix = expiresAt ? (' · ' + fmtDate(expiresAt)) : '';
+
+        if (stage === 'expiring_tomorrow') {
+            return '<span class="ud-badge lifecycle-warn" title="Premium ends within 2 days' + escapeHtml(expirySuffix) + '">' +
+                        '⏳ Expiring soon' +
+                   '</span>';
+        }
+        if (stage === 'expiring_soon') {
+            return '<span class="ud-badge lifecycle-warn" title="Premium ends within 7 days' + escapeHtml(expirySuffix) + '">' +
+                        '⏳ Expiring this week' +
+                   '</span>';
+        }
+        if (stage === 'churned') {
+            return '<span class="ud-badge lifecycle-danger" title="Premium ended in the last 30 days">' +
+                        '📉 Recently churned' +
+                   '</span>';
+        }
+        if (stage === 'active_premium') {
+            return '<span class="ud-badge lifecycle-ok" title="Active premium">' +
+                        '👑 Active premium' +
+                   '</span>';
+        }
+        return '';
+    }
+
     function render(user) {
         // ---- HERO ----
         const initial = (user.first_name || '?')[0].toUpperCase()
@@ -173,9 +206,15 @@
         if (user.is_admin) {
             badges.push('<span class="ud-badge admin"><i class="fas fa-shield-alt"></i> Admin</span>');
         }
+
+        // Two-tier model: free / premium only.
         const tierClass = 'tier-' + (user.tier || 'free');
-        const tierIcon = user.tier === 'pro' ? '👑' : (user.tier === 'premium' ? '💎' : '⚪');
+        const tierIcon = (user.tier === 'premium') ? '💎' : '⚪';
         badges.push('<span class="ud-badge ' + tierClass + '">' + tierIcon + ' ' + escapeHtml((user.tier || 'free').toUpperCase()) + '</span>');
+
+        // ---- LIFECYCLE STAGE ----
+        const lifecycleHtml = lifecycleBadge(user.lifecycle_stage, user.tier_expires_at);
+        if (lifecycleHtml) badges.push(lifecycleHtml);
 
         // ---- STATS ----
         const s = user.stats || {};
@@ -193,12 +232,11 @@
         const location = user.location || '<span class="muted">—</span>';
         const curriculum = user.curriculum || '<span class="muted">—</span>';
 
-        // ---- TIER PICKER ----
-        const tiers = ['free', 'premium', 'pro'];
+        // ---- TIER PICKER — free / premium only ----
+        const tiers = ['free', 'premium'];
         const tierMeta = {
             'free':    { icon: '⚪', label: 'Free',    sub: 'Basic' },
             'premium': { icon: '💎', label: 'Premium', sub: 'Unlocked' },
-            'pro':     { icon: '👑', label: 'Pro',     sub: 'Everything' },
         };
 
         const canSetTier = user.can && user.can.set_tier;
@@ -206,7 +244,7 @@
             const meta = tierMeta[t];
             const isCurrent = (user.tier === t);
             let cls = 'ud-tier-btn';
-            if (isCurrent) cls += (t === 'pro' ? ' is-current-pro' : ' is-current');
+            if (isCurrent) cls += ' is-current';
             const disabled = (!canSetTier || isCurrent) ? ' disabled' : '';
             return '<button type="button" class="' + cls + '"' + disabled +
                     ' data-tier="' + t + '">' +
@@ -383,7 +421,6 @@
         if (!currentUserId) return;
         if (loadingMsg) toast(loadingMsg, 'info');
 
-        // Disable all interactive elements briefly
         const controls = bodyEl.querySelectorAll('button, input, textarea, a.admin-btn');
         controls.forEach(function (el) { el.disabled = true; });
 
@@ -407,14 +444,11 @@
         .then(function (res) {
             if (res.ok && res.data && res.data.success) {
                 toast(res.data.message || 'Done', 'success');
-                // Update the table row behind (verified badge, tier pill, name)
                 updateRow(currentUserId, res.data.row_updates || null);
-                // Refresh the drawer from server (source of truth)
                 fetchUser(currentUserId);
             } else {
                 const err = (res.data && res.data.error) || 'Action failed';
                 toast(err, 'error');
-                // Re-enable controls so user can retry
                 controls.forEach(function (el) { el.disabled = false; });
             }
         })
@@ -455,10 +489,6 @@
     function updateRow(userId, updates) {
         const row = document.querySelector('tr[data-user-id="' + userId + '"]');
         if (!row) return;
-
-        // Always update the "verified" cell and tier pill from the server-rendered
-        // attributes — simplest safe approach is to re-fetch these from the drawer
-        // response. If not provided, fall through silently.
         if (!updates) return;
 
         if (updates.verified !== undefined) {
@@ -491,36 +521,28 @@
         ensureDrawerRefs();
         if (!drawerEl) return;
 
-        // CSRF token (from meta tag)
         const meta = document.querySelector('meta[name="csrf-token"]');
         csrfToken = meta ? meta.content : '';
 
-        // Backdrop click + X button
         backdropEl.addEventListener('click', closeDrawer);
         const closeBtn = drawerEl.querySelector('.ud-head__close');
         if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
 
-        // Esc to close
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && drawerEl.classList.contains('is-open')) {
                 closeDrawer();
             }
         });
 
-        // Row click — event delegation
         document.addEventListener('click', function (e) {
             const row = e.target.closest('tr.ud-clickable[data-user-id]');
             if (!row) return;
-
-            // Skip interactive elements
             if (e.target.closest('a, button, input, label, [data-no-drawer]')) return;
-
             const uid = row.getAttribute('data-user-id');
             if (!uid) return;
             openDrawer(uid, row);
         });
 
-        // Keyboard — Enter or Space on focused row
         document.addEventListener('keydown', function (e) {
             const row = e.target.closest('tr.ud-clickable[data-user-id]');
             if (!row) return;

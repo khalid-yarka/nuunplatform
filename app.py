@@ -802,6 +802,101 @@ def manifest():
     return send_from_directory('static', 'manifest.json',
                                mimetype='application/manifest+json')
 
+@app.route('/robots.txt')
+def robots_txt():
+    """
+    Serve robots.txt for crawlers. Public pages are crawlable;
+    admin, webhook, and heavy PDF endpoints are disallowed.
+    """
+    base = (getattr(Config, 'BASE_URL', '') or '').rstrip('/')
+
+    lines = [
+        'User-agent: *',
+        'Allow: /$',
+        'Allow: /login',
+        'Allow: /register',
+        'Allow: /help',
+        'Allow: /home',
+        'Allow: /pdfs/$',
+        'Allow: /groups/$',
+        'Allow: /leaderboard',
+        '',
+        '# Private / admin areas',
+        'Disallow: /admin/',
+        'Disallow: /webhook/',
+        'Disallow: /telegram/',
+        'Disallow: /backup/',
+        'Disallow: /api/',
+        'Disallow: /push/',
+        'Disallow: /auth/',
+        'Disallow: /settings/',
+        'Disallow: /notifications/',
+        'Disallow: /saved/',
+        'Disallow: /focus/',
+        'Disallow: /history/',
+        'Disallow: /profile/',
+        'Disallow: /quiz/',
+        'Disallow: /live-quiz/',
+        '',
+        '# Heavy / streaming endpoints',
+        'Disallow: /pdfs/stream/',
+        'Disallow: /pdfs/preview/',
+        'Disallow: /pdfs/download/',
+        '',
+        '# Well-known bot traps',
+        'Disallow: /*?pdf=',
+        'Disallow: /*?next=',
+        'Disallow: /*?saved=',
+    ]
+
+    if base:
+        lines.append('')
+        lines.append(f'Sitemap: {base}/sitemap.xml')
+
+    body = '\n'.join(lines) + '\n'
+    return Response(body, mimetype='text/plain')
+
+@app.route('/sitemap.xml')
+def sitemap_xml():
+    """Dynamic sitemap: home, auth, groups, and every public PDF."""
+    from db import get_all_pdfs
+
+    base = (getattr(Config, 'BASE_URL', '') or '').rstrip('/')
+    if not base:
+        return Response('', mimetype='application/xml'), 204
+
+    urls = [
+        ('/',           'weekly',  '1.0'),
+        ('/login',      'monthly', '0.3'),
+        ('/register',   'monthly', '0.3'),
+        ('/help',       'monthly', '0.4'),
+        ('/pdfs/',      'daily',   '0.9'),
+        ('/groups/',    'weekly',  '0.7'),
+        ('/leaderboard','weekly',  '0.6'),
+    ]
+
+    try:
+        pdfs = get_all_pdfs(limit=5000, offset=0)
+    except Exception:
+        pdfs = []
+
+    for p in pdfs:
+        pid = p.get('id')
+        if not pid:
+            continue
+        urls.append((f'/pdfs/?pdf={pid}', 'monthly', '0.5'))
+
+    parts = ['<?xml version="1.0" encoding="UTF-8"?>']
+    parts.append('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">')
+    for path, freq, prio in urls:
+        parts.append('  <url>')
+        parts.append(f'    <loc>{base}{path}</loc>')
+        parts.append(f'    <changefreq>{freq}</changefreq>')
+        parts.append(f'    <priority>{prio}</priority>')
+        parts.append('  </url>')
+    parts.append('</urlset>')
+
+    return Response('\n'.join(parts), mimetype='application/xml')
 
 @app.route('/sw.js')
 def service_worker():
