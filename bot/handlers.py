@@ -11,11 +11,21 @@
 #   Before the bot delivers a stored PDF to a non-admin user, it
 #   verifies the user has joined the configured channel and group.
 #   The gate is a courtesy, not a security control, and fails open
-#   on any error: an unconfigured ID, a network failure, or a
-#   get_chat_member rejection all let the delivery proceed. See
-#   `_force_join_config`, `_is_member_of`, `_check_force_join`.
+#   on any error.
+#
+# ── DELETION OF THE JOIN PROMPT
+#   When the user taps "✅ I joined" and the check passes, the bot
+#   deletes the prompt message that carried the button before
+#   proceeding to the next step (or delivering the file). If the
+#   check fails, the prompt is kept so the user can tap again.
+#
+# ── SUPER ADMIN COMMANDS
+#   Commands are dispatched by bot.admin_handlers.dispatch() at the
+#   top of handle_message. See bot/admin_handlers.py for the full
+#   list and the authorization guard.
 
 import logging
+import requests
 import telebot
 from telebot import types
 
@@ -31,6 +41,9 @@ from bot.db import (
 from config import Config
 
 logger = logging.getLogger(__name__)
+
+# Module-level flag so the diagnostic runs at most once per process.
+_DIAGNOSTIC_DONE = {'done': False}
 
 
 # ============================================
@@ -48,14 +61,105 @@ def _protect(user_id: int) -> bool:
 
 
 # ============================================
+# ONE-SHOT GATE DIAGNOSTIC
+# ============================================
+
+def _diagnose_gate_once(chat_id):
+    """
+    Called once on the first CHAT_ADMIN_REQUIRED failure. Logs the
+    bot identity and the chat identity so the operator can see
+    exactly what Telegram sees.
+    """
+    if _DIAGNOSTIC_DONE['done']:
+        return
+    _DIAGNOSTIC_DONE['done'] = True
+
+    try:
+        token = Config.TELEGRAM_BOT_TOKEN
+    except Exception:
+        logger.warning("force_join DIAG: no bot token in config")
+        return
+
+    try:
+        r = requests.get(
+            f"https://api.telegram.org/bot{token}/getMe", timeout=10,
+        ).json()
+        if r.get('ok'):
+            me = r.get('result') or {}
+            logger.warning(
+                "force_join DIAG: bot identity — id=%s username=%s "
+                "first_name=%r. Confirm this is the bot you added as "
+                "admin to the channel and group.",
+                me.get('id'), me.get('username'), me.get('first_name'),
+            )
+        else:
+            logger.warning(
+                "force_join DIAG: getMe returned non-ok: %s",
+                (r.get('description') or r)[:200],
+            )
+    except Exception as e:
+        logger.warning(f"force_join DIAG: getMe failed: {e}")
+
+    try:
+        r = requests.get(
+            f"https://api.telegram.org/bot{token}/getChat",
+            params={"chat_id": chat_id},
+            timeout=10,
+        ).json()
+        if r.get('ok'):
+            ch = r.get('result') or {}
+            logger.warning(
+                "force_join DIAG: chat identity — id=%s type=%s "
+                "title=%r username=%r. Confirm this is the channel "
+                "or group you expect.",
+                ch.get('id'), ch.get('type'), ch.get('title'),
+                ch.get('username'),
+            )
+        else:
+            logger.warning(
+                "force_join DIAG: getChat(%r) returned non-ok: %s",
+                chat_id, (r.get('description') or r)[:200],
+            )
+    except Exception as e:
+        logger.warning(f"force_join DIAG: getChat failed: {e}")
+
+    try:
+        me_r = requests.get(
+            f"https://api.telegram.org/bot{token}/getMe", timeout=10,
+        ).json()
+        bot_id = (me_r.get('result') or {}).get('id') if me_r.get('ok') else None
+        if bot_id:
+            r = requests.get(
+                f"https://api.telegram.org/bot{token}/getChatMember",
+                params={"chat_id": chat_id, "user_id": bot_id},
+                timeout=10,
+            ).json()
+            if r.get('ok'):
+                m = r.get('result') or {}
+                logger.warning(
+                    "force_join DIAG: bot's own status in chat %r — "
+                    "status=%s. If this is not 'administrator', the "
+                    "bot is not admin here regardless of what the app "
+                    "shows.",
+                    chat_id, m.get('status'),
+                )
+            else:
+                logger.warning(
+                    "force_join DIAG: getChatMember(bot) in chat %r "
+                    "returned non-ok: %s",
+                    chat_id, (r.get('description') or r)[:200],
+                )
+    except Exception as e:
+        logger.warning(f"force_join DIAG: getChatMember(bot) failed: {e}")
+
+
+# ============================================
 # FORCE-JOIN GATE
 # ============================================
 
 def _parse_chat_id(raw):
     """
     Normalize a channel/group id from config into an int (or None).
-    Accepts '-1001234567890', '-1001234567890 ' etc. Non-numeric
-    identifiers (e.g. '@channelname') are accepted as strings.
     """
     if raw is None:
         return None
@@ -65,7 +169,6 @@ def _parse_chat_id(raw):
     try:
         return int(s)
     except (ValueError, TypeError):
-        # Telegram also accepts @username for public chats.
         return s
 
 
@@ -76,6 +179,7 @@ def _force_join_config():
     """
     try:
         if not getattr(Config, 'TELEGRAM_FORCE_JOIN_ENABLED', False):
+            logger.info("force_join: disabled via config")
             return None
         channel_id = _parse_chat_id(
             getattr(Config, 'TELEGRAM_FORCE_CHANNEL_ID', '') or ''
@@ -84,8 +188,12 @@ def _force_join_config():
             getattr(Config, 'TELEGRAM_FORCE_GROUP_ID', '') or ''
         )
         if not channel_id and not group_id:
+            logger.warning(
+                "force_join: ENABLED but neither CHANNEL_ID nor GROUP_ID "
+                "is configured — gate is a no-op"
+            )
             return None
-        return {
+        cfg = {
             'channel_id': channel_id,
             'channel_invite': (
                 getattr(Config, 'TELEGRAM_FORCE_CHANNEL_INVITE', '') or ''
@@ -98,9 +206,37 @@ def _force_join_config():
                 getattr(Config, 'TELEGRAM_FORCE_JOIN_MAX_ATTEMPTS', 10) or 10
             ),
         }
+        logger.info(
+            "force_join: config loaded channel_id=%r group_id=%r "
+            "channel_invite_set=%s group_invite_set=%s",
+            cfg['channel_id'], cfg['group_id'],
+            bool(cfg['channel_invite']), bool(cfg['group_invite']),
+        )
+        return cfg
     except Exception as e:
-        logger.warning(f"_force_join_config failed: {e}")
+        logger.error(f"force_join: config read failed: {e}", exc_info=True)
         return None
+
+
+def _extract_status(member):
+    """
+    Return the membership status string from a telebot get_chat_member
+    result, handling object / dict / to_dict() shapes.
+    """
+    if member is None:
+        return None
+    if isinstance(member, dict):
+        return member.get('status')
+    status = getattr(member, 'status', None)
+    if status is not None:
+        return status
+    try:
+        as_dict = member.to_dict()
+        if isinstance(as_dict, dict):
+            return as_dict.get('status')
+    except Exception:
+        pass
+    return None
 
 
 def _is_member_of(bot, chat_id, user_id):
@@ -108,30 +244,79 @@ def _is_member_of(bot, chat_id, user_id):
     Three-state membership check.
 
     Returns:
-        True  → user is a member (creator, administrator, member, or
-                restricted-but-in-the-chat)
-        False → user is definitively not in the chat (left or kicked)
+        True  → user is a member
+        False → user is definitively not in the chat
         None  → unknown; the caller must fail open
     """
     try:
         member = bot.get_chat_member(chat_id, user_id)
-        status = getattr(member, 'status', None)
-        if status in ('creator', 'administrator', 'member', 'restricted'):
-            return True
-        if status in ('left', 'kicked'):
-            return False
-        logger.warning(
-            f"_is_member_of: unexpected status {status!r} for "
-            f"chat={chat_id} user={user_id}"
-        )
-        return None
     except Exception as e:
-        # Bot not admin, chat not found, network error, Telegram 5xx —
-        # all fall here and all fail open.
+        err_text = str(e)
+        err_lower = err_text.lower()
+
+        if 'chat_admin_required' in err_lower or \
+                'chat admin required' in err_lower or \
+                'not enough rights' in err_lower:
+            _diagnose_gate_once(chat_id)
+            logger.warning(
+                "force_join: TELEGRAM REFUSED — CHAT_ADMIN_REQUIRED "
+                "for chat=%r user=%s. From Telegram's perspective, "
+                "the bot calling this method is not an admin of that "
+                "chat. (error: %s)",
+                chat_id, user_id, err_text,
+            )
+            return None
+
+        if 'member list is inaccessible' in err_lower or \
+                'member_list_is_inaccessible' in err_lower:
+            logger.warning(
+                "force_join: bot IS admin of chat %r BUT LACKS the "
+                "member-read permission. Enable 'Add Users' (groups) "
+                "or 'Add Subscribers' (channels) for the bot. "
+                "(error: %s)",
+                chat_id, err_text,
+            )
+            return None
+
+        if 'chat not found' in err_lower:
+            logger.warning(
+                "force_join: chat %r NOT FOUND. Check the ID in "
+                "TELEGRAM_FORCE_CHANNEL_ID / TELEGRAM_FORCE_GROUP_ID "
+                "in .env. (error: %s)",
+                chat_id, err_text,
+            )
+            return None
+
         logger.warning(
-            f"_is_member_of failed for chat={chat_id} user={user_id}: {e}"
+            "force_join: get_chat_member failed for chat=%r "
+            "user=%s: %s",
+            chat_id, user_id, err_text,
         )
         return None
+
+    status = _extract_status(member)
+    if status is None:
+        logger.warning(
+            "force_join: could not read status from get_chat_member "
+            "result for chat=%r user=%s — result type=%s",
+            chat_id, user_id, type(member).__name__,
+        )
+        return None
+
+    logger.info(
+        "force_join: chat=%r user=%s status=%r",
+        chat_id, user_id, status,
+    )
+
+    if status in ('creator', 'administrator', 'member', 'restricted'):
+        return True
+    if status in ('left', 'kicked'):
+        return False
+    logger.warning(
+        "force_join: unexpected status %r for chat=%r user=%s",
+        status, chat_id, user_id,
+    )
+    return None
 
 
 def _check_force_join(bot, user_id, cfg):
@@ -139,8 +324,7 @@ def _check_force_join(bot, user_id, cfg):
     Two-step gate check.
 
     Returns:
-        'ok'      → user may proceed (both required chats cleared, or
-                    the check was inconclusive and failed open)
+        'ok'      → user may proceed
         'channel' → user must join the channel first
         'group'   → user must join the group first
     """
@@ -153,15 +337,47 @@ def _check_force_join(bot, user_id, cfg):
     if channel_id:
         result = _is_member_of(bot, channel_id, user_id)
         if result is False:
+            logger.info(
+                "force_join: user %s must join channel %r",
+                user_id, channel_id,
+            )
             return 'channel'
-        # True or None → proceed
 
     if group_id:
         result = _is_member_of(bot, group_id, user_id)
         if result is False:
+            logger.info(
+                "force_join: user %s must join group %r",
+                user_id, group_id,
+            )
             return 'group'
 
     return 'ok'
+
+
+def _delete_prompt_message(bot, prompt_message):
+    """
+    Delete the prompt message that carried the 'I joined' button.
+    Never raises — too-old messages, already-deleted messages, or
+    any other Telegram error is logged and ignored.
+    """
+    if not prompt_message:
+        return
+    try:
+        chat_id, message_id = prompt_message
+    except (TypeError, ValueError):
+        return
+    try:
+        bot.delete_message(chat_id, message_id)
+        logger.info(
+            "force_join: deleted prompt message chat=%s id=%s",
+            chat_id, message_id,
+        )
+    except Exception as e:
+        logger.info(
+            "force_join: could not delete prompt chat=%s id=%s: %s",
+            chat_id, message_id, e,
+        )
 
 
 def _prompt_join_channel(bot, chat_id, code):
@@ -188,8 +404,12 @@ def _prompt_join_channel(bot, chat_id, code):
         bot.send_message(
             chat_id, text, parse_mode='Markdown', reply_markup=markup,
         )
+        logger.info(
+            "force_join: sent channel prompt to chat=%s code=%r",
+            chat_id, code,
+        )
     except Exception as e:
-        logger.error(f"_prompt_join_channel send failed: {e}")
+        logger.error(f"_prompt_join_channel send failed: {e}", exc_info=True)
 
 
 def _prompt_join_group(bot, chat_id, code):
@@ -216,17 +436,16 @@ def _prompt_join_group(bot, chat_id, code):
         bot.send_message(
             chat_id, text, parse_mode='Markdown', reply_markup=markup,
         )
+        logger.info(
+            "force_join: sent group prompt to chat=%s code=%r",
+            chat_id, code,
+        )
     except Exception as e:
-        logger.error(f"_prompt_join_group send failed: {e}")
+        logger.error(f"_prompt_join_group send failed: {e}", exc_info=True)
 
 
 def _deliver_pdf(bot, chat_id, user_id, code, bot_pdf):
-    """
-    Send a stored PDF with its description and a Browse More button.
-    Mirrors the original handle_start_with_code behaviour, but takes
-    the resolved PDF row as an argument so both the gate path and
-    the direct path can share it.
-    """
+    """Send a stored PDF with its description and a Browse More button."""
     try:
         file_id = bot_pdf['file_id']
 
@@ -253,8 +472,11 @@ def _deliver_pdf(bot, chat_id, user_id, code, bot_pdf):
             reply_markup=markup,
             protect_content=_protect(user_id),
         )
+        logger.info(
+            "force_join: delivered code=%r to user=%s", code, user_id,
+        )
     except Exception as e:
-        logger.error(f"_deliver_pdf failed for code {code}: {e}")
+        logger.error(f"_deliver_pdf failed for code {code}: {e}", exc_info=True)
         try:
             bot.send_message(
                 chat_id,
@@ -266,13 +488,12 @@ def _deliver_pdf(bot, chat_id, user_id, code, bot_pdf):
             pass
 
 
-def _recheck_join(bot, chat_id, user_id):
+def _recheck_join(bot, chat_id, user_id, prompt_message=None):
     """
     The recheck path used by both the inline button and the message
-    fallback. Reads the pending gate row, re-verifies membership,
-    and either advances the stage or delivers.
-
-    Never raises. Fails open on any inconclusive membership check.
+    fallback. `prompt_message` is an optional (chat_id, message_id)
+    tuple — when supplied, the prompt is deleted as soon as the
+    check passes.
     """
     try:
         row = get_join_gate(user_id)
@@ -280,11 +501,20 @@ def _recheck_join(bot, chat_id, user_id):
         row = None
 
     if not row:
+        logger.info(
+            "force_join: recheck for user=%s with no pending gate row — "
+            "ignoring", user_id,
+        )
         return
+
+    logger.info(
+        "force_join: recheck user=%s stage=%r code=%r attempts=%s",
+        user_id, row.get('stage'), row.get('code'), row.get('attempts'),
+    )
 
     cfg = _force_join_config()
     if not cfg:
-        # Gate was disabled after the row was written. Deliver and clear.
+        _delete_prompt_message(bot, prompt_message)
         code = row.get('code')
         delete_join_gate(user_id)
         if code:
@@ -293,13 +523,12 @@ def _recheck_join(bot, chat_id, user_id):
                 _deliver_pdf(bot, chat_id, user_id, code, bot_pdf)
         return
 
-    # Attempts counter — the cutoff is per gate row, not per stage.
     attempts = bump_join_gate_attempts(user_id)
     if attempts is None:
-        # Row vanished mid-flight; nothing to do.
         return
     max_attempts = cfg.get('max_attempts', 10)
     if attempts > max_attempts:
+        _delete_prompt_message(bot, prompt_message)
         delete_join_gate(user_id)
         try:
             bot.send_message(
@@ -317,7 +546,7 @@ def _recheck_join(bot, chat_id, user_id):
 
     if stage == 'channel':
         if not cfg.get('channel_id'):
-            # Config dropped the channel — skip to next stage.
+            _delete_prompt_message(bot, prompt_message)
             if cfg.get('group_id'):
                 set_join_gate(user_id, 'group', code)
                 _prompt_join_group(bot, chat_id, code)
@@ -342,7 +571,7 @@ def _recheck_join(bot, chat_id, user_id):
                 pass
             return
 
-        # result is True or None — advance or deliver.
+        _delete_prompt_message(bot, prompt_message)
         if cfg.get('group_id'):
             set_join_gate(user_id, 'group', code)
             _prompt_join_group(bot, chat_id, code)
@@ -356,6 +585,7 @@ def _recheck_join(bot, chat_id, user_id):
 
     if stage == 'group':
         if not cfg.get('group_id'):
+            _delete_prompt_message(bot, prompt_message)
             delete_join_gate(user_id)
             if code:
                 bot_pdf = get_bot_pdf_by_code(code)
@@ -376,7 +606,7 @@ def _recheck_join(bot, chat_id, user_id):
                 pass
             return
 
-        # True or None — deliver.
+        _delete_prompt_message(bot, prompt_message)
         delete_join_gate(user_id)
         if code:
             bot_pdf = get_bot_pdf_by_code(code)
@@ -406,8 +636,19 @@ def handle_message(bot, message):
     user_id = message.from_user.id
     text = message.text or ''
 
-    # /start <code> always restarts the flow — handle_start_with_code
-    # clears any pending gate row before checking.
+    # ── Super admin commands ──
+    # Dispatched first, before anything else, so admin commands fire
+    # even when the sender has a pending gate row or is in the middle
+    # of any other flow. Non-commands and unknown commands fall through
+    # to the normal routing below.
+    if text.startswith('/'):
+        try:
+            from bot import admin_handlers
+            if admin_handlers.dispatch(bot, message):
+                return
+        except Exception as e:
+            logger.warning(f"admin_handlers dispatch failed: {e}")
+
     is_start = text.startswith('/start')
     is_start_with_code = is_start and len(text.split()) > 1
 
@@ -415,16 +656,13 @@ def handle_message(bot, message):
         handle_start_with_code(bot, message)
         return
 
-    # Message fallback for the force-join gate:
-    #   Any text message from a non-admin user with a pending gate row
-    #   is treated as a recheck. /start <code> is excluded above so
-    #   re-entry works.
     if text and not is_admin(user_id):
         try:
             pending_gate = get_join_gate(user_id)
         except Exception:
             pending_gate = None
         if pending_gate:
+            # No prompt to delete on the message-fallback path.
             _recheck_join(bot, message.chat.id, user_id)
             return
 
@@ -440,7 +678,6 @@ def handle_message(bot, message):
 
 
 def handle_callback(bot, call):
-    # Force-join recheck — fires when the user taps "✅ I joined".
     if call.data == 'join_recheck':
         handle_join_recheck(bot, call)
         return
@@ -476,16 +713,7 @@ def handle_start(bot, message):
 # ============================================
 
 def handle_start_with_code(bot, message):
-    """
-    Handle /start <code>.
-
-    Flow:
-      1. Validate the PDF code. If invalid, fall through to handle_start.
-      2. /start <code> is always a fresh start — clear any pending gate.
-      3. Admin / super admin bypass the gate.
-      4. If the gate is disabled or misconfigured, deliver directly.
-      5. Otherwise, check memberships. Deliver, or prompt the next step.
-    """
+    """Handle /start <code>."""
     user_id = message.from_user.id
     text = message.text
     parts = text.split(maxsplit=1)
@@ -497,23 +725,22 @@ def handle_start_with_code(bot, message):
     code = parts[1].strip()
     bot_pdf = get_bot_pdf_by_code(code)
 
-    # Validate the code BEFORE gating, so users don't join for nothing.
     if not bot_pdf:
         handle_start(bot, message)
         return
 
-    # /start <code> restarts the flow — clear any pending gate row.
     try:
         delete_join_gate(user_id)
     except Exception as e:
         logger.warning(f"delete_join_gate failed: {e}")
 
-    # Admins bypass the gate entirely.
     if is_admin(user_id):
+        logger.info(
+            "force_join: user=%s is admin — bypassing gate", user_id,
+        )
         _deliver_pdf(bot, message.chat.id, user_id, code, bot_pdf)
         return
 
-    # Gate disabled or misconfigured → deliver directly.
     cfg = _force_join_config()
     if not cfg:
         _deliver_pdf(bot, message.chat.id, user_id, code, bot_pdf)
@@ -527,7 +754,6 @@ def handle_start_with_code(bot, message):
 
     if status == 'channel':
         if not set_join_gate(user_id, 'channel', code):
-            # DB write failed — fail open and deliver.
             logger.warning(
                 f"set_join_gate failed for user {user_id}; delivering anyway"
             )
@@ -546,7 +772,6 @@ def handle_start_with_code(bot, message):
         _prompt_join_group(bot, message.chat.id, code)
         return
 
-    # Unknown status — fail open.
     _deliver_pdf(bot, message.chat.id, user_id, code, bot_pdf)
 
 
@@ -636,17 +861,32 @@ def handle_document(bot, message):
 # ============================================
 
 def handle_join_recheck(bot, call):
-    """User tapped the '✅ I joined' inline button."""
+    """
+    User tapped the '✅ I joined' inline button.
+    Passes the prompt message's (chat_id, message_id) so the recheck
+    can delete it once the check passes.
+    """
     user_id = call.from_user.id
+    logger.info(
+        "force_join: 'I joined' tapped by user=%s data=%r",
+        user_id, call.data,
+    )
     try:
         bot.answer_callback_query(call.id)
     except Exception:
         pass
+
+    prompt_message = None
     try:
+        prompt_message = (
+            call.message.chat.id,
+            call.message.message_id,
+        )
         chat_id = call.message.chat.id
     except Exception:
         chat_id = user_id
-    _recheck_join(bot, chat_id, user_id)
+
+    _recheck_join(bot, chat_id, user_id, prompt_message=prompt_message)
 
 
 # ============================================
