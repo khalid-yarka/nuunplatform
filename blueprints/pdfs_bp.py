@@ -1,6 +1,8 @@
 # blueprints/pdfs_bp.py
 import os
 import re
+import secrets
+import random as _random
 from urllib.parse import quote
 from datetime import datetime, timedelta
 
@@ -9,7 +11,8 @@ from flask import (
     redirect, url_for, abort, send_file, Response, jsonify,
 )
 from db import (
-    get_all_pdfs, get_main_pdf_count, get_pdf_by_code, get_pdf_by_id,
+    get_all_pdfs, get_all_pdfs_shuffled, get_main_pdf_count,
+    get_pdf_by_code, get_pdf_by_id,
     increment_pdf_view, increment_pdf_view_by_code,
     get_pdf_distinct_subjects, get_pdf_distinct_classes,
     get_pdf_distinct_curricula,
@@ -35,7 +38,34 @@ logger = logging.getLogger(__name__)
 pdfs_bp = Blueprint('pdfs', __name__, url_prefix='/pdfs')
 
 PER_PAGE = 50
-_VALID_SORTS = {'newest', 'oldest', 'popular', 'title_asc', 'title_desc'}
+_VALID_SORTS = {'shuffle', 'newest', 'oldest', 'popular', 'title_asc', 'title_desc'}
+_DEFAULT_SORT = 'shuffle'
+
+# Session key for the shuffle seed. It persists across pagination but is
+# regenerated on every fresh visit (no page param) or explicit reseed.
+_SHUF_SEED_KEY = 'pdf_shuffle_seed'
+
+
+# ============================================================
+# SHUFFLE SEED HELPERS
+# ============================================================
+
+def _ensure_shuffle_seed():
+    """Return the session's shuffle seed, generating one on first use."""
+    seed = session.get(_SHUF_SEED_KEY)
+    if not seed:
+        seed = secrets.token_hex(4)
+        session[_SHUF_SEED_KEY] = seed
+        session.modified = True
+    return seed
+
+
+def _reseed_shuffle():
+    """Force a new shuffle seed for the current session."""
+    seed = secrets.token_hex(4)
+    session[_SHUF_SEED_KEY] = seed
+    session.modified = True
+    return seed
 
 
 # ============================================================
@@ -158,9 +188,9 @@ def list_pdfs():
     search_query      = (request.args.get('search') or '').strip()
     saved_only        = request.args.get('saved') == '1'
 
-    sort = (request.args.get('sort') or 'newest').strip()
+    sort = (request.args.get('sort') or _DEFAULT_SORT).strip()
     if sort not in _VALID_SORTS:
-        sort = 'newest'
+        sort = _DEFAULT_SORT
 
     try:
         page = int(request.args.get('page') or 1)
@@ -217,6 +247,25 @@ def list_pdfs():
         except Exception:
             reported_ids = set()
 
+    # ── Shuffle seed policy ────────────────────────────────
+    #   fresh visit or refresh of base URL  → new seed
+    #   explicit shuffle button (reseed=1)  → new seed, then redirect
+    #                                         to page 1 without the param
+    #   pagination (page param present)     → keep the current seed
+    shuffle_seed = None
+    if sort == 'shuffle':
+        if request.args.get('reseed') == '1':
+            _reseed_shuffle()
+            args = request.args.to_dict(flat=True)
+            args.pop('reseed', None)
+            args['page'] = '1'
+            return redirect(url_for('pdfs.list_pdfs', **args))
+        if 'page' not in request.args:
+            _reseed_shuffle()
+        else:
+            _ensure_shuffle_seed()
+        shuffle_seed = session.get(_SHUF_SEED_KEY)
+
     if showing_shared:
         pdfs = [shared_pdf]
         total = 1
@@ -232,6 +281,8 @@ def list_pdfs():
             subject=effective_subject, curriculum=effective_curriculum,
             class_filter=effective_class, sort=sort,
         )
+        if sort == 'shuffle' and shuffle_seed:
+            _random.Random(str(shuffle_seed)).shuffle(all_saved)
         total = len(all_saved)
         total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
         if page > total_pages:
@@ -247,12 +298,19 @@ def list_pdfs():
         if page > total_pages:
             page = total_pages
         offset = (page - 1) * PER_PAGE
-        pdfs = get_all_pdfs(
-            limit=PER_PAGE, offset=offset,
-            search=effective_search, subject=effective_subject,
-            curriculum=effective_curriculum, class_filter=effective_class,
-            sort=sort,
-        )
+        if sort == 'shuffle' and shuffle_seed:
+            pdfs = get_all_pdfs_shuffled(
+                seed=shuffle_seed, limit=PER_PAGE, offset=offset,
+                search=effective_search, subject=effective_subject,
+                curriculum=effective_curriculum, class_filter=effective_class,
+            )
+        else:
+            pdfs = get_all_pdfs(
+                limit=PER_PAGE, offset=offset,
+                search=effective_search, subject=effective_subject,
+                curriculum=effective_curriculum, class_filter=effective_class,
+                sort=sort if sort != 'shuffle' else 'newest',
+            )
 
     subjects  = get_pdf_distinct_subjects()  if search_level >= 1 else []
     classes   = get_pdf_distinct_classes()   if search_level >= 2 else []
@@ -369,6 +427,11 @@ def list_pdfs():
 
 
 def _list_saved_pdfs(saved_ids, search, subject, curriculum, class_filter, sort):
+    """
+    Return the user's saved PDFs, filtered. Sorting is applied here
+    for the deterministic sorts. The shuffle case is handled by the
+    caller, which shuffles after this returns.
+    """
     if not saved_ids:
         return []
     items = []
@@ -392,7 +455,10 @@ def _list_saved_pdfs(saved_ids, search, subject, curriculum, class_filter, sort)
                 continue
         items.append(p)
 
-    if sort == 'popular':
+    if sort == 'shuffle':
+        # Order does not matter here — caller shuffles. Return as-is.
+        pass
+    elif sort == 'popular':
         items.sort(key=lambda x: x.get('view_count') or 0, reverse=True)
     elif sort == 'title_asc':
         items.sort(key=lambda x: (x.get('title') or '').lower())

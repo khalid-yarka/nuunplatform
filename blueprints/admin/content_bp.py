@@ -34,6 +34,7 @@ from db import (
     check_question_exists,
     bulk_create_questions,
     get_all_pdfs,
+    get_all_pdfs_shuffled,
     get_pdf_by_id,
     get_pdf_by_code,
     get_main_pdf_count,
@@ -64,10 +65,6 @@ admin_content_bp = Blueprint('admin_content', __name__, url_prefix='/admin')
 # ============================================================
 # CONSTANTS — FULL COVERAGE LISTS
 # ============================================================
-# These are the CANONICAL sets of values an admin may pick. They
-# are NOT derived from the DB, so the dropdowns always show every
-# option even if the library currently has only a subset.
-# ============================================================
 
 _PDF_CURRICULA = (
     ('PL', 'Puntland'),
@@ -77,14 +74,46 @@ _PDF_CURRICULA = (
 
 _PDF_CLASSES = ('F4', 'F3', 'G8', 'G7')
 
+_VALID_PDF_SORTS = (
+    'shuffle', 'newest', 'oldest', 'popular', 'title_asc', 'title_desc',
+)
+_DEFAULT_PDF_SORT = 'shuffle'
+
+# Session key for the admin shuffle seed. Independent from the
+# student-library key ('pdf_shuffle_seed' in pdfs_bp.py).
+_ADMIN_SHUF_SEED_KEY = 'admin_pdf_shuffle_seed'
+
+
+# ============================================================
+# SHUFFLE SEED HELPERS
+# ============================================================
+
+def _ensure_admin_shuffle_seed():
+    """Return the admin session's shuffle seed, generating one on first use."""
+    seed = session.get(_ADMIN_SHUF_SEED_KEY)
+    if not seed:
+        seed = secrets.token_hex(4)
+        session[_ADMIN_SHUF_SEED_KEY] = seed
+        session.modified = True
+    return seed
+
+
+def _reseed_admin_shuffle():
+    """Force a new shuffle seed for the admin session."""
+    seed = secrets.token_hex(4)
+    session[_ADMIN_SHUF_SEED_KEY] = seed
+    session.modified = True
+    return seed
+
 
 # ============================================================
 # HELPERS
 # ============================================================
 
 _PDF_CODE_RE = re.compile(r'^[A-Z0-9]{4}-[A-Z0-9]{4}$')
-# Read the same cap the user-facing library uses so admin preview # matches what students see. Falls back to 19 MB if unset. 
-_PDF_SIZE_CAP_BYTES = int(     getattr(Config, 'PDF_DIRECT_DOWNLOAD_MAX_BYTES', 19 * 1024 * 1024) )
+_PDF_SIZE_CAP_BYTES = int(
+    getattr(Config, 'PDF_DIRECT_DOWNLOAD_MAX_BYTES', 19 * 1024 * 1024)
+)
 
 _PDF_SIZE_CACHE = {}
 _PDF_SIZE_CACHE_TTL = 300
@@ -113,26 +142,11 @@ def _normalize_pdf_page(raw):
 
 def _get_telegram_file_size(file_id):
     """
-    Resolve a Telegram file's size.
-
-    Order of operations:
-      1. Read the bot DB column (populated by backfill_pdf_sizes.py and
-         kept current by the pdfs.refetch_sizes daily task).
-         - file_size > 0  → real size
-         - file_size == -2 → known too large; return a sentinel dict
-         - file_size == -1 / NULL → unknown; fall through to (2)
-      2. Call Telegram get_file() and cache the result in memory for 5 min.
-
-    Returns:
-        (size_bytes: int | None, is_known_too_large: bool)
-
-    The caller must not assume the first element is populated; check
-    `is_known_too_large` first.
+    Returns (size_bytes: int | None, is_known_too_large: bool).
     """
     if not file_id:
         return None, False
 
-    # ── Step 1: read the persisted column via the bot DB ──
     try:
         from bot.db import _get_connection as bot_conn
         conn = bot_conn()
@@ -150,16 +164,12 @@ def _get_telegram_file_size(file_id):
                     if size > 0:
                         return size, False
                     if size == -2:
-                        # Permanent sentinel — file is too large for
-                        # any Telegram API path.
                         return None, True
-                    # -1 (retryable) or NULL → keep going to step 2
         finally:
             conn.close()
     except Exception as e:
         logger.debug(f"_get_telegram_file_size: DB lookup failed: {e}")
 
-    # ── Step 2: in-memory cache, then Telegram API ──
     now = time.time()
     cached = _PDF_SIZE_CACHE.get(file_id)
     if cached and (now - cached['fetched_at']) < _PDF_SIZE_CACHE_TTL:
@@ -180,8 +190,6 @@ def _get_telegram_file_size(file_id):
             return size, False
         return None, False
     except Exception as e:
-        # Telegram returns "file is too big" for >20 MB — surface
-        # as a known-too-large so the template can respond accordingly.
         msg = str(e).lower()
         too_large = any(tok in msg for tok in ('too big', 'too large', '413'))
         if too_large:
@@ -194,90 +202,37 @@ def _get_telegram_file_size(file_id):
         logger.warning(f"Could not get Telegram file size: {e}")
         return None, False
 
-# ============================================================
-# SAFE FILENAME FOR HTTP HEADERS
-# ============================================================
-# HTTP headers can only contain Latin-1 characters. PDF titles can
-# contain emojis, Arabic, Somali diacritics, etc. If we interpolate
-# those into Content-Disposition directly, Werkzeug's WSGI layer
-# raises "http header must be encodable in latin1".
-#
-# Strategy:
-#   • Build a Latin-1-safe ASCII fallback (filename="...") — always sent.
-#   • If the original name had non-ASCII characters, also emit the
-#     RFC 5987 encoded form (filename*=UTF-8''...) which modern
-#     browsers prefer. Both together are spec-compliant.
-# ============================================================
 
 def _ascii_filename(raw, fallback='document.pdf'):
-    """Return an ASCII-only filename suitable for a Latin-1 header."""
     if not raw:
         return fallback
     s = str(raw)
-    # Keep only Latin-1 safe characters. Anything else becomes '_'.
     s = ''.join(
         ch if (ord(ch) < 128 and (ch.isalnum() or ch in ' -_().')) else '_'
         for ch in s
     )
-    # Collapse runs of underscores and strip
     s = re.sub(r'_+', '_', s).strip('_ ')
     if not s:
         return fallback
-    # Cap length so header doesn't grow unbounded
     return s[:120]
 
 
 def _encode_content_disposition(disposition, filename):
-    """
-    Build a Content-Disposition value that is guaranteed Latin-1 safe.
-
-    Always emits filename="<ascii>". If the original filename had
-    non-ASCII characters, also emits filename*=UTF-8''<pct-encoded>
-    so compliant browsers display the pretty name.
-    """
     ascii_name = _ascii_filename(filename)
     header = f'{disposition}; filename="{ascii_name}"'
-
     try:
         if any(ord(c) >= 128 for c in str(filename or '')):
             encoded = _urlquote(str(filename), safe='')
             header += f"; filename*=UTF-8''{encoded}"
     except Exception:
         pass
-
     return header
 
 
-# ============================================================
-# PDF RESPONSE BUILDERS
-# ============================================================
-# Two flavors of PDF Response, because the browser treats previews
-# and downloads very differently.
-# ============================================================
-
 def _pdf_response(data: bytes, disposition_header: str) -> Response:
-    """
-    Plain PDF Response for ATTACHMENT DOWNLOADS.
-
-    WHY NOT send_file:
-        send_file() with a BytesIO cannot determine size reliably and
-        falls back to chunked transfer encoding. PythonAnywhere's
-        proxy rejects chunked upstream responses on some paths,
-        returning a 502 "Bad Gateway" to the browser.
-
-        A plain Response with an explicit Content-Length avoids the
-        chunked path entirely.
-
-    WHY NO Accept-Ranges:
-        Advertising byte-range support while returning 200 for a
-        range request makes browsers fall back to download UI.
-        Since we do not implement 206 slicing here, we simply do
-        not advertise ranges.
-    """
     if data is None:
         data = b''
     length = len(data)
-
     return Response(
         data,
         status=200,
@@ -291,47 +246,22 @@ def _pdf_response(data: bytes, disposition_header: str) -> Response:
 
 
 def _pdf_preview_response(data: bytes, disposition_header: str) -> Response:
-    """
-    PDF Response for INLINE PREVIEW (used by /preview and intake/preview).
-
-    Chrome's PDF viewer extension asks for the file in byte ranges
-    (`Range: bytes=0-N`) and expects a proper 206 Partial Content
-    response. It uses that to stream the PDF while rendering.
-
-    If the server replies with a plain 200 + full body to a range
-    request, Chrome decides the PDF cannot be streamed and falls
-    back to its "Open in new tab" UI — which is exactly what
-    happened when we served previews via a plain Response.
-
-    The reliable way to support range requests for a file already
-    in memory is to hand the bytes to send_file with
-    conditional=True. Werkzeug slices the BytesIO internally and
-    emits a proper 206 when the browser asks for a range.
-    """
     if data is None:
         data = b''
-
     buf = io.BytesIO(data)
     buf.seek(0)
-
     resp = send_file(
         buf,
         mimetype='application/pdf',
         as_attachment=False,
         conditional=True,
     )
-    # Override the disposition so we control the pretty filename
-    # (with RFC 5987 fallback for non-ASCII titles).
     resp.headers['Content-Disposition'] = disposition_header
     resp.headers['Cache-Control'] = 'private, max-age=300'
     return resp
 
 
 def _fetch_telegram_pdf_bytes(code: str):
-    """
-    Fetch a PDF from Telegram by code. Returns (bytes, error_message).
-    error_message is None on success. Never raises.
-    """
     if not code:
         return None, 'No PDF code'
     try:
@@ -378,7 +308,6 @@ def _int_or_none(raw):
 
 
 def _coerce_bool(raw):
-    """Convert any form value to a 0/1 int. Accepts 'on', '1', 'true', 'yes'."""
     if raw is None:
         return 0
     if isinstance(raw, bool):
@@ -1292,13 +1221,18 @@ def pdf_info():
             from bot.db import get_bot_pdf_by_code
             bot_pdf = get_bot_pdf_by_code(code)
             if bot_pdf:
-                size = _get_telegram_file_size(bot_pdf['file_id'])
-                if size:
-                    out['size_mb'] = round(size / (1024 * 1024), 2)
-                    if size <= _PDF_SIZE_CAP_BYTES:
+                size_bytes, known_too_large = _get_telegram_file_size(
+                    bot_pdf['file_id']
+                )
+                if known_too_large:
+                    out['reason'] = 'too_large'
+                elif size_bytes:
+                    out['size_mb'] = round(size_bytes / (1024 * 1024), 2)
+                    if size_bytes <= _PDF_SIZE_CAP_BYTES:
                         out['can_preview'] = True
-                        out['preview_url'] = url_for('pdfs.preview_telegram',
-                                                     code=code)
+                        out['preview_url'] = url_for(
+                            'pdfs.preview_telegram', code=code
+                        )
                     else:
                         out['reason'] = 'too_large'
                 else:
@@ -1318,13 +1252,18 @@ def pdf_info():
             out['source'] = 'bot'
             out['title'] = bot_pdf.get('title') or code
             out['is_premium'] = bool(bot_pdf.get('is_premium', 0))
-            size = _get_telegram_file_size(bot_pdf['file_id'])
-            if size:
-                out['size_mb'] = round(size / (1024 * 1024), 2)
-                if size <= _PDF_SIZE_CAP_BYTES:
+            size_bytes, known_too_large = _get_telegram_file_size(
+                bot_pdf['file_id']
+            )
+            if known_too_large:
+                out['reason'] = 'too_large'
+            elif size_bytes:
+                out['size_mb'] = round(size_bytes / (1024 * 1024), 2)
+                if size_bytes <= _PDF_SIZE_CAP_BYTES:
                     out['can_preview'] = True
-                    out['preview_url'] = url_for('pdfs.preview_telegram',
-                                                 code=code)
+                    out['preview_url'] = url_for(
+                        'pdfs.preview_telegram', code=code
+                    )
                 else:
                     out['reason'] = 'too_large'
             else:
@@ -1346,10 +1285,6 @@ def pdf_info():
                         endpoint='pdf_check_code')
 @admin_can('pdfs.view')
 def pdf_check_code():
-    """
-    Live uniqueness check used by the edit page's code field.
-    Body: { 'code': 'XXXX-XXXX', 'exclude_id': <pdf_id> }
-    """
     if not _csrf_ok():
         return jsonify({'error': 'Invalid session.'}), 403
 
@@ -2083,7 +2018,10 @@ def pdfs():
         subject_filter    = (request.args.get('subject') or '').strip()
         curriculum_filter = (request.args.get('curriculum') or '').strip()
         class_filter      = (request.args.get('class') or '').strip()
-        sort              = (request.args.get('sort') or 'newest').strip()
+        sort              = (request.args.get('sort') or _DEFAULT_PDF_SORT).strip()
+        if sort not in _VALID_PDF_SORTS:
+            sort = _DEFAULT_PDF_SORT
+
         try:
             lib_page = max(1, int(request.args.get('page') or 1))
         except (TypeError, ValueError):
@@ -2091,18 +2029,43 @@ def pdfs():
 
         offset = (lib_page - 1) * PER_PAGE
 
-        try:
-            pdf_list = get_all_pdfs(
-                limit=PER_PAGE, offset=offset,
-                search=search,
-                subject=subject_filter,
-                curriculum=curriculum_filter,
-                class_filter=class_filter,
-                sort=sort,
-            )
-        except Exception as e:
-            logger.error(f"pdfs(): library fetch failed: {e}", exc_info=True)
-            pdf_list = []
+        # ── Shuffle seed policy ────────────────────────────
+        #   fresh visit or refresh of base URL  → new seed
+        #   explicit shuffle button (reseed=1)  → new seed, then redirect
+        #                                         to page 1 without the param
+        #   pagination (page param present)     → keep the current seed
+        if sort == 'shuffle':
+            if request.args.get('reseed') == '1':
+                _reseed_admin_shuffle()
+                args = request.args.to_dict(flat=True)
+                args.pop('reseed', None)
+                args['page'] = '1'
+                return redirect(url_for('admin_content.pdfs', **args))
+            if 'page' not in request.args:
+                _reseed_admin_shuffle()
+            else:
+                _ensure_admin_shuffle_seed()
+            seed = session.get(_ADMIN_SHUF_SEED_KEY)
+            try:
+                pdf_list = get_all_pdfs_shuffled(
+                    seed=seed, limit=PER_PAGE, offset=offset,
+                    search=search, subject=subject_filter,
+                    curriculum=curriculum_filter, class_filter=class_filter,
+                )
+            except Exception as e:
+                logger.error(f"pdfs(): shuffled fetch failed: {e}", exc_info=True)
+                pdf_list = []
+        else:
+            try:
+                pdf_list = get_all_pdfs(
+                    limit=PER_PAGE, offset=offset,
+                    search=search, subject=subject_filter,
+                    curriculum=curriculum_filter, class_filter=class_filter,
+                    sort=sort,
+                )
+            except Exception as e:
+                logger.error(f"pdfs(): library fetch failed: {e}", exc_info=True)
+                pdf_list = []
 
         try:
             filtered_total = get_main_pdf_count(
@@ -2129,6 +2092,7 @@ def pdfs():
             'subject_filter':    subject_filter,
             'curriculum_filter': curriculum_filter,
             'class_filter':      class_filter,
+            'sort':              sort,
         })
 
     elif tab == 'intake':
@@ -2253,16 +2217,6 @@ def pdfs():
                         endpoint='pdf_library_preview')
 @admin_can('pdfs.view')
 def pdf_library_preview(pdf_id):
-    """
-    Inline PDF preview. Served inside an iframe on the edit page and
-    also as a standalone page in a new tab.
-
-    Uses _pdf_preview_response so Werkzeug handles byte-range
-    requests. Chrome's PDF viewer sends `Range: bytes=0-N` first and
-    needs a proper 206 Partial Content to stream the PDF inline.
-    Serving a plain 200 + full body to a range request makes Chrome
-    fall back to its "Open in new tab" UI.
-    """
     pdf = get_pdf_by_id(pdf_id)
     if not pdf:
         abort(404)
@@ -2270,7 +2224,6 @@ def pdf_library_preview(pdf_id):
     raw_name = (pdf.get('title') or pdf.get('code') or f'pdf-{pdf_id}') + '.pdf'
     disposition = _encode_content_disposition('inline', raw_name)
 
-    # Local file branch
     file_url = pdf.get('file_url')
     if file_url and os.path.exists(file_url) and os.path.isfile(file_url):
         try:
@@ -2280,7 +2233,6 @@ def pdf_library_preview(pdf_id):
         except Exception as e:
             logger.warning(f"Local file read failed for pdf {pdf_id}: {e}")
 
-    # Telegram branch
     code = pdf.get('code')
     if not code:
         abort(404, 'PDF has no code')
@@ -2297,15 +2249,6 @@ def pdf_library_preview(pdf_id):
                         endpoint='pdf_download')
 @admin_can('pdfs.view')
 def pdf_download(pdf_id):
-    """
-    Force-download the PDF as an attachment.
-
-    Uses _pdf_response() with an explicit Content-Length so the
-    response is a single well-formed body, avoiding the chunked
-    encoding that PythonAnywhere's proxy rejects with a 502.
-    Range support is not advertised because we do not implement
-    206 responses on this route.
-    """
     pdf = get_pdf_by_id(pdf_id)
     if not pdf:
         abort(404)
@@ -2313,7 +2256,6 @@ def pdf_download(pdf_id):
     raw_name = (pdf.get('title') or pdf.get('code') or f'pdf-{pdf_id}') + '.pdf'
     disposition = _encode_content_disposition('attachment', raw_name)
 
-    # Local file branch
     file_url = pdf.get('file_url')
     if file_url and os.path.exists(file_url) and os.path.isfile(file_url):
         try:
@@ -2323,7 +2265,6 @@ def pdf_download(pdf_id):
         except Exception as e:
             logger.warning(f"Local file read failed for pdf {pdf_id}: {e}")
 
-    # Telegram branch
     code = pdf.get('code')
     if not code:
         abort(404, 'PDF has no code')
@@ -2339,22 +2280,11 @@ def pdf_download(pdf_id):
 # ============================================================
 # PDFs — LIBRARY EDIT / UPDATE / DELETE
 # ============================================================
+
 @admin_content_bp.route('/pdfs/<int:pdf_id>/refetch-size', methods=['POST'],
                         endpoint='pdf_refetch_size')
 @admin_can('pdfs.edit')
 def pdf_refetch_size(pdf_id):
-    """
-    Re-resolve a single PDF's file size from Telegram.
-
-    Clears the in-memory cache entry, calls get_file() once, and
-    persists the result into bot_data.db `pdfs.file_size` so future
-    page loads don't need another round-trip.
-
-    The sentinel scheme matches the rest of the app:
-        > 0   → real size
-        -1    → transient failure (retryable)
-        -2    → known too large / gone (never retry)
-    """
     if not _csrf_ok():
         return jsonify({'error': 'Invalid session.'}), 403
 
@@ -2362,7 +2292,6 @@ def pdf_refetch_size(pdf_id):
     if not pdf:
         return jsonify({'error': 'PDF not found'}), 404
 
-    # Look up the bot-side row by code
     try:
         from bot.db import get_bot_pdf_by_code, update_bot_pdf_file_size
         bot_pdf = get_bot_pdf_by_code(pdf.get('code') or '')
@@ -2377,13 +2306,11 @@ def pdf_refetch_size(pdf_id):
 
     file_id = bot_pdf['file_id']
 
-    # Clear any stale cache entry
     try:
         _PDF_SIZE_CACHE.pop(file_id, None)
     except Exception:
         pass
 
-    # Call Telegram directly — do not read from cache
     try:
         from bot.utils import get_bot
         bot = get_bot()
@@ -2439,6 +2366,7 @@ def pdf_refetch_size(pdf_id):
                       if too_large else ''),
     })
 
+
 @admin_content_bp.route('/pdfs/<int:pdf_id>/edit', methods=['GET'],
                         endpoint='pdf_edit')
 @admin_can('pdfs.edit')
@@ -2451,7 +2379,7 @@ def pdf_edit(pdf_id):
         'available':       False,
         'source':          None,
         'size_mb':         None,
-        'size_status':     'missing',   # 'ok' | 'too_large' | 'unknown' | 'missing'
+        'size_status':     'missing',
         'too_large':       False,
         'has_local_file':  False,
         'has_telegram':    False,
@@ -2479,7 +2407,6 @@ def pdf_edit(pdf_id):
             if bot_pdf and bot_pdf.get('file_id'):
                 preview_info['has_telegram'] = True
 
-                # Prefer the persisted column (avoids a Telegram round-trip)
                 raw_size = bot_pdf.get('file_size')
                 known_too_large = False
                 if raw_size is not None:
@@ -2493,7 +2420,6 @@ def pdf_edit(pdf_id):
                 elif raw_size is not None and raw_size > 0:
                     size_bytes = raw_size
                 else:
-                    # Unknown — resolve via Telegram
                     size_bytes, known_too_large = _get_telegram_file_size(
                         bot_pdf['file_id']
                     )
@@ -2534,6 +2460,7 @@ def pdf_edit(pdf_id):
         classes=_PDF_CLASSES,
         csrf_token=session.get('csrf_token'),
     )
+
 
 @admin_content_bp.route('/pdfs/<int:pdf_id>/edit', methods=['POST'],
                         endpoint='pdf_update')
@@ -2817,10 +2744,6 @@ def pdf_intake_process(pending_id):
                         endpoint='pdf_intake_preview')
 @admin_can('pdfs.intake')
 def pdf_intake_preview(pending_id):
-    """
-    Same preview policy as pdf_library_preview — Werkzeug's send_file
-    with conditional=True so Chrome's PDF viewer can range-fetch.
-    """
     from bot.db import get_pending_pdf_by_id
     pending = get_pending_pdf_by_id(pending_id)
     if not pending:
@@ -3058,7 +2981,7 @@ def pdf_staging_publish_all():
 
     from bot.db import get_bot_pdfs
     try:
-        all_pdfs = get_bot_pdfs(limit=10000, offset=0)
+        all_pdfs = get_bot_pdfs(limit=10000, offset=0, published_filter=False)
     except Exception as e:
         logger.error(f"publish-all load failed: {e}")
         flash('Could not load staging PDFs.', 'error')
@@ -3109,7 +3032,7 @@ def pdf_staging_publish_all():
             except Exception:
                 pass
     if failed:
-        flash(f'{failed} already existed or failed to publish.', 'info')
+        flash(f'{failed} failed to publish.', 'error')
 
     return redirect(url_for('admin_content.pdfs', tab='staging'))
 
@@ -3523,7 +3446,7 @@ def pdfs_bulk_action():
     for i in raw_ids:
         try:
             clean_ids.append(int(i))
-        except (ValueError, TypeError):
+        except (TypeError, ValueError):
             continue
 
     if not clean_ids:
@@ -3561,17 +3484,20 @@ def pdfs_bulk_action():
         if action == 'delete':
             if not admin_can('pdfs.delete'):
                 return jsonify({'error': 'Delete permission required'}), 403
-            execute_with_retry(
-                f"DELETE FROM pdfs WHERE id IN ({placeholders})",
-                tuple(clean_ids), commit=True,
-            )
+            deleted = 0
+            failed = []
+            for pid in clean_ids:
+                if delete_main_pdf(pid):
+                    deleted += 1
+                else:
+                    failed.append(pid)
             write_audit(
                 action='pdf.bulk_delete',
                 target_type='pdf', before=None,
-                after={'count': len(clean_ids), 'ids': clean_ids},
+                after={'count': deleted, 'ids': clean_ids, 'failed': failed},
                 severity='warning',
             )
-            return jsonify({'success': True, 'affected': len(clean_ids)})
+            return jsonify({'success': True, 'affected': deleted, 'failed': failed})
 
         return jsonify({'error': f'Unknown action: {action}'}), 400
 

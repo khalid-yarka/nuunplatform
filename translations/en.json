@@ -1356,5 +1356,6 @@
   "offline.subtitle": "No internet connection. NuunPlatform will pick up where you left off once you're back online.",
   "offline.retry": "Try again",
   "offline.home": "Home",
-  "offline.tip": "Tip\\: pages you visited before are available offline."
+  "offline.tip": "Tip\\: pages you visited before are available offline.",
+  "pdfs.shuffle_again": "Shuffle again"
 }

@@ -1214,35 +1214,102 @@ _SORT_MAP = {
 }
 
 
+def _pdf_filter_clause(search='', subject='', curriculum='', class_filter=''):
+    """
+    Build the WHERE fragment + params used by both get_all_pdfs and
+    get_all_pdfs_shuffled. Kept in one place so the two fetchers
+    cannot drift apart.
+    """
+    where = ["1=1"]
+    params = []
+    if search:
+        where.append("(title LIKE ? OR description LIKE ? OR code LIKE ? OR subject LIKE ?)")
+        like = f"%{search}%"
+        params.extend([like, like, like, like])
+    if subject:
+        where.append("subject = ?")
+        params.append(subject)
+    if curriculum:
+        where.append("curriculum = ?")
+        params.append(curriculum)
+    if class_filter:
+        where.append("class = ?")
+        params.append(class_filter)
+    return " AND ".join(where), params
+
+
 def get_all_pdfs(limit=100, offset=0, search='', subject='', curriculum='',
                  class_filter='', sort='newest'):
     try:
-        query = "SELECT * FROM pdfs WHERE 1=1"
-        params = []
-        if search:
-            query += " AND (title LIKE ? OR description LIKE ? OR code LIKE ? OR subject LIKE ?)"
-            like = f"%{search}%"
-            params.extend([like, like, like, like])
-        if subject:
-            query += " AND subject = ?"
-            params.append(subject)
-        if curriculum:
-            query += " AND curriculum = ?"
-            params.append(curriculum)
-        if class_filter:
-            query += " AND class = ?"
-            params.append(class_filter)
-
+        where_sql, params = _pdf_filter_clause(
+            search=search, subject=subject,
+            curriculum=curriculum, class_filter=class_filter,
+        )
         order_sql = _SORT_MAP.get(sort, _SORT_MAP['newest'])
-        query += f" ORDER BY {order_sql} LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
-
-        cursor = execute_with_retry(query, params)
+        query = f"SELECT * FROM pdfs WHERE {where_sql} ORDER BY {order_sql} LIMIT ? OFFSET ?"
+        cursor = execute_with_retry(query, params + [limit, offset])
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
     except Exception as e:
         logger.error(f"Error fetching PDFs: {e}")
         return []
+
+
+def get_all_pdfs_shuffled(seed, limit=100, offset=0, search='', subject='',
+                          curriculum='', class_filter=''):
+    """
+    Deterministic-shuffle fetch. Uses `seed` to produce a stable
+    permutation of the matching PDFs. Different seeds yield
+    different orders. The same seed on the same filter set always
+    returns the same order — critical for pagination.
+
+    `seed` may be any string or int. It is fed to random.Random(),
+    which accepts anything hashable. Empty seed falls back to a
+    stable non-random order so the caller never crashes.
+    """
+    import random as _random
+    try:
+        where_sql, params = _pdf_filter_clause(
+            search=search, subject=subject,
+            curriculum=curriculum, class_filter=class_filter,
+        )
+
+        id_cursor = execute_with_retry(
+            f"SELECT id FROM pdfs WHERE {where_sql}", params
+        )
+        all_ids = [r['id'] for r in id_cursor.fetchall()]
+
+        if seed is None or seed == '':
+            # No seed — behave like 'newest' rather than crash.
+            sliced = all_ids[offset:offset + limit]
+        else:
+            rng = _random.Random(str(seed))
+            rng.shuffle(all_ids)
+            sliced = all_ids[offset:offset + limit]
+
+        if not sliced:
+            return []
+
+        placeholders = ','.join('?' * len(sliced))
+        row_cursor = execute_with_retry(
+            f"SELECT * FROM pdfs WHERE id IN ({placeholders})", sliced
+        )
+        by_id = {r['id']: dict(r) for r in row_cursor.fetchall()}
+        # Preserve the shuffled order — SQLite does not guarantee
+        # the order of an IN(...) clause.
+        return [by_id[i] for i in sliced if i in by_id]
+    except Exception as e:
+        logger.error(f"Error fetching shuffled PDFs: {e}")
+        # Fall back to deterministic order so the page still renders.
+        try:
+            return get_all_pdfs(
+                limit=limit, offset=offset, search=search,
+                subject=subject, curriculum=curriculum,
+                class_filter=class_filter, sort='newest',
+            )
+        except Exception:
+            return []
+
 
 def get_pdf_by_code(code):
     try:
@@ -1306,8 +1373,55 @@ def create_main_pdf(data):
 
 
 def delete_main_pdf(pdf_id):
+    """
+    Delete a main-library PDF, and also purge the corresponding
+    staging row from bot_data.db.
+
+    Removing the staging row prevents the "Publish all" flow (and any
+    other bulk publish path) from re-materialising a PDF that the
+    admin explicitly deleted. Without this, deleting a main PDF left
+    the staging row intact, and a subsequent publish-all brought the
+    PDF back.
+
+    Returns True when the main row was removed. Cleanup of the staging
+    row is best-effort — a failure there does not fail the delete.
+    """
     try:
-        execute_with_retry("DELETE FROM pdfs WHERE id = ?", (pdf_id,), commit=True)
+        # Read the code first so we can find the matching staging row.
+        code = None
+        try:
+            row = execute_with_retry(
+                "SELECT code FROM pdfs WHERE id = ?", (pdf_id,)
+            ).fetchone()
+            if row is not None:
+                code = row['code'] if hasattr(row, 'keys') else row[0]
+        except Exception as e:
+            logger.warning(
+                f"delete_main_pdf: code lookup failed for {pdf_id}: {e}"
+            )
+
+        execute_with_retry(
+            "DELETE FROM pdfs WHERE id = ?", (pdf_id,), commit=True
+        )
+
+        # Best-effort: also remove the staging row so the code cannot
+        # be republished. Uses a separate DB file (bot_data.db).
+        if code:
+            try:
+                from bot.db import get_bot_pdf_by_code, delete_bot_pdf
+                bot_row = get_bot_pdf_by_code(code)
+                if bot_row:
+                    delete_bot_pdf(bot_row['id'])
+                    logger.info(
+                        f"delete_main_pdf: also removed staging row "
+                        f"#{bot_row['id']} (code {code})"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"delete_main_pdf: staging cleanup failed for "
+                    f"code {code}: {e}"
+                )
+
         return True
     except Exception as e:
         logger.error(f"Error deleting main PDF: {e}")
@@ -1459,22 +1573,13 @@ def check_pdf_codes_exist(codes) -> dict:
 
 def get_main_pdf_count(search='', subject='', curriculum='', class_filter=''):
     try:
-        query = "SELECT COUNT(*) as count FROM pdfs WHERE 1=1"
-        params = []
-        if search:
-            query += " AND (title LIKE ? OR description LIKE ? OR code LIKE ? OR subject LIKE ?)"
-            like = f"%{search}%"
-            params.extend([like, like, like, like])
-        if subject:
-            query += " AND subject = ?"
-            params.append(subject)
-        if curriculum:
-            query += " AND curriculum = ?"
-            params.append(curriculum)
-        if class_filter:
-            query += " AND class = ?"
-            params.append(class_filter)
-        cursor = execute_with_retry(query, params)
+        where_sql, params = _pdf_filter_clause(
+            search=search, subject=subject,
+            curriculum=curriculum, class_filter=class_filter,
+        )
+        cursor = execute_with_retry(
+            f"SELECT COUNT(*) AS count FROM pdfs WHERE {where_sql}", params
+        )
         row = cursor.fetchone()
         return row['count'] if row else 0
     except Exception as e:
@@ -1967,6 +2072,8 @@ def get_question_ids_for_quiz(quiz_id: int):
         except RuntimeError:
             logger.error(f"Error getting question IDs: {e}")
         return []
+
+
 def get_questions_by_subject(subject_code: str, limit: int = 10,
                              grade: str = None):
     """
@@ -2005,6 +2112,7 @@ def get_questions_by_subject(subject_code: str, limit: int = 10,
         except RuntimeError:
             logger.error(f"Error fetching questions: {e}")
         return []
+
 
 def get_questions_by_ids(question_ids: list):
     if not question_ids:
@@ -4266,6 +4374,7 @@ def purge_batch_items(batch_id, dry_run=True, item_ids=None, item_type=None) -> 
             exc_info=True)
         out['error'] = str(e)
         return out
+
 
 def clean_expired_batch_edits() -> int:
     """Delete undo snapshots whose window has expired."""

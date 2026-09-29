@@ -377,7 +377,6 @@
 .lib-card:hover .lib-card__check,
 .lib-card.is-selected .lib-card__check { opacity: 1; }
 
-/* ─── Always-visible checkboxes on touch devices ─── */
 @media (hover: none), (pointer: coarse) {
     .lib-card__check { opacity: 1 !important; }
 }
@@ -657,7 +656,7 @@
     <form method="GET" class="lib-filter" id="libFilterForm" autocomplete="off">
         <input type="hidden" name="tab" value="library">
         <input type="hidden" name="quick" id="libQuickFilter" value="">
-        <input type="hidden" name="sort" id="libSortInput" value="{{ request.args.get('sort', 'newest') }}">
+        <input type="hidden" name="sort" id="libSortInput" value="{{ request.args.get('sort', 'shuffle') }}">
 
         <div class="lib-filter__row">
             <div class="lib-search" role="search">
@@ -720,6 +719,7 @@
                 <div class="lib-advanced__field">
                     <label>Sort by</label>
                     <select id="libSortSelect" class="lib-select">
+                        <option value="shuffle">🔀 Shuffle (default)</option>
                         <option value="newest">Newest first</option>
                         <option value="oldest">Oldest first</option>
                         <option value="popular">Most viewed</option>
@@ -781,28 +781,28 @@
             {% if search %}
                 <a class="lib-chip" href="{{ url_for('admin_content.pdfs', tab='library',
                     subject=subject_filter or None, curriculum=curriculum_filter or None,
-                    class=class_filter or None) }}">
+                    class=class_filter or None, sort=sort or None) }}">
                     <i class="fas fa-search"></i><span>{{ search }}</span><i class="fas fa-times"></i>
                 </a>
             {% endif %}
             {% if subject_filter %}
                 <a class="lib-chip" href="{{ url_for('admin_content.pdfs', tab='library',
                     search=search or None, curriculum=curriculum_filter or None,
-                    class=class_filter or None) }}">
+                    class=class_filter or None, sort=sort or None) }}">
                     <i class="fas fa-book"></i><span>{{ subject_filter }}</span><i class="fas fa-times"></i>
                 </a>
             {% endif %}
             {% if curriculum_filter %}
                 <a class="lib-chip" href="{{ url_for('admin_content.pdfs', tab='library',
                     search=search or None, subject=subject_filter or None,
-                    class=class_filter or None) }}">
+                    class=class_filter or None, sort=sort or None) }}">
                     <i class="fas fa-globe"></i><span>{{ curriculum_filter }}</span><i class="fas fa-times"></i>
                 </a>
             {% endif %}
             {% if class_filter %}
                 <a class="lib-chip" href="{{ url_for('admin_content.pdfs', tab='library',
                     search=search or None, subject=subject_filter or None,
-                    curriculum=curriculum_filter or None) }}">
+                    curriculum=curriculum_filter or None, sort=sort or None) }}">
                     <i class="fas fa-graduation-cap"></i><span>{{ class_filter }}</span><i class="fas fa-times"></i>
                 </a>
             {% endif %}
@@ -850,6 +850,21 @@
                     <i class="fas fa-times"></i>
                 </button>
             </div>
+
+            <a href="{{ url_for('admin_content.pdfs',
+                                tab='library',
+                                search=search or None,
+                                subject=subject_filter or None,
+                                curriculum=curriculum_filter or None,
+                                class=class_filter or None,
+                                sort=sort or None,
+                                reseed='1') }}"
+               class="lib-btn lib-btn--ghost lib-btn--sm"
+               title="Shuffle again"
+               aria-label="Shuffle again">
+                <i class="fas fa-shuffle"></i>
+                <span class="hide-sm">Shuffle</span>
+            </a>
 
             <div class="lib-view" role="group" aria-label="View mode">
                 <button type="button" class="lib-view__btn active" data-view="grid" title="Grid view">
@@ -960,6 +975,7 @@
             'subject': subject_filter or None,
             'curriculum': curriculum_filter or None,
             'class': class_filter or None,
+            'sort': sort or None,
         }) }}
     {% else %}
         <div class="lib-empty">
@@ -1203,18 +1219,12 @@
     var noResults    = document.getElementById('libNoResults');
     var noResultsClear = document.getElementById('libNoResultsClear');
 
-    // ═══════════════════════════════════════════════════
-    // 1. AUTO-FILTER on select change
-    // ═══════════════════════════════════════════════════
     document.querySelectorAll('[data-autofilter]').forEach(function (el) {
         el.addEventListener('change', function () {
             if (form) form.submit();
         });
     });
 
-    // ═══════════════════════════════════════════════════
-    // 2. SEARCH — Enter + button + live filter
-    // ═══════════════════════════════════════════════════
     if (searchInput && form) {
         searchInput.addEventListener('keydown', function (e) {
             if (e.key === 'Enter' || e.keyCode === 13) {
@@ -1249,9 +1259,6 @@
         });
     }
 
-    // ═══════════════════════════════════════════════════
-    // 3. ADVANCED PANEL
-    // ═══════════════════════════════════════════════════
     if (toggleBtn && advPanel) {
         toggleBtn.addEventListener('click', function () {
             var open = !advPanel.hidden;
@@ -1260,9 +1267,6 @@
         });
     }
 
-    // ═══════════════════════════════════════════════════
-    // 4. SORT
-    // ═══════════════════════════════════════════════════
     if (sortSelect && sortInput) {
         Array.from(sortSelect.options).forEach(function (o) {
             if (o.value === sortInput.value) o.selected = true;
@@ -1273,9 +1277,6 @@
         });
     }
 
-    // ═══════════════════════════════════════════════════
-    // 5. QUICK FILTER
-    // ═══════════════════════════════════════════════════
     function applyQuickFilter(mode) {
         if (!grid) return;
         var visible = 0;
@@ -1324,9 +1325,6 @@
         history.replaceState({}, '', u.toString());
     });
 
-    // ═══════════════════════════════════════════════════
-    // 6. VIEW + DENSITY
-    // ═══════════════════════════════════════════════════
     var STORAGE_VIEW = 'nuun.admin.pdfs.view';
     var STORAGE_DENSITY = 'nuun.admin.pdfs.density';
     function setView(mode) {
@@ -1358,9 +1356,6 @@
         if (sd === 'compact' || sd === 'comfortable') setDensity(sd);
     } catch (e) {}
 
-    // ═══════════════════════════════════════════════════
-    // 7. SELECTION
-    // ═══════════════════════════════════════════════════
     function getChecked() {
         return Array.from(document.querySelectorAll('.lib-row-check:checked'));
     }
@@ -1398,9 +1393,6 @@
         updateSelection();
     });
 
-    // ═══════════════════════════════════════════════════
-    // 8. BULK ACTIONS — call real endpoint
-    // ═══════════════════════════════════════════════════
     var BULK_URL = '{{ url_for("admin_content.pdfs_bulk_action") }}';
     var CSRF = '{{ csrf_token }}';
 
@@ -1431,7 +1423,6 @@
                 alert(res.data.error || 'Action failed.');
                 return;
             }
-            // Reload to reflect new state (premium/delete updates the underlying DB)
             window.location.reload();
         })
         .catch(function (e) {
@@ -1454,9 +1445,6 @@
         runBulkAction('delete');
     });
 
-    // ═══════════════════════════════════════════════════
-    // 9. CSV export — client-side
-    // ═══════════════════════════════════════════════════
     if (bulkExport) bulkExport.addEventListener('click', function () {
         var cards = getChecked().map(function (cb) {
             return cb.closest('.lib-card');
@@ -1487,9 +1475,6 @@
         setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
     });
 
-    // ═══════════════════════════════════════════════════
-    // 10. SINGLE ROW DELETE
-    // ═══════════════════════════════════════════════════
     document.addEventListener('click', function (e) {
         var btn = e.target.closest && e.target.closest('.lib-row-delete');
         if (!btn) return;
@@ -1514,23 +1499,17 @@
         .catch(function (e) { alert('Network error: ' + e); });
     });
 
-    // ═══════════════════════════════════════════════════
-    // 11. CLEAR ALL
-    // ═══════════════════════════════════════════════════
     if (clearAllBtn) clearAllBtn.addEventListener('click', function () {
         if (searchInput) searchInput.value = '';
         document.querySelectorAll('.lib-select[data-autofilter]').forEach(function (s) { s.value = ''; });
-        if (sortSelect) sortSelect.value = 'newest';
-        if (sortInput) sortInput.value = 'newest';
+        if (sortSelect) sortSelect.value = 'shuffle';
+        if (sortInput) sortInput.value = 'shuffle';
         if (quickSelect) quickSelect.value = '';
         if (quickInput) quickInput.value = '';
         applyQuickFilter('');
         form.submit();
     });
 
-    // ═══════════════════════════════════════════════════
-    // 12. SAVED VIEWS
-    // ═══════════════════════════════════════════════════
     var SAVED_KEY = 'nuun.admin.pdfs.saved_views';
     var savedSelect = document.getElementById('libSavedSelect');
     var saveBtn = document.getElementById('libSaveView');
@@ -1587,9 +1566,6 @@
     });
     renderSavedViews();
 
-    // ═══════════════════════════════════════════════════
-    // 13. KEYBOARD
-    // ═══════════════════════════════════════════════════
     document.addEventListener('keydown', function (e) {
         var tag = (document.activeElement || {}).tagName || '';
         var inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';

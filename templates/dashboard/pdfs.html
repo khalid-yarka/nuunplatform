@@ -6,6 +6,29 @@
 {% block extra_css %}
 {{ super() }}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pdfs.css') }}" />
+<style>
+    .lib-shuffle-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        text-decoration: none;
+        transition: all 0.15s;
+        margin-right: 6px;
+        flex-shrink: 0;
+    }
+    .lib-shuffle-btn:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+        background: var(--primary-light);
+    }
+    .lib-shuffle-btn i { font-size: 13px; }
+</style>
 {% endblock %}
 
 
@@ -131,6 +154,9 @@
         {% if saved_filter %}
             <input type="hidden" name="saved" value="1">
         {% endif %}
+        {% if sort %}
+            <input type="hidden" name="sort" value="{{ sort }}">
+        {% endif %}
 
         {% if search_level == 0 or not is_logged_in %}
             {% if not is_logged_in %}
@@ -214,6 +240,7 @@
                         'subject':    subject_filter or None,
                         'class':      class_filter or None,
                         'curriculum': curriculum_filter or None,
+                        'sort':       sort or None,
                     } %}
                     <div class="lib-saved-tabs" role="tablist" aria-label="Filter by saved">
                         <a href="{{ url_for('pdfs.list_pdfs', **_tab_args) }}"
@@ -237,6 +264,21 @@
                         </a>
                     </div>
                 {% endif %}
+
+                {# ─── Shuffle-again button ─── #}
+                <a href="{{ url_for('pdfs.list_pdfs',
+                                    search=search_query or None,
+                                    subject=subject_filter or None,
+                                    class=class_filter or None,
+                                    curriculum=curriculum_filter or None,
+                                    saved=1 if saved_filter else None,
+                                    sort=sort or None,
+                                    reseed='1') }}"
+                   class="lib-shuffle-btn"
+                   title="{{ _('pdfs.shuffle_again') }}"
+                   aria-label="{{ _('pdfs.shuffle_again') }}">
+                    <i class="fas fa-shuffle"></i>
+                </a>
 
                 <div class="lib-view-toggle">
                     <button type="button" id="viewGridBtn" class="active" title="Grid view">
@@ -371,7 +413,6 @@
                                 <span class="pdf-card__btn-badge">0</span>
                             </button>
                         {% endif %}
-                        {# dl_state == 'hidden' → nothing rendered #}
 
                         {# ── VIEW ── #}
                         {% if vw_state == 'enabled' %}
@@ -398,7 +439,6 @@
                                 <span>{{ _('pdfs.view_btn') }}</span>
                             </a>
                         {% endif %}
-                        {# vw_state == 'hidden' → nothing rendered #}
 
                         {# ── GET PDF ── #}
                         {% if gt_state == 'enabled' %}
@@ -453,6 +493,7 @@
                     'class':      class_filter or None,
                     'curriculum': curriculum_filter or None,
                     'saved':      1 if saved_filter else None,
+                    'sort':       sort or None,
                 } %}
 
                 {% if page > 1 %}
