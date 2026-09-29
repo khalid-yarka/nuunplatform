@@ -2,17 +2,30 @@
 # services/admin/entitlements.py
 # Admin-side operations for the entitlement system.
 #
-# ── FIX: save_feature_detail() now compares each submitted value
-#    against the SEED policy (unmerged) rather than the effective
-#    policy. This lets the writer detect three distinct states:
+# ── FIX (is_global_active, defensive): save_feature_detail()
+#    now requires an EXPLICIT value for is_global_active in the
+#    payload. When the key is absent, or when its value is None,
+#    the flag is left untouched and no audit row is written.
+#
+#    Prior behaviour wrote whatever the caller sent, including a
+#    silent False when a caller's form did not carry the field.
+#    Combined with the caller-side bug in policy_bp.py, this
+#    deactivated features globally on every save.
+#
+# ── FIX (per-tier is_enabled, defensive): the tier loop now
+#    treats `is_enabled` as absent when the caller did not send
+#    it, rather than coercing a missing value to False. A caller
+#    that only wants to change a limit_value no longer disables
+#    the tier as a side effect.
+#
+# ── FIX (compare vs seed): save_feature_detail() compares each
+#    submitted value against the SEED policy (unmerged) rather
+#    than the effective policy. This lets the writer detect three
+#    distinct states:
 #
 #      submitted == seed        → clear any override (revert to inherit)
 #      submitted != seed        → set/update the override
 #      submitted == effective   → no-op (already in the right state)
-#
-#    Previously it compared against the effective policy, which
-#    meant an admin who reverted a field to seed value left a dead
-#    override behind. Now the override is cleaned up automatically.
 # ============================================================
 
 import json
@@ -142,9 +155,6 @@ def clear_all_overrides_for_feature(feature_key: str, actor_id: int) -> int:
 # ============================================================
 
 def build_feature_catalog() -> list[dict]:
-    """
-    Return one dict per feature for the entitlements list page.
-    """
     policy = get_policy()
     features_out = []
 
@@ -189,10 +199,6 @@ def build_feature_catalog() -> list[dict]:
 # ============================================================
 
 def build_feature_detail(feature_key: str) -> Optional[dict]:
-    """
-    Return the full detail for one feature, including the effective
-    policy per tier and the overrides applied.
-    """
     policy = get_policy()
     feature = policy.get(feature_key)
     if not feature:
@@ -255,8 +261,13 @@ def save_feature_detail(
     """
     Save one feature's policy grid.
 
-    Comparison is done against the SEED policy, not the effective policy:
-        submitted == seed   → clear any override on this field (inherit)
+    The payload may contain:
+        is_global_active    — optional, bool. Absent or None = leave alone.
+        description         — informational only.
+        tiers               — dict of {tier: {field: value}}.
+
+    Per-tier fields are compared against the SEED policy (unmerged):
+        submitted == seed   → clear any override (inherit)
         submitted != seed   → set / update the override
     """
     policy = get_policy()
@@ -266,15 +277,16 @@ def save_feature_detail(
 
     seed = get_seed_feature(feature_key)
     if not seed:
-        # Extremely defensive: fall back to the effective policy as a
-        # comparison base if the seed read fails.
         seed = feature
 
     existing_overrides = list_overrides_for_feature(feature_key)
     changed = 0
 
     # ---------- is_global_active ----------
-    if 'is_global_active' in payload:
+    # Only touched when the caller sent an explicit boolean.
+    # Absent or None = leave the flag alone. This prevents a save
+    # that was never meant to toggle the flag from toggling it.
+    if 'is_global_active' in payload and payload['is_global_active'] is not None:
         new_active = bool(payload['is_global_active'])
         old_active = bool(feature.get('is_global_active'))
         if new_active != old_active:
@@ -302,6 +314,8 @@ def save_feature_detail(
         seed_tier = seed.get('policies', {}).get(tier, {})
 
         for field in ('is_enabled', 'level_value', 'limit_value', 'limit_unit'):
+            # Missing field in the submitted dict = leave alone.
+            # This is the same defensive rule applied to is_global_active.
             if field not in submitted_tier:
                 continue
 
@@ -338,7 +352,6 @@ def save_feature_detail(
 
             # submitted differs from seed — set / update override.
             if has_override and _norm_field(field, current_override) == submitted_value:
-                # Override already holds the requested value. No-op.
                 continue
 
             if set_override(feature_key, tier, field, submitted_value, actor_id):

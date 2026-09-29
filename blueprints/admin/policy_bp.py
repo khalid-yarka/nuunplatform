@@ -3,16 +3,33 @@
 # Policy domain — entitlement feature catalog, per-feature
 # policy editor, audit trail, and JSON import/export.
 #
-# Routes:
-#   GET  /admin/entitlements                            → catalog
-#   GET  /admin/entitlements/<feature_key>              → detail editor
-#   POST /admin/entitlements/<feature_key>              → save
-#   POST /admin/entitlements/<feature_key>/reset        → reset to registry default
-#   GET  /admin/entitlements/audit                      → audit list
-#   GET  /admin/entitlements/import                     → import page
-#   GET  /admin/entitlements/export                     → download JSON
-#   POST /admin/entitlements/import/preview             → AJAX diff
-#   POST /admin/entitlements/import                     → apply import
+# ── FIX (is_global_active): the save handler previously built
+#    the payload with `is_global_active` unconditionally, reading
+#    `request.form.get('is_global_active') == '1'`. That is wrong
+#    for two reasons:
+#
+#      1. A plain unchecked checkbox is absent from the form, so
+#         `.get()` returns None and the flag is treated as off.
+#      2. A hidden `0` + checkbox `1` pattern sends both values
+#         when checked, and Flask's `.get()` returns the FIRST one
+#         (the `0`), so the flag is off even when the box is on.
+#
+#    The net effect was: any save of ANY feature silently
+#    deactivated it globally. The feature then appeared enabled in
+#    the admin panel (per-tier checkboxes green) but returned
+#    False from entitlement_service.check() for every user,
+#    because check() short-circuits on is_global_active.
+#
+#    The handler now:
+#      * Reads every submitted value with getlist().
+#      * Treats "1 present" as the explicit ON signal.
+#      * Treats "field present but no 1" as the explicit OFF signal.
+#      * Treats "field absent entirely" as "leave the flag alone"
+#        and does not include the key in the payload at all.
+#
+#    The write layer (services/admin/entitlements.py) mirrors
+#    this: it only touches is_global_active when the key is
+#    present in the payload.
 # ============================================================
 
 from flask import (
@@ -42,6 +59,43 @@ VALID_TIERS = ('free', 'premium')
 
 
 # ============================================================
+# HELPERS
+# ============================================================
+
+def _read_is_global_active():
+    """
+    Return True / False / None for the is_global_active field.
+
+    None means "the form did not carry this field at all — do not
+    touch the flag". True / False mean an explicit intent.
+
+    Handles both common template patterns:
+        • Plain checkbox (absent when unchecked)
+        • Hidden 0 + checkbox 1 (both present when checked)
+    """
+    if 'is_global_active' not in request.form:
+        return None
+    values = request.form.getlist('is_global_active')
+    # Any '1' among the submitted values is an explicit ON.
+    for v in values:
+        if str(v).strip() == '1':
+            return True
+    # Field present, no ON value → explicit OFF.
+    return False
+
+
+def _read_checkbox(name):
+    """
+    Read a boolean checkbox that may be absent (off) or present
+    with '1' (on). Uses getlist() so hidden 0 + checkbox 1 works.
+    """
+    if name not in request.form:
+        return False
+    values = request.form.getlist(name)
+    return any(str(v).strip() == '1' for v in values)
+
+
+# ============================================================
 # CATALOG — /admin/entitlements
 # ============================================================
 
@@ -50,7 +104,6 @@ VALID_TIERS = ('free', 'premium')
 def entitlements():
     features = build_feature_catalog()
 
-    # Filtering
     search = (request.args.get('search') or '').strip().lower()
     category_filter = (request.args.get('category') or '').strip().lower()
     modified_filter = (request.args.get('modified') or '').strip()
@@ -71,7 +124,6 @@ def entitlements():
     elif modified_filter == '0':
         features = [f for f in features if not f['modified']]
 
-    # Category list for filter dropdown
     all_categories = sorted({f['category'] for f in build_feature_catalog()})
 
     stats = {
@@ -121,19 +173,23 @@ def entitlement_save(feature_key):
     if not detail:
         abort(404)
 
-    # Build the payload from the form
     payload = {
-        'is_global_active': request.form.get('is_global_active') == '1',
         'tiers': {},
         'description': detail.get('description', ''),
     }
 
+    # is_global_active is only included when the form explicitly
+    # carried the field. Absence means "leave it alone".
+    global_flag = _read_is_global_active()
+    if global_flag is not None:
+        payload['is_global_active'] = global_flag
+
     for tier in VALID_TIERS:
         tier_payload = {}
 
-        # is_enabled — checkbox, present only when checked
+        # is_enabled — reads via getlist() to handle hidden 0 + checkbox 1.
         enabled_key = f'tier_{tier}_is_enabled'
-        tier_payload['is_enabled'] = (request.form.get(enabled_key) == '1')
+        tier_payload['is_enabled'] = _read_checkbox(enabled_key)
 
         # level_value — optional, only for level features
         if detail['policy_type'] == 'level':
@@ -217,7 +273,6 @@ def entitlement_reset(feature_key):
 def entitlements_audit():
     entries = recent_entitlement_audit(limit=200)
 
-    # Filtering
     search = (request.args.get('search') or '').strip().lower()
     if search:
         entries = [
@@ -246,7 +301,6 @@ def entitlements_export():
     data = entitlement_service.export_to_json()
     body = json.dumps(data, indent=2, ensure_ascii=False)
 
-    # Log the export action
     try:
         from services.admin.audit import write_audit
         write_audit(
@@ -285,10 +339,6 @@ def entitlements_import():
                        endpoint='entitlements_import_preview')
 @admin_can('entitlements.write')
 def entitlements_import_preview():
-    """
-    Compute a diff between submitted JSON and the current policy.
-    Never modifies the DB.
-    """
     if not validate_csrf():
         return jsonify({'error': 'Invalid session. Refresh the page.'}), 403
 
@@ -345,12 +395,10 @@ def entitlements_import_preview():
                 before = cur_p.get(field)
                 after = new_p.get(field)
 
-                # Normalize booleans from JSON
                 if field == 'is_enabled':
                     before = bool(before)
                     after = bool(after)
 
-                # Normalize numerics
                 if field in ('level_value', 'limit_value'):
                     if before is not None:
                         try:

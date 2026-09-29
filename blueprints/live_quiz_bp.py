@@ -10,6 +10,7 @@ import random
 import threading
 import logging
 import time
+import sqlite3
 from datetime import datetime, timezone, timedelta
 from flask import (
     Blueprint, render_template, request, session, flash, redirect,
@@ -54,6 +55,8 @@ from db import (
     create_live_quiz_with_participant,
     generate_unique_join_code,
     execute_with_retry,
+    get_db,
+    to_json,
 )
 
 from config import Config
@@ -114,6 +117,18 @@ check_single_worker()
 
 
 # ============================================
+# FINALIZATION LOCK
+# ============================================
+# Prevents two concurrent requests from running the DB loop and the
+# notification loop twice for the same quiz. State-layer idempotency
+# also guards this, but the flag makes the second caller short-circuit
+# before any DB work.
+
+_finalize_lock = threading.Lock()
+_finalize_in_progress: dict = {}
+
+
+# ============================================
 # SHARED HELPERS
 # ============================================
 
@@ -136,25 +151,16 @@ def get_questions_for_subject(subject_code, limit, grade=None):
 
 
 def _profile_grade(user_id):
-    """
-    Return the user-facing grade (F4 / F3). Anything else — G8, G7,
-    empty, malformed — is treated as F4.
-    """
     user = get_student_by_id(user_id) or {}
     g = (user.get('grade') or '').strip().upper()
     return g if g in UI_GRADES else UI_GRADES[0]
 
 
 def _grade_choices():
-    """User-facing pill choices: F4 and F3 only."""
     return [{'code': g, 'label': grade_label(g)} for g in UI_GRADES]
 
 
 def _is_grade_locked_for_viewer(quiz_row, user_id, user_tier):
-    """
-    True when the viewer is free and the quiz grade doesn't match their
-    profile grade. Premium always gets False.
-    """
     if user_tier == 'premium':
         return False
     quiz_grade = normalize_grade(quiz_row.get('grade') if quiz_row else None)
@@ -185,20 +191,71 @@ def _get_active_quiz_for_user(user_id: int):
     return _enrich_active_quiz(quiz, user_id)
 
 
+def _atomic_add_participant(quiz_id, student_id, question_ids, max_participants):
+    """
+    Atomically add a participant to a quiz if the cap allows.
+
+    Fixes the check-then-insert race (C2): the count and the INSERT
+    happen inside a single BEGIN IMMEDIATE transaction.
+
+    Returns (True, 'ok') on success, or (False, reason) where reason
+    is one of: 'full', 'already_joined', 'error'.
+    """
+    shuffled = question_ids[:]
+    random.shuffle(shuffled)
+    answers_json = json.dumps({'__shuffled_ids': shuffled})
+    ratings_json = json.dumps({})
+    now_iso = get_somali_time_db()
+
+    conn = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("BEGIN IMMEDIATE")
+        try:
+            row = cursor.execute(
+                "SELECT COUNT(*) AS c FROM live_quiz_participants WHERE quiz_id = ?",
+                (quiz_id,)
+            ).fetchone()
+            current = row['c'] if row else 0
+            if current >= max_participants:
+                conn.rollback()
+                return False, 'full'
+
+            cursor.execute("""
+                INSERT INTO live_quiz_participants (
+                    quiz_id, student_id, score, current_question_index,
+                    correct_count, wrong_count, skipped_count, answers, ratings,
+                    ranking, status, joined_at
+                ) VALUES (?, ?, 0, 0, 0, 0, 0, ?, ?, NULL, 'active', ?)
+            """, (quiz_id, student_id, answers_json, ratings_json, now_iso))
+            conn.commit()
+            return True, 'ok'
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise
+    except sqlite3.IntegrityError as e:
+        msg = str(e).lower()
+        if 'unique' in msg:
+            return False, 'already_joined'
+        logger.warning(f"_atomic_add_participant integrity: {e}")
+        return False, 'error'
+    except Exception as e:
+        logger.error(f"_atomic_add_participant failed: {e}", exc_info=True)
+        return False, 'error'
+
+
 def _rejoin_if_left(quiz_id: int, user_id: int) -> bool:
     """
-    If the user has a 'left' participant record for this quiz, flip
-    them back to active — in both the DB and memory.
+    Flip a 'left' participant back to active in both the DB and memory.
 
-    Returns True if the user is active after the call (whether or not
-    a rejoin was needed), False only when the record doesn't exist or
-    the DB rejoin failed.
-
-    This is the single entry point used by every rejoin path:
-      • waiting_room GET (auto-rejoin on landing)
-      • /join (code form)
-      • /lobby/join/<id> (lobby button)
-      • /rejoin/<id> (explicit rejoin button)
+    Returns True only when BOTH the DB and the in-memory state reflect
+    the active status. A partial failure returns False so the caller
+    does not report success to the user while the room still shows
+    them as left.
     """
     try:
         participant = get_live_quiz_participant(quiz_id, user_id)
@@ -211,10 +268,8 @@ def _rejoin_if_left(quiz_id: int, user_id: int) -> bool:
 
     current_status = participant.get('status')
     if current_status != 'left':
-        # Already active or completed — nothing to rejoin.
         return True
 
-    # Hit the DB rejoin.
     try:
         ok = db_rejoin_live_quiz(quiz_id, user_id)
     except Exception as e:
@@ -225,24 +280,34 @@ def _rejoin_if_left(quiz_id: int, user_id: int) -> bool:
         logger.info(f"_rejoin_if_left: db_rejoin returned False for quiz {quiz_id} user {user_id}")
         return False
 
-    # Update memory so the participant list reflects the change immediately.
+    # The memory side is mandatory for consistency. If it fails, we
+    # return False — the caller must not claim success.
     try:
         manager = get_state_manager()
-        manager.ensure_quiz_in_memory(quiz_id)
+        if not manager.ensure_quiz_in_memory(quiz_id):
+            logger.error(f"_rejoin_if_left: quiz {quiz_id} not in memory and could not be recovered")
+            return False
+
         quiz_state = manager.get_quiz(quiz_id)
-        if quiz_state:
-            user = get_student_by_id(user_id) or {}
-            name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
-            public_id = user.get('public_id', '----')
+        if not quiz_state:
+            logger.error(f"_rejoin_if_left: quiz {quiz_id} has no in-memory state")
+            return False
 
-            quiz_state.restore_participant(user_id, name=name, public_id=public_id)
+        user = get_student_by_id(user_id) or {}
+        name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
+        public_id = user.get('public_id', '----')
 
-            manager.enqueue_event({
-                'quiz_id': quiz_id,
-                'user_id': user_id,
-                'event_type': 'JOIN',
-                'payload': json.dumps({'name': name}),
-            })
+        restored = quiz_state.restore_participant(user_id, name=name, public_id=public_id)
+        if not restored:
+            logger.error(f"_rejoin_if_left: restore_participant returned False")
+            return False
+
+        manager.enqueue_event({
+            'quiz_id': quiz_id,
+            'user_id': user_id,
+            'event_type': 'JOIN',
+            'payload': json.dumps({'name': name}),
+        })
 
         invalidate_quiz_cache(quiz_id)
         logger.info(f"_rejoin_if_left: auto-rejoined user {user_id} into quiz {quiz_id}")
@@ -253,90 +318,123 @@ def _rejoin_if_left(quiz_id: int, user_id: int) -> bool:
 
 
 def finalize_live_quiz(quiz_id: int) -> dict:
-    manager = get_state_manager()
-    quiz_state = manager.get_quiz(quiz_id)
-    if not quiz_state:
-        return {'error': 'Quiz not in memory'}
+    """
+    Compute final standings, write them, and dispatch notifications.
 
-    final_data = quiz_state.finalize()
-    if 'error' in final_data:
-        return final_data
+    Concurrency:
+      - _finalize_lock + _finalize_in_progress prevents two concurrent
+        requests from both running the DB loop.
+      - QuizState.finalize() claims the in-memory finalized flag under
+        the state lock, so a second caller cannot re-run finalize().
+      - update_live_quiz(status='finished') is the FIRST DB write, so
+        even if the participant loop later fails, the DB reflects the
+        terminal status.
+    """
+    with _finalize_lock:
+        if _finalize_in_progress.get(quiz_id):
+            return {'error': 'Finalization already in progress'}
+        _finalize_in_progress[quiz_id] = True
 
     try:
-        update_live_quiz(quiz_id, {
-            'status': 'finished',
-            'ended_at': final_data['ended_at'],
-        })
+        manager = get_state_manager()
+        quiz_state = manager.get_quiz(quiz_id)
+        if not quiz_state:
+            return {'error': 'Quiz not in memory'}
 
-        for pdata in final_data['participants']:
-            db_p = get_live_quiz_participant(quiz_id, pdata['user_id'])
-            if db_p:
-                update_live_quiz_participant(db_p['id'], {
-                    'score': pdata['score'],
-                    'correct_count': pdata['correct_count'],
-                    'wrong_count': pdata['wrong_count'],
-                    'skipped_count': pdata['skipped_count'],
-                    'answers': pdata['answers'],
-                    'ratings': pdata['ratings'],
-                    'ranking': pdata['rank'],
-                    'status': pdata['status'],
-                })
+        # Guard: if the DB already says finished, do nothing.
+        db_quiz = get_live_quiz_by_id(quiz_id)
+        if db_quiz and db_quiz.get('status') == 'finished':
+            return {'success': True, 'already_finalized': True}
 
-            try:
-                from services.interaction_service import flush_quiz_reactions
-                flush_quiz_reactions(
-                    pdata['user_id'],
-                    pdata.get('likes') or [],
-                    pdata.get('saves') or [],
+        # Compute the final data. This claims the in-memory flag.
+        final_data = quiz_state.finalize()
+        if 'error' in final_data:
+            return final_data
+
+        # Force a checkpoint right now so recovery from a crash during
+        # the loop below sees the terminal state.
+        try:
+            manager._force_final_checkpoint(quiz_state)
+        except Exception as e:
+            logger.warning(f"Forced final checkpoint failed for {quiz_id}: {e}")
+
+        # DB writes
+        try:
+            update_live_quiz(quiz_id, {
+                'status': 'finished',
+                'ended_at': final_data['ended_at'],
+            })
+
+            for pdata in final_data['participants']:
+                db_p = get_live_quiz_participant(quiz_id, pdata['user_id'])
+                if db_p:
+                    update_live_quiz_participant(db_p['id'], {
+                        'score': pdata['score'],
+                        'correct_count': pdata['correct_count'],
+                        'wrong_count': pdata['wrong_count'],
+                        'skipped_count': pdata['skipped_count'],
+                        'answers': pdata['answers'],
+                        'ratings': pdata['ratings'],
+                        'ranking': pdata['rank'],
+                        'status': pdata['status'],
+                    })
+
+                try:
+                    from services.interaction_service import flush_quiz_reactions
+                    flush_quiz_reactions(
+                        pdata['user_id'],
+                        pdata.get('likes') or [],
+                        pdata.get('saves') or [],
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"flush_quiz_reactions failed for user {pdata['user_id']} "
+                        f"in quiz {quiz_id}: {e}"
+                    )
+
+                add_history_entry(
+                    user_id=pdata['user_id'],
+                    entry_type='live_quiz',
+                    action='completed',
+                    metadata={
+                        'subject': quiz_state.metadata.get('subject_code', 'Unknown'),
+                        'grade': quiz_state.metadata.get('grade', DEFAULT_GRADE),
+                        'score': pdata['score'],
+                        'rank': pdata.get('rank'),
+                        'total_questions': len(quiz_state.question_ids),
+                    },
                 )
-            except Exception as e:
-                logger.error(
-                    f"flush_quiz_reactions failed for user {pdata['user_id']} "
-                    f"in quiz {quiz_id}: {e}"
+
+            manager.enqueue_event({
+                'quiz_id': quiz_id,
+                'event_type': 'COMPLETE',
+                'payload': json.dumps(final_data),
+            })
+
+            participants = quiz_state.get_all_participants()
+            for p in participants:
+                send_notification(
+                    user_id=p['student_id'],
+                    notification_type='live_quiz_result',
+                    title='🏆 Quiz Complete!',
+                    body=(
+                        f'"{quiz_state.metadata.get("title", "Quiz")}" finished. '
+                        f'Your rank: #{p.get("rank", "N/A")}, '
+                        f'Score: {p.get("score", 0)}'
+                    ),
+                    link=f'/live-quiz/results/{quiz_id}',
+                    icon='🏅',
                 )
 
-            add_history_entry(
-                user_id=pdata['user_id'],
-                entry_type='live_quiz',
-                action='completed',
-                metadata={
-                    'subject': quiz_state.metadata.get('subject_code', 'Unknown'),
-                    'grade': quiz_state.metadata.get('grade', DEFAULT_GRADE),
-                    'score': pdata['score'],
-                    'rank': pdata.get('rank'),
-                    'total_questions': len(quiz_state.question_ids),
-                },
-            )
-
-        manager.enqueue_event({
-            'quiz_id': quiz_id,
-            'event_type': 'COMPLETE',
-            'payload': json.dumps(final_data),
-        })
-
-        quiz_state.mark_finalized()
-
-        participants = quiz_state.get_all_participants()
-        for p in participants:
-            send_notification(
-                user_id=p['student_id'],
-                notification_type='live_quiz_result',
-                title='🏆 Quiz Complete!',
-                body=(
-                    f'"{quiz_state.metadata.get("title", "Quiz")}" finished. '
-                    f'Your rank: #{p.get("rank", "N/A")}, '
-                    f'Score: {p.get("score", 0)}'
-                ),
-                link=f'/live-quiz/results/{quiz_id}',
-                icon='🏅',
-            )
-
-        invalidate_quiz_cache(quiz_id)
-        logger.info(f"Finalized quiz {quiz_id}")
-        return {'success': True, 'final_data': final_data}
-    except Exception as e:
-        logger.error(f"Finalization error for quiz {quiz_id}: {e}", exc_info=True)
-        return {'error': str(e)}
+            invalidate_quiz_cache(quiz_id)
+            logger.info(f"Finalized quiz {quiz_id}")
+            return {'success': True, 'final_data': final_data}
+        except Exception as e:
+            logger.error(f"Finalization DB loop failed for {quiz_id}: {e}", exc_info=True)
+            return {'error': str(e)}
+    finally:
+        with _finalize_lock:
+            _finalize_in_progress.pop(quiz_id, None)
 
 
 # ============================================
@@ -430,7 +528,6 @@ def lobby_join(quiz_id):
     if not quiz:
         return jsonify({'error': 'Quiz not found'}), 404
 
-    # Grade gate (only blocks free users with a mismatched profile grade)
     if _is_grade_locked_for_viewer(quiz, user_id, get_current_user_tier()):
         return jsonify({
             'error': 'This quiz is for a different grade. '
@@ -440,7 +537,6 @@ def lobby_join(quiz_id):
             'required_grade': normalize_grade(quiz.get('grade')),
         }), 403
 
-    # ── If the user has a 'left' record, rejoin rather than insert.
     existing = get_live_quiz_participant(quiz_id, user_id)
     if existing:
         if existing.get('status') == 'left':
@@ -450,25 +546,32 @@ def lobby_join(quiz_id):
                     'redirect': url_for('live_quiz.waiting_room', quiz_id=quiz_id),
                 })
             return jsonify({'error': 'Failed to rejoin quiz'}), 500
-        # Already active — nothing to do, just send them to the room.
         return jsonify({
             'success': True,
             'redirect': url_for('live_quiz.waiting_room', quiz_id=quiz_id),
         })
 
-    # ── Fresh join path
     can_join, reason = can_join_live_quiz(quiz_id, user_id)
     if not can_join:
         return jsonify({'error': reason}), 400
 
-    success = add_live_quiz_participant(quiz_id, user_id)
-    if not success:
+    # Atomic add: count + insert inside one transaction.
+    question_ids = quiz.get('question_ids', []) or []
+    max_participants = quiz.get('max_participants', 50)
+    ok, code = _atomic_add_participant(quiz_id, user_id, question_ids, max_participants)
+    if not ok:
+        if code == 'full':
+            return jsonify({'error': 'This quiz is full.'}), 400
+        if code == 'already_joined':
+            return jsonify({
+                'success': True,
+                'redirect': url_for('live_quiz.waiting_room', quiz_id=quiz_id),
+            })
         return jsonify({'error': 'Failed to join quiz'}), 500
 
     manager = get_state_manager()
     if not manager.ensure_quiz_in_memory(quiz_id):
-        if not manager.ensure_quiz_in_memory(quiz_id):
-            return jsonify({'error': 'Quiz state could not be loaded'}), 500
+        return jsonify({'error': 'Quiz state could not be loaded'}), 500
 
     quiz_state = manager.get_quiz(quiz_id)
     if quiz_state:
@@ -508,13 +611,6 @@ def lobby_join(quiz_id):
 
 @live_quiz_bp.route('/available-count')
 def available_count():
-    """
-    AJAX: how many active questions exist for a subject + grade.
-
-    Mirrors db.get_questions_by_subject's two-query behaviour:
-      • exact count for the (subject, grade) pair
-      • fallback count for the subject regardless of grade
-    """
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
 
@@ -590,9 +686,6 @@ def create():
         )
         return redirect(url_for('dashboard.profile'))
 
-    # Free tier can now host competitions. This check remains as a
-    # defensive guard only — can_create_live_quiz() should return True
-    # for every tier today.
     if not can_create_live_quiz():
         flash('You do not have permission to create competitions.', 'error')
         return redirect(url_for('live_quiz.lobby'))
@@ -1029,7 +1122,6 @@ def join():
             flash('Invalid join code or quiz has already started.', 'error')
             return render_template('dashboard/live_quiz/join.html')
 
-        # Grade gate
         if _is_grade_locked_for_viewer(quiz, user_id, user_tier):
             flash(
                 'This quiz is for a different grade. '
@@ -1043,7 +1135,6 @@ def join():
             flash('You are already in another quiz. Please leave that quiz first.', 'error')
             return render_template('dashboard/live_quiz/join.html')
 
-        # ── If they have a prior participation (left), rejoin via helper.
         participant = get_live_quiz_participant(quiz['id'], user_id)
         if participant:
             status = participant.get('status')
@@ -1061,13 +1152,19 @@ def join():
                 flash('You have already joined this quiz.', 'info')
                 return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
 
-        # ── Fresh join.
-        participant_count = get_live_quiz_count(quiz['id'])
-        if participant_count >= quiz.get('max_participants', 50):
-            flash('This quiz is full.', 'error')
+        # Atomic add: count + insert inside one transaction.
+        question_ids = quiz.get('question_ids', []) or []
+        max_participants = quiz.get('max_participants', 50)
+        ok, code = _atomic_add_participant(quiz['id'], user_id, question_ids, max_participants)
+        if not ok:
+            if code == 'full':
+                flash('This quiz is full.', 'error')
+                return render_template('dashboard/live_quiz/join.html')
+            if code == 'already_joined':
+                flash('You have already joined this quiz.', 'info')
+                return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
+            flash('Failed to join quiz.', 'error')
             return render_template('dashboard/live_quiz/join.html')
-
-        add_live_quiz_participant(quiz['id'], user_id)
 
         manager = get_state_manager()
         manager.ensure_quiz_in_memory(quiz['id'])
@@ -1117,10 +1214,6 @@ def waiting_room(quiz_id):
         flash('Quiz not found.', 'error')
         return redirect(url_for('live_quiz.lobby'))
 
-    # ── Auto-rejoin: if the user has a 'left' record and the quiz is
-    # still joinable, flip them back to active before rendering.
-    # This is what makes the lobby → waiting room path work without a
-    # manual button press.
     if quiz['status'] in ('waiting', 'scheduled'):
         try:
             existing = get_live_quiz_participant(quiz_id, user_id)
@@ -1155,8 +1248,8 @@ def waiting_room(quiz_id):
     if scheduled_start and quiz['status'] == 'scheduled':
         try:
             start_dt = datetime.fromisoformat(scheduled_start.replace('Z', '+00:00'))
-            now = datetime.now(timezone.utc)
-            diff = (start_dt - now).total_seconds()
+            now_dt = datetime.now(timezone.utc)
+            diff = (start_dt - now_dt).total_seconds()
             starts_in_seconds = max(0, int(diff))
             scheduled_start_display = format_somali_time(start_dt)
         except Exception:
@@ -1855,12 +1948,6 @@ def leave_quiz(quiz_id):
 
 @live_quiz_bp.route('/rejoin/<quiz_id>', methods=['POST'])
 def rejoin_quiz(quiz_id):
-    """
-    Explicit rejoin button handler.
-
-    Delegates to the shared _rejoin_if_left helper, which handles both
-    the DB UPDATE and the in-memory restore in one shot.
-    """
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
     if not validate_csrf():
@@ -1909,8 +1996,45 @@ def delete_quiz(quiz_id):
     if quiz['creator_id'] != user_id and not is_admin(user_id):
         return jsonify({'error': 'Permission denied'}), 403
 
+    # Audit BEFORE the destructive delete
+    try:
+        execute_with_retry("""
+            INSERT INTO admin_audit_log
+                (actor_id, actor_role, action, target_type, target_id,
+                 before_value, note, severity, created_at)
+            VALUES (?, ?, 'live_quiz.delete', 'live_quiz', ?,
+                    ?, ?, 'warning', ?)
+        """, (
+            user_id,
+            'admin' if is_admin(user_id) else 'user',
+            quiz_id,
+            json.dumps({
+                'title': quiz.get('title'),
+                'status': quiz.get('status'),
+                'creator_id': quiz.get('creator_id'),
+            }),
+            f'Deleted live quiz {quiz_id}',
+            get_somali_time_db(),
+        ), commit=True)
+    except Exception as e:
+        logger.warning(f"audit write for live_quiz.delete failed: {e}")
+
     manager = get_state_manager()
     manager.delete_quiz(quiz_id)
+
+    # Cascade to events and checkpoints. Both are orphaned otherwise
+    # because the schema does not declare ON DELETE CASCADE for them.
+    try:
+        execute_with_retry(
+            "DELETE FROM live_quiz_events WHERE quiz_id = ?",
+            (quiz_id,), commit=True,
+        )
+        execute_with_retry(
+            "DELETE FROM live_quiz_checkpoints WHERE quiz_id = ?",
+            (quiz_id,), commit=True,
+        )
+    except Exception as e:
+        logger.warning(f"cascade delete for quiz {quiz_id} failed: {e}")
 
     success = db_delete_live_quiz(quiz_id)
     if success:

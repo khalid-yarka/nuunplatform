@@ -3,6 +3,24 @@
 Redis-free Live Quiz State Manager for NuunPlatform.
 Designed for single-worker PythonAnywhere deployment.
 All state is held in memory; SQLite used for checkpoints and events.
+
+Idempotency contract:
+  ── submit_answer: if the question was already answered (by this user,
+     for this question), the recorded result is returned unchanged.
+     A second submit for the same question is a no-op that returns the
+     same payload as the first. If the recorded answer differs from
+     the new submission, the RECORDED answer is returned (server is
+     the source of truth).
+  ── skip_question: if the question was already skipped, returns
+     (True, 'already_skipped') — not an error.
+  ── advance_question: if the participant has already moved past the
+     given question, returns (True, 'already_advanced'). Advancing an
+     already-advanced question is a successful no-op.
+
+Convergence contract:
+  ── Any endpoint that would return an error for a benign race instead
+     returns the current authoritative state, so the client can render
+     it and move on.
 """
 
 import json
@@ -34,13 +52,11 @@ class ParticipantState:
     wrong_count: int = 0
     skipped_count: int = 0
     current_question_index: int = 0
-    # NOTE: dicts are keyed by STRING question_id for JSON round-trip safety.
     answers: Dict[str, Dict] = field(default_factory=dict)
-    ratings: Dict[str, str] = field(default_factory=dict)   # dormant, kept for legacy checkpoints
-    status: str = 'active'   # active, completed, left
+    ratings: Dict[str, str] = field(default_factory=dict)
+    status: str = 'active'
     is_ready: bool = False
     rank: Optional[int] = None
-    # Reaction fields — used after unification
     likes: List[int] = field(default_factory=list)
     saves: List[int] = field(default_factory=list)
     reports: Dict[str, Dict] = field(default_factory=dict)
@@ -75,7 +91,8 @@ class QuizState:
     All mutations are serialised via its RLock.
     """
 
-    def __init__(self, quiz_id: int, metadata: dict, question_ids: List[int], questions_cache: Dict[int, dict]):
+    def __init__(self, quiz_id: int, metadata: dict,
+                 question_ids: List[int], questions_cache: Dict[int, dict]):
         self.id = quiz_id
         self.metadata = metadata
         self.question_ids = question_ids
@@ -90,26 +107,15 @@ class QuizState:
         self.finalized = False
         self.dirty = True
         self._checkpoint_in_progress = False
+        self._final_checkpoint_done = False
 
     # ---------- Participant Management ----------
 
     def add_participant(self, user_id: int, name: str, public_id: str) -> bool:
-        """
-        Add a participant to the in-memory state.
-
-        Returns True when the participant is present and active after
-        the call, False only if they were already active and we did
-        NOT overwrite them.
-
-        A participant whose previous state is 'left' is allowed to
-        re-join. Their ParticipantState is replaced with a clean one.
-        """
         with self.lock:
             existing = self.participants.get(user_id)
             if existing is not None and existing.status != 'left':
-                # Already active or completed — do not clobber.
                 return False
-            # Fresh join OR re-join after a previous leave.
             self.participants[user_id] = ParticipantState(
                 user_id=user_id,
                 name=name,
@@ -122,49 +128,81 @@ class QuizState:
 
     def restore_participant(self, user_id: int,
                             name: Optional[str] = None,
-                            public_id: Optional[str] = None) -> bool:
+                            public_id: Optional[str] = None,
+                            score: Optional[int] = None,
+                            current_question_index: Optional[int] = None,
+                            answers: Optional[Dict] = None,
+                            correct_count: Optional[int] = None,
+                            wrong_count: Optional[int] = None,
+                            skipped_count: Optional[int] = None,
+                            is_ready: Optional[bool] = None,
+                            status: Optional[str] = None) -> bool:
         """
         Bring a participant back into the active set.
 
-        Behaviour:
-          • No existing entry       → creates a fresh active entry.
-          • Existing status='left'  → flips status back to 'active'
-                                       WITHOUT resetting score, answers,
-                                       or reactions (safer if a rejoin
-                                       happens mid-quiz).
-          • Existing status='active'/'completed' → no-op, returns True.
+        If optional snapshot values are supplied (score, current index,
+        answers, etc.) they are applied to the participant. This is
+        used by the auto-recovery path in live_quiz_bp when a
+        participant exists in the database but is missing from memory.
 
-        This is the method callers should use for rejoin flows.
+        Existing fields are only overwritten when a value is explicitly
+        supplied — never cleared by an unset argument.
         """
         with self.lock:
             existing = self.participants.get(user_id)
 
             if existing is None:
-                return self.add_participant(
-                    user_id,
-                    name or 'Participant',
-                    public_id or '----',
+                p = ParticipantState(
+                    user_id=user_id,
+                    name=name or 'Participant',
+                    public_id=public_id or '----',
+                    score=score if score is not None else 0,
+                    current_question_index=(
+                        current_question_index
+                        if current_question_index is not None else 0
+                    ),
+                    answers=answers if answers is not None else {},
+                    correct_count=correct_count or 0,
+                    wrong_count=wrong_count or 0,
+                    skipped_count=skipped_count or 0,
+                    is_ready=bool(is_ready) if is_ready is not None else False,
+                    status=status or 'active',
                 )
+                self.participants[user_id] = p
+                self._update_leaderboard()
+                self.version += 1
+                self.dirty = True
+                return True
 
-            # Refresh name / public_id if the caller provided new values.
             if name:
                 existing.name = name
             if public_id:
                 existing.public_id = public_id
-
-            if existing.status == 'left':
+            if score is not None:
+                existing.score = score
+            if current_question_index is not None:
+                existing.current_question_index = current_question_index
+            if answers is not None:
+                existing.answers = answers
+            if correct_count is not None:
+                existing.correct_count = correct_count
+            if wrong_count is not None:
+                existing.wrong_count = wrong_count
+            if skipped_count is not None:
+                existing.skipped_count = skipped_count
+            if is_ready is not None:
+                existing.is_ready = bool(is_ready)
+            if status is not None:
+                existing.status = status
+            elif existing.status == 'left':
                 existing.status = 'active'
-                self._update_leaderboard()
-                self.version += 1
-                self.dirty = True
 
+            self._update_leaderboard()
+            self.version += 1
+            self.dirty = True
             return True
 
     def remove_participant(self, user_id: int) -> bool:
-        """
-        Mark a participant as left. The entry is retained so the UI
-        can render a 'left' badge and history is preserved.
-        """
         with self.lock:
             p = self.participants.get(user_id)
             if not p:
@@ -197,11 +235,6 @@ class QuizState:
             return None
 
     def get_all_participants(self) -> List[dict]:
-        """
-        Every participant currently held in memory — INCLUDING those
-        with status 'left'. The client uses the 'left' entries to
-        render a badge, so we do not filter them out here.
-        """
         with self.lock:
             result = []
             for uid, p in self.participants.items():
@@ -216,10 +249,6 @@ class QuizState:
             return result
 
     def get_active_participants(self) -> List[dict]:
-        """
-        Same shape as get_all_participants, but excludes anyone with
-        status 'left'.
-        """
         with self.lock:
             result = []
             for uid, p in self.participants.items():
@@ -284,43 +313,101 @@ class QuizState:
         with self.lock:
             return self.questions_cache.get(question_id)
 
-    # ---------- Answer Submission ----------
+    # ---------- Answer Submission (IDEMPOTENT) ----------
 
-    def submit_answer(self, user_id: int, question_id: int, answer: str) -> Tuple[bool, dict]:
+    def submit_answer(self, user_id: int, question_id: int,
+                      answer: str) -> Tuple[bool, dict]:
+        """
+        Record an answer. Idempotent — a repeated submit for the same
+        (user, question) returns the previously recorded result.
+
+        Never raises out of this method; internal errors are returned
+        as a synthetic payload so the HTTP layer can build a valid
+        response for the client.
+        """
+        try:
+            return self._submit_answer_inner(user_id, question_id, answer)
+        except Exception as e:
+            logger.error(
+                f"submit_answer inner failed for user {user_id} "
+                f"quiz {self.id}: {e}", exc_info=True,
+            )
+            return True, {
+                'correct': False,
+                'correct_answer': '',
+                'explanation': '',
+                'new_score': 0,
+                'deferred': True,
+            }
+
+    def _submit_answer_inner(self, user_id: int, question_id: int,
+                             answer: str) -> Tuple[bool, dict]:
         with self.lock:
             try:
                 question_id = int(question_id)
             except (TypeError, ValueError):
-                return False, {'error': 'Invalid question_id'}
+                return False, {'error': 'Invalid question_id', 'resync': True}
 
             p = self.participants.get(user_id)
             if not p or p.status != 'active':
-                return False, {'error': 'Not an active participant'}
+                return False, {
+                    'error': 'Not an active participant',
+                    'resync': True,
+                }
 
             if self.status != 'active':
-                return False, {'error': 'Quiz not active'}
+                return False, {'error': 'Quiz not active', 'resync': True}
 
+            q_data = self.questions_cache.get(question_id) or {}
+
+            # ── Idempotent path ──
+            # Already answered this question — return the RECORDED result.
+            # The recorded answer is the source of truth. A duplicate
+            # submit, a retry after a lost response, and a mobile
+            # double-fire all land here and get a consistent reply.
             if str(question_id) in p.answers:
-                return False, {'error': 'Already answered this question'}
+                recorded = p.answers[str(question_id)]
+                return True, {
+                    'correct': bool(recorded.get('correct', False)),
+                    'correct_answer': q_data.get('correct_answer', ''),
+                    'explanation': q_data.get('explanation', ''),
+                    'new_score': p.score,
+                    'already_answered': True,
+                    'submitted_answer': recorded.get('answer'),
+                }
 
+            # ── Convergence path ──
+            # Not answered, but the question id doesn't match the
+            # current index. This means the client is behind (or a
+            # stale poll is in flight). Return the current state so
+            # the client can resync, rather than rejecting outright.
             if p.current_question_index >= len(self.question_ids):
-                return False, {'error': 'Quiz already completed'}
+                return False, {
+                    'error': 'Quiz already completed',
+                    'completed': True,
+                }
 
-            qid = self.question_ids[p.current_question_index]
-            if qid != question_id:
-                return False, {'error': 'Question mismatch'}
+            current_qid = self.question_ids[p.current_question_index]
+            if current_qid != question_id:
+                return False, {
+                    'error': 'Question has moved on',
+                    'resync': True,
+                    'current_index': p.current_question_index,
+                    'current_question_id': current_qid,
+                }
 
-            q_data = self.questions_cache.get(question_id)
-            if not q_data:
-                return False, {'error': 'Question data missing'}
-
-            correct = (answer == q_data['correct_answer'])
+            # ── Fresh answer ──
+            correct = (answer == q_data.get('correct_answer'))
             points = 2 if correct else 0
 
             p.score += points
             p.correct_count += 1 if correct else 0
             p.wrong_count += 0 if correct else 1
-            p.answers[str(question_id)] = {'answer': answer, 'correct': correct, 'skipped': False}
+            p.answers[str(question_id)] = {
+                'answer': answer,
+                'correct': correct,
+                'skipped': False,
+            }
 
             self._update_leaderboard()
             self.version += 1
@@ -328,14 +415,29 @@ class QuizState:
 
             return True, {
                 'correct': correct,
-                'correct_answer': q_data['correct_answer'],
+                'correct_answer': q_data.get('correct_answer', ''),
                 'explanation': q_data.get('explanation', ''),
-                'new_score': p.score
+                'new_score': p.score,
             }
 
-    # ---------- Skip ----------
+    # ---------- Skip (IDEMPOTENT) ----------
 
     def skip_question(self, user_id: int, question_id: int) -> Tuple[bool, str]:
+        """
+        Skip a question. Idempotent — a repeated skip of the same
+        question returns (True, 'already_skipped').
+        """
+        try:
+            return self._skip_question_inner(user_id, question_id)
+        except Exception as e:
+            logger.error(
+                f"skip_question inner failed for user {user_id} "
+                f"quiz {self.id}: {e}", exc_info=True,
+            )
+            return True, 'deferred'
+
+    def _skip_question_inner(self, user_id: int,
+                             question_id: int) -> Tuple[bool, str]:
         with self.lock:
             try:
                 question_id = int(question_id)
@@ -349,25 +451,51 @@ class QuizState:
             if self.status != 'active':
                 return False, 'Quiz not active'
 
-            if p.current_question_index >= len(self.question_ids):
-                return False, 'Quiz already completed'
-
-            qid = self.question_ids[p.current_question_index]
-            if qid != question_id:
-                return False, 'Question mismatch'
-
+            # Already answered or skipped — return success, no-op.
             if str(question_id) in p.answers:
-                return False, 'Already answered'
+                recorded = p.answers[str(question_id)]
+                if recorded.get('skipped'):
+                    return True, 'already_skipped'
+                return True, 'already_answered'
 
-            p.answers[str(question_id)] = {'answer': None, 'correct': False, 'skipped': True}
+            if p.current_question_index >= len(self.question_ids):
+                return True, 'already_completed'
+
+            current_qid = self.question_ids[p.current_question_index]
+            if current_qid != question_id:
+                # Question is past — treat as already advanced past it.
+                return True, 'already_advanced'
+
+            p.answers[str(question_id)] = {
+                'answer': None,
+                'correct': False,
+                'skipped': True,
+            }
             p.skipped_count += 1
             self.version += 1
             self.dirty = True
             return True, 'skipped'
 
-    # ---------- Advance ----------
+    # ---------- Advance (IDEMPOTENT) ----------
 
-    def advance_question(self, user_id: int, question_id: int) -> Tuple[bool, str]:
+    def advance_question(self, user_id: int,
+                         question_id: int) -> Tuple[bool, str]:
+        """
+        Advance past a question. Idempotent — advancing a question the
+        participant has already passed returns (True, 'already_advanced')
+        rather than a mismatch error.
+        """
+        try:
+            return self._advance_question_inner(user_id, question_id)
+        except Exception as e:
+            logger.error(
+                f"advance_question inner failed for user {user_id} "
+                f"quiz {self.id}: {e}", exc_info=True,
+            )
+            return True, 'deferred'
+
+    def _advance_question_inner(self, user_id: int,
+                                question_id: int) -> Tuple[bool, str]:
         with self.lock:
             try:
                 question_id = int(question_id)
@@ -382,12 +510,30 @@ class QuizState:
                 return False, 'Quiz not active'
 
             if p.current_question_index >= len(self.question_ids):
-                return False, 'Quiz already completed'
+                return True, 'already_completed'
 
-            qid = self.question_ids[p.current_question_index]
-            if qid != question_id:
+            current_qid = self.question_ids[p.current_question_index]
+
+            # ── Idempotent path ──
+            # Client is asking to advance past a question that's
+            # already behind us. Treat as success.
+            if current_qid != question_id:
+                try:
+                    past_index = self.question_ids.index(question_id)
+                except ValueError:
+                    # Unknown question id — should not happen.
+                    return False, 'Unknown question'
+
+                if past_index < p.current_question_index:
+                    return True, 'already_advanced'
+
+                # Client is asking to advance a FUTURE question. Do
+                # not advance — this is a client desync. Return success
+                # with the current state hint so the client resyncs
+                # via get-question on the next tick.
                 return False, 'Question mismatch'
 
+            # ── Fresh advance ──
             if str(question_id) not in p.answers:
                 return False, 'Must answer or skip first'
 
@@ -401,7 +547,8 @@ class QuizState:
 
     # ---------- Legacy rating (dormant) ----------
 
-    def submit_rating(self, user_id: int, question_id: int, rating: str) -> Tuple[bool, str]:
+    def submit_rating(self, user_id: int, question_id: int,
+                      rating: str) -> Tuple[bool, str]:
         with self.lock:
             p = self.participants.get(user_id)
             if not p or p.status != 'active':
@@ -409,7 +556,7 @@ class QuizState:
             if self.status != 'active':
                 return False, 'Quiz not active'
             if str(question_id) in p.ratings:
-                return False, 'Already rated'
+                return True, 'already_rated'
             p.ratings[str(question_id)] = rating
             p.current_question_index += 1
             self.version += 1
@@ -418,7 +565,7 @@ class QuizState:
                 p.status = 'completed'
             return True, 'rated'
 
-    # ---------- Reaction methods ----------
+    # ---------- Reaction methods (idempotent-friendly) ----------
 
     def toggle_like(self, user_id: int, question_id: int) -> bool:
         with self.lock:
@@ -454,14 +601,15 @@ class QuizState:
             self.dirty = True
             return True
 
-    def add_report(self, user_id: int, question_id: int, reason: str, comment: str = '') -> bool:
+    def add_report(self, user_id: int, question_id: int, reason: str,
+                   comment: str = '') -> bool:
         with self.lock:
             p = self.participants.get(user_id)
             if not p or p.status == 'left':
                 return False
             qid_str = str(question_id)
             if qid_str in p.reports:
-                return False
+                return True  # idempotent
             p.reports[qid_str] = {'reason': reason, 'comment': comment}
             self.version += 1
             self.dirty = True
@@ -486,7 +634,8 @@ class QuizState:
     # ---------- Leaderboard ----------
 
     def _update_leaderboard(self):
-        scores = [(uid, p.score) for uid, p in self.participants.items() if p.status != 'left']
+        scores = [(uid, p.score) for uid, p in self.participants.items()
+                  if p.status != 'left']
         scores.sort(key=lambda x: x[1], reverse=True)
         self.leaderboard = scores
 
@@ -500,7 +649,7 @@ class QuizState:
                     result.append({
                         'user_id': user_id,
                         'name': p.name,
-                        'score': score
+                        'score': score,
                     })
             return result
 
@@ -521,7 +670,10 @@ class QuizState:
                 'question_ids': self.question_ids,
                 'status': self.status,
                 'started_at': self.started_at,
-                'participants': {str(uid): p.to_dict() for uid, p in self.participants.items()},
+                'participants': {
+                    str(uid): p.to_dict()
+                    for uid, p in self.participants.items()
+                },
                 'version': self.version,
                 'leaderboard': self.leaderboard,
             }
@@ -551,9 +703,15 @@ class QuizState:
             if self.finalized:
                 return {'error': 'Already finalized'}
 
+            self.finalized = True
+            self.status = 'finished'
+            self.ended_at = get_somali_time_db()
+            self.dirty = True
+
             sorted_participants = sorted(
-                [(uid, p.score) for uid, p in self.participants.items() if p.status != 'left'],
-                key=lambda x: x[1], reverse=True
+                [(uid, p.score) for uid, p in self.participants.items()
+                 if p.status != 'left'],
+                key=lambda x: x[1], reverse=True,
             )
             for rank, (uid, _) in enumerate(sorted_participants, 1):
                 p = self.participants.get(uid)
@@ -562,8 +720,8 @@ class QuizState:
 
             final_data = {
                 'quiz_id': self.id,
-                'ended_at': get_somali_time_db(),
-                'participants': []
+                'ended_at': self.ended_at,
+                'participants': [],
             }
             for uid, p in self.participants.items():
                 final_data['participants'].append({
@@ -578,16 +736,25 @@ class QuizState:
                     'saves': p.saves,
                     'reports': p.reports,
                     'rank': getattr(p, 'rank', None),
-                    'status': p.status
+                    'status': p.status,
                 })
             return final_data
 
     def mark_finalized(self):
         with self.lock:
+            already = self.finalized
             self.status = 'finished'
-            self.ended_at = get_somali_time_db()
+            if not self.ended_at:
+                self.ended_at = get_somali_time_db()
             self.finalized = True
             self.dirty = True
+
+        if not already:
+            try:
+                manager = get_live_quiz_state_manager()
+                manager._force_final_checkpoint(self)
+            except Exception as e:
+                logger.warning(f"mark_finalized force-checkpoint failed: {e}")
 
     def cleanup(self):
         pass
@@ -611,16 +778,24 @@ class LiveQuizStateManager:
         self._shutdown_event = threading.Event()
         self._event_retry_backoff = 0.1
         self._max_retry_delay = 5.0
+        self._pending_events: Dict[int, int] = {}
+        self._pending_lock = threading.Lock()
+        self._threads_lock = threading.Lock()
+
+    # ---------- Lifecycle ----------
 
     def start(self):
-        if self._running:
-            return
-        self._running = True
-        self._shutdown_event.clear()
-        self._writer_thread = threading.Thread(target=self._writer_loop, daemon=True)
-        self._writer_thread.start()
-        self._start_checkpoint_timer()
-        logger.info("LiveQuizStateManager started with background writer.")
+        with self._threads_lock:
+            if self._running and self._writer_thread and self._writer_thread.is_alive():
+                return
+            self._running = True
+            self._shutdown_event.clear()
+            self._writer_thread = threading.Thread(
+                target=self._writer_loop, daemon=True, name='lq-writer',
+            )
+            self._writer_thread.start()
+            self._start_checkpoint_timer()
+            logger.info("LiveQuizStateManager started with background writer.")
 
     def stop(self):
         self._running = False
@@ -631,10 +806,30 @@ class LiveQuizStateManager:
             self._checkpoint_timer.join(timeout=2)
         logger.info("LiveQuizStateManager stopped.")
 
-    def create_quiz(self, quiz_id: int, metadata: dict, question_ids: List[int], questions_cache: Dict[int, dict]) -> QuizState:
+    def _ensure_threads_alive(self):
+        """Restart worker threads if they died. Called from entry points."""
+        with self._threads_lock:
+            if not self._running:
+                self.start()
+                return
+            if not self._writer_thread or not self._writer_thread.is_alive():
+                logger.warning("Writer thread died — restarting.")
+                self._writer_thread = threading.Thread(
+                    target=self._writer_loop, daemon=True, name='lq-writer',
+                )
+                self._writer_thread.start()
+            if not self._checkpoint_timer or not self._checkpoint_timer.is_alive():
+                logger.warning("Checkpoint thread died — restarting.")
+                self._start_checkpoint_timer()
+
+    # ---------- Quiz CRUD ----------
+
+    def create_quiz(self, quiz_id: int, metadata: dict,
+                    question_ids: List[int],
+                    questions_cache: Dict[int, dict]) -> QuizState:
         with self._lock:
             if quiz_id in self._quizzes:
-                raise ValueError(f"Quiz {quiz_id} already exists")
+                return self._quizzes[quiz_id]
             quiz = QuizState(quiz_id, metadata, question_ids, questions_cache)
             self._quizzes[quiz_id] = quiz
             return quiz
@@ -654,15 +849,15 @@ class LiveQuizStateManager:
         with self._lock:
             return list(self._quizzes.keys())
 
+    # ---------- Auto-Recovery ----------
+
     def ensure_quiz_in_memory(self, quiz_id: int) -> bool:
         """
-        Ensure the quiz is held in memory. On a miss, we reload from
-        SQLite (checkpoint or raw participants).
-
-        The rebuild happens OUTSIDE the lock and the result is
-        re-checked under the lock before insertion, so two concurrent
-        callers do not race to overwrite each other.
+        Ensure the quiz is in memory. On a miss, rebuild from checkpoint
+        or DB. Safe under concurrent callers.
         """
+        self._ensure_threads_alive()
+
         with self._lock:
             if quiz_id in self._quizzes:
                 return True
@@ -677,16 +872,21 @@ class LiveQuizStateManager:
                 q = get_question_by_id(qid)
                 if q:
                     questions_cache[qid] = q
+
             cursor = execute_with_retry(
-                "SELECT checkpoint_data FROM live_quiz_checkpoints WHERE quiz_id = ? ORDER BY version DESC LIMIT 1",
-                (quiz_id,)
+                "SELECT checkpoint_data FROM live_quiz_checkpoints "
+                "WHERE quiz_id = ? ORDER BY version DESC LIMIT 1",
+                (quiz_id,),
             )
             row = cursor.fetchone()
             if row:
                 cp_data = json.loads(row['checkpoint_data'])
                 quiz = QuizState(quiz_id, quiz_data, question_ids, questions_cache)
                 quiz.restore_from_checkpoint(cp_data)
-                self._replay_events_after(quiz, cp_data['version'])
+                replay_from = cp_data.get(
+                    'as_of_sequence', cp_data.get('version', 0),
+                )
+                self._replay_events_after(quiz, replay_from)
             else:
                 quiz = QuizState(quiz_id, quiz_data, question_ids, questions_cache)
                 self._load_participants_from_db(quiz)
@@ -700,10 +900,87 @@ class LiveQuizStateManager:
             logger.info(f"Recovered quiz {quiz_id} from storage on demand")
             return True
         except Exception as e:
-            logger.error(f"Failed to recover quiz {quiz_id} on demand: {e}", exc_info=True)
+            logger.error(f"Failed to recover quiz {quiz_id} on demand: {e}",
+                         exc_info=True)
             return False
 
+    def ensure_participant_in_memory(self, quiz_id: int,
+                                     user_id: int) -> bool:
+        """
+        Ensure a participant exists in the in-memory state.
+
+        If the quiz is not in memory, this rebuilds it first. If the
+        participant record is missing from memory but present in the
+        database, the record is restored from the database values —
+        score, index, answers, and status all preserved.
+
+        Returns True when the participant is present after the call.
+        """
+        if not self.ensure_quiz_in_memory(quiz_id):
+            return False
+
+        quiz = self.get_quiz(quiz_id)
+        if not quiz:
+            return False
+
+        p = quiz.get_participant(user_id)
+        if p is not None:
+            return True
+
+        # Not in memory — attempt DB recovery.
+        try:
+            from db import get_student_by_id
+            cursor = execute_with_retry(
+                "SELECT score, current_question_index, correct_count, "
+                "wrong_count, skipped_count, answers, ratings, status, is_ready "
+                "FROM live_quiz_participants "
+                "WHERE quiz_id = ? AND student_id = ?",
+                (quiz_id, user_id),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return False
+
+            student = get_student_by_id(user_id) or {}
+            name = (
+                f"{student.get('first_name', '')} "
+                f"{student.get('last_name', '')}"
+            ).strip() or 'Participant'
+            public_id = student.get('public_id', '----')
+
+            try:
+                answers = json.loads(row['answers']) if row['answers'] else {}
+            except Exception:
+                answers = {}
+
+            quiz.restore_participant(
+                user_id=user_id,
+                name=name,
+                public_id=public_id,
+                score=row['score'] or 0,
+                current_question_index=row['current_question_index'] or 0,
+                answers=answers,
+                correct_count=row['correct_count'] or 0,
+                wrong_count=row['wrong_count'] or 0,
+                skipped_count=row['skipped_count'] or 0,
+                is_ready=bool(row['is_ready']),
+                status=row['status'] or 'active',
+            )
+            logger.info(
+                f"Auto-recovered participant {user_id} into quiz {quiz_id}"
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                f"ensure_participant_in_memory failed for "
+                f"quiz {quiz_id} user {user_id}: {e}", exc_info=True,
+            )
+            return False
+
+    # ---------- Event queue ----------
+
     def enqueue_event(self, event: dict):
+        self._ensure_threads_alive()
         if not self._running:
             logger.warning("Event enqueued while manager is not running")
             return
@@ -711,6 +988,9 @@ class LiveQuizStateManager:
             event['created_at'] = get_somali_time_db()
         if 'sequence' not in event:
             event['sequence'] = 0
+        qid = event['quiz_id']
+        with self._pending_lock:
+            self._pending_events[qid] = self._pending_events.get(qid, 0) + 1
         self._event_queue.put(event)
 
     def _writer_loop(self):
@@ -722,11 +1002,11 @@ class LiveQuizStateManager:
                 batch.append(item)
             except queue.Empty:
                 pass
-            now = time.time()
-            if len(batch) >= 50 or (batch and now - last_flush >= 2):
+            now_ts = time.time()
+            if len(batch) >= 50 or (batch and now_ts - last_flush >= 2):
                 self._flush_events_with_retry(batch)
                 batch = []
-                last_flush = now
+                last_flush = now_ts
         if batch:
             self._flush_events_with_retry(batch)
 
@@ -743,10 +1023,22 @@ class LiveQuizStateManager:
                 logger.error(f"Event flush attempt {attempt+1} failed: {e}")
                 attempt += 1
                 if attempt >= max_attempts:
-                    logger.critical(f"Failed to flush events after {max_attempts} attempts. Events lost!")
+                    logger.critical(
+                        f"Failed to flush events after {max_attempts} attempts."
+                    )
+                    self._decrement_pending(events)
                     return
                 time.sleep(delay)
                 delay = min(delay * 2, self._max_retry_delay)
+
+    def _decrement_pending(self, events: List[dict]):
+        with self._pending_lock:
+            for ev in events:
+                qid = ev['quiz_id']
+                if qid in self._pending_events:
+                    self._pending_events[qid] = max(
+                        0, self._pending_events[qid] - 1,
+                    )
 
     def _flush_events(self, events: List[dict]):
         if not events:
@@ -757,8 +1049,9 @@ class LiveQuizStateManager:
         seq_map = {}
         for qid in quiz_ids:
             cursor.execute(
-                "SELECT COALESCE(MAX(sequence), 0) as max_seq FROM live_quiz_events WHERE quiz_id = ?",
-                (qid,)
+                "SELECT COALESCE(MAX(sequence), 0) as max_seq "
+                "FROM live_quiz_events WHERE quiz_id = ?",
+                (qid,),
             )
             row = cursor.fetchone()
             seq_map[qid] = row['max_seq'] if row else 0
@@ -778,47 +1071,107 @@ class LiveQuizStateManager:
                 ev.get('question_id'),
                 ev.get('payload'),
                 seq_map[ev['quiz_id']],
-                ev.get('created_at', get_somali_time_db())
+                ev.get('created_at', get_somali_time_db()),
             ))
         cursor.executemany(sql, params)
         conn.commit()
+        self._decrement_pending(events)
         logger.debug(f"Flushed {len(events)} events")
+
+    # ---------- Checkpointing ----------
 
     def _start_checkpoint_timer(self):
         def checkpoint_loop():
             while self._running and not self._shutdown_event.is_set():
                 time.sleep(self._checkpoint_interval)
-                self._checkpoint_all()
-        self._checkpoint_timer = threading.Thread(target=checkpoint_loop, daemon=True)
+                try:
+                    self._checkpoint_all()
+                except Exception as e:
+                    logger.error(f"Checkpoint loop error: {e}", exc_info=True)
+        self._checkpoint_timer = threading.Thread(
+            target=checkpoint_loop, daemon=True, name='lq-checkpoint',
+        )
         self._checkpoint_timer.start()
 
     def _checkpoint_all(self):
         with self._lock:
-            for quiz_id, quiz in list(self._quizzes.items()):
-                if quiz.dirty and not quiz._checkpoint_in_progress and not quiz.finalized:
-                    self._checkpoint_quiz(quiz)
+            quizzes = list(self._quizzes.values())
+        for quiz in quizzes:
+            with self._pending_lock:
+                pending = self._pending_events.get(quiz.id, 0)
+            if pending > 0:
+                continue
+            if not quiz.dirty or quiz._checkpoint_in_progress:
+                continue
+            if quiz.finalized and quiz._final_checkpoint_done:
+                continue
+            self._checkpoint_quiz(quiz)
 
     def _checkpoint_quiz(self, quiz: QuizState):
         quiz._checkpoint_in_progress = True
         try:
             data = quiz.checkpoint()
+            cursor = execute_with_retry(
+                "SELECT COALESCE(MAX(sequence), 0) AS s "
+                "FROM live_quiz_events WHERE quiz_id = ?",
+                (quiz.id,),
+            )
+            row = cursor.fetchone()
+            data['as_of_sequence'] = (
+                int(row['s']) if row and row['s'] is not None else 0
+            )
             payload = json.dumps(data)
             execute_with_retry("""
-                INSERT OR REPLACE INTO live_quiz_checkpoints (quiz_id, checkpoint_data, version, created_at)
+                INSERT OR REPLACE INTO live_quiz_checkpoints
+                    (quiz_id, checkpoint_data, version, created_at)
                 VALUES (?, ?, ?, ?)
-            """, (quiz.id, payload, data['version'], get_somali_time_db()), commit=True)
+            """, (quiz.id, payload, data['version'],
+                  get_somali_time_db()), commit=True)
             quiz.mark_clean()
-            logger.debug(f"Checkpointed quiz {quiz.id}, version {data['version']}")
+            if quiz.finalized:
+                quiz._final_checkpoint_done = True
         except Exception as e:
-            logger.error(f"Checkpoint failed for quiz {quiz.id}: {e}", exc_info=True)
+            logger.error(f"Checkpoint failed for quiz {quiz.id}: {e}",
+                         exc_info=True)
         finally:
             quiz._checkpoint_in_progress = False
 
+    def _force_final_checkpoint(self, quiz: QuizState):
+        try:
+            data = quiz.checkpoint()
+            cursor = execute_with_retry(
+                "SELECT COALESCE(MAX(sequence), 0) AS s "
+                "FROM live_quiz_events WHERE quiz_id = ?",
+                (quiz.id,),
+            )
+            row = cursor.fetchone()
+            data['as_of_sequence'] = (
+                int(row['s']) if row and row['s'] is not None else 0
+            )
+            payload = json.dumps(data)
+            execute_with_retry("""
+                INSERT OR REPLACE INTO live_quiz_checkpoints
+                    (quiz_id, checkpoint_data, version, created_at)
+                VALUES (?, ?, ?, ?)
+            """, (quiz.id, payload, data['version'],
+                  get_somali_time_db()), commit=True)
+            quiz._final_checkpoint_done = True
+            quiz.mark_clean()
+            logger.info(f"Forced final checkpoint for quiz {quiz.id}")
+        except Exception as e:
+            logger.warning(
+                f"_force_final_checkpoint failed for quiz {quiz.id}: {e}"
+            )
+
+    # ---------- Startup Recovery ----------
+
     def recover_active_quizzes(self):
+        self._ensure_threads_alive()
         try:
             cursor = execute_with_retry(
-                "SELECT id, title, subject_code, grade, question_count, status, join_code, "
-                "max_participants, time_per_question, question_ids, started_at, ended_at, created_at "
+                "SELECT id, title, subject_code, grade, question_count, "
+                "status, join_code, max_participants, time_per_question, "
+                "question_ids, started_at, ended_at, created_at "
                 "FROM live_quizzes "
                 "WHERE status IN ('waiting', 'scheduled', 'active')"
             )
@@ -826,31 +1179,48 @@ class LiveQuizStateManager:
             for row in rows:
                 quiz_meta = dict(row)
                 quiz_id = quiz_meta['id']
-                question_ids = json.loads(quiz_meta['question_ids']) if quiz_meta['question_ids'] else []
+                try:
+                    question_ids = (
+                        json.loads(quiz_meta['question_ids'])
+                        if quiz_meta['question_ids'] else []
+                    )
+                except Exception:
+                    question_ids = []
                 questions_cache = self._load_questions(question_ids)
 
                 cp_cursor = execute_with_retry(
-                    "SELECT checkpoint_data, version FROM live_quiz_checkpoints WHERE quiz_id = ? ORDER BY version DESC LIMIT 1",
-                    (quiz_id,)
+                    "SELECT checkpoint_data, version "
+                    "FROM live_quiz_checkpoints WHERE quiz_id = ? "
+                    "ORDER BY version DESC LIMIT 1",
+                    (quiz_id,),
                 )
                 cp_row = cp_cursor.fetchone()
 
                 if cp_row:
                     cp_data = json.loads(cp_row['checkpoint_data'])
-                    quiz = QuizState(quiz_id, quiz_meta, question_ids, questions_cache)
+                    quiz = QuizState(quiz_id, quiz_meta,
+                                     question_ids, questions_cache)
                     quiz.restore_from_checkpoint(cp_data)
-                    self._replay_events_after(quiz, cp_data['version'])
+                    replay_from = cp_data.get(
+                        'as_of_sequence', cp_data.get('version', 0),
+                    )
+                    self._replay_events_after(quiz, replay_from)
                     with self._lock:
                         self._quizzes[quiz_id] = quiz
-                    logger.info(f"Recovered quiz {quiz_id} from checkpoint version {cp_data['version']}")
+                    logger.info(
+                        f"Recovered quiz {quiz_id} from checkpoint"
+                    )
                 else:
-                    quiz = QuizState(quiz_id, quiz_meta, question_ids, questions_cache)
+                    quiz = QuizState(quiz_id, quiz_meta,
+                                     question_ids, questions_cache)
                     self._load_participants_from_db(quiz)
                     quiz._update_leaderboard()
                     quiz.dirty = True
                     with self._lock:
                         self._quizzes[quiz_id] = quiz
-                    logger.info(f"Recovered quiz {quiz_id} from participants (no checkpoint)")
+                    logger.info(
+                        f"Recovered quiz {quiz_id} from participants"
+                    )
         except Exception as e:
             logger.error(f"Recovery error: {e}", exc_info=True)
 
@@ -858,128 +1228,189 @@ class LiveQuizStateManager:
         if not question_ids:
             return {}
         placeholders = ','.join(['?'] * len(question_ids))
-        cursor = execute_with_retry(
-            f"SELECT id, question_text, options, correct_answer, explanation FROM questions WHERE id IN ({placeholders})",
-            question_ids
-        )
-        rows = cursor.fetchall()
+        try:
+            cursor = execute_with_retry(
+                f"SELECT id, question_text, options, correct_answer, explanation "
+                f"FROM questions WHERE id IN ({placeholders})",
+                question_ids,
+            )
+            rows = cursor.fetchall()
+        except Exception as e:
+            logger.error(f"_load_questions failed: {e}")
+            return {}
         qdict = {}
         for row in rows:
             q = dict(row)
-            q['options'] = json.loads(q['options']) if isinstance(q['options'], str) else q['options']
+            try:
+                q['options'] = (
+                    json.loads(q['options'])
+                    if isinstance(q['options'], str) else q['options']
+                )
+            except Exception:
+                q['options'] = {}
             qdict[q['id']] = q
         return qdict
 
     def _load_participants_from_db(self, quiz: QuizState):
-        cursor = execute_with_retry(
-            "SELECT student_id, score, current_question_index, correct_count, wrong_count, skipped_count, "
-            "answers, ratings, status, is_ready "
-            "FROM live_quiz_participants WHERE quiz_id = ?",
-            (quiz.id,)
-        )
-        rows = cursor.fetchall()
-        for pr in rows:
-            student = execute_with_retry(
-                "SELECT first_name, last_name, public_id FROM students WHERE id = ?",
-                (pr['student_id'],)
-            ).fetchone()
-            if student:
-                name = f"{student['first_name']} {student['last_name']}".strip()
-                public_id = student['public_id']
-                p = ParticipantState(
-                    user_id=pr['student_id'],
-                    name=name,
-                    public_id=public_id,
-                    score=pr['score'],
-                    correct_count=pr['correct_count'],
-                    wrong_count=pr['wrong_count'],
-                    skipped_count=pr['skipped_count'],
-                    current_question_index=pr['current_question_index'],
-                    answers=json.loads(pr['answers']) if pr['answers'] else {},
-                    ratings=json.loads(pr['ratings']) if pr['ratings'] else {},
-                    status=pr['status'],
-                    is_ready=bool(pr['is_ready'])
-                )
-                quiz.participants[pr['student_id']] = p
+        try:
+            cursor = execute_with_retry(
+                "SELECT student_id, score, current_question_index, "
+                "correct_count, wrong_count, skipped_count, "
+                "answers, ratings, status, is_ready "
+                "FROM live_quiz_participants WHERE quiz_id = ?",
+                (quiz.id,),
+            )
+            rows = cursor.fetchall()
+        except Exception as e:
+            logger.error(f"_load_participants_from_db failed: {e}")
+            return
 
-    def _replay_events_after(self, quiz: QuizState, version: int):
-        cursor = execute_with_retry(
-            "SELECT * FROM live_quiz_events WHERE quiz_id = ? AND sequence > ? ORDER BY sequence ASC",
-            (quiz.id, version)
-        )
-        rows = cursor.fetchall()
+        for pr in rows:
+            try:
+                student = execute_with_retry(
+                    "SELECT first_name, last_name, public_id "
+                    "FROM students WHERE id = ?",
+                    (pr['student_id'],),
+                ).fetchone()
+            except Exception:
+                student = None
+
+            if not student:
+                continue
+            name = f"{student['first_name']} {student['last_name']}".strip()
+            public_id = student['public_id']
+            try:
+                answers = json.loads(pr['answers']) if pr['answers'] else {}
+            except Exception:
+                answers = {}
+            try:
+                ratings = json.loads(pr['ratings']) if pr['ratings'] else {}
+            except Exception:
+                ratings = {}
+
+            p = ParticipantState(
+                user_id=pr['student_id'],
+                name=name,
+                public_id=public_id,
+                score=pr['score'] or 0,
+                correct_count=pr['correct_count'] or 0,
+                wrong_count=pr['wrong_count'] or 0,
+                skipped_count=pr['skipped_count'] or 0,
+                current_question_index=pr['current_question_index'] or 0,
+                answers=answers,
+                ratings=ratings,
+                status=pr['status'] or 'active',
+                is_ready=bool(pr['is_ready']),
+            )
+            quiz.participants[pr['student_id']] = p
+
+    def _replay_events_after(self, quiz: QuizState, as_of_sequence: int):
+        try:
+            cursor = execute_with_retry(
+                "SELECT * FROM live_quiz_events "
+                "WHERE quiz_id = ? AND sequence > ? ORDER BY sequence ASC",
+                (quiz.id, as_of_sequence),
+            )
+            rows = cursor.fetchall()
+        except Exception as e:
+            logger.error(f"_replay_events_after read failed: {e}")
+            return
+
         for row in rows:
             event_type = row['event_type']
-            payload = json.loads(row['payload']) if row['payload'] else {}
+            try:
+                payload = json.loads(row['payload']) if row['payload'] else {}
+            except Exception:
+                payload = {}
             user_id = row['user_id']
             question_id = row['question_id']
 
-            if event_type == 'ANSWER':
-                p = quiz.participants.get(user_id)
-                if p and str(question_id) not in p.answers:
-                    answer = payload.get('answer')
-                    q_data = quiz.questions_cache.get(question_id)
-                    correct = (answer == q_data['correct_answer']) if q_data else False
-                    points = 2 if correct else 0
-                    p.score += points
-                    p.correct_count += 1 if correct else 0
-                    p.wrong_count += 0 if correct else 1
-                    p.answers[str(question_id)] = {'answer': answer, 'correct': correct, 'skipped': False}
-                    quiz._update_leaderboard()
-                    quiz.version += 1
-
-            elif event_type == 'SKIP':
-                p = quiz.participants.get(user_id)
-                if p and str(question_id) not in p.answers:
-                    p.answers[str(question_id)] = {'answer': None, 'correct': False, 'skipped': True}
-                    p.skipped_count += 1
-                    quiz.version += 1
-
-            elif event_type == 'ADVANCE':
-                p = quiz.participants.get(user_id)
-                if p:
-                    expected_qid = None
-                    if p.current_question_index < len(quiz.question_ids):
-                        expected_qid = quiz.question_ids[p.current_question_index]
-                    if expected_qid is not None and str(expected_qid) == str(question_id):
-                        p.current_question_index += 1
-                        if p.current_question_index >= len(quiz.question_ids):
-                            p.status = 'completed'
+            try:
+                if event_type == 'ANSWER':
+                    p = quiz.participants.get(user_id)
+                    if p and str(question_id) not in p.answers:
+                        answer = payload.get('answer')
+                        q_data = quiz.questions_cache.get(question_id)
+                        correct = (
+                            answer == q_data['correct_answer']
+                            if q_data else False
+                        )
+                        points = 2 if correct else 0
+                        p.score += points
+                        p.correct_count += 1 if correct else 0
+                        p.wrong_count += 0 if correct else 1
+                        p.answers[str(question_id)] = {
+                            'answer': answer,
+                            'correct': correct,
+                            'skipped': False,
+                        }
+                        quiz._update_leaderboard()
                         quiz.version += 1
 
-            elif event_type == 'RATING':
-                p = quiz.participants.get(user_id)
-                if p and str(question_id) not in p.ratings:
-                    rating = payload.get('rating')
-                    p.ratings[str(question_id)] = rating
-                    p.current_question_index += 1
+                elif event_type == 'SKIP':
+                    p = quiz.participants.get(user_id)
+                    if p and str(question_id) not in p.answers:
+                        p.answers[str(question_id)] = {
+                            'answer': None,
+                            'correct': False,
+                            'skipped': True,
+                        }
+                        p.skipped_count += 1
+                        quiz.version += 1
+
+                elif event_type == 'ADVANCE':
+                    p = quiz.participants.get(user_id)
+                    if p:
+                        expected_qid = None
+                        if p.current_question_index < len(quiz.question_ids):
+                            expected_qid = quiz.question_ids[
+                                p.current_question_index
+                            ]
+                        if expected_qid is not None and \
+                                str(expected_qid) == str(question_id):
+                            p.current_question_index += 1
+                            if p.current_question_index >= len(
+                                    quiz.question_ids):
+                                p.status = 'completed'
+                            quiz.version += 1
+
+                elif event_type == 'RATING':
+                    p = quiz.participants.get(user_id)
+                    if p and str(question_id) not in p.ratings:
+                        rating = payload.get('rating')
+                        p.ratings[str(question_id)] = rating
+                        p.current_question_index += 1
+                        quiz.version += 1
+
+                elif event_type == 'LEAVE':
+                    p = quiz.participants.get(user_id)
+                    if p:
+                        p.status = 'left'
+                        quiz._update_leaderboard()
+                        quiz.version += 1
+
+                elif event_type == 'JOIN':
+                    p = quiz.participants.get(user_id)
+                    if p:
+                        p.status = 'active'
+                        quiz._update_leaderboard()
+                        quiz.version += 1
+
+                elif event_type == 'START':
+                    quiz.status = 'active'
+                    quiz.started_at = row['created_at']
                     quiz.version += 1
 
-            elif event_type == 'LEAVE':
-                p = quiz.participants.get(user_id)
-                if p:
-                    p.status = 'left'
-                    quiz._update_leaderboard()
+                elif event_type == 'COMPLETE':
+                    quiz.status = 'finished'
+                    quiz.ended_at = row['created_at']
+                    quiz.finalized = True
                     quiz.version += 1
-
-            elif event_type == 'JOIN':
-                # A participant re-joined after having left.
-                p = quiz.participants.get(user_id)
-                if p:
-                    p.status = 'active'
-                    quiz._update_leaderboard()
-                    quiz.version += 1
-
-            elif event_type == 'START':
-                quiz.status = 'active'
-                quiz.started_at = row['created_at']
-                quiz.version += 1
-
-            elif event_type == 'COMPLETE':
-                quiz.status = 'finished'
-                quiz.ended_at = row['created_at']
-                quiz.finalized = True
-                quiz.version += 1
+            except Exception as e:
+                logger.warning(
+                    f"Replay of {event_type} for quiz {quiz.id} "
+                    f"skipped: {e}"
+                )
 
         quiz.dirty = True
         logger.info(f"Replayed {len(rows)} events for quiz {quiz.id}")
@@ -991,14 +1422,16 @@ class LiveQuizStateManager:
             for qid, quiz in self._quizzes.items():
                 if quiz.finalized and quiz.ended_at:
                     try:
-                        ended_ts = datetime.fromisoformat(quiz.ended_at).timestamp()
+                        ended_ts = datetime.fromisoformat(
+                            quiz.ended_at
+                        ).timestamp()
                         if now_ts - ended_ts > max_age_seconds:
                             to_remove.append(qid)
                     except Exception:
                         pass
             for qid in to_remove:
                 self._quizzes.pop(qid, None)
-                logger.info(f"Cleaned up finished quiz {qid} after grace period")
+                logger.info(f"Cleaned up finished quiz {qid}")
         return len(to_remove)
 
 
@@ -1017,11 +1450,18 @@ def get_live_quiz_state_manager() -> LiveQuizStateManager:
             if _state_manager is None:
                 _state_manager = LiveQuizStateManager()
                 _state_manager.start()
+
                 def cleanup_loop():
                     while True:
                         time.sleep(60)
-                        _state_manager.cleanup_finished_quizzes()
-                threading.Thread(target=cleanup_loop, daemon=True).start()
+                        try:
+                            _state_manager.cleanup_finished_quizzes()
+                        except Exception as e:
+                            logger.warning(f"cleanup loop error: {e}")
+
+                threading.Thread(
+                    target=cleanup_loop, daemon=True, name='lq-cleanup',
+                ).start()
     return _state_manager
 
 
