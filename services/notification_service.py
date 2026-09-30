@@ -303,3 +303,49 @@ def broadcast_announcement(
         push_result['skipped'] = 'delivery_error'
 
     return {'in_app': inapp_count, 'push': push_result}
+
+
+# ---------------------------------------------------------------------
+# Broadcast — new public quiz created
+# ---------------------------------------------------------------------
+def broadcast_new_quiz(quiz_title, creator_name, join_url, creator_id):
+    """
+    Notify every verified user (except the creator) that a new public
+    competition exists. One bulk INSERT regardless of user count.
+
+    Hardcoded Somali text (per user request).
+    Respects `notifications.new_live_quiz` preference — users can
+    opt out via Settings → Notifications.
+
+    Returns the number of notification rows written.
+    """
+    from db import execute_with_retry, now as db_now
+
+    # Hardcoded Somali
+    title = "🎯 Tartan cusub"
+    body  = f'"{quiz_title}" — {creator_name}. Taabo si aad u biirto.'
+    icon  = "🎯"
+    ntype = "new_live_quiz"
+
+    try:
+        cursor = execute_with_retry("""
+            INSERT INTO notifications
+                (user_id, type, title, body, link, icon, is_read, created_at)
+            SELECT s.id, ?, ?, ?, ?, ?, 0, ?
+            FROM students s
+            WHERE s.id != ?
+              AND NOT EXISTS (
+                  SELECT 1 FROM notification_preferences np
+                  WHERE np.user_id = s.id
+                    AND np.notification_type = ?
+                    AND np.enabled = 0
+              )
+        """, (
+            ntype, title, body, join_url, icon, db_now(),
+            creator_id,
+            ntype,
+        ), commit=True)
+        return cursor.rowcount or 0
+    except Exception as e:
+        logger.error(f"broadcast_new_quiz failed: {e}", exc_info=True)
+        return 0

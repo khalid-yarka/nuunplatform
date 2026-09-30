@@ -689,19 +689,28 @@ def lobby_join(quiz_id):
 
     creator_id = quiz.get('creator_id')
     if creator_id and creator_id != user_id:
-        user = get_student_by_id(user_id)
-        user_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
         try:
-            send_notification(
-                user_id=creator_id,
-                notification_type='participant_joined',
-                title='👋 New Participant!',
-                body=f'{user_name} joined your quiz "{quiz.get("title", "Live Quiz")}"',
-                link=f'/live-quiz/waiting-room/{quiz_id}',
-                icon='👤',
-            )
+            cname = session.get('user_name') or 'Participant'
+            qtitle = quiz.get('title') or 'Live Quiz'
+            qid_val = quiz['id']
+            cid_val = creator_id
+            def _notify_creator():
+                try:
+                    from services.notification_service import send_notification
+                    send_notification(
+                        user_id=cid_val,
+                        notification_type='participant_joined',
+                        title='👋 Ka-qaybgal cusub!',
+                        body=f'{cname} wuxuu ku biiray "{qtitle}"',
+                        link=f'/live-quiz/waiting-room/{qid_val}',
+                        icon='👤',
+                        force=True,
+                    )
+                except Exception as e:
+                    logger.warning(f"participant_joined notification failed: {e}")
+            threading.Thread(target=_notify_creator, daemon=True).start()
         except Exception as e:
-            logger.warning(f"participant_joined notification failed: {e}")
+            logger.warning(f"could not spawn join notification: {e}")
 
     return jsonify({
         'success': True,
@@ -1001,7 +1010,22 @@ def create():
         'event_type': 'JOIN',
         'payload': json.dumps({'name': name}),
     })
-
+    
+    # Broadcast to the community — public + waiting quizzes only.
+    try:
+        if (quiz.get('is_public') and quiz.get('status') == 'waiting'):
+            from services.notification_service import broadcast_new_quiz
+            join_url = '/live-quiz/j/' + quiz['join_code']
+            cname = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'NuunPlatform'
+            broadcast_new_quiz(
+                quiz_title=quiz.get('title') or 'Live Quiz',
+                creator_name=cname,
+                join_url=join_url,
+                creator_id=user_id,
+            )
+    except Exception as e:
+        logger.warning(f"new-quiz broadcast failed: {e}")
+    
     flash('Quiz created successfully! Share the join code.', 'success')
     return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
 
@@ -1115,7 +1139,21 @@ def create_with_available():
         'event_type': 'JOIN',
         'payload': json.dumps({'name': name}),
     })
-
+    
+    try:
+        if (quiz.get('is_public') and quiz.get('status') == 'waiting'):
+            from services.notification_service import broadcast_new_quiz
+            join_url = '/live-quiz/j/' + quiz['join_code']
+            cname = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'NuunPlatform'
+            broadcast_new_quiz(
+                quiz_title=quiz.get('title') or 'Live Quiz',
+                creator_name=cname,
+                join_url=join_url,
+                creator_id=user_id,
+            )
+    except Exception as e:
+        logger.warning(f"new-quiz broadcast failed: {e}")
+    
     flash(f'Quiz created with {available} questions!', 'success')
     return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
 
@@ -1282,19 +1320,28 @@ def join():
 
         creator_id = quiz.get('creator_id')
         if creator_id and creator_id != user_id:
-            user = get_student_by_id(user_id)
-            user_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
             try:
-                send_notification(
-                    user_id=creator_id,
-                    notification_type='participant_joined',
-                    title='👋 New Participant!',
-                    body=f'{user_name} joined your quiz "{quiz.get("title", "Live Quiz")}"',
-                    link=f'/live-quiz/waiting-room/{quiz["id"]}',
-                    icon='👤',
-                )
+                cname = session.get('user_name') or 'Participant'
+                qtitle = quiz.get('title') or 'Live Quiz'
+                qid_val = quiz['id']
+                cid_val = creator_id
+                def _notify_creator():
+                    try:
+                        from services.notification_service import send_notification
+                        send_notification(
+                            user_id=cid_val,
+                            notification_type='participant_joined',
+                            title='👋 Ka-qaybgal cusub!',
+                            body=f'{cname} wuxuu ku biiray "{qtitle}"',
+                            link=f'/live-quiz/waiting-room/{qid_val}',
+                            icon='👤',
+                            force=True,
+                        )
+                    except Exception as e:
+                        logger.warning(f"participant_joined notification failed: {e}")
+                threading.Thread(target=_notify_creator, daemon=True).start()
             except Exception as e:
-                logger.warning(f"participant_joined notification failed: {e}")
+                logger.warning(f"could not spawn join notification: {e}")
 
         flash('You have joined the quiz!', 'success')
         return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
@@ -1508,19 +1555,28 @@ def direct_join(code):
     # Notify the creator.
     creator_id = quiz.get('creator_id')
     if creator_id and creator_id != user_id:
-        user = get_student_by_id(user_id)
-        user_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
         try:
-            send_notification(
-                user_id=creator_id,
-                notification_type='participant_joined',
-                title='👋 New Participant!',
-                body=f'{user_name} joined your quiz "{quiz.get("title", "Live Quiz")}"',
-                link=f'/live-quiz/waiting-room/{quiz["id"]}',
-                icon='👤',
-            )
+            cname = session.get('user_name') or 'Participant'
+            qtitle = quiz.get('title') or 'Live Quiz'
+            qid_val = quiz['id']
+            cid_val = creator_id
+            def _notify_creator():
+                try:
+                    from services.notification_service import send_notification
+                    send_notification(
+                        user_id=cid_val,
+                        notification_type='participant_joined',
+                        title='👋 Ka-qaybgal cusub!',
+                        body=f'{cname} wuxuu ku biiray "{qtitle}"',
+                        link=f'/live-quiz/waiting-room/{qid_val}',
+                        icon='👤',
+                        force=True,
+                    )
+                except Exception as e:
+                    logger.warning(f"participant_joined notification failed: {e}")
+            threading.Thread(target=_notify_creator, daemon=True).start()
         except Exception as e:
-            logger.warning(f"participant_joined notification failed: {e}")
+            logger.warning(f"could not spawn join notification: {e}")
 
     return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
 
@@ -1773,6 +1829,14 @@ def quiz_state_endpoint(quiz_id):
     if not quiz:
         return jsonify({'error': 'Quiz not found'}), 404
 
+    # ── Auto-start / auto-flip for scheduled quizzes ──
+    if quiz.get('status') == 'scheduled' and quiz.get('scheduled_start'):
+        try:
+            _maybe_auto_start_scheduled(quiz)
+            quiz = get_live_quiz_with_subject(quiz_id) or quiz
+        except Exception as e:
+            logger.warning(f"auto-start check failed for {quiz_id}: {e}")
+
     manager = get_state_manager()
     manager.ensure_quiz_in_memory(quiz_id)
     quiz_state = manager.get_quiz(quiz_id)
@@ -1871,6 +1935,121 @@ def quiz_state_endpoint(quiz_id):
     response['participant_progress'] = progress
 
     return jsonify(response)
+
+
+# ============================================
+# SCHEDULED QUIZ AUTO-START
+# ============================================
+# Runs inside every /quiz-state poll. No background threads — on the
+# free PythonAnywhere tier, spinning up daemons is a CPU-quota risk.
+# Polls fire every 3s per participant, so this is effectively free.
+
+def _maybe_auto_start_scheduled(quiz):
+    """
+    If the quiz is `scheduled` and its time has passed:
+      · 2+ active participants  → flip to `active`, notify everyone
+      · fewer than 2            → flip to `waiting` (manual start)
+
+    Atomic: the UPDATE uses WHERE status='scheduled', so two concurrent
+    callers cannot both fire the transition.
+    """
+    from utils import get_somali_time_db
+
+    quiz_id = quiz['id']
+    sched = quiz.get('scheduled_start')
+    if not sched:
+        return
+
+    try:
+        sched_dt = datetime.fromisoformat(sched.replace('Z', '+00:00'))
+    except Exception:
+        return
+
+    now_utc = datetime.now(timezone.utc)
+    if sched_dt > now_utc:
+        return  # Not yet due
+
+    # Active participant count
+    try:
+        row = execute_with_retry(
+            "SELECT COUNT(*) AS c FROM live_quiz_participants "
+            "WHERE quiz_id = ? AND status != 'left'",
+            (quiz_id,),
+        ).fetchone()
+        active_count = int(row['c']) if row else 0
+    except Exception as e:
+        logger.warning(f"auto-start: count failed for {quiz_id}: {e}")
+        return
+
+    if active_count >= 2:
+        now_str = get_somali_time_db()
+        try:
+            cur = execute_with_retry("""
+                UPDATE live_quizzes
+                SET status = 'active',
+                    started_at = ?,
+                    scheduled_start = NULL
+                WHERE id = ? AND status = 'scheduled'
+            """, (now_str, quiz_id), commit=True)
+        except Exception as e:
+            logger.warning(f"auto-start: UPDATE failed for {quiz_id}: {e}")
+            return
+
+        if not cur or cur.rowcount == 0:
+            return  # Lost the race
+
+        # Sync in-memory state
+        try:
+            manager = get_state_manager()
+            if manager.ensure_quiz_in_memory(quiz_id):
+                qs = manager.get_quiz(quiz_id)
+                if qs and qs.status == 'scheduled':
+                    qs.start()
+                    manager.enqueue_event({
+                        'quiz_id': quiz_id,
+                        'event_type': 'START',
+                        'payload': json.dumps({}),
+                    })
+        except Exception as e:
+            logger.warning(f"auto-start: memory sync failed for {quiz_id}: {e}")
+
+        # Bulk-notify participants (hardcoded Somali)
+        try:
+            execute_with_retry("""
+                INSERT INTO notifications
+                    (user_id, type, title, body, link, icon, is_read, created_at)
+                SELECT lqp.student_id, ?, ?, ?, ?, ?, 0, ?
+                FROM live_quiz_participants lqp
+                WHERE lqp.quiz_id = ? AND lqp.status != 'left'
+            """, (
+                'live_quiz_start',
+                '🚀 Tartanku wuu bilaabmay!',
+                f'"{quiz.get("title") or "Live Quiz"}" wuu bilaabmay. Hadda ciyaar!',
+                f'/live-quiz/play/{quiz_id}',
+                '⚡',
+                get_somali_time_db(),
+                quiz_id,
+            ), commit=True)
+        except Exception as e:
+            logger.warning(f"auto-start: notify failed for {quiz_id}: {e}")
+
+        logger.info(f"Auto-started scheduled quiz {quiz_id} ({active_count} participants)")
+
+    else:
+        # Less than 2 participants — flip to manual (waiting) mode
+        try:
+            cur = execute_with_retry("""
+                UPDATE live_quizzes
+                SET status = 'waiting', scheduled_start = NULL
+                WHERE id = ? AND status = 'scheduled'
+            """, (quiz_id,), commit=True)
+            if cur and cur.rowcount > 0:
+                logger.info(
+                    f"Scheduled quiz {quiz_id} flipped to manual "
+                    f"({active_count} participant(s) at scheduled time)"
+                )
+        except Exception as e:
+            logger.warning(f"auto-start: flip-to-waiting failed for {quiz_id}: {e}")
 
 
 @live_quiz_bp.route('/get-question/<quiz_id>')

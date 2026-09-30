@@ -25,7 +25,7 @@
 
     <div class="waiting-room-card">
 
-        {# ── PING BANNER (both tabs, hidden by default) ── #}
+        {# ── PING BANNER ── #}
         <div class="ping-banner" id="pingBanner" hidden>
             <div class="ping-banner-icon">📣</div>
             <div class="ping-banner-body">
@@ -98,17 +98,16 @@
             </div>
             {% endif %}
 
-            {# ── SHARE SECTION (compact accordion) ── #}
+            {# ── SHARE SECTION ── #}
             <div class="wr-share-section" id="wrShareSection">
                 <div class="wr-share-bar">
                     <button type="button" class="wr-share-chip" id="shareChip"
-                            aria-label="{{ _('live_quiz.waiting.copy_link') }}">
+                            aria-label="Copy invite link">
                         <i class="fas fa-link" aria-hidden="true"></i>
                         <span class="wr-share-chip-text" id="shareChipText"></span>
                     </button>
                     <button type="button" class="wr-share-toggle" id="shareToggle"
-                            aria-label="{{ _('live_quiz.waiting.share_options') }}"
-                            aria-expanded="false">
+                            aria-label="Share options" aria-expanded="false">
                         <i class="fas fa-ellipsis-h" id="shareToggleIcon"></i>
                     </button>
                 </div>
@@ -136,7 +135,6 @@
                 <div class="wr-participants-list" id="participantList"></div>
             </div>
 
-            {# ── PING BUTTON (creator only, waiting/scheduled only) ── #}
             {% if is_creator and quiz.status in ('waiting', 'scheduled') %}
             <button type="button" class="ping-open-btn" id="pingOpenBtn">
                 <i class="fas fa-bullhorn"></i>
@@ -189,6 +187,12 @@
            ============================================ #}
         <div class="wr-panel" id="panel-chat" role="tabpanel" hidden>
 
+            <button type="button" class="wr-chat-mute" id="chatMuteBtn"
+                    aria-label="Mute chat sounds"
+                    title="Mute chat sounds">
+                <i class="fas fa-volume-up" id="chatMuteIcon"></i>
+            </button>
+
             <div class="wr-chat-messages" id="chatMessages">
                 <div class="wr-chat-empty" id="chatEmpty">
                     <div class="wr-chat-empty-icon">💬</div>
@@ -232,7 +236,7 @@
     </div>
 </div>
 
-{# ── PING SHEET (bottom sheet, creator only) ── #}
+{# ── PING SHEET ── #}
 <div class="ping-sheet" id="pingSheet" hidden>
     <div class="ping-sheet-backdrop" onclick="closePingSheet()"></div>
     <div class="ping-sheet-panel" role="dialog" aria-modal="true">
@@ -315,9 +319,13 @@
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
+// ── Notification text — hardcoded Somali ──
+// T-60 countdown title and body. The body wraps the quiz title,
+// truncated to keep the collapsed Android notification readable.
+const NOTIFY_T60_TITLE = "🚀 1 daqiiqo ka hartay";
+const NOTIFY_T60_BODY_TAIL = " wuu soo dhowaaday. Taabo si aad ugu soo biirto. Haderbu bilaban.";
+
 const I18N = {
-    notify_title:      "{{ _('live_quiz.waiting.notify_starting_title') }}",
-    notify_body:       "{{ _('live_quiz.waiting.notify_starting_body', title=quiz.title or _('live_quiz.lobby.untitled_quiz')) }}",
     quiz_started:      "{{ _('live_quiz.waiting.toast_started') }}",
     starting:          "{{ _('live_quiz.waiting.starting') }}",
     start_btn:         "{{ _('live_quiz.waiting.start_btn') }}",
@@ -354,8 +362,7 @@ const I18N = {
     ping_cooldown_fmt: "{{ _('live_quiz.waiting.ping_cooldown_fmt') }}",
     ping_sent_fmt:     "{{ _('live_quiz.waiting.ping_sent_fmt') }}",
     ping_error:        "{{ _('live_quiz.waiting.ping_error') }}",
-    link_copied:       "{{ _('live_quiz.waiting.link_copied') }}",
-    copy_link:         "{{ _('live_quiz.waiting.copy_link') }}",
+    link_copied:       "Xiriirka waa la koobiyay",
     share_cta:         "Kuso biir Tartankan, oo kororso aqoon",
     share_link_label:  "Ku biir"
 };
@@ -383,6 +390,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const QUIZ_TITLE = {{ (quiz.title or 'Live Quiz')|tojson }};
     const SUBJECT_CODE = '{{ (quiz.subject_code or "")|upper }}';
     const QUIZ_GRADE = '{{ quiz.grade or "" }}';
+
+    // ── Short title for the T-60 notification (fits collapsed Android) ──
+    function shortTitle() {
+        var t = QUIZ_TITLE;
+        if (t.length > 30) t = t.substring(0, 28) + '…';
+        return t;
+    }
 
     if (!quizId || quizId === 'None') {
         console.error('Invalid quizId. Redirect to lobby.');
@@ -458,13 +472,12 @@ document.addEventListener('DOMContentLoaded', function() {
     function hideUnreadDot() { if (chatUnreadDot) chatUnreadDot.hidden = true; }
 
     // ============================================================
-    // SWIPE GESTURE — swap tabs by swiping left/right on the card
+    // SWIPE GESTURE
     // ============================================================
     (function setupSwipeGesture() {
         var SWIPE_MIN_DX = 60;
         var SWIPE_MAX_DT = 600;
         var SWIPE_RATIO  = 1.5;
-
         var startX = 0, startY = 0, startT = 0, armed = false;
 
         function isInteractive(el) {
@@ -472,21 +485,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!el.tagName) { el = el.parentElement; continue; }
                 var tag = el.tagName.toUpperCase();
                 if (tag === 'BUTTON' || tag === 'A' || tag === 'INPUT' ||
-                    tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'LABEL') {
-                    return true;
-                }
+                    tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'LABEL') return true;
                 if (el.hasAttribute) {
                     if (el.hasAttribute('onclick') ||
                         el.hasAttribute('data-copy') ||
-                        el.getAttribute('role') === 'button') {
-                        return true;
-                    }
+                        el.getAttribute('role') === 'button') return true;
                 }
                 el = el.parentElement;
             }
             return false;
         }
-
         function modalOpen() {
             var del = document.getElementById('deleteModal');
             if (del && del.classList.contains('active')) return true;
@@ -494,10 +502,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (ps && !ps.hidden) return true;
             return false;
         }
-
         var container = document.querySelector('.waiting-room-container');
         if (!container) return;
-
         container.addEventListener('touchstart', function(e) {
             if (e.touches.length !== 1) { armed = false; return; }
             if (modalOpen()) { armed = false; return; }
@@ -506,7 +512,6 @@ document.addEventListener('DOMContentLoaded', function() {
             startX = t.clientX; startY = t.clientY;
             startT = Date.now(); armed = true;
         }, { passive: true });
-
         container.addEventListener('touchend', function(e) {
             if (!armed) return;
             armed = false;
@@ -515,15 +520,12 @@ document.addEventListener('DOMContentLoaded', function() {
             var dx = t.clientX - startX;
             var dy = t.clientY - startY;
             var dt = Date.now() - startT;
-
             if (dt > SWIPE_MAX_DT) return;
             if (Math.abs(dx) < SWIPE_MIN_DX) return;
             if (Math.abs(dx) < Math.abs(dy) * SWIPE_RATIO) return;
-
             if (dx < 0 && activeTab !== 'chat') switchTab('chat');
             else if (dx > 0 && activeTab !== 'participants') switchTab('participants');
         }, { passive: true });
-
         container.addEventListener('touchcancel', function() { armed = false; }, { passive: true });
     })();
 
@@ -543,12 +545,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (!chip || !toggle || !actions) return;
 
-        // Show a compact host + path text in the chip
-        var chipLabel = SHARE_URL
-            .replace(/^https?:\/\//, '')
-            .replace(/\/$/, '');
+        var chipLabel = SHARE_URL.replace(/^https?:\/\//, '').replace(/\/$/, '');
         chipText.textContent = chipLabel;
-
         var originalChipLabel = chipLabel;
         var chipFeedbackTimer = null;
         var codeFeedbackTimer = null;
@@ -572,7 +570,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        // ── Chip: tap to copy link ──
         chip.addEventListener('click', function() {
             copyToClipboard(SHARE_URL).then(function() {
                 chip.classList.add('is-copied');
@@ -582,14 +579,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     chip.classList.remove('is-copied');
                     chipText.textContent = originalChipLabel;
                 }, 1500);
-            }).catch(function() {
-                if (typeof window.showToast === 'function') {
-                    window.showToast(I18N.chat_send_error, 'error');
-                }
-            });
+            }).catch(function() {});
         });
 
-        // ── Toggle: expand / collapse the action row ──
         var expanded = false;
         function setExpanded(v) {
             expanded = !!v;
@@ -599,14 +591,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         toggle.addEventListener('click', function() { setExpanded(!expanded); });
 
-        // Collapse when tapping outside
         document.addEventListener('click', function(e) {
             if (!expanded) return;
             var sec = document.getElementById('wrShareSection');
             if (sec && !sec.contains(e.target)) setExpanded(false);
         });
 
-        // ── Build share text ──
         function buildWhatsAppText() {
             var lines = [];
             lines.push('🎯 *' + I18N.share_cta + '*');
@@ -633,19 +623,16 @@ document.addEventListener('DOMContentLoaded', function() {
             return lines.join('\n');
         }
 
-        // ── WhatsApp button ──
         waBtn.addEventListener('click', function() {
             var text = encodeURIComponent(buildWhatsAppText());
             window.open('https://wa.me/?text=' + text, '_blank', 'noopener,noreferrer');
         });
 
-        // ── Telegram button ──
         tgBtn.addEventListener('click', function() {
             var text = encodeURIComponent(buildTelegramText());
             window.open('https://t.me/share/url?text=' + text, '_blank', 'noopener,noreferrer');
         });
 
-        // ── Code button: copy code ──
         var originalCodeLabel = codeLabel.textContent;
         codeBtn.addEventListener('click', function() {
             copyToClipboard(JOIN_CODE).then(function() {
@@ -685,35 +672,85 @@ document.addEventListener('DOMContentLoaded', function() {
         pingBanner.hidden = false;
         void pingBanner.offsetWidth;
         pingBanner.classList.add('is-visible');
-
         if (pingBannerProgress) {
             pingBannerProgress.style.animation = 'none';
             void pingBannerProgress.offsetWidth;
             pingBannerProgress.style.animation = 'pingProgress 8s linear forwards';
         }
-
         if (pingBannerTimer) clearTimeout(pingBannerTimer);
         pingBannerTimer = setTimeout(window.dismissPingBanner, 8000);
     }
 
+    // ============================================================
+    // AUDIO — shared context, chat pop, ping chime
+    // ============================================================
+    let _audioCtx = null;
+    function getAudioCtx() {
+        if (!_audioCtx) {
+            try {
+                _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            } catch (e) { return null; }
+        }
+        if (_audioCtx.state === 'suspended') {
+            _audioCtx.resume().catch(() => {});
+        }
+        return _audioCtx;
+    }
+
+    function playChatSound() {
+        const ctx = getAudioCtx();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        [660, 880].forEach((freq, i) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.frequency.value = freq;
+            osc.type = 'sine';
+            const start = now + i * 0.07;
+            gain.gain.setValueAtTime(0, start);
+            gain.gain.linearRampToValueAtTime(0.22, start + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.01, start + 0.12);
+            osc.start(start);
+            osc.stop(start + 0.15);
+        });
+    }
+
     function playPingSound() {
-        try {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            const now = ctx.currentTime;
-            [660, 880, 1100].forEach((freq, i) => {
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.connect(gain); gain.connect(ctx.destination);
-                osc.frequency.value = freq;
-                osc.type = 'sine';
-                const start = now + i * 0.13;
-                gain.gain.setValueAtTime(0, start);
-                gain.gain.linearRampToValueAtTime(0.35, start + 0.02);
-                gain.gain.exponentialRampToValueAtTime(0.01, start + 0.28);
-                osc.start(start);
-                osc.stop(start + 0.32);
-            });
-        } catch (e) {}
+        const ctx = getAudioCtx();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        [660, 880, 1100].forEach((freq, i) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.frequency.value = freq;
+            osc.type = 'sine';
+            const start = now + i * 0.13;
+            gain.gain.setValueAtTime(0, start);
+            gain.gain.linearRampToValueAtTime(0.35, start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.01, start + 0.28);
+            osc.start(start);
+            osc.stop(start + 0.32);
+        });
+    }
+
+    let chatSoundMuted = false;
+    let lastChatSoundAt = 0;
+    const CHAT_SOUND_THROTTLE_MS = 1500;
+
+    try {
+        chatSoundMuted = sessionStorage.getItem('nuun_chat_muted') === '1';
+    } catch (e) {}
+
+    function shouldPlayChatSound() {
+        if (chatSoundMuted) return false;
+        if (document.visibilityState === 'hidden') return false;
+        if (document.activeElement === chatInputEl) return false;
+        const now = Date.now();
+        if (now - lastChatSoundAt < CHAT_SOUND_THROTTLE_MS) return false;
+        lastChatSoundAt = now;
+        return true;
     }
 
     // ============================================================
@@ -770,6 +807,22 @@ document.addEventListener('DOMContentLoaded', function() {
     const chatSendBtn    = document.getElementById('chatSendBtn');
     const chatLockedEl   = document.getElementById('chatLocked');
 
+    // ── Chat mute button ──
+    const chatMuteBtn  = document.getElementById('chatMuteBtn');
+    const chatMuteIcon = document.getElementById('chatMuteIcon');
+    function renderMuteIcon() {
+        if (!chatMuteIcon) return;
+        chatMuteIcon.className = chatSoundMuted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
+    }
+    renderMuteIcon();
+    if (chatMuteBtn) {
+        chatMuteBtn.addEventListener('click', function() {
+            chatSoundMuted = !chatSoundMuted;
+            try { sessionStorage.setItem('nuun_chat_muted', chatSoundMuted ? '1' : '0'); } catch (e) {}
+            renderMuteIcon();
+        });
+    }
+
     let chatSinceId       = 0;
     let chatPollTimer     = null;
     let chatSendingNow    = false;
@@ -779,12 +832,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let newMessagePill    = null;
     let lastShownPingId   = 0;
     let pollsCompleted    = 0;
-
-    // ── Duplicate-message guard ──
-    // Tracks every rendered chat message ID. Any ID already rendered is
-    // skipped, so racing polls that both return the same message cannot
-    // produce a duplicate. This is the fix for "sender sees their own
-    // message twice".
     const renderedChatIds = new Set();
 
     function formatTime12h(raw) {
@@ -918,7 +965,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const isFirst = (pollsCompleted === 0);
         const frag = document.createDocumentFragment();
         msgs.forEach(m => {
-            // Skip anything already rendered — this is the dedup guard.
             if (renderedChatIds.has(m.id)) return;
             renderedChatIds.add(m.id);
 
@@ -942,6 +988,9 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 const isMine = String(m.user_id) === String(userId);
                 frag.appendChild(isMine ? buildMineMessageEl(m) : buildOtherMessageEl(m));
+                if (!isMine && !m.is_deleted && shouldPlayChatSound()) {
+                    playChatSound();
+                }
             }
         });
         chatMessagesEl.appendChild(frag);
@@ -996,8 +1045,6 @@ document.addEventListener('DOMContentLoaded', function() {
         chatLockedEl.hidden = !showLocked;
 
         if (showForm) {
-            // Only the send button is gated by chatSendingNow; the input
-            // stays enabled so the mobile keyboard never closes.
             chatInputEl.disabled = false;
             chatSendBtn.disabled = chatSendingNow
                 || !(chatInputEl.value || '').trim();
@@ -1068,7 +1115,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     chatInputEl.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
-            return; // default textarea inserts \n
+            return;
         }
     });
 
@@ -1095,10 +1142,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const text = (chatInputEl.value || '').trim();
         if (!text) return;
 
-        // Do NOT disable the input — that closes the mobile keyboard and
-        // re-focusing it is unreliable across browsers. Only the send
-        // button is gated, and the chatSendingNow flag prevents double
-        // submits.
         chatSendingNow = true;
         chatSendBtn.disabled = true;
 
@@ -1161,7 +1204,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // ============================================================
-    // PING UI (creator only)
+    // PING UI
     // ============================================================
     const pingOpenBtn     = document.getElementById('pingOpenBtn');
     const pingOpenSub     = document.getElementById('pingOpenSub');
@@ -1298,7 +1341,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ============================================================
-    // COUNTDOWN (with T-60 warning)
+    // COUNTDOWN — Somali T-60 hardcoded
     // ============================================================
     function startCountdown(seconds) {
         if (countdownInterval) clearInterval(countdownInterval);
@@ -1321,8 +1364,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (remaining <= 60 && remaining > 55 && !notificationSent) {
                 notificationSent = true;
+                // Hardcoded Somali — no translation lookup
                 sendBrowserNotification(
-                    I18N.notify_title, I18N.notify_body,
+                    NOTIFY_T60_TITLE,
+                    '"' + shortTitle() + '"' + NOTIFY_T60_BODY_TAIL,
                     '/live-quiz/waiting-room/' + quizId,
                     'system'
                 );
