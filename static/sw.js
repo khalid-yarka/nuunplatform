@@ -9,7 +9,7 @@
    Bump CACHE_VERSION on any release that must reach old clients.
    ============================================================ */
 
-const CACHE_VERSION = 'nuun-v3-20260929';
+const CACHE_VERSION = 'nuun-v3-20260930';
 const SHELL_CACHE   = 'nuun-shell-' + CACHE_VERSION;
 const RUNTIME_CACHE = 'nuun-runtime-' + CACHE_VERSION;
 
@@ -156,5 +156,74 @@ self.addEventListener('fetch', function (event) {
                 return cached || Response.error();
             });
         })
+    );
+});
+
+/* ============================================================
+   NOTIFICATION CLICK HANDLER
+   ============================================================
+   Fires when a user taps a notification created via
+   `reg.showNotification()`. Looks for an existing tab at this
+   origin, focuses it, and navigates it to the URL stored in
+   `event.notification.data.url`. Falls back to opening a new
+   window when no same-origin tab exists.
+
+   Without this handler, tapping a service-worker-created
+   notification simply dismisses it — nothing opens.
+   ============================================================ */
+self.addEventListener('notificationclick', function (event) {
+    event.notification.close();
+
+    var targetUrl = '/';
+    try {
+        if (event.notification.data && event.notification.data.url) {
+            targetUrl = event.notification.data.url;
+        }
+    } catch (e) { /* keep default */ }
+
+    // Resolve target to an absolute URL.
+    var absoluteUrl;
+    try {
+        absoluteUrl = new URL(targetUrl, self.location.origin).href;
+    } catch (e) {
+        absoluteUrl = self.location.origin + '/';
+    }
+
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true })
+            .then(function (windowClients) {
+
+                // 1. Prefer an existing window already at the target path.
+                for (var i = 0; i < windowClients.length; i++) {
+                    var c = windowClients[i];
+                    try {
+                        var cu = new URL(c.url);
+                        var tu = new URL(absoluteUrl);
+                        if (cu.origin === tu.origin && cu.pathname === tu.pathname) {
+                            return c.focus();
+                        }
+                    } catch (e) { /* skip */ }
+                }
+
+                // 2. Otherwise focus a same-origin window and navigate it.
+                for (var j = 0; j < windowClients.length; j++) {
+                    var w = windowClients[j];
+                    try {
+                        if (new URL(w.url).origin === self.location.origin) {
+                            if ('navigate' in w) {
+                                return w.navigate(absoluteUrl)
+                                    .then(function () { return w.focus(); })
+                                    .catch(function () { return w.focus(); });
+                            }
+                            return w.focus()
+                                .then(function () { return clients.openWindow(absoluteUrl); })
+                                .catch(function () { return clients.openWindow(absoluteUrl); });
+                        }
+                    } catch (e) { /* skip */ }
+                }
+
+                // 3. No same-origin window — open a new one.
+                return clients.openWindow(absoluteUrl);
+            })
     );
 });

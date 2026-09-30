@@ -223,7 +223,7 @@
        ---------------------------------------------------------- */
     @media (min-width: 769px) {
         .notification-wrapper { position: relative; }
-    
+
         .notification-wrapper .notification-dropdown {
             position: absolute;
             top: calc(100% + 8px);
@@ -238,7 +238,7 @@
             box-shadow: var(--shadow-lg);
         }
     }
-  
+
     @keyframes notifDropIn {
         from { opacity: 0; transform: translateY(-10px) scale(0.97); }
         to   { opacity: 1; transform: translateY(0)    scale(1); }
@@ -885,6 +885,12 @@
     </div>
 </div>
 
+{# ────────────────────────────────────────────────────────
+   WHATSAPP COMMUNITY FAB
+   Overridable so focus screens (e.g. the live-quiz waiting
+   room) can hide the floating WhatsApp button entirely.
+   ──────────────────────────────────────────────────────── #}
+{% block whatsapp_fab %}
 {% if whatsapp_group_url %}
 <a href="{{ whatsapp_group_url }}"
    target="_blank" rel="noopener noreferrer"
@@ -894,6 +900,7 @@
     <i class="fab fa-whatsapp" aria-hidden="true"></i>
 </a>
 {% endif %}
+{% endblock %}
 
 {% endblock %}
 

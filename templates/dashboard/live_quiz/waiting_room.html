@@ -4,8 +4,9 @@
 
 {% block page_title %}{{ _('live_quiz.waiting.page_title') }}{% endblock %}
 
-{# Hide the dashboard footer on this focus screen #}
+{# Hide the dashboard footer and WhatsApp FAB on this focus screen #}
 {% block dashboard_footer %}{% endblock %}
+{% block whatsapp_fab %}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
@@ -433,6 +434,86 @@ document.addEventListener('DOMContentLoaded', function() {
     function hideUnreadDot() { if (chatUnreadDot) chatUnreadDot.hidden = true; }
 
     // ============================================================
+    // SWIPE GESTURE — swap tabs by swiping left/right on the card
+    // ============================================================
+    (function setupSwipeGesture() {
+        var SWIPE_MIN_DX = 60;
+        var SWIPE_MAX_DT = 600;
+        var SWIPE_RATIO  = 1.5;
+
+        var startX = 0;
+        var startY = 0;
+        var startT = 0;
+        var armed  = false;
+
+        function isInteractive(el) {
+            while (el && el !== document.body) {
+                if (!el.tagName) { el = el.parentElement; continue; }
+                var tag = el.tagName.toUpperCase();
+                if (tag === 'BUTTON' || tag === 'A' || tag === 'INPUT' ||
+                    tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'LABEL') {
+                    return true;
+                }
+                if (el.hasAttribute) {
+                    if (el.hasAttribute('onclick') ||
+                        el.hasAttribute('data-copy') ||
+                        el.getAttribute('role') === 'button') {
+                        return true;
+                    }
+                }
+                el = el.parentElement;
+            }
+            return false;
+        }
+
+        function modalOpen() {
+            var del = document.getElementById('deleteModal');
+            if (del && del.classList.contains('active')) return true;
+            var ps = document.getElementById('pingSheet');
+            if (ps && !ps.hidden) return true;
+            return false;
+        }
+
+        var container = document.querySelector('.waiting-room-container');
+        if (!container) return;
+
+        container.addEventListener('touchstart', function(e) {
+            if (e.touches.length !== 1) { armed = false; return; }
+            if (modalOpen()) { armed = false; return; }
+            if (isInteractive(e.target)) { armed = false; return; }
+            var t = e.touches[0];
+            startX = t.clientX;
+            startY = t.clientY;
+            startT = Date.now();
+            armed = true;
+        }, { passive: true });
+
+        container.addEventListener('touchend', function(e) {
+            if (!armed) return;
+            armed = false;
+            if (e.changedTouches.length !== 1) return;
+            var t = e.changedTouches[0];
+            var dx = t.clientX - startX;
+            var dy = t.clientY - startY;
+            var dt = Date.now() - startT;
+
+            if (dt > SWIPE_MAX_DT) return;
+            if (Math.abs(dx) < SWIPE_MIN_DX) return;
+            if (Math.abs(dx) < Math.abs(dy) * SWIPE_RATIO) return;
+
+            if (dx < 0 && activeTab !== 'chat') {
+                switchTab('chat');
+            } else if (dx > 0 && activeTab !== 'participants') {
+                switchTab('participants');
+            }
+        }, { passive: true });
+
+        container.addEventListener('touchcancel', function() {
+            armed = false;
+        }, { passive: true });
+    })();
+
+    // ============================================================
     // PING BANNER
     // ============================================================
     const pingBanner         = document.getElementById('pingBanner');
@@ -490,40 +571,45 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ============================================================
     // IN-PAGE BROWSER NOTIFICATION
-    // Same mechanism as the T-60 countdown warning. No VAPID, no
-    // push subscription, no service worker dependency. Works while
-    // the page is loaded — even in a hidden or background tab.
+    // Prefers `new Notification()` for direct click handling.
+    // Falls back to the service worker path (with its
+    // notificationclick handler in sw.js).
+    //
+    // icon:  full-color logo.png (shown large on the right)
+    // badge: badge-nuun.png — 72x72 white-on-transparent PNG,
+    //        Android strips it to a monochrome silhouette.
     // ============================================================
     function sendBrowserNotification(title, body, url) {
         if (!('Notification' in window)) return;
         if (Notification.permission !== 'granted') return;
+
+        var opts = {
+            body: body,
+            icon: '/static/images/logo.png',
+            badge: '/static/images/badge-nuun.png',
+            tag: 'live-quiz-ping-' + quizId,
+            requireInteraction: false,
+            data: { url: url }
+        };
+
         try {
-            if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
-                navigator.serviceWorker.ready.then(function (reg) {
-                    reg.showNotification(title, {
-                        body: body,
-                        icon: '/static/images/logo.png',
-                        badge: '/static/images/icon-192.png',
-                        tag: 'live-quiz-ping-' + quizId,
-                        requireInteraction: false,
-                        data: { url: url }
-                    });
-                }).catch(function () {});
-                return;
-            }
-            const n = new Notification(title, {
-                body: body,
-                icon: '/static/images/logo.png',
-                tag: 'live-quiz-ping-' + quizId
-            });
-            n.onclick = function() {
-                window.focus();
+            var n = new Notification(title, opts);
+            n.onclick = function () {
+                try { window.focus(); } catch (e) {}
                 if (url) window.location.href = url;
                 n.close();
             };
-            setTimeout(function() { n.close(); }, 15000);
+            n.onerror = function () {};
+            setTimeout(function () { try { n.close(); } catch (e) {} }, 20000);
+            return;
         } catch (e) {
-            console.warn('Notification error:', e);
+            // Fall through to the SW path if the in-page API throws.
+        }
+
+        if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+            navigator.serviceWorker.ready.then(function (reg) {
+                return reg.showNotification(title, opts);
+            }).catch(function () {});
         }
     }
 
@@ -685,7 +771,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else if (m.id > lastShownPingId) {
                     lastShownPingId = m.id;
                     showPingBanner(m.name, formatTime12h(m.created_at), m.body);
-                    // Sound and OS notification only for other people's pings
                     if (String(m.user_id) !== String(userId)) {
                         playPingSound();
                         sendBrowserNotification(
@@ -799,9 +884,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
-    // When the tab becomes visible, poll immediately for freshness.
-    // When it becomes hidden, let the current timer run out — the
-    // next scheduleChatPoll will use the slow interval automatically.
     document.addEventListener('visibilitychange', function() {
         if (document.visibilityState === 'visible') {
             if (chatPollTimer) { clearTimeout(chatPollTimer); chatPollTimer = null; }
@@ -822,10 +904,9 @@ document.addEventListener('DOMContentLoaded', function() {
     autogrowTextarea();
     updateSendBtnState();
 
-    // Enter inserts a newline. Only the send button submits.
     chatInputEl.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
-            return; // default textarea behaviour already inserts \n
+            return;
         }
     });
 
@@ -1055,7 +1136,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ============================================================
-    // COUNTDOWN (with T-60 warning — unchanged)
+    // COUNTDOWN (with T-60 warning)
     // ============================================================
     function startCountdown(seconds) {
         if (countdownInterval) clearInterval(countdownInterval);
