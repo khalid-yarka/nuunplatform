@@ -1381,6 +1381,6 @@
   "live_quiz.waiting.ping_or": "or",
   "live_quiz.waiting.ping_custom_placeholder": "Type a custom message…",
   "live_quiz.waiting.ping_send_btn": "Send ping to everyone",
-  "live_quiz.waiting.ping_sent_fmt": "📣 Ping sent · {sent}/{total} reached",
+  "live_quiz.waiting.ping_sent_fmt": "📣 Ping sent · {n} participant(s)",
   "live_quiz.waiting.ping_error": "Could not send ping. Try again."
 }

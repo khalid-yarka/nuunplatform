@@ -184,10 +184,14 @@ def _ping_cooldown_remaining(quiz_id: int) -> int:
 
 def _dispatch_ping_push(quiz, creator_id, body):
     """
-    Fan out a ping push to every active participant + the creator.
-    Returns (sent, total):
-        sent  — unique users reached via push
-        total — active participants the ping was addressed to
+    Best-effort push delivery to active participants + creator.
+    On hosts without VAPID configured, the push layer is a no-op;
+    the in-page Notification API on the client delivers instead.
+
+    Returns the number of active participants — i.e. how many people
+    will see the ping in their chat stream and, if their tab is open,
+    receive the OS notification. This is the honest number shown in
+    the toast, not a fake "sent" count.
     """
     from db import get_live_quiz_participants as _get_parts
     parts = _get_parts(quiz['id']) or []
@@ -197,16 +201,16 @@ def _dispatch_ping_push(quiz, creator_id, body):
 
     total = len(active_ids)
     if total == 0:
-        return 0, 0
+        return 0
 
-    sent = 0
+    # Best-effort VAPID push. Silently no-ops when unavailable.
     try:
         from services import push_service
-        if push_service.is_available():
+        if push_service.is_available() and active_ids:
             creator = get_student_by_id(creator_id) or {}
             cname = f"{creator.get('first_name','')} {creator.get('last_name','')}".strip() or 'Host'
             qtitle = quiz.get('title') or 'Live Quiz'
-            result = push_service.deliver_batch(
+            push_service.deliver_batch(
                 active_ids,
                 title=f"📣 {cname} · {qtitle}",
                 body=body,
@@ -216,19 +220,12 @@ def _dispatch_ping_push(quiz, creator_id, body):
                 data={
                     'type': 'live_quiz_ping',
                     'quiz_id': quiz['id'],
-                    'requireInteraction': True,
-                    'vibrate': [200, 100, 200, 100, 200],
                 },
             )
-            sent = result.get('users_reached', 0)
     except Exception as e:
-        logger.error(f"_dispatch_ping_push failed: {e}", exc_info=True)
+        logger.debug(f"ping push skipped: {e}")
 
-    # Fallback — the in-page banner reaches everyone on the page
-    if sent == 0:
-        sent = total
-
-    return sent, total
+    return total
 
   
 # ============================================
@@ -1560,13 +1557,12 @@ def waiting_room_ping_send(quiz_id):
     with _ping_lock:
         _ping_last_sent[quiz_id] = time.time()
 
-    sent, total = _dispatch_ping_push(quiz, user_id, body)
-
+    recipients = _dispatch_ping_push(quiz, user_id, body)
+    
     return jsonify({
         'success': True,
         'id': msg_id,
-        'sent': sent,
-        'total': total,
+        'recipients': recipients,
         'cooldown': PING_COOLDOWN_SECONDS,
     })
 

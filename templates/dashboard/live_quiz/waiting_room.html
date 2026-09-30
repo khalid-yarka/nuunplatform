@@ -357,6 +357,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const totalQuestions = {{ quiz.question_count }};
     const timePerQuestion = {{ quiz.time_per_question or 30 }};
     const chatPollMs = 2000;
+    const chatPollMsHidden = 20000;
 
     if (!quizId || quizId === 'None') {
         console.error('Invalid quizId. Redirect to lobby.');
@@ -488,6 +489,45 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ============================================================
+    // IN-PAGE BROWSER NOTIFICATION
+    // Same mechanism as the T-60 countdown warning. No VAPID, no
+    // push subscription, no service worker dependency. Works while
+    // the page is loaded — even in a hidden or background tab.
+    // ============================================================
+    function sendBrowserNotification(title, body, url) {
+        if (!('Notification' in window)) return;
+        if (Notification.permission !== 'granted') return;
+        try {
+            if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+                navigator.serviceWorker.ready.then(function (reg) {
+                    reg.showNotification(title, {
+                        body: body,
+                        icon: '/static/images/logo.png',
+                        badge: '/static/images/icon-192.png',
+                        tag: 'live-quiz-ping-' + quizId,
+                        requireInteraction: false,
+                        data: { url: url }
+                    });
+                }).catch(function () {});
+                return;
+            }
+            const n = new Notification(title, {
+                body: body,
+                icon: '/static/images/logo.png',
+                tag: 'live-quiz-ping-' + quizId
+            });
+            n.onclick = function() {
+                window.focus();
+                if (url) window.location.href = url;
+                n.close();
+            };
+            setTimeout(function() { n.close(); }, 15000);
+        } catch (e) {
+            console.warn('Notification error:', e);
+        }
+    }
+
+    // ============================================================
     // CHAT STATE
     // ============================================================
     const chatMessagesEl = document.getElementById('chatMessages');
@@ -536,9 +576,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return 'n' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
     }
 
-    // Auto-grow the textarea 1 → 4 lines.
-    // 44px  = 1 line (matches the send button height, so they align perfectly)
-    // 120px = ~4 lines; beyond that, the textarea scrolls internally.
     function autogrowTextarea() {
         if (!chatInputEl) return;
         chatInputEl.style.height = 'auto';
@@ -648,7 +685,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else if (m.id > lastShownPingId) {
                     lastShownPingId = m.id;
                     showPingBanner(m.name, formatTime12h(m.created_at), m.body);
-                    if (String(m.user_id) !== String(userId)) playPingSound();
+                    // Sound and OS notification only for other people's pings
+                    if (String(m.user_id) !== String(userId)) {
+                        playPingSound();
+                        sendBrowserNotification(
+                            '📣 ' + (m.name || 'Participant'),
+                            m.body,
+                            '/live-quiz/waiting-room/' + quizId
+                        );
+                    }
                 }
             } else {
                 const isMine = String(m.user_id) === String(userId);
@@ -723,6 +768,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function scheduleChatPoll() {
+        const delay = (document.visibilityState === 'hidden')
+            ? chatPollMsHidden
+            : chatPollMs;
+        chatPollTimer = setTimeout(pollChat, delay);
+    }
+
     function pollChat(oneShot) {
         fetch('/live-quiz/waiting-room/' + quizId
               + '/chat?since=' + chatSinceId + '&t=' + Date.now())
@@ -735,22 +787,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 updateChatPermissionUI(data);
                 pollsCompleted++;
-                if (!oneShot) {
-                    chatPollTimer = setTimeout(pollChat, chatPollMs);
-                }
+                if (!oneShot) scheduleChatPoll();
             })
             .catch(() => {
                 if (!oneShot) {
-                    chatPollTimer = setTimeout(pollChat, chatPollMs * 2);
+                    const delay = (document.visibilityState === 'hidden')
+                        ? chatPollMsHidden * 2
+                        : chatPollMs * 2;
+                    chatPollTimer = setTimeout(pollChat, delay);
                 }
             });
     }
 
+    // When the tab becomes visible, poll immediately for freshness.
+    // When it becomes hidden, let the current timer run out — the
+    // next scheduleChatPoll will use the slow interval automatically.
     document.addEventListener('visibilitychange', function() {
         if (document.visibilityState === 'visible') {
-            if (!chatPollTimer) pollChat();
-        } else {
             if (chatPollTimer) { clearTimeout(chatPollTimer); chatPollTimer = null; }
+            pollChat(false);
         }
     });
 
@@ -767,14 +822,10 @@ document.addEventListener('DOMContentLoaded', function() {
     autogrowTextarea();
     updateSendBtnState();
 
-    // Enter inserts a newline (textarea default). Shift+Enter too. Only the
-    // send button submits. We add an explicit guard just in case a future
-    // browser change tries to auto-submit on Enter.
+    // Enter inserts a newline. Only the send button submits.
     chatInputEl.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
-            // Default textarea behaviour already inserts \n. Let it through.
-            // No preventDefault, no submit, no send.
-            return;
+            return; // default textarea behaviour already inserts \n
         }
     });
 
@@ -974,9 +1025,9 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(res => {
                 if (res.ok && res.body.success) {
                     window.closePingSheet();
-                    const tpl = I18N.ping_sent_fmt || '📣 {sent}/{total}';
-                    const toast = tpl.replace('{sent}', res.body.sent)
-                                      .replace('{total}', res.body.total);
+                    const n = res.body.recipients || 0;
+                    const tpl = I18N.ping_sent_fmt || '📣 Ping sent · {n}';
+                    const toast = tpl.replace('{n}', n);
                     if (typeof window.showToast === 'function') {
                         window.showToast(toast, 'success');
                     }
@@ -1004,7 +1055,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ============================================================
-    // COUNTDOWN
+    // COUNTDOWN (with T-60 warning — unchanged)
     // ============================================================
     function startCountdown(seconds) {
         if (countdownInterval) clearInterval(countdownInterval);
@@ -1050,33 +1101,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (initialStartsIn > 0) startCountdown(initialStartsIn);
-
-    function sendBrowserNotification(title, body, url) {
-        if (!('Notification' in window)) return;
-        if (Notification.permission !== 'granted') return;
-        try {
-            if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
-                navigator.serviceWorker.ready.then(function (reg) {
-                    reg.showNotification(title, {
-                        body: body, icon: '/static/images/logo.png',
-                        tag: 'live-quiz-' + quizId,
-                        requireInteraction: true, data: { url: url }
-                    });
-                }).catch(function () {});
-                return;
-            }
-            const n = new Notification(title, {
-                body: body, icon: '/static/images/logo.png',
-                tag: 'live-quiz-' + quizId, requireInteraction: true
-            });
-            n.onclick = function() {
-                window.focus();
-                if (url) window.location.href = url;
-                n.close();
-            };
-            setTimeout(function() { n.close(); }, 15000);
-        } catch (e) {}
-    }
 
     function playNotificationSound() {
         try {
