@@ -57,6 +57,10 @@ from db import (
     execute_with_retry,
     get_db,
     to_json,
+    insert_chat_message,
+    get_chat_messages_since,
+    count_chat_messages,
+    soft_delete_chat_message, 
 )
 
 from config import Config
@@ -126,6 +130,36 @@ check_single_worker()
 
 _finalize_lock = threading.Lock()
 _finalize_in_progress: dict = {}
+
+# ============================================
+# CHAT HELPERS (waiting room)
+# ============================================
+
+_chat_rate_lock = threading.Lock()
+_chat_rate: dict = {}
+
+
+def _chat_rate_ok(user_id: int, per_minute: int) -> bool:
+    """In-process sliding-window rate limiter, per user."""
+    now_ts = time.time()
+    cutoff = now_ts - 60.0
+    with _chat_rate_lock:
+        times = [t for t in _chat_rate.get(user_id, []) if t > cutoff]
+        if len(times) >= per_minute:
+            _chat_rate[user_id] = times
+            return False
+        times.append(now_ts)
+        _chat_rate[user_id] = times
+    return True
+
+
+def _can_send_chat(user_id: int) -> bool:
+    """True when the user's tier allows SENDING. Reading is never gated."""
+    try:
+        from services import entitlement_service
+        return entitlement_service.check(user_id, 'live_quiz_chat_send')
+    except Exception:
+        return False
 
 
 # ============================================
@@ -1255,6 +1289,12 @@ def waiting_room(quiz_id):
         except Exception:
             pass
 
+    # ── Chat context ──
+    chat_max_length = Config.LIVE_QUIZ_CHAT_MAX_LENGTH
+    chat_can_send   = (quiz['status'] in ('waiting', 'scheduled')
+                       and _can_send_chat(user_id))
+    chat_count      = count_chat_messages(quiz_id)
+    
     return render_template(
         'dashboard/live_quiz/waiting_room.html',
         quiz=quiz,
@@ -1265,6 +1305,9 @@ def waiting_room(quiz_id):
         user_participant_status=user_participant_status,
         starts_in_seconds=starts_in_seconds,
         scheduled_start_display=scheduled_start_display,
+        chat_max_length=chat_max_length,
+        chat_can_send=chat_can_send,
+        chat_count=chat_count,
     )
 
 
@@ -1304,6 +1347,89 @@ def waiting_room_participants(quiz_id):
         'total': len(formatted),
     })
 
+@live_quiz_bp.route('/waiting-room/<quiz_id>/chat', methods=['GET'])
+def waiting_room_chat_fetch(quiz_id):
+    """Cursor-based read. Returns new messages + send permission state."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+
+    user_id = session['user_id']
+    quiz = get_live_quiz_by_id(quiz_id)
+    if not quiz:
+        return jsonify({'error': 'Quiz not found'}), 404
+
+    participant = get_live_quiz_participant(quiz_id, user_id)
+    if not participant and quiz['creator_id'] != user_id:
+        return jsonify({'error': 'Not a participant'}), 403
+
+    try:
+        since = int(request.args.get('since', 0))
+    except (TypeError, ValueError):
+        since = 0
+
+    messages = get_chat_messages_since(quiz_id, since_id=since)
+
+    chat_open = quiz['status'] in ('waiting', 'scheduled')
+    can_send  = chat_open and _can_send_chat(user_id)
+
+    return jsonify({
+        'messages':  messages,
+        'chat_open': chat_open,
+        'can_send':  can_send,
+        'total':     count_chat_messages(quiz_id),
+    })
+
+
+@live_quiz_bp.route('/waiting-room/<quiz_id>/chat', methods=['POST'])
+def waiting_room_chat_send(quiz_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    if not validate_csrf():
+        return jsonify({'error': 'CSRF token missing or invalid'}), 403
+
+    user_id = session['user_id']
+    quiz = get_live_quiz_by_id(quiz_id)
+    if not quiz:
+        return jsonify({'error': 'Quiz not found'}), 404
+
+    participant = get_live_quiz_participant(quiz_id, user_id)
+    if not participant and quiz['creator_id'] != user_id:
+        return jsonify({'error': 'Not a participant'}), 403
+
+    if quiz['status'] not in ('waiting', 'scheduled'):
+        return jsonify({
+            'error':  'Chat is closed — the quiz has started.',
+            'reason': 'chat_closed',
+        }), 409
+
+    if not _can_send_chat(user_id):
+        return jsonify({
+            'error':  'Sending is disabled for your account.',
+            'reason': 'sending_locked',
+        }), 403
+
+    data  = request.get_json(silent=True) or {}
+    body  = (data.get('body') or '').strip()
+    nonce = (data.get('nonce') or '').strip() or None
+
+    if not body:
+        return jsonify({'error': 'Empty message'}), 400
+    if len(body) > Config.LIVE_QUIZ_CHAT_MAX_LENGTH:
+        return jsonify({
+            'error': f'Message too long (max {Config.LIVE_QUIZ_CHAT_MAX_LENGTH} chars)',
+        }), 400
+
+    if not _chat_rate_ok(user_id, Config.LIVE_QUIZ_CHAT_RATE_PER_MIN):
+        return jsonify({
+            'error':  'Slow down a bit.',
+            'reason': 'rate_limited',
+        }), 429
+
+    msg_id = insert_chat_message(quiz_id, user_id, body, nonce=nonce)
+    if not msg_id:
+        return jsonify({'error': 'Failed to save message'}), 500
+
+    return jsonify({'success': True, 'id': msg_id})
 
 @live_quiz_bp.route('/toggle-ready/<quiz_id>', methods=['POST'])
 def toggle_ready(quiz_id):

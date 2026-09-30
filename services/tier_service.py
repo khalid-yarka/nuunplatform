@@ -343,3 +343,9 @@ def can_see_trends(user_id: int) -> bool:
 
 def can_delete_history(user_id: int) -> bool:
     return has_feature("history_delete", user_id)
+
+
+def can_send_live_quiz_chat(user_id: Optional[int] = None) -> bool:
+    """True if the user may SEND messages in the waiting-room chat.
+    Reading is always allowed; this gates sending only."""
+    return has_feature("live_quiz_chat_send", user_id)

@@ -4388,3 +4388,96 @@ def clean_expired_batch_edits() -> int:
         return cursor.rowcount or 0
     except Exception:
         return 0
+
+
+# ============================================
+# LIVE QUIZ CHAT MESSAGES (waiting room only)
+# ============================================
+
+def insert_chat_message(quiz_id: int, user_id: int,
+                        body: str, nonce: str = None) -> Optional[int]:
+    """
+    Insert a chat message. Idempotent on (quiz_id, user_id, nonce):
+    a duplicate nonce returns the existing row's id.
+    Returns the row id, or None on failure.
+    """
+    try:
+        cursor = execute_with_retry("""
+            INSERT INTO live_quiz_chat_messages
+                (quiz_id, user_id, body, client_nonce, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (quiz_id, user_id, body, nonce, now()), commit=True)
+        return cursor.lastrowid
+    except sqlite3.IntegrityError:
+        try:
+            row = execute_with_retry("""
+                SELECT id FROM live_quiz_chat_messages
+                WHERE quiz_id = ? AND user_id = ? AND client_nonce = ?
+            """, (quiz_id, user_id, nonce)).fetchone()
+            return row['id'] if row else None
+        except Exception:
+            return None
+    except Exception as e:
+        logger.error(f"insert_chat_message failed: {e}")
+        return None
+
+
+def get_chat_messages_since(quiz_id: int, since_id: int = 0,
+                            limit: int = 200) -> list:
+    """
+    Cursor read. Returns messages with id > since_id, oldest first.
+    Soft-deleted rows are returned with empty body so the client can
+    render a tombstone.
+    """
+    try:
+        cursor = execute_with_retry("""
+            SELECT m.id, m.user_id, m.body, m.created_at,
+                   m.deleted_at, m.deleted_by,
+                   s.first_name, s.last_name, s.public_id
+            FROM live_quiz_chat_messages m
+            LEFT JOIN students s ON s.id = m.user_id
+            WHERE m.quiz_id = ? AND m.id > ?
+            ORDER BY m.id ASC
+            LIMIT ?
+        """, (quiz_id, since_id, limit))
+
+        out = []
+        for r in cursor.fetchall():
+            d = dict(r)
+            first = d.pop('first_name', '') or ''
+            last  = d.pop('last_name', '')  or ''
+            d['name'] = f"{first} {last}".strip() or 'Participant'
+            d['public_id'] = d.get('public_id') or '----'
+            d['is_deleted'] = bool(d.get('deleted_at'))
+            if d['is_deleted']:
+                d['body'] = ''
+            out.append(d)
+        return out
+    except Exception as e:
+        logger.error(f"get_chat_messages_since failed: {e}")
+        return []
+
+
+def count_chat_messages(quiz_id: int) -> int:
+    try:
+        row = execute_with_retry(
+            "SELECT COUNT(*) AS n FROM live_quiz_chat_messages WHERE quiz_id = ?",
+            (quiz_id,)
+        ).fetchone()
+        return int(row['n']) if row else 0
+    except Exception:
+        return 0
+
+
+def soft_delete_chat_message(msg_id: int, deleted_by: int) -> bool:
+    """Soft-delete a message. Idempotent."""
+    try:
+        execute_with_retry("""
+            UPDATE live_quiz_chat_messages
+            SET deleted_at = ?, deleted_by = ?
+            WHERE id = ? AND deleted_at IS NULL
+        """, (now(), deleted_by, msg_id), commit=True)
+        return True
+    except Exception as e:
+        logger.error(f"soft_delete_chat_message failed: {e}")
+        return False

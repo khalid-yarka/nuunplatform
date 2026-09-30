@@ -1357,5 +1357,20 @@
   "offline.retry": "Isku day mar kale",
   "offline.home": "Dib ugu labo Dashboard",
   "offline.tip": "Fariin\\: bogagga aad hore u booqatay waa la heli karaa adigoon online ahayn.",
-  "pdfs.shuffle_again": "Isku dar mar kale"
+  "pdfs.shuffle_again": "Isku dar mar kale",
+  "live_quiz.waiting.tab_participants": "Ka-qaybgalayaasha",
+  "live_quiz.waiting.tab_chat": "Wada-hadal",
+  
+  "live_quiz.waiting.chat_empty_title": "Weli fariin ma jirto",
+  "live_quiz.waiting.chat_empty_sub": "Salaan! 👋",
+  "live_quiz.waiting.chat_placeholder": "Qor fariin…",
+  "live_quiz.waiting.chat_send_aria": "Dir fariinta",
+  "live_quiz.waiting.chat_deleted": "fariinta waa la tirtiray",
+  
+  "live_quiz.waiting.chat_locked_title": "Dirista waa xiran tahay",
+  "live_quiz.waiting.chat_locked_sub": "Riix si aad u furto dirista Premium",
+  "live_quiz.waiting.chat_send_error": "Diristu waa guuldareystay — isku day mar kale",
+  "live_quiz.waiting.chat_rate_limited": "Xoogaa yaree.",
+  "live_quiz.waiting.chat_id_copied": "Aqoonsiga waa la nuqulay",
+  "live_quiz.waiting.chat_new_pill": "Fariin cusub"
 }

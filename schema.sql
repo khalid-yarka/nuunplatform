@@ -989,3 +989,25 @@ CREATE INDEX IF NOT EXISTS idx_batch_edits_batch
     ON content_batch_edits(batch_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_batch_edits_undo_until
     ON content_batch_edits(undo_until);
+
+-- ============================================
+-- LIVE QUIZ CHAT MESSAGES (waiting room only)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS live_quiz_chat_messages (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    quiz_id      INTEGER NOT NULL,
+    user_id      INTEGER NOT NULL,
+    body         TEXT NOT NULL,
+    client_nonce TEXT,
+    created_at   TEXT DEFAULT (datetime('now', 'localtime')),
+    deleted_at   TEXT,
+    deleted_by   INTEGER,
+    FOREIGN KEY (quiz_id)    REFERENCES live_quizzes(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id)    REFERENCES students(id)     ON DELETE CASCADE,
+    FOREIGN KEY (deleted_by) REFERENCES students(id)     ON DELETE SET NULL,
+    UNIQUE(quiz_id, user_id, client_nonce)
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_quiz_id
+    ON live_quiz_chat_messages(quiz_id, id);

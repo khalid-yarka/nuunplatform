@@ -585,6 +585,27 @@ def ensure_live_quiz_tables():
 
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_live_quizzes_status ON live_quizzes(status)")
 
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS live_quiz_chat_messages (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                quiz_id      INTEGER NOT NULL,
+                user_id      INTEGER NOT NULL,
+                body         TEXT NOT NULL,
+                client_nonce TEXT,
+                created_at   TEXT DEFAULT (datetime('now', 'localtime')),
+                deleted_at   TEXT,
+                deleted_by   INTEGER,
+                FOREIGN KEY (quiz_id)    REFERENCES live_quizzes(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id)    REFERENCES students(id)     ON DELETE CASCADE,
+                FOREIGN KEY (deleted_by) REFERENCES students(id)     ON DELETE SET NULL,
+                UNIQUE(quiz_id, user_id, client_nonce)
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chat_quiz_id "
+            "ON live_quiz_chat_messages(quiz_id, id)"
+        )
+        
         conn.commit()
         conn.close()
         logger.info("Live quiz event and checkpoint tables verified/created.")

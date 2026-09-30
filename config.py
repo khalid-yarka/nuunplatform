@@ -125,6 +125,13 @@ class Config:
     RATING_TIME = int(os.getenv('RATING_TIME', '10'))
     LIVE_QUIZ_TIME_PER_QUESTION = int(os.getenv('LIVE_QUIZ_TIME_PER_QUESTION', '30'))
     LIVE_QUIZ_MAX_PARTICIPANTS = int(os.getenv('LIVE_QUIZ_MAX_PARTICIPANTS', '50'))
+    
+    # ============================================
+    # LIVE QUIZ WAITING-ROOM CHAT
+    # ============================================
+    LIVE_QUIZ_CHAT_MAX_LENGTH   = int(os.getenv('LIVE_QUIZ_CHAT_MAX_LENGTH', '300'))
+    LIVE_QUIZ_CHAT_RATE_PER_MIN = int(os.getenv('LIVE_QUIZ_CHAT_RATE_PER_MIN', '20'))
+    LIVE_QUIZ_CHAT_POLL_MS      = int(os.getenv('LIVE_QUIZ_CHAT_POLL_MS', '2000'))
 
     # ============================================
     # PDF DIRECT DOWNLOAD

@@ -1357,5 +1357,20 @@
   "offline.retry": "Try again",
   "offline.home": "Home",
   "offline.tip": "Tip\\: pages you visited before are available offline.",
-  "pdfs.shuffle_again": "Shuffle again"
+  "pdfs.shuffle_again": "Shuffle again",
+  "live_quiz.waiting.tab_participants": "Participants",
+  "live_quiz.waiting.tab_chat": "Chat",
+  
+  "live_quiz.waiting.chat_empty_title": "No messages yet",
+  "live_quiz.waiting.chat_empty_sub": "Say salaam! 👋",
+  "live_quiz.waiting.chat_placeholder": "Type a message…",
+  "live_quiz.waiting.chat_send_aria": "Send message",
+  "live_quiz.waiting.chat_deleted": "message removed",
+  
+  "live_quiz.waiting.chat_locked_title": "Sending is disabled",
+  "live_quiz.waiting.chat_locked_sub": "Tap to unlock sending with Premium",
+  "live_quiz.waiting.chat_send_error": "Send failed — try again",
+  "live_quiz.waiting.chat_rate_limited": "Slow down a bit.",
+  "live_quiz.waiting.chat_id_copied": "ID copied",
+  "live_quiz.waiting.chat_new_pill": "New message"
 }
