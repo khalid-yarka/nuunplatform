@@ -1382,5 +1382,8 @@
   "live_quiz.waiting.ping_custom_placeholder": "Qor fariin gaar ah…",
   "live_quiz.waiting.ping_send_btn": "U dir digniin dhammaan",
   "live_quiz.waiting.ping_sent_fmt": "📣 Digniin la diray · {n} ka-qaybgalayaal",
-  "live_quiz.waiting.ping_error": "Digniinta lama diri karin. Isku day mar kale."
+  "live_quiz.waiting.ping_error": "Digniinta lama diri karin. Isku day mar kale.",
+  "live_quiz.waiting.copy_link": "Koobi xiriirka",
+  "live_quiz.waiting.link_copied": "Xiriirka waa la koobiyay",
+  "live_quiz.waiting.share_options": "Ikhtiyaarada wadaagista"
 }

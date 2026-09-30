@@ -762,7 +762,7 @@
 }
 
 /* ============================================
-   WAITING ROOM — CARD + HEADER + SHARE + PARTICIPANTS
+   WAITING ROOM — CARD + HEADER + PARTICIPANTS
    ============================================ */
 
 .waiting-room-container {
@@ -863,113 +863,244 @@
     margin-top: 6px;
 }
 
+/* ============================================
+   SHARE SECTION — compact accordion
+   ============================================ */
+
 .wr-share-section {
     background: var(--background);
+    border: 1px solid var(--border-light);
     border-radius: var(--radius-sm);
-    padding: 14px 16px;
-    margin-bottom: 16px;
+    overflow: hidden;
+    margin-bottom: 14px;
 }
 
-.wr-join-code {
+/* ── Bar: chip + toggle ── */
+.wr-share-bar {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
+    align-items: stretch;
+    min-height: 52px;
 }
 
-.wr-code-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.wr-code-display {
+.wr-share-chip {
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
-    flex: 1;
-}
-
-.wr-code {
-    font-size: 20px;
-    font-weight: 700;
-    font-family: monospace;
-    letter-spacing: 2px;
-    color: var(--primary);
-    background: var(--surface);
-    padding: 4px 12px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-}
-
-.wr-copy-btn {
-    padding: 4px 12px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-secondary);
+    gap: 10px;
+    padding: 12px 14px;
+    background: transparent;
+    border: none;
+    text-align: left;
     cursor: pointer;
-    transition: var(--transition);
+    font-family: inherit;
+    color: var(--text);
+    transition: background 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
 }
 
-.wr-copy-btn:hover {
-    background: var(--primary-light);
-    border-color: var(--primary);
+.wr-share-chip:hover,
+.wr-share-chip:focus-visible {
+    background: var(--surface);
+    outline: none;
+}
+
+.wr-share-chip:active {
+    background: var(--surface);
+}
+
+.wr-share-chip > i.fa-link {
     color: var(--primary);
+    font-size: 15px;
+    flex-shrink: 0;
 }
 
-.wr-share-buttons {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-top: 4px;
+.wr-share-chip-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12.5px;
+    font-family: 'SF Mono', Menlo, Monaco, monospace;
+    color: var(--text);
+    letter-spacing: 0.1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.wr-share-buttons .share-btn {
-    padding: 4px 12px;
-    border-radius: 6px;
-    font-size: 13px;
+.wr-share-chip.is-copied {
+    background: var(--primary-light);
+}
+
+.wr-share-chip.is-copied > i.fa-link {
+    color: #10B981;
+}
+
+.wr-share-chip.is-copied .wr-share-chip-text {
+    color: var(--primary);
     font-weight: 600;
-    text-decoration: none;
-    transition: var(--transition);
+    font-family: inherit;
+}
+
+.wr-share-toggle {
+    flex: 0 0 auto;
+    padding: 12px 18px;
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--border-light);
+    cursor: pointer;
+    font-size: 17px;
+    color: var(--text-muted);
+    transition: background 0.15s ease, color 0.15s ease;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-}
-.wr-share-buttons .share-btn.whatsapp {
-    background: #25D366;
-    color: #ffffff !important;
-}
-.wr-share-buttons .share-btn.whatsapp:hover {
-    background: #1DA851;
-    transform: translateY(-2px);
-    color: #ffffff !important;
-}
-.wr-share-buttons .share-btn.telegram {
-    background: #0088CC;
-    color: #ffffff !important;
-}
-.wr-share-buttons .share-btn.telegram:hover {
-    background: #006699;
-    transform: translateY(-2px);
-    color: #ffffff !important;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
 }
 
-.wr-public-note {
-    font-size: 12px;
+.wr-share-toggle:hover,
+.wr-share-toggle:focus-visible {
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
+}
+
+.wr-share-toggle:active {
+    background: var(--surface);
+}
+
+/* ── Action row (accordion) ── */
+.wr-share-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    padding: 12px;
+    border-top: 1px solid var(--border-light);
+    background: var(--surface);
+    animation: shareExpand 0.18s ease-out;
+}
+
+.wr-share-actions[hidden] {
+    display: none !important;
+}
+
+@keyframes shareExpand {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.wr-share-action {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 8px;
+    background: var(--background);
+    border: 1.5px solid var(--border-light);
+    border-left-width: 3px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text);
+    transition: background 0.15s ease, transform 0.1s ease;
+    -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.wr-share-action:hover {
+    background: var(--surface);
+}
+
+.wr-share-action:active {
+    transform: scale(0.97);
+}
+
+.wr-share-action:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.wr-share-action i {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.wr-share-action span {
+    display: block;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    max-width: 100%;
+}
+
+.wr-share-whatsapp {
+    border-left-color: #25D366;
+}
+.wr-share-whatsapp i {
+    color: #25D366;
+}
+
+.wr-share-telegram {
+    border-left-color: #0088CC;
+}
+.wr-share-telegram i {
+    color: #0088CC;
+}
+
+.wr-share-code {
+    border-left-color: var(--text-muted);
+}
+.wr-share-code i {
     color: var(--text-muted);
-    margin-top: 6px;
+}
+.wr-share-code span {
+    font-family: 'SF Mono', Menlo, Monaco, monospace;
+    font-size: 11px;
+    letter-spacing: 0.3px;
 }
 
-.wr-public-note a {
-    color: var(--primary);
-    text-decoration: none;
+.wr-share-code.is-copied {
+    background: var(--primary-light);
+    border-left-color: #10B981;
 }
+.wr-share-code.is-copied i {
+    color: #10B981;
+}
+
+/* ── Dark theme overrides ── */
+[data-theme="dark"] .wr-share-section {
+    background: var(--surface);
+    border-color: var(--border);
+}
+[data-theme="dark"] .wr-share-chip:hover,
+[data-theme="dark"] .wr-share-chip:focus-visible,
+[data-theme="dark"] .wr-share-chip:active,
+[data-theme="dark"] .wr-share-toggle:hover,
+[data-theme="dark"] .wr-share-toggle:focus-visible,
+[data-theme="dark"] .wr-share-toggle:active {
+    background: var(--background);
+}
+[data-theme="dark"] .wr-share-actions {
+    background: var(--background);
+    border-top-color: var(--border);
+}
+[data-theme="dark"] .wr-share-action {
+    background: var(--surface);
+    border-color: var(--border);
+}
+[data-theme="dark"] .wr-share-action:hover {
+    background: var(--background);
+}
+[data-theme="dark"] .wr-share-code.is-copied {
+    background: var(--primary-light);
+}
+
+/* ============================================
+   WAITING ROOM — PARTICIPANTS LIST
+   ============================================ */
 
 .wr-participants-section {
     margin-bottom: 16px;
@@ -1241,15 +1372,6 @@
 [data-theme="dark"] .wr-meta .privacy-badge.private { background: #3A2E1A; color: #FBBF24; }
 [data-theme="dark"] .wr-meta .privacy-badge.public  { background: #1A3A2E; color: #34D399; }
 
-[data-theme="dark"] .wr-code {
-    background: var(--surface-alt);
-    border-color: var(--border);
-}
-
-[data-theme="dark"] .wr-copy-btn:hover {
-    background: var(--primary-light);
-}
-
 [data-theme="dark"] .wr-participant-item {
     background: var(--surface-alt);
 }
@@ -1408,7 +1530,7 @@
 
 .wr-chat-messages {
     flex: 1 1 auto;
-    min-height: 0;               /* critical: allows the flex item to shrink */
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     display: flex;
@@ -1457,8 +1579,6 @@
 
 /* ------------------------------------------------------------
    MESSAGE BUBBLES
-   flex: 0 0 auto + width: fit-content prevent shrinking when
-   new messages arrive.
    ------------------------------------------------------------ */
 
 .wr-chat-msg {
@@ -1515,7 +1635,6 @@
 
 /* ============================================
    OTHER message — WhatsApp group style
-   Two-band bubble: header strip + body
    ============================================ */
 
 .wr-chat-msg.is-other {
@@ -1708,24 +1827,18 @@
 
 /* ============================================
    Chat composer — pinned at the bottom of the panel
-   WhatsApp-style pill textarea + circular send button.
    ============================================ */
 
 .wr-chat-form {
     flex: 0 0 auto;
     display: flex;
     gap: 8px;
-    align-items: flex-end;   /* send button rides the bottom as textarea grows */
+    align-items: flex-end;
     width: 100%;
     min-width: 0;
 }
 
 .wr-chat-form[hidden] { display: none !important; }
-
-/* ------------------------------------------------------------
-   Textarea — grows 1 → 4 lines, then scrolls internally.
-   Min height matches the send button so they align at line 1.
-   ------------------------------------------------------------ */
 
 .wr-chat-form textarea {
     flex: 1 1 auto;
@@ -1791,10 +1904,6 @@
 }
 .wr-chat-form textarea { scrollbar-width: thin; }
 
-/* ------------------------------------------------------------
-   Send button — circular, sits at the bottom of the row.
-   ------------------------------------------------------------ */
-
 .wr-chat-form button {
     flex: 0 0 auto;
     min-width: 44px;
@@ -1818,7 +1927,7 @@
 
 .wr-chat-form button i {
     display: inline-block;
-    transform: translateX(-1px);   /* optical nudge for the paper plane */
+    transform: translateX(-1px);
 }
 
 .wr-chat-form button:hover:not(:disabled) {
@@ -2447,6 +2556,19 @@
     .wr-chat-msg { max-width: 86%; }
     .ping-banner-meta strong { max-width: 50%; }
     .ping-sheet-panel { max-width: 100%; }
+
+    /* Sticky tabs — keeps the tab bar visible when the keyboard opens */
+    .wr-tabs {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: var(--surface);
+        box-shadow: 0 1px 0 0 var(--border-light);
+    }
+    [data-theme="dark"] .wr-tabs {
+        background: var(--surface);
+        box-shadow: 0 1px 0 0 var(--border);
+    }
 }
 
 @media (max-width: 480px) {
@@ -2508,7 +2630,6 @@
     .wr-chat-msg.is-other .wr-chat-header { padding: 5px 10px 4px; }
     .wr-chat-msg.is-other .wr-chat-body   { padding: 6px 10px 7px; }
 
-    /* Composer: 16px font prevents iOS auto-zoom on focus */
     .wr-chat-form textarea {
         font-size: 16px;
         padding: 11px 14px;
@@ -2535,4 +2656,35 @@
     .ping-open-btn > i { font-size: 20px; }
     .ping-open-text strong { font-size: 13px; }
     .ping-open-text em     { font-size: 11px; }
+
+    /* Share section — tighter on small phones */
+    .wr-share-bar {
+        min-height: 48px;
+    }
+    .wr-share-chip {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    .wr-share-chip-text {
+        font-size: 11.5px;
+    }
+    .wr-share-toggle {
+        padding: 10px 14px;
+        font-size: 16px;
+    }
+    .wr-share-actions {
+        gap: 6px;
+        padding: 10px;
+    }
+    .wr-share-action {
+        padding: 10px 6px;
+        font-size: 10.5px;
+        gap: 5px;
+    }
+    .wr-share-action i {
+        font-size: 18px;
+    }
+    .wr-share-code span {
+        font-size: 10px;
+    }
 }

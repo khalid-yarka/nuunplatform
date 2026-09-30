@@ -98,21 +98,34 @@
             </div>
             {% endif %}
 
-            <div class="wr-share-section">
-                <div class="wr-join-code">
-                    <span class="wr-code-label">📌 {{ _('live_quiz.waiting.share_code') }}</span>
-                    <div class="wr-code-display">
-                        <span class="wr-code">{{ quiz.join_code }}</span>
-                        <button class="wr-copy-btn" onclick="copyCode('{{ quiz.join_code }}')"><i class="fas fa-copy"></i> {{ _('live_quiz.waiting.copy_btn') }}</button>
-                    </div>
+            {# ── SHARE SECTION (compact accordion) ── #}
+            <div class="wr-share-section" id="wrShareSection">
+                <div class="wr-share-bar">
+                    <button type="button" class="wr-share-chip" id="shareChip"
+                            aria-label="{{ _('live_quiz.waiting.copy_link') }}">
+                        <i class="fas fa-link" aria-hidden="true"></i>
+                        <span class="wr-share-chip-text" id="shareChipText"></span>
+                    </button>
+                    <button type="button" class="wr-share-toggle" id="shareToggle"
+                            aria-label="{{ _('live_quiz.waiting.share_options') }}"
+                            aria-expanded="false">
+                        <i class="fas fa-ellipsis-h" id="shareToggleIcon"></i>
+                    </button>
                 </div>
-                <div class="wr-share-buttons">
-                    <a href="#" onclick="shareWhatsApp('{{ quiz.join_code }}');return false;" class="share-btn whatsapp"><i class="fab fa-whatsapp"></i> WhatsApp</a>
-                    <a href="#" onclick="shareTelegram('{{ quiz.join_code }}');return false;" class="share-btn telegram"><i class="fab fa-telegram-plane"></i> Telegram</a>
+                <div class="wr-share-actions" id="shareActions" hidden>
+                    <button type="button" class="wr-share-action wr-share-whatsapp" id="shareWhatsAppBtn">
+                        <i class="fab fa-whatsapp" aria-hidden="true"></i>
+                        <span>WhatsApp</span>
+                    </button>
+                    <button type="button" class="wr-share-action wr-share-telegram" id="shareTelegramBtn">
+                        <i class="fab fa-telegram-plane" aria-hidden="true"></i>
+                        <span>Telegram</span>
+                    </button>
+                    <button type="button" class="wr-share-action wr-share-code" id="shareCodeBtn">
+                        <i class="fas fa-hashtag" aria-hidden="true"></i>
+                        <span id="shareCodeLabel">{{ quiz.join_code }}</span>
+                    </button>
                 </div>
-                {% if quiz.is_public %}
-                <div class="wr-public-note">🌐 {{ _('live_quiz.waiting.public_note_before') }} <a href="{{ url_for('live_quiz.lobby') }}">{{ _('live_quiz.waiting.public_note_link') }}</a></div>
-                {% endif %}
             </div>
 
             <div class="wr-participants-section">
@@ -340,7 +353,11 @@ const I18N = {
     ping_open_sub:     "{{ _('live_quiz.waiting.ping_open_sub') }}",
     ping_cooldown_fmt: "{{ _('live_quiz.waiting.ping_cooldown_fmt') }}",
     ping_sent_fmt:     "{{ _('live_quiz.waiting.ping_sent_fmt') }}",
-    ping_error:        "{{ _('live_quiz.waiting.ping_error') }}"
+    ping_error:        "{{ _('live_quiz.waiting.ping_error') }}",
+    link_copied:       "{{ _('live_quiz.waiting.link_copied') }}",
+    copy_link:         "{{ _('live_quiz.waiting.copy_link') }}",
+    share_cta:         "Kuso biir Tartankan, oo kororso aqoon",
+    share_link_label:  "Ku biir"
 };
 
 var quizExiting = false;
@@ -359,6 +376,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const timePerQuestion = {{ quiz.time_per_question or 30 }};
     const chatPollMs = 2000;
     const chatPollMsHidden = 20000;
+
+    // ── Share data ──
+    const JOIN_CODE = '{{ quiz.join_code }}';
+    const SHARE_URL = window.location.origin + '/live-quiz/j/' + JOIN_CODE;
+    const QUIZ_TITLE = {{ (quiz.title or 'Live Quiz')|tojson }};
+    const SUBJECT_CODE = '{{ (quiz.subject_code or "")|upper }}';
+    const QUIZ_GRADE = '{{ quiz.grade or "" }}';
 
     if (!quizId || quizId === 'None') {
         console.error('Invalid quizId. Redirect to lobby.');
@@ -441,10 +465,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var SWIPE_MAX_DT = 600;
         var SWIPE_RATIO  = 1.5;
 
-        var startX = 0;
-        var startY = 0;
-        var startT = 0;
-        var armed  = false;
+        var startX = 0, startY = 0, startT = 0, armed = false;
 
         function isInteractive(el) {
             while (el && el !== document.body) {
@@ -482,10 +503,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (modalOpen()) { armed = false; return; }
             if (isInteractive(e.target)) { armed = false; return; }
             var t = e.touches[0];
-            startX = t.clientX;
-            startY = t.clientY;
-            startT = Date.now();
-            armed = true;
+            startX = t.clientX; startY = t.clientY;
+            startT = Date.now(); armed = true;
         }, { passive: true });
 
         container.addEventListener('touchend', function(e) {
@@ -501,16 +520,144 @@ document.addEventListener('DOMContentLoaded', function() {
             if (Math.abs(dx) < SWIPE_MIN_DX) return;
             if (Math.abs(dx) < Math.abs(dy) * SWIPE_RATIO) return;
 
-            if (dx < 0 && activeTab !== 'chat') {
-                switchTab('chat');
-            } else if (dx > 0 && activeTab !== 'participants') {
-                switchTab('participants');
-            }
+            if (dx < 0 && activeTab !== 'chat') switchTab('chat');
+            else if (dx > 0 && activeTab !== 'participants') switchTab('participants');
         }, { passive: true });
 
-        container.addEventListener('touchcancel', function() {
-            armed = false;
-        }, { passive: true });
+        container.addEventListener('touchcancel', function() { armed = false; }, { passive: true });
+    })();
+
+    // ============================================================
+    // SHARE SECTION
+    // ============================================================
+    (function setupShare() {
+        var chip        = document.getElementById('shareChip');
+        var chipText    = document.getElementById('shareChipText');
+        var toggle      = document.getElementById('shareToggle');
+        var toggleIcon  = document.getElementById('shareToggleIcon');
+        var actions     = document.getElementById('shareActions');
+        var waBtn       = document.getElementById('shareWhatsAppBtn');
+        var tgBtn       = document.getElementById('shareTelegramBtn');
+        var codeBtn     = document.getElementById('shareCodeBtn');
+        var codeLabel   = document.getElementById('shareCodeLabel');
+
+        if (!chip || !toggle || !actions) return;
+
+        // Show a compact host + path text in the chip
+        var chipLabel = SHARE_URL
+            .replace(/^https?:\/\//, '')
+            .replace(/\/$/, '');
+        chipText.textContent = chipLabel;
+
+        var originalChipLabel = chipLabel;
+        var chipFeedbackTimer = null;
+        var codeFeedbackTimer = null;
+
+        function copyToClipboard(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                return navigator.clipboard.writeText(text);
+            }
+            return new Promise(function(resolve, reject) {
+                try {
+                    var ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    resolve();
+                } catch (e) { reject(e); }
+            });
+        }
+
+        // ── Chip: tap to copy link ──
+        chip.addEventListener('click', function() {
+            copyToClipboard(SHARE_URL).then(function() {
+                chip.classList.add('is-copied');
+                chipText.textContent = '✓ ' + I18N.link_copied;
+                if (chipFeedbackTimer) clearTimeout(chipFeedbackTimer);
+                chipFeedbackTimer = setTimeout(function() {
+                    chip.classList.remove('is-copied');
+                    chipText.textContent = originalChipLabel;
+                }, 1500);
+            }).catch(function() {
+                if (typeof window.showToast === 'function') {
+                    window.showToast(I18N.chat_send_error, 'error');
+                }
+            });
+        });
+
+        // ── Toggle: expand / collapse the action row ──
+        var expanded = false;
+        function setExpanded(v) {
+            expanded = !!v;
+            actions.hidden = !expanded;
+            toggleIcon.className = expanded ? 'fas fa-times' : 'fas fa-ellipsis-h';
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        }
+        toggle.addEventListener('click', function() { setExpanded(!expanded); });
+
+        // Collapse when tapping outside
+        document.addEventListener('click', function(e) {
+            if (!expanded) return;
+            var sec = document.getElementById('wrShareSection');
+            if (sec && !sec.contains(e.target)) setExpanded(false);
+        });
+
+        // ── Build share text ──
+        function buildWhatsAppText() {
+            var lines = [];
+            lines.push('🎯 *' + I18N.share_cta + '*');
+            lines.push('');
+            var meta = '📚 *' + QUIZ_TITLE + '*';
+            if (SUBJECT_CODE) meta += ' [' + SUBJECT_CODE + ']';
+            if (QUIZ_GRADE) meta += '  ·  🎓 ' + QUIZ_GRADE;
+            lines.push(meta);
+            lines.push('');
+            lines.push('🔗 ' + SHARE_URL);
+            return lines.join('\n');
+        }
+
+        function buildTelegramText() {
+            var lines = [];
+            lines.push('🎯 *' + I18N.share_cta + '*');
+            lines.push('');
+            var meta = '📚 *' + QUIZ_TITLE + '*';
+            if (SUBJECT_CODE) meta += ' [' + SUBJECT_CODE + ']';
+            if (QUIZ_GRADE) meta += '  ·  🎓 ' + QUIZ_GRADE;
+            lines.push(meta);
+            lines.push('');
+            lines.push('🔗 [' + I18N.share_link_label + '](' + SHARE_URL + ').');
+            return lines.join('\n');
+        }
+
+        // ── WhatsApp button ──
+        waBtn.addEventListener('click', function() {
+            var text = encodeURIComponent(buildWhatsAppText());
+            window.open('https://wa.me/?text=' + text, '_blank', 'noopener,noreferrer');
+        });
+
+        // ── Telegram button ──
+        tgBtn.addEventListener('click', function() {
+            var text = encodeURIComponent(buildTelegramText());
+            window.open('https://t.me/share/url?text=' + text, '_blank', 'noopener,noreferrer');
+        });
+
+        // ── Code button: copy code ──
+        var originalCodeLabel = codeLabel.textContent;
+        codeBtn.addEventListener('click', function() {
+            copyToClipboard(JOIN_CODE).then(function() {
+                codeBtn.classList.add('is-copied');
+                codeLabel.textContent = '✓';
+                if (codeFeedbackTimer) clearTimeout(codeFeedbackTimer);
+                codeFeedbackTimer = setTimeout(function() {
+                    codeBtn.classList.remove('is-copied');
+                    codeLabel.textContent = originalCodeLabel;
+                }, 1500);
+            });
+        });
     })();
 
     // ============================================================
@@ -571,26 +718,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ============================================================
     // IN-PAGE BROWSER NOTIFICATION
-    // Prefers `new Notification()` for direct click handling.
-    // Falls back to the service worker path (with its
-    // notificationclick handler in sw.js).
-    //
-    // icon:  full-color logo.png (shown large on the right)
-    // badge: badge-nuun.png — 72x72 white-on-transparent PNG,
-    //        Android strips it to a monochrome silhouette.
     // ============================================================
-    function sendBrowserNotification(title, body, url) {
+    function sendBrowserNotification(title, body, url, kind) {
         if (!('Notification' in window)) return;
         if (Notification.permission !== 'granted') return;
+
+        var isPing = (kind === 'ping');
 
         var opts = {
             body: body,
             icon: '/static/images/logo.png',
             badge: '/static/images/badge-nuun.png',
-            tag: 'live-quiz-ping-' + quizId,
-            requireInteraction: false,
+            tag: isPing
+                ? ('live-quiz-ping-' + quizId)
+                : ('live-quiz-start-' + quizId),
+            requireInteraction: isPing,
+            silent: false,
+            renotify: isPing,
             data: { url: url }
         };
+        if (isPing) opts.vibrate = [200, 100, 200, 100, 200];
 
         try {
             var n = new Notification(title, opts);
@@ -600,11 +747,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 n.close();
             };
             n.onerror = function () {};
-            setTimeout(function () { try { n.close(); } catch (e) {} }, 20000);
+            if (!isPing) {
+                setTimeout(function () { try { n.close(); } catch (e) {} }, 20000);
+            }
             return;
-        } catch (e) {
-            // Fall through to the SW path if the in-page API throws.
-        }
+        } catch (e) { /* fall through to SW */ }
 
         if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
             navigator.serviceWorker.ready.then(function (reg) {
@@ -632,6 +779,13 @@ document.addEventListener('DOMContentLoaded', function() {
     let newMessagePill    = null;
     let lastShownPingId   = 0;
     let pollsCompleted    = 0;
+
+    // ── Duplicate-message guard ──
+    // Tracks every rendered chat message ID. Any ID already rendered is
+    // skipped, so racing polls that both return the same message cannot
+    // produce a duplicate. This is the fix for "sender sees their own
+    // message twice".
+    const renderedChatIds = new Set();
 
     function formatTime12h(raw) {
         if (!raw) return '';
@@ -764,6 +918,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const isFirst = (pollsCompleted === 0);
         const frag = document.createDocumentFragment();
         msgs.forEach(m => {
+            // Skip anything already rendered — this is the dedup guard.
+            if (renderedChatIds.has(m.id)) return;
+            renderedChatIds.add(m.id);
+
             if (m.message_type === 'ping') {
                 frag.appendChild(buildPingMessageEl(m));
                 if (isFirst) {
@@ -776,7 +934,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         sendBrowserNotification(
                             '📣 ' + (m.name || 'Participant'),
                             m.body,
-                            '/live-quiz/waiting-room/' + quizId
+                            '/live-quiz/waiting-room/' + quizId,
+                            'ping'
                         );
                     }
                 }
@@ -837,7 +996,9 @@ document.addEventListener('DOMContentLoaded', function() {
         chatLockedEl.hidden = !showLocked;
 
         if (showForm) {
-            chatInputEl.disabled = chatSendingNow;
+            // Only the send button is gated by chatSendingNow; the input
+            // stays enabled so the mobile keyboard never closes.
+            chatInputEl.disabled = false;
             chatSendBtn.disabled = chatSendingNow
                 || !(chatInputEl.value || '').trim();
         }
@@ -867,7 +1028,8 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data && Array.isArray(data.messages) && data.messages.length) {
                     renderChatMessages(data.messages);
-                    chatSinceId = data.messages[data.messages.length - 1].id;
+                    const lastId = data.messages[data.messages.length - 1].id;
+                    if (lastId > chatSinceId) chatSinceId = lastId;
                     if (activeTab !== 'chat') showUnreadDot();
                 }
                 updateChatPermissionUI(data);
@@ -906,7 +1068,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     chatInputEl.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
-            return;
+            return; // default textarea inserts \n
         }
     });
 
@@ -933,9 +1095,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const text = (chatInputEl.value || '').trim();
         if (!text) return;
 
+        // Do NOT disable the input — that closes the mobile keyboard and
+        // re-focusing it is unreliable across browsers. Only the send
+        // button is gated, and the chatSendingNow flag prevents double
+        // submits.
         chatSendingNow = true;
         chatSendBtn.disabled = true;
-        chatInputEl.disabled = true;
 
         const nonce = makeNonce();
 
@@ -973,11 +1138,8 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .finally(() => {
             chatSendingNow = false;
-            const shouldEnable = chatServerOpen && chatServerAllows;
-            chatInputEl.disabled = !shouldEnable;
-            if (shouldEnable) {
+            if (chatServerOpen && chatServerAllows) {
                 updateSendBtnState();
-                chatInputEl.focus();
             }
         });
     }
@@ -1161,7 +1323,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 notificationSent = true;
                 sendBrowserNotification(
                     I18N.notify_title, I18N.notify_body,
-                    '/live-quiz/waiting-room/' + quizId
+                    '/live-quiz/waiting-room/' + quizId,
+                    'system'
                 );
                 playNotificationSound();
             }
@@ -1427,32 +1590,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('deleteModal').addEventListener('click', function(e) {
         if (e.target === this) closeDeleteModal();
     });
-
-    window.copyCode = function(code) {
-        navigator.clipboard.writeText(code).then(function() {
-            if (typeof window.showToast === 'function') window.showToast(I18N.code_copied, 'success');
-        }).catch(function() {
-            const textarea = document.createElement('textarea');
-            textarea.value = code;
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-            if (typeof window.showToast === 'function') window.showToast(I18N.code_copied, 'success');
-        });
-    };
-
-    window.shareWhatsApp = function(code) {
-        const url = window.location.origin + '/live-quiz/join';
-        const text = `🎯 Join my live quiz!\n📌 Join Code: ${code}\n🔗 ${url}`;
-        window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
-    };
-
-    window.shareTelegram = function(code) {
-        const url = window.location.origin + '/live-quiz/join';
-        const text = `🎯 Join my live quiz!\n📌 Join Code: ${code}\n🔗 ${url}`;
-        window.open('https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(text), '_blank');
-    };
 
     // ============================================================
     // STATE POLL

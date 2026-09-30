@@ -1413,6 +1413,118 @@ def waiting_room_participants(quiz_id):
         'total': len(formatted),
     })
 
+@live_quiz_bp.route('/j/<code>', methods=['GET'])
+def direct_join(code):
+    """
+    Direct join link: /live-quiz/j/<code>
+
+    Reuses the same eligibility checks as the POST /join handler, but
+    reads the code from the URL. Works for both public and private
+    quizzes — the link itself is the invite. Grade gating is preserved:
+    a free user whose profile grade doesn't match the quiz's grade is
+    still redirected with the upgrade prompt.
+
+    Not logged in → bounce to /login with next=<this URL>. After
+    logging in, the user is returned to the same URL and joined
+    automatically.
+    """
+    if 'user_id' not in session:
+        return redirect(url_for('auth.login', next=request.url))
+
+    # Normalise the code the same way the join form does.
+    code_norm = (code or '').strip().upper().replace(' ', '')
+    if not code_norm:
+        flash('Invalid join code.', 'error')
+        return redirect(url_for('live_quiz.join'))
+
+    quiz = get_active_live_quiz(code_norm)
+    if not quiz:
+        flash('Invalid or expired code. Please check and try again.', 'error')
+        return redirect(url_for('live_quiz.join') + '?code=' + code_norm + '&invalid=1')
+
+    user_id = session['user_id']
+    user_tier = get_current_user_tier()
+
+    # Grade gate — same as the POST handler.
+    if _is_grade_locked_for_viewer(quiz, user_id, user_tier):
+        flash(
+            'This quiz is for a different grade. '
+            'Upgrade to join quizzes of any grade.',
+            'error',
+        )
+        return redirect(url_for('live_quiz.join') + '?grade_locked=1')
+
+    # Already in a different quiz?
+    active_quiz = get_user_active_quiz(user_id)
+    if active_quiz and active_quiz != quiz['id']:
+        flash('You are already in another quiz. Please leave that quiz first.', 'error')
+        return redirect(url_for('live_quiz.lobby'))
+
+    # Already a participant here?
+    participant = get_live_quiz_participant(quiz['id'], user_id)
+    if participant:
+        status = participant.get('status')
+        if status == 'left':
+            if quiz['status'] in ('waiting', 'scheduled'):
+                if _rejoin_if_left(quiz['id'], user_id):
+                    return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
+                flash('Failed to rejoin. Please try again.', 'error')
+                return redirect(url_for('live_quiz.lobby'))
+            flash('Cannot rejoin an active quiz.', 'error')
+            return redirect(url_for('live_quiz.lobby'))
+        # Already active — straight to the waiting room.
+        return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
+
+    # Atomic add — same shape as the POST handler.
+    question_ids = quiz.get('question_ids', []) or []
+    max_participants = quiz.get('max_participants', 50)
+    ok, reason_code = _atomic_add_participant(
+        quiz['id'], user_id, question_ids, max_participants,
+    )
+    if not ok:
+        if reason_code == 'full':
+            flash('This quiz is full.', 'error')
+            return redirect(url_for('live_quiz.lobby'))
+        if reason_code == 'already_joined':
+            return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
+        flash('Failed to join quiz. Please try again.', 'error')
+        return redirect(url_for('live_quiz.lobby'))
+
+    # Bring the user into the in-memory state.
+    manager = get_state_manager()
+    manager.ensure_quiz_in_memory(quiz['id'])
+    quiz_state = manager.get_quiz(quiz['id'])
+    if quiz_state:
+        user = get_student_by_id(user_id)
+        name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
+        quiz_state.add_participant(user_id, name, user.get('public_id', '----'))
+        manager.enqueue_event({
+            'quiz_id': quiz['id'],
+            'user_id': user_id,
+            'event_type': 'JOIN',
+            'payload': json.dumps({'name': name}),
+        })
+
+    # Notify the creator.
+    creator_id = quiz.get('creator_id')
+    if creator_id and creator_id != user_id:
+        user = get_student_by_id(user_id)
+        user_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
+        try:
+            send_notification(
+                user_id=creator_id,
+                notification_type='participant_joined',
+                title='👋 New Participant!',
+                body=f'{user_name} joined your quiz "{quiz.get("title", "Live Quiz")}"',
+                link=f'/live-quiz/waiting-room/{quiz["id"]}',
+                icon='👤',
+            )
+        except Exception as e:
+            logger.warning(f"participant_joined notification failed: {e}")
+
+    return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
+
+  
 @live_quiz_bp.route('/waiting-room/<quiz_id>/chat', methods=['GET'])
 def waiting_room_chat_fetch(quiz_id):
     if 'user_id' not in session:
