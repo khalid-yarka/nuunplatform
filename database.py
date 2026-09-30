@@ -592,6 +592,8 @@ def ensure_live_quiz_tables():
                 user_id      INTEGER NOT NULL,
                 body         TEXT NOT NULL,
                 client_nonce TEXT,
+                message_type TEXT NOT NULL DEFAULT 'chat',
+                ping_reason  TEXT DEFAULT '',
                 created_at   TEXT DEFAULT (datetime('now', 'localtime')),
                 deleted_at   TEXT,
                 deleted_by   INTEGER,
@@ -605,6 +607,28 @@ def ensure_live_quiz_tables():
             "CREATE INDEX IF NOT EXISTS idx_chat_quiz_id "
             "ON live_quiz_chat_messages(quiz_id, id)"
         )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chat_quiz_type "
+            "ON live_quiz_chat_messages(quiz_id, message_type, id)"
+        )
+        
+        # Idempotent column upgrades for existing installs
+        cur_info = cursor.execute(
+            "PRAGMA table_info(live_quiz_chat_messages)"
+        ).fetchall()
+        existing_cols = {row[1] for row in cur_info}
+        if 'message_type' not in existing_cols:
+            cursor.execute(
+                "ALTER TABLE live_quiz_chat_messages "
+                "ADD COLUMN message_type TEXT NOT NULL DEFAULT 'chat'"
+            )
+        if 'ping_reason' not in existing_cols:
+            cursor.execute(
+                "ALTER TABLE live_quiz_chat_messages "
+                "ADD COLUMN ping_reason TEXT DEFAULT ''"
+            )
+
+      
         
         conn.commit()
         conn.close()

@@ -4,6 +4,9 @@
 
 {% block page_title %}{{ _('live_quiz.waiting.page_title') }}{% endblock %}
 
+{# Hide the dashboard footer on this focus screen #}
+{% block dashboard_footer %}{% endblock %}
+
 {% block extra_css %}
 {{ super() }}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-core.css') }}" />
@@ -20,6 +23,22 @@
     </div>
 
     <div class="waiting-room-card">
+
+        {# ── PING BANNER (both tabs, hidden by default) ── #}
+        <div class="ping-banner" id="pingBanner" hidden>
+            <div class="ping-banner-icon">📣</div>
+            <div class="ping-banner-body">
+                <div class="ping-banner-meta">
+                    <strong id="pingBannerName"></strong>
+                    <span id="pingBannerTime"></span>
+                </div>
+                <div class="ping-banner-text" id="pingBannerText"></div>
+            </div>
+            <button type="button" class="ping-banner-close" onclick="dismissPingBanner()" aria-label="Dismiss">
+                <i class="fas fa-times"></i>
+            </button>
+            <div class="ping-banner-progress" id="pingBannerProgress"></div>
+        </div>
 
         <div class="wr-header">
             <div class="wr-title-section">
@@ -38,9 +57,6 @@
             </div>
         </div>
 
-        <!-- ============================================
-             TABS
-             ============================================ -->
         <div class="wr-tabs" role="tablist">
             <button class="wr-tab is-active" role="tab"
                     data-tab="participants" id="tabParticipants">
@@ -56,9 +72,9 @@
             </button>
         </div>
 
-        <!-- ============================================
-             PANEL: PARTICIPANTS
-             ============================================ -->
+        {# ============================================
+           PANEL: PARTICIPANTS
+           ============================================ #}
         <div class="wr-panel" id="panel-participants" role="tabpanel">
 
             {% if quiz.status == 'scheduled' and starts_in_seconds is not none and starts_in_seconds > 0 %}
@@ -90,8 +106,8 @@
                     </div>
                 </div>
                 <div class="wr-share-buttons">
-                    <a href="#" onclick="shareWhatsApp('{{ quiz.join_code }}')" class="share-btn whatsapp"><i class="fab fa-whatsapp"></i> WhatsApp</a>
-                    <a href="#" onclick="shareTelegram('{{ quiz.join_code }}')" class="share-btn telegram"><i class="fab fa-telegram-plane"></i> Telegram</a>
+                    <a href="#" onclick="shareWhatsApp('{{ quiz.join_code }}');return false;" class="share-btn whatsapp"><i class="fab fa-whatsapp"></i> WhatsApp</a>
+                    <a href="#" onclick="shareTelegram('{{ quiz.join_code }}');return false;" class="share-btn telegram"><i class="fab fa-telegram-plane"></i> Telegram</a>
                 </div>
                 {% if quiz.is_public %}
                 <div class="wr-public-note">🌐 {{ _('live_quiz.waiting.public_note_before') }} <a href="{{ url_for('live_quiz.lobby') }}">{{ _('live_quiz.waiting.public_note_link') }}</a></div>
@@ -105,6 +121,17 @@
                 </div>
                 <div class="wr-participants-list" id="participantList"></div>
             </div>
+
+            {# ── PING BUTTON (creator only, waiting/scheduled only) ── #}
+            {% if is_creator and quiz.status in ('waiting', 'scheduled') %}
+            <button type="button" class="ping-open-btn" id="pingOpenBtn">
+                <i class="fas fa-bullhorn"></i>
+                <span class="ping-open-text">
+                    <strong>{{ _('live_quiz.waiting.ping_open_title') }}</strong>
+                    <em id="pingOpenSub">{{ _('live_quiz.waiting.ping_open_sub') }}</em>
+                </span>
+            </button>
+            {% endif %}
 
             <div class="wr-actions">
                 {% if is_creator %}
@@ -143,9 +170,9 @@
             <div class="wr-tip">💡 {{ _('live_quiz.waiting.tip') }}</div>
         </div>
 
-        <!-- ============================================
-             PANEL: CHAT
-             ============================================ -->
+        {# ============================================
+           PANEL: CHAT
+           ============================================ #}
         <div class="wr-panel" id="panel-chat" role="tabpanel" hidden>
 
             <div class="wr-chat-messages" id="chatMessages">
@@ -165,18 +192,89 @@
                 <i class="fas fa-chevron-right wr-chat-locked-arrow"></i>
             </button>
 
-            <form class="wr-chat-form" id="chatForm" autocomplete="off">
-                <input type="text" id="chatInput"
-                       maxlength="{{ chat_max_length }}"
-                       placeholder="{{ _('live_quiz.waiting.chat_placeholder') }}"
-                       autocomplete="off"
-                       {% if not chat_can_send %}disabled{% endif %}>
-                <button type="submit" id="chatSendBtn"
+            <div class="wr-chat-form" id="chatForm">
+                <textarea id="chatInput"
+                          name="nuun_composer"
+                          rows="1"
+                          maxlength="{{ chat_max_length }}"
+                          placeholder="{{ _('live_quiz.waiting.chat_placeholder') }}"
+                          autocomplete="off"
+                          autocorrect="off"
+                          autocapitalize="sentences"
+                          spellcheck="false"
+                          inputmode="text"
+                          enterkeyhint="enter"
+                          data-form-type="other"
+                          data-lpignore="true"
+                          data-1p-ignore="true"
+                          {% if not chat_can_send %}disabled{% endif %}></textarea>
+                <button type="button" id="chatSendBtn"
                         {% if not chat_can_send %}disabled{% endif %}
                         aria-label="{{ _('live_quiz.waiting.chat_send_aria') }}">
                     <i class="fas fa-paper-plane"></i>
                 </button>
-            </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── PING SHEET (bottom sheet, creator only) ── #}
+<div class="ping-sheet" id="pingSheet" hidden>
+    <div class="ping-sheet-backdrop" onclick="closePingSheet()"></div>
+    <div class="ping-sheet-panel" role="dialog" aria-modal="true">
+        <div class="ping-sheet-header">
+            <h3>📣 {{ _('live_quiz.waiting.ping_sheet_title') }}</h3>
+            <button type="button" class="ping-sheet-close" onclick="closePingSheet()" aria-label="Close">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="ping-sheet-body">
+            <p class="ping-sheet-lead">{{ _('live_quiz.waiting.ping_sheet_lead') }}</p>
+
+            <button type="button" class="ping-preset" data-reason="starting"
+                    data-message="Waan bilaabaynaa — isku diyaari!">
+                <span class="ping-preset-icon">⏰</span>
+                <span class="ping-preset-text">Waan bilaabaynaa — isku diyaari!</span>
+            </button>
+            <button type="button" class="ping-preset" data-reason="invite"
+                    data-message="Yar ayaan nahay — asxaabtaada ku casuum">
+                <span class="ping-preset-icon">👥</span>
+                <span class="ping-preset-text">Yar ayaan nahay — asxaabtaada ku casuum</span>
+            </button>
+            <button type="button" class="ping-preset" data-reason="join"
+                    data-message="Hadda soo gal si aan u bilaabno">
+                <span class="ping-preset-icon">🚪</span>
+                <span class="ping-preset-text">Hadda soo gal si aan u bilaabno</span>
+            </button>
+            <button type="button" class="ping-preset" data-reason="wait"
+                    data-message="Waqti yar — ha tagin!">
+                <span class="ping-preset-icon">✋</span>
+                <span class="ping-preset-text">Waqti yar — ha tagin!</span>
+            </button>
+
+            <div class="ping-sheet-divider">
+                <span>{{ _('live_quiz.waiting.ping_or') }}</span>
+            </div>
+
+            <textarea id="pingCustomText"
+                      class="ping-custom"
+                      maxlength="120"
+                      rows="2"
+                      placeholder="{{ _('live_quiz.waiting.ping_custom_placeholder') }}"
+                      autocomplete="off"
+                      autocorrect="off"
+                      autocapitalize="sentences"
+                      spellcheck="false"
+                      data-form-type="other"
+                      data-lpignore="true"></textarea>
+            <div class="ping-custom-counter">
+                <span id="pingCustomCount">0</span>/120
+            </div>
+
+            <button type="button" class="ping-send-btn" id="pingSendBtn" disabled>
+                <i class="fas fa-bullhorn"></i>
+                <span>{{ _('live_quiz.waiting.ping_send_btn') }}</span>
+            </button>
         </div>
     </div>
 </div>
@@ -229,7 +327,6 @@ const I18N = {
     badge_left:        "{{ _('live_quiz.waiting.badge_left') }}",
     ready_updated_err: "{{ _('live_quiz.waiting.ready_updated_err') }}",
     leave_confirm:     "{{ _('live_quiz.waiting.leave_confirm') }}",
-    // ── Chat ──
     chat_deleted:      "{{ _('live_quiz.waiting.chat_deleted') }}",
     chat_locked_title: "{{ _('live_quiz.waiting.chat_locked_title') }}",
     chat_locked_sub:   "{{ _('live_quiz.waiting.chat_locked_sub') }}",
@@ -238,7 +335,11 @@ const I18N = {
     chat_id_copied:    "{{ _('live_quiz.waiting.chat_id_copied') }}",
     chat_new_pill:     "{{ _('live_quiz.waiting.chat_new_pill') }}",
     chat_empty_title:  "{{ _('live_quiz.waiting.chat_empty_title') }}",
-    chat_empty_sub:    "{{ _('live_quiz.waiting.chat_empty_sub') }}"
+    chat_empty_sub:    "{{ _('live_quiz.waiting.chat_empty_sub') }}",
+    ping_open_sub:     "{{ _('live_quiz.waiting.ping_open_sub') }}",
+    ping_cooldown_fmt: "{{ _('live_quiz.waiting.ping_cooldown_fmt') }}",
+    ping_sent_fmt:     "{{ _('live_quiz.waiting.ping_sent_fmt') }}",
+    ping_error:        "{{ _('live_quiz.waiting.ping_error') }}"
 };
 
 var quizExiting = false;
@@ -253,11 +354,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const quizId = '{{ quiz.id }}';
     const userId = '{{ session.user_id }}';
     const isCreator = {{ 'true' if is_creator else 'false' }};
-    const quizTitle = '{{ quiz.title or 'Live Quiz' }}';
     const totalQuestions = {{ quiz.question_count }};
     const timePerQuestion = {{ quiz.time_per_question or 30 }};
-    const ratingTime = 10;
-    const totalDuration = totalQuestions * (timePerQuestion + ratingTime);
     const chatPollMs = 2000;
 
     if (!quizId || quizId === 'None') {
@@ -267,7 +365,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ============================================================
-    // PARTICIPANTS POLLING + UI
+    // PARTICIPANTS POLLING
     // ============================================================
     let participantList = [];
     let isPolling = false;
@@ -317,7 +415,6 @@ document.addEventListener('DOMContentLoaded', function() {
             requestAnimationFrame(() => {
                 chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
                 hideUnreadDot();
-                if (chatInputEl && !chatInputEl.disabled) chatInputEl.focus();
                 hideNewMessagePill();
             });
         }
@@ -333,6 +430,62 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function showUnreadDot() { if (chatUnreadDot) chatUnreadDot.hidden = false; }
     function hideUnreadDot() { if (chatUnreadDot) chatUnreadDot.hidden = true; }
+
+    // ============================================================
+    // PING BANNER
+    // ============================================================
+    const pingBanner         = document.getElementById('pingBanner');
+    const pingBannerName     = document.getElementById('pingBannerName');
+    const pingBannerTime     = document.getElementById('pingBannerTime');
+    const pingBannerText     = document.getElementById('pingBannerText');
+    const pingBannerProgress = document.getElementById('pingBannerProgress');
+    let pingBannerTimer = null;
+
+    window.dismissPingBanner = function() {
+        if (!pingBanner) return;
+        pingBanner.classList.remove('is-visible');
+        if (pingBannerTimer) clearTimeout(pingBannerTimer);
+        setTimeout(() => { pingBanner.hidden = true; }, 250);
+    };
+
+    function showPingBanner(name, time, text) {
+        if (!pingBanner) return;
+        pingBannerName.textContent = name;
+        pingBannerTime.textContent = time;
+        pingBannerText.textContent = text;
+        pingBanner.hidden = false;
+        void pingBanner.offsetWidth;
+        pingBanner.classList.add('is-visible');
+
+        if (pingBannerProgress) {
+            pingBannerProgress.style.animation = 'none';
+            void pingBannerProgress.offsetWidth;
+            pingBannerProgress.style.animation = 'pingProgress 8s linear forwards';
+        }
+
+        if (pingBannerTimer) clearTimeout(pingBannerTimer);
+        pingBannerTimer = setTimeout(window.dismissPingBanner, 8000);
+    }
+
+    function playPingSound() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const now = ctx.currentTime;
+            [660, 880, 1100].forEach((freq, i) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.frequency.value = freq;
+                osc.type = 'sine';
+                const start = now + i * 0.13;
+                gain.gain.setValueAtTime(0, start);
+                gain.gain.linearRampToValueAtTime(0.35, start + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.01, start + 0.28);
+                osc.start(start);
+                osc.stop(start + 0.32);
+            });
+        } catch (e) {}
+    }
 
     // ============================================================
     // CHAT STATE
@@ -351,37 +504,24 @@ document.addEventListener('DOMContentLoaded', function() {
     let chatServerAllows  = {{ 'true' if chat_can_send else 'false' }};
     let chatServerOpen    = {{ 'true' if quiz.status in ('waiting','scheduled') else 'false' }};
     let newMessagePill    = null;
+    let lastShownPingId   = 0;
+    let pollsCompleted    = 0;
 
-    // ------------------------------------------------------------
-    // FIXED: robust 12-hour formatter.
-    // Extracts HH:MM from any of:
-    //     "2026-09-30 14:14:00"      (SQLite localtime)
-    //     "2026-09-30T14:14:00+03:00" (ISO 8601)
-    //     "2026/9/30 2:14 pm Mon"    (Somali display format)
-    // Then renders "2:14 pm".
-    // ------------------------------------------------------------
     function formatTime12h(raw) {
         if (!raw) return '';
         const s = String(raw).trim();
-
         const match = s.match(/(\d{1,2}):(\d{2})/);
         if (!match) return '';
-
         let h = parseInt(match[1], 10);
         const m = match[2];
         if (isNaN(h)) return '';
-
-        // If the string already contains an explicit am/pm marker, honour
-        // it. Otherwise derive am/pm from the 24-hour hour value.
         const lower = s.toLowerCase();
         let ampm;
         if (lower.indexOf('pm') !== -1) ampm = 'pm';
         else if (lower.indexOf('am') !== -1) ampm = 'am';
         else ampm = (h >= 12) ? 'pm' : 'am';
-
         if (h === 0) h = 12;
         else if (h > 12) h -= 12;
-
         return h + ':' + m + ' ' + ampm;
     }
 
@@ -394,6 +534,17 @@ document.addEventListener('DOMContentLoaded', function() {
     function makeNonce() {
         if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
         return 'n' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+    }
+
+    // Auto-grow the textarea 1 → 4 lines.
+    // 44px  = 1 line (matches the send button height, so they align perfectly)
+    // 120px = ~4 lines; beyond that, the textarea scrolls internally.
+    function autogrowTextarea() {
+        if (!chatInputEl) return;
+        chatInputEl.style.height = 'auto';
+        const maxHeight = 120;
+        const next = Math.min(chatInputEl.scrollHeight, maxHeight);
+        chatInputEl.style.height = next + 'px';
     }
 
     function ensureNewMessagePill() {
@@ -411,12 +562,7 @@ document.addEventListener('DOMContentLoaded', function() {
         newMessagePill = btn;
         return btn;
     }
-
-    function showNewMessagePill() {
-        const pill = ensureNewMessagePill();
-        pill.classList.add('is-visible');
-    }
-
+    function showNewMessagePill() { ensureNewMessagePill().classList.add('is-visible'); }
     function hideNewMessagePill() {
         if (newMessagePill) newMessagePill.classList.remove('is-visible');
     }
@@ -424,27 +570,22 @@ document.addEventListener('DOMContentLoaded', function() {
     function buildOtherMessageEl(m) {
         const wrap = document.createElement('div');
         wrap.className = 'wr-chat-msg is-other';
-
         if (m.is_deleted) {
             wrap.classList.add('is-deleted');
             wrap.innerHTML = '<div class="wr-chat-body"><em>'
-                           + escapeHtml(I18N.chat_deleted)
-                           + '</em></div>';
+                           + escapeHtml(I18N.chat_deleted) + '</em></div>';
             return wrap;
         }
-
-        const name  = escapeHtml(m.name || 'Participant');
-        const pid   = escapeHtml(m.public_id || '----');
-        const time  = escapeHtml(formatTime12h(m.created_at));
-        const body  = escapeHtml(m.body || '').replace(/\n/g, '<br>');
-
+        const name = escapeHtml(m.name || 'Participant');
+        const pid  = escapeHtml(m.public_id || '----');
+        const time = escapeHtml(formatTime12h(m.created_at));
+        const body = escapeHtml(m.body || '').replace(/\n/g, '<br>');
         wrap.innerHTML =
             '<div class="wr-chat-header">' +
                 '<div class="wr-chat-idwrap">' +
                     '<span class="wr-chat-name">' + name + '</span>' +
                     '<button type="button" class="wr-chat-pid" data-copy="' +
-                        escapeHtml(m.public_id || '') + '" ' +
-                        'title="Copy ID">#' + pid + '</button>' +
+                        escapeHtml(m.public_id || '') + '" title="Copy ID">#' + pid + '</button>' +
                 '</div>' +
                 '<span class="wr-chat-time">' + time + '</span>' +
             '</div>' +
@@ -455,40 +596,66 @@ document.addEventListener('DOMContentLoaded', function() {
     function buildMineMessageEl(m) {
         const wrap = document.createElement('div');
         wrap.className = 'wr-chat-msg is-mine';
-
         if (m.is_deleted) {
             wrap.classList.add('is-deleted');
-            wrap.innerHTML =
-                '<div class="wr-chat-body"><em>' +
-                escapeHtml(I18N.chat_deleted) +
-                '</em></div>';
+            wrap.innerHTML = '<div class="wr-chat-body"><em>'
+                           + escapeHtml(I18N.chat_deleted) + '</em></div>';
             return wrap;
         }
-
         const time = escapeHtml(formatTime12h(m.created_at));
         const body = escapeHtml(m.body || '').replace(/\n/g, '<br>');
-
         wrap.innerHTML =
             '<div class="wr-chat-body">' + body + '</div>' +
             '<span class="wr-chat-time">' + time + '</span>';
         return wrap;
     }
 
+    function buildPingMessageEl(m) {
+        const wrap = document.createElement('div');
+        const mine = String(m.user_id) === String(userId);
+        wrap.className = 'wr-chat-msg is-ping' + (mine ? ' is-ping-mine' : '');
+        if (m.is_deleted) {
+            wrap.classList.add('is-deleted');
+            wrap.innerHTML = '<div class="wr-chat-body"><em>'
+                           + escapeHtml(I18N.chat_deleted) + '</em></div>';
+            return wrap;
+        }
+        const name = escapeHtml(m.name || 'Participant');
+        const time = escapeHtml(formatTime12h(m.created_at));
+        const body = escapeHtml(m.body || '').replace(/\n/g, '<br>');
+        wrap.innerHTML =
+            '<div class="wr-chat-ping-header">' +
+                '<span class="wr-chat-ping-icon">📣</span>' +
+                '<span class="wr-chat-ping-label">PING · ' + name + '</span>' +
+                '<span class="wr-chat-ping-time">' + time + '</span>' +
+            '</div>' +
+            '<div class="wr-chat-body">' + body + '</div>';
+        return wrap;
+    }
+
     function renderChatMessages(msgs) {
         if (!msgs || !msgs.length) return;
-
         if (chatEmptyEl && chatEmptyEl.parentNode) {
             chatEmptyEl.parentNode.removeChild(chatEmptyEl);
         }
-
+        const isFirst = (pollsCompleted === 0);
         const frag = document.createDocumentFragment();
         msgs.forEach(m => {
-            const isMine = String(m.user_id) === String(userId);
-            const el = isMine ? buildMineMessageEl(m) : buildOtherMessageEl(m);
-            frag.appendChild(el);
+            if (m.message_type === 'ping') {
+                frag.appendChild(buildPingMessageEl(m));
+                if (isFirst) {
+                    if (m.id > lastShownPingId) lastShownPingId = m.id;
+                } else if (m.id > lastShownPingId) {
+                    lastShownPingId = m.id;
+                    showPingBanner(m.name, formatTime12h(m.created_at), m.body);
+                    if (String(m.user_id) !== String(userId)) playPingSound();
+                }
+            } else {
+                const isMine = String(m.user_id) === String(userId);
+                frag.appendChild(isMine ? buildMineMessageEl(m) : buildOtherMessageEl(m));
+            }
         });
         chatMessagesEl.appendChild(frag);
-
         if (chatAtBottom) {
             chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
         } else if (activeTab === 'chat') {
@@ -530,7 +697,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!data) return;
         const open    = !!data.chat_open;
         const canSend = !!data.can_send;
-
         chatServerOpen   = open;
         chatServerAllows = canSend;
 
@@ -545,10 +711,15 @@ document.addEventListener('DOMContentLoaded', function() {
             chatSendBtn.disabled = chatSendingNow
                 || !(chatInputEl.value || '').trim();
         }
-
         if (!open) {
             chatInputEl.disabled = true;
             chatSendBtn.disabled = true;
+        }
+
+        if (isCreator && typeof data.ping_cooldown_remaining === 'number') {
+            if (data.ping_cooldown_remaining > 0) {
+                startPingCooldown(data.ping_cooldown_remaining);
+            }
         }
     }
 
@@ -563,6 +734,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (activeTab !== 'chat') showUnreadDot();
                 }
                 updateChatPermissionUI(data);
+                pollsCompleted++;
                 if (!oneShot) {
                     chatPollTimer = setTimeout(pollChat, chatPollMs);
                 }
@@ -588,14 +760,44 @@ document.addEventListener('DOMContentLoaded', function() {
         chatSendBtn.disabled = !has;
     }
 
-    chatInputEl.addEventListener('input', updateSendBtnState);
+    chatInputEl.addEventListener('input', function() {
+        autogrowTextarea();
+        updateSendBtnState();
+    });
+    autogrowTextarea();
     updateSendBtnState();
 
-    chatFormEl.addEventListener('submit', function(e) {
-        e.preventDefault();
+    // Enter inserts a newline (textarea default). Shift+Enter too. Only the
+    // send button submits. We add an explicit guard just in case a future
+    // browser change tries to auto-submit on Enter.
+    chatInputEl.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            // Default textarea behaviour already inserts \n. Let it through.
+            // No preventDefault, no submit, no send.
+            return;
+        }
+    });
+
+    chatInputEl.addEventListener('focus', function() {
+        setTimeout(() => {
+            try {
+                chatFormEl.scrollIntoView({ block: 'end', behavior: 'smooth' });
+            } catch (e) { try { chatFormEl.scrollIntoView(false); } catch (e2) {} }
+        }, 300);
+    });
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', function() {
+            if (document.activeElement === chatInputEl) {
+                setTimeout(() => {
+                    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+                }, 50);
+            }
+        });
+    }
+
+    function sendChatMessage() {
         if (chatSendingNow) return;
         if (!chatServerOpen || !chatServerAllows) return;
-
         const text = (chatInputEl.value || '').trim();
         if (!text) return;
 
@@ -613,19 +815,19 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             body: JSON.stringify({ body: text, nonce: nonce })
         })
-        .then(r => r.json().then(j => ({ ok: r.ok, status: r.status, body: j })))
+        .then(r => r.json().then(j => ({ ok: r.ok, body: j })))
         .then(res => {
             if (res.ok && res.body.success) {
                 chatInputEl.value = '';
+                autogrowTextarea();
                 chatAtBottom = true;
                 pollChat(true);
             } else {
-                const msg = (res.body && res.body.error) || I18N.chat_send_error;
                 const reason = res.body && res.body.reason;
-                let text2 = msg;
-                if (reason === 'rate_limited') text2 = I18N.chat_rate_limited;
+                let msg = (res.body && res.body.error) || I18N.chat_send_error;
+                if (reason === 'rate_limited') msg = I18N.chat_rate_limited;
                 if (typeof window.showToast === 'function') {
-                    window.showToast(text2, 'error');
+                    window.showToast(msg, 'error');
                 }
                 if (reason === 'sending_locked') {
                     updateChatPermissionUI({ chat_open: true, can_send: false });
@@ -641,11 +843,17 @@ document.addEventListener('DOMContentLoaded', function() {
             chatSendingNow = false;
             const shouldEnable = chatServerOpen && chatServerAllows;
             chatInputEl.disabled = !shouldEnable;
-            if (shouldEnable && !chatInputEl.value.trim()) {
-                chatSendBtn.disabled = true;
+            if (shouldEnable) {
+                updateSendBtnState();
+                chatInputEl.focus();
             }
-            if (shouldEnable) chatInputEl.focus();
         });
+    }
+
+    chatSendBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        sendChatMessage();
     });
 
     chatLockedEl.addEventListener('click', function() {
@@ -657,6 +865,143 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     });
+
+    // ============================================================
+    // PING UI (creator only)
+    // ============================================================
+    const pingOpenBtn     = document.getElementById('pingOpenBtn');
+    const pingOpenSub     = document.getElementById('pingOpenSub');
+    const pingSheet       = document.getElementById('pingSheet');
+    const pingCustomText  = document.getElementById('pingCustomText');
+    const pingCustomCount = document.getElementById('pingCustomCount');
+    const pingSendBtn     = document.getElementById('pingSendBtn');
+
+    let pingSelectedMessage = '';
+    let pingSelectedReason  = '';
+    let pingCooldownTimer   = null;
+    let pingCooldownRemaining = 0;
+
+    window.openPingSheet = function() {
+        if (pingCooldownRemaining > 0) return;
+        if (!pingSheet) return;
+        pingSheet.hidden = false;
+        pingCustomText.value = '';
+        pingCustomCount.textContent = '0';
+        pingSendBtn.disabled = true;
+        pingSelectedMessage = '';
+        pingSelectedReason = '';
+        document.querySelectorAll('.ping-preset').forEach(b => b.classList.remove('is-selected'));
+        setTimeout(() => pingCustomText.focus(), 100);
+    };
+
+    window.closePingSheet = function() {
+        if (!pingSheet) return;
+        pingSheet.hidden = true;
+    };
+
+    document.querySelectorAll('.ping-preset').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.ping-preset').forEach(b => b.classList.remove('is-selected'));
+            btn.classList.add('is-selected');
+            pingCustomText.value = '';
+            pingCustomCount.textContent = '0';
+            pingSelectedMessage = btn.getAttribute('data-message') || '';
+            pingSelectedReason  = btn.getAttribute('data-reason')  || 'custom';
+            pingSendBtn.disabled = !pingSelectedMessage;
+        });
+    });
+
+    if (pingCustomText) {
+        pingCustomText.addEventListener('input', function() {
+            const v = pingCustomText.value || '';
+            pingCustomCount.textContent = v.length;
+            if (v.trim()) {
+                document.querySelectorAll('.ping-preset').forEach(b => b.classList.remove('is-selected'));
+                pingSelectedMessage = v.trim();
+                pingSelectedReason  = 'custom';
+                pingSendBtn.disabled = false;
+            } else {
+                pingSendBtn.disabled = !pingSelectedMessage;
+            }
+        });
+    }
+
+    function startPingCooldown(seconds) {
+        if (!pingOpenSub || !pingOpenBtn) return;
+        if (pingCooldownTimer) clearInterval(pingCooldownTimer);
+        pingCooldownRemaining = seconds;
+        pingOpenBtn.classList.add('is-cooldown');
+        updatePingSubText();
+        pingCooldownTimer = setInterval(() => {
+            pingCooldownRemaining--;
+            if (pingCooldownRemaining <= 0) {
+                clearInterval(pingCooldownTimer);
+                pingCooldownTimer = null;
+                pingCooldownRemaining = 0;
+                pingOpenBtn.classList.remove('is-cooldown');
+                pingOpenSub.textContent = I18N.ping_open_sub;
+            } else {
+                updatePingSubText();
+            }
+        }, 1000);
+    }
+
+    function updatePingSubText() {
+        if (!pingOpenSub) return;
+        const tpl = I18N.ping_cooldown_fmt || 'Next ping available in {s}s';
+        pingOpenSub.textContent = tpl.replace('{s}', pingCooldownRemaining);
+    }
+
+    if (pingOpenBtn) {
+        pingOpenBtn.addEventListener('click', window.openPingSheet);
+    }
+
+    if (pingSendBtn) {
+        pingSendBtn.addEventListener('click', function() {
+            const message = (pingSelectedMessage || '').trim();
+            if (!message) return;
+            pingSendBtn.disabled = true;
+
+            fetch('/live-quiz/waiting-room/' + quizId + '/ping', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                body: JSON.stringify({ body: message, reason: pingSelectedReason || 'custom' })
+            })
+            .then(r => r.json().then(j => ({ ok: r.ok, body: j })))
+            .then(res => {
+                if (res.ok && res.body.success) {
+                    window.closePingSheet();
+                    const tpl = I18N.ping_sent_fmt || '📣 {sent}/{total}';
+                    const toast = tpl.replace('{sent}', res.body.sent)
+                                      .replace('{total}', res.body.total);
+                    if (typeof window.showToast === 'function') {
+                        window.showToast(toast, 'success');
+                    }
+                    startPingCooldown(res.body.cooldown || 30);
+                    pollChat(true);
+                } else {
+                    const reason = res.body && res.body.reason;
+                    let msg = (res.body && res.body.error) || I18N.ping_error;
+                    if (reason === 'cooldown' && res.body.remaining) {
+                        startPingCooldown(res.body.remaining);
+                    }
+                    if (typeof window.showToast === 'function') {
+                        window.showToast(msg, 'error');
+                    }
+                    pingSendBtn.disabled = false;
+                }
+            })
+            .catch(() => {
+                if (typeof window.showToast === 'function') {
+                    window.showToast(I18N.ping_error, 'error');
+                }
+                pingSendBtn.disabled = false;
+            });
+        });
+    }
 
     // ============================================================
     // COUNTDOWN
@@ -683,8 +1028,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (remaining <= 60 && remaining > 55 && !notificationSent) {
                 notificationSent = true;
                 sendBrowserNotification(
-                    I18N.notify_title,
-                    I18N.notify_body,
+                    I18N.notify_title, I18N.notify_body,
                     '/live-quiz/waiting-room/' + quizId
                 );
                 playNotificationSound();
@@ -692,8 +1036,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (remaining <= 0) {
                 clearInterval(countdownInterval);
-                // Countdown zero does NOT close chat.
-                // Only the creator pressing Start closes it.
                 const alertEl = document.getElementById('quizStartedAlert');
                 if (alertEl) alertEl.classList.add('show');
             }
@@ -716,20 +1058,16 @@ document.addEventListener('DOMContentLoaded', function() {
             if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
                 navigator.serviceWorker.ready.then(function (reg) {
                     reg.showNotification(title, {
-                        body: body,
-                        icon: '/static/images/logo.png',
+                        body: body, icon: '/static/images/logo.png',
                         tag: 'live-quiz-' + quizId,
-                        requireInteraction: true,
-                        data: { url: url }
+                        requireInteraction: true, data: { url: url }
                     });
                 }).catch(function () {});
                 return;
             }
             const n = new Notification(title, {
-                body: body,
-                icon: '/static/images/logo.png',
-                tag: 'live-quiz-' + quizId,
-                requireInteraction: true
+                body: body, icon: '/static/images/logo.png',
+                tag: 'live-quiz-' + quizId, requireInteraction: true
             });
             n.onclick = function() {
                 window.focus();
@@ -737,9 +1075,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 n.close();
             };
             setTimeout(function() { n.close(); }, 15000);
-        } catch (e) {
-            console.warn('Notification error:', e);
-        }
+        } catch (e) {}
     }
 
     function playNotificationSound() {
@@ -753,16 +1089,6 @@ document.addEventListener('DOMContentLoaded', function() {
             gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
             osc.start(audioCtx.currentTime);
             osc.stop(audioCtx.currentTime + 0.3);
-            setTimeout(function() {
-                const osc2 = audioCtx.createOscillator();
-                const gain2 = audioCtx.createGain();
-                osc2.connect(gain2); gain2.connect(audioCtx.destination);
-                osc2.frequency.value = 1100; osc2.type = 'sine';
-                gain2.gain.setValueAtTime(0.3, audioCtx.currentTime);
-                gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
-                osc2.start(audioCtx.currentTime);
-                osc2.stop(audioCtx.currentTime + 0.2);
-            }, 200);
         } catch (e) {}
     }
 
@@ -779,48 +1105,36 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateCounts(data);
                 isPolling = false;
             })
-            .catch(function(err) {
-                console.warn('Error fetching participants:', err);
-                isPolling = false;
-            });
+            .catch(function() { isPolling = false; });
     }
 
     function renderParticipants(participants) {
         participantList = participants || [];
         if (!participantListEl) return;
-
         if (participantList.length === 0) {
             participantListEl.innerHTML = `
                 <div class="wr-empty-participants">
                     <div class="wr-empty-icon">👥</div>
                     <span>${I18N.no_participants}</span>
-                </div>
-            `;
+                </div>`;
             return;
         }
-
         let html = '';
         participantList.forEach(function(p) {
             const isYou = p.student_id == userId;
             const isP = p.is_creator;
             const isLeft = p.status === 'left';
             const isReady = (isP && p.status !== 'left') ? true : p.is_ready;
-
             let badge = '';
             if (isP) badge += '<span class="wr-badge creator">' + I18N.badge_creator + '</span>';
             if (isYou) badge += '<span class="wr-badge you">' + I18N.badge_you + '</span>';
             if (isLeft) badge += '<span class="wr-badge left">' + I18N.badge_left + '</span>';
-
             let readyHand = '';
-            if (isReady && !isLeft) {
-                readyHand = '<span class="wr-ready-hand">✋</span>';
-            }
-
+            if (isReady && !isLeft) readyHand = '<span class="wr-ready-hand">✋</span>';
             let statusDot = '<span class="wr-status-dot ' + (isLeft ? 'left' : 'active') + '"></span>';
             let itemClass = 'wr-participant-item';
             if (isLeft) itemClass += ' left';
             if (isReady && !isLeft) itemClass += ' ready';
-
             html += `
                 <div class="${itemClass}">
                     ${statusDot}
@@ -830,8 +1144,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     </span>
                     <span class="wr-participant-id">#${p.public_id || '----'}</span>
                     ${readyHand}
-                </div>
-            `;
+                </div>`;
         });
         participantListEl.innerHTML = html;
     }
@@ -842,7 +1155,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (participantCountLabel) participantCountLabel.textContent = activeCount + ' joined';
         if (tabParticipantsCount) tabParticipantsCount.textContent = activeCount;
         if (waitingCountEl) waitingCountEl.textContent = activeCount;
-
         if (isCreator) {
             if (statusMsg) {
                 if (activeCount >= 2) {
@@ -861,29 +1173,18 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!btn) return;
         const isActive = btn.classList.contains('active');
         const newState = !isActive;
-
         fetch('/live-quiz/toggle-ready/' + quizId, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken
-            },
+            headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
             body: JSON.stringify({ is_ready: newState })
         })
-        .then(response => response.json())
+        .then(r => r.json())
         .then(data => {
-            if (data.success) {
-                btn.classList.toggle('active', newState);
-            } else {
-                if (typeof window.showToast === 'function') {
-                    window.showToast(I18N.ready_updated_err, 'error');
-                }
-            }
+            if (data.success) btn.classList.toggle('active', newState);
+            else if (typeof window.showToast === 'function') window.showToast(I18N.ready_updated_err, 'error');
         })
         .catch(function() {
-            if (typeof window.showToast === 'function') {
-                window.showToast(I18N.ready_updated_err, 'error');
-            }
+            if (typeof window.showToast === 'function') window.showToast(I18N.ready_updated_err, 'error');
         });
     }
 
@@ -892,36 +1193,25 @@ document.addEventListener('DOMContentLoaded', function() {
         if (startBtn.disabled) return;
         startBtn.disabled = true;
         startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + I18N.starting;
-
         fetch('/live-quiz/start/' + quizId, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken
-            },
+            headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
             body: JSON.stringify({})
         })
-        .then(response => response.json())
+        .then(r => r.json())
         .then(data => {
             if (data.success) {
                 isRedirecting = true;
                 quizExiting = true;
-                if (typeof window.showToast === 'function') {
-                    window.showToast(I18N.quiz_started, 'success');
-                }
                 window.location.replace('/live-quiz/play/' + quizId);
             } else {
-                if (typeof window.showToast === 'function') {
-                    window.showToast(I18N.start_error + ' ' + (data.error || ''), 'error');
-                }
+                if (typeof window.showToast === 'function') window.showToast(I18N.start_error + ' ' + (data.error || ''), 'error');
                 startBtn.disabled = false;
                 startBtn.innerHTML = '<i class="fas fa-play"></i> ' + I18N.start_btn;
             }
         })
         .catch(function() {
-            if (typeof window.showToast === 'function') {
-                window.showToast(I18N.start_error, 'error');
-            }
+            if (typeof window.showToast === 'function') window.showToast(I18N.start_error, 'error');
             startBtn.disabled = false;
             startBtn.innerHTML = '<i class="fas fa-play"></i> ' + I18N.start_btn;
         });
@@ -935,24 +1225,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         fetch('/live-quiz/leave/' + quizId, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken
-            },
+            headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
             body: JSON.stringify({})
         })
-        .then(response => response.json())
+        .then(r => r.json())
         .then(data => {
             if (data.success) {
                 quizExiting = true;
-                if (typeof window.showToast === 'function') {
-                    window.showToast(I18N.left_ok, 'info');
-                }
                 window.location.href = data.redirect || '/live-quiz/lobby';
             } else {
-                if (typeof window.showToast === 'function') {
-                    window.showToast(I18N.leave_error + ' ' + (data.error || ''), 'error');
-                }
+                if (typeof window.showToast === 'function') window.showToast(I18N.leave_error + ' ' + (data.error || ''), 'error');
                 if (leaveBtn) {
                     leaveBtn.disabled = false;
                     leaveBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> ' + I18N.leave_btn;
@@ -960,9 +1242,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(function() {
-            if (typeof window.showToast === 'function') {
-                window.showToast(I18N.leave_error, 'error');
-            }
+            if (typeof window.showToast === 'function') window.showToast(I18N.leave_error, 'error');
             if (leaveBtn) {
                 leaveBtn.disabled = false;
                 leaveBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> ' + I18N.leave_btn;
@@ -977,23 +1257,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         fetch('/live-quiz/rejoin/' + quizId, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken
-            },
+            headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
             body: JSON.stringify({})
         })
-        .then(response => response.json())
+        .then(r => r.json())
         .then(data => {
             if (data.success) {
-                if (typeof window.showToast === 'function') {
-                    window.showToast(I18N.rejoin_ok, 'success');
-                }
                 window.location.href = data.redirect || '/live-quiz/waiting-room/' + quizId;
             } else {
-                if (typeof window.showToast === 'function') {
-                    window.showToast(I18N.rejoin_error + ' ' + (data.error || ''), 'error');
-                }
+                if (typeof window.showToast === 'function') window.showToast(I18N.rejoin_error + ' ' + (data.error || ''), 'error');
                 if (rejoinBtn) {
                     rejoinBtn.disabled = false;
                     rejoinBtn.innerHTML = '<i class="fas fa-undo"></i> ' + I18N.rejoin_btn;
@@ -1001,9 +1273,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(function() {
-            if (typeof window.showToast === 'function') {
-                window.showToast(I18N.rejoin_error, 'error');
-            }
+            if (typeof window.showToast === 'function') window.showToast(I18N.rejoin_error, 'error');
             if (rejoinBtn) {
                 rejoinBtn.disabled = false;
                 rejoinBtn.innerHTML = '<i class="fas fa-undo"></i> ' + I18N.rejoin_btn;
@@ -1027,33 +1297,23 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + I18N.deleting;
         fetch('/live-quiz/delete/' + quizId, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken
-            },
+            headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
             body: JSON.stringify({})
         })
-        .then(response => response.json())
+        .then(r => r.json())
         .then(data => {
             if (data.success) {
                 quizExiting = true;
-                if (typeof window.showToast === 'function') {
-                    window.showToast(I18N.delete_ok, 'success');
-                }
                 closeDeleteModal();
                 window.location.href = '/live-quiz/lobby';
             } else {
-                if (typeof window.showToast === 'function') {
-                    window.showToast(I18N.delete_error + ' ' + (data.error || ''), 'error');
-                }
+                if (typeof window.showToast === 'function') window.showToast(I18N.delete_error + ' ' + (data.error || ''), 'error');
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-trash"></i> ' + I18N.delete_confirm;
             }
         })
         .catch(function() {
-            if (typeof window.showToast === 'function') {
-                window.showToast(I18N.delete_error, 'error');
-            }
+            if (typeof window.showToast === 'function') window.showToast(I18N.delete_error, 'error');
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-trash"></i> ' + I18N.delete_confirm;
         });
@@ -1065,9 +1325,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.copyCode = function(code) {
         navigator.clipboard.writeText(code).then(function() {
-            if (typeof window.showToast === 'function') {
-                window.showToast(I18N.code_copied, 'success');
-            }
+            if (typeof window.showToast === 'function') window.showToast(I18N.code_copied, 'success');
         }).catch(function() {
             const textarea = document.createElement('textarea');
             textarea.value = code;
@@ -1075,9 +1333,7 @@ document.addEventListener('DOMContentLoaded', function() {
             textarea.select();
             document.execCommand('copy');
             document.body.removeChild(textarea);
-            if (typeof window.showToast === 'function') {
-                window.showToast(I18N.code_copied, 'success');
-            }
+            if (typeof window.showToast === 'function') window.showToast(I18N.code_copied, 'success');
         });
     };
 
@@ -1094,7 +1350,7 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     // ============================================================
-    // STATE POLL (redirects when creator starts)
+    // STATE POLL
     // ============================================================
     function pollQuizState() {
         fetch('/live-quiz/quiz-state/' + quizId + '?t=' + Date.now())
@@ -1111,9 +1367,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     quizExiting = true;
                     const alertEl = document.getElementById('quizStartedAlert');
                     if (alertEl) alertEl.classList.add('show');
-                    if (typeof window.showToast === 'function') {
-                        window.showToast(I18N.quiz_started, 'success');
-                    }
                     window.location.replace('/live-quiz/play/' + quizId);
                     return;
                 }
@@ -1128,8 +1381,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 setTimeout(pollQuizState, 3000);
             })
-            .catch(function(err) {
-                console.warn('State poll error:', err);
+            .catch(function() {
                 setTimeout(pollQuizState, 5000);
             });
     }

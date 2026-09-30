@@ -1372,5 +1372,15 @@
   "live_quiz.waiting.chat_send_error": "Diristu waa guuldareystay — isku day mar kale",
   "live_quiz.waiting.chat_rate_limited": "Xoogaa yaree.",
   "live_quiz.waiting.chat_id_copied": "Aqoonsiga waa la nuqulay",
-  "live_quiz.waiting.chat_new_pill": "Fariin cusub"
+  "live_quiz.waiting.chat_new_pill": "Fariin cusub",
+  "live_quiz.waiting.ping_open_title": "U dir digniin dhammaan",
+  "live_quiz.waiting.ping_open_sub": "U dir cod dheer dhammaan ka-qaybgalayaasha",
+  "live_quiz.waiting.ping_cooldown_fmt": "Digniinta xigta waxay diyaar noqonaysaa {s}s",
+  "live_quiz.waiting.ping_sheet_title": "U dir digniin dhammaan",
+  "live_quiz.waiting.ping_sheet_lead": "Dooro sabab — isla markiiba dhammaan ka-qaybgalayaasha ayaa loo diri doonaa.",
+  "live_quiz.waiting.ping_or": "ama",
+  "live_quiz.waiting.ping_custom_placeholder": "Qor fariin gaar ah…",
+  "live_quiz.waiting.ping_send_btn": "U dir digniin dhammaan",
+  "live_quiz.waiting.ping_sent_fmt": "📣 Digniin la diray · {sent}/{total} la gaaray",
+  "live_quiz.waiting.ping_error": "Digniinta lama diri karin. Isku day mar kale."
 }

@@ -4395,20 +4395,28 @@ def clean_expired_batch_edits() -> int:
 # ============================================
 
 def insert_chat_message(quiz_id: int, user_id: int,
-                        body: str, nonce: str = None) -> Optional[int]:
+                        body: str, nonce: str = None,
+                        message_type: str = 'chat',
+                        ping_reason: str = '') -> Optional[int]:
     """
-    Insert a chat message. Idempotent on (quiz_id, user_id, nonce):
-    a duplicate nonce returns the existing row's id.
+    Insert a chat message or ping. Idempotent on
+    (quiz_id, user_id, nonce) for chat messages.
     Returns the row id, or None on failure.
     """
+    if message_type not in ('chat', 'ping'):
+        message_type = 'chat'
     try:
         cursor = execute_with_retry("""
             INSERT INTO live_quiz_chat_messages
-                (quiz_id, user_id, body, client_nonce, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (quiz_id, user_id, body, nonce, now()), commit=True)
+                (quiz_id, user_id, body, client_nonce,
+                 message_type, ping_reason, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (quiz_id, user_id, body, nonce,
+              message_type, ping_reason, now()), commit=True)
         return cursor.lastrowid
     except sqlite3.IntegrityError:
+        if not nonce:
+            return None
         try:
             row = execute_with_retry("""
                 SELECT id FROM live_quiz_chat_messages
@@ -4432,6 +4440,7 @@ def get_chat_messages_since(quiz_id: int, since_id: int = 0,
     try:
         cursor = execute_with_retry("""
             SELECT m.id, m.user_id, m.body, m.created_at,
+                   m.message_type, m.ping_reason,
                    m.deleted_at, m.deleted_by,
                    s.first_name, s.last_name, s.public_id
             FROM live_quiz_chat_messages m
@@ -4449,6 +4458,8 @@ def get_chat_messages_since(quiz_id: int, since_id: int = 0,
             d['name'] = f"{first} {last}".strip() or 'Participant'
             d['public_id'] = d.get('public_id') or '----'
             d['is_deleted'] = bool(d.get('deleted_at'))
+            d['message_type'] = d.get('message_type') or 'chat'
+            d['ping_reason'] = d.get('ping_reason') or ''
             if d['is_deleted']:
                 d['body'] = ''
             out.append(d)

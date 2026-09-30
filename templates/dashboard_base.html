@@ -772,6 +772,13 @@
             {% block dashboard_content %}{% endblock %}
         </div>
 
+        {# ────────────────────────────────────────────────────────
+           FOOTER BLOCK
+           Overridable so focus screens (e.g. the live-quiz waiting
+           room) can hide the footer entirely. Every other page
+           inherits the full footer below.
+           ──────────────────────────────────────────────────────── #}
+        {% block dashboard_footer %}
         <footer class="app-footer">
             <div class="footer-container">
                 <div class="footer-top">
@@ -860,6 +867,7 @@
                 </div>
             </div>
         </footer>
+        {% endblock %}
     </main>
 </div>
 

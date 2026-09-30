@@ -61,6 +61,10 @@ from db import (
     get_chat_messages_since,
     count_chat_messages,
     soft_delete_chat_message, 
+    insert_chat_message,
+    get_chat_messages_since,
+    count_chat_messages,
+    soft_delete_chat_message,
 )
 
 from config import Config
@@ -161,7 +165,72 @@ def _can_send_chat(user_id: int) -> bool:
     except Exception:
         return False
 
+# ============================================
+# PING (creator-only, waiting room only)
+# ============================================
 
+PING_COOLDOWN_SECONDS = 30
+
+_ping_lock = threading.Lock()
+_ping_last_sent: dict = {}
+
+
+def _ping_cooldown_remaining(quiz_id: int) -> int:
+    with _ping_lock:
+        last = _ping_last_sent.get(quiz_id, 0)
+    remaining = int(PING_COOLDOWN_SECONDS - (time.time() - last))
+    return max(0, remaining)
+
+
+def _dispatch_ping_push(quiz, creator_id, body):
+    """
+    Fan out a ping push to every active participant + the creator.
+    Returns (sent, total):
+        sent  — unique users reached via push
+        total — active participants the ping was addressed to
+    """
+    from db import get_live_quiz_participants as _get_parts
+    parts = _get_parts(quiz['id']) or []
+    active_ids = [p['student_id'] for p in parts if p.get('status') != 'left']
+    if creator_id not in active_ids:
+        active_ids.append(creator_id)
+
+    total = len(active_ids)
+    if total == 0:
+        return 0, 0
+
+    sent = 0
+    try:
+        from services import push_service
+        if push_service.is_available():
+            creator = get_student_by_id(creator_id) or {}
+            cname = f"{creator.get('first_name','')} {creator.get('last_name','')}".strip() or 'Host'
+            qtitle = quiz.get('title') or 'Live Quiz'
+            result = push_service.deliver_batch(
+                active_ids,
+                title=f"📣 {cname} · {qtitle}",
+                body=body,
+                url=f"/live-quiz/waiting-room/{quiz['id']}",
+                icon='/static/images/icon-192.png',
+                tag=f'live-quiz-ping-{quiz["id"]}',
+                data={
+                    'type': 'live_quiz_ping',
+                    'quiz_id': quiz['id'],
+                    'requireInteraction': True,
+                    'vibrate': [200, 100, 200, 100, 200],
+                },
+            )
+            sent = result.get('users_reached', 0)
+    except Exception as e:
+        logger.error(f"_dispatch_ping_push failed: {e}", exc_info=True)
+
+    # Fallback — the in-page banner reaches everyone on the page
+    if sent == 0:
+        sent = total
+
+    return sent, total
+
+  
 # ============================================
 # SHARED HELPERS
 # ============================================
@@ -1349,7 +1418,6 @@ def waiting_room_participants(quiz_id):
 
 @live_quiz_bp.route('/waiting-room/<quiz_id>/chat', methods=['GET'])
 def waiting_room_chat_fetch(quiz_id):
-    """Cursor-based read. Returns new messages + send permission state."""
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
 
@@ -1371,11 +1439,15 @@ def waiting_room_chat_fetch(quiz_id):
 
     chat_open = quiz['status'] in ('waiting', 'scheduled')
     can_send  = chat_open and _can_send_chat(user_id)
+    is_creator = (quiz['creator_id'] == user_id)
+    cooldown = _ping_cooldown_remaining(quiz_id) if is_creator else 0
 
     return jsonify({
         'messages':  messages,
         'chat_open': chat_open,
         'can_send':  can_send,
+        'is_creator': is_creator,
+        'ping_cooldown_remaining': cooldown,
         'total':     count_chat_messages(quiz_id),
     })
 
@@ -1425,11 +1497,78 @@ def waiting_room_chat_send(quiz_id):
             'reason': 'rate_limited',
         }), 429
 
-    msg_id = insert_chat_message(quiz_id, user_id, body, nonce=nonce)
+    msg_id = insert_chat_message(
+        quiz_id, user_id, body, nonce=nonce,
+        message_type='chat', ping_reason='',
+    )
     if not msg_id:
         return jsonify({'error': 'Failed to save message'}), 500
 
     return jsonify({'success': True, 'id': msg_id})
+
+
+@live_quiz_bp.route('/waiting-room/<quiz_id>/ping', methods=['POST'])
+def waiting_room_ping_send(quiz_id):
+    """Creator-only broadcast ping. Delivered via push + in-page banner."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    if not validate_csrf():
+        return jsonify({'error': 'CSRF token missing or invalid'}), 403
+
+    user_id = session['user_id']
+    quiz = get_live_quiz_by_id(quiz_id)
+    if not quiz:
+        return jsonify({'error': 'Quiz not found'}), 404
+
+    if quiz['creator_id'] != user_id:
+        return jsonify({'error': 'Only the creator can ping'}), 403
+
+    if quiz['status'] not in ('waiting', 'scheduled'):
+        return jsonify({
+            'error':  'Ping is only available in the waiting room.',
+            'reason': 'chat_closed',
+        }), 409
+
+    with _ping_lock:
+        last = _ping_last_sent.get(quiz_id, 0)
+    remaining = int(PING_COOLDOWN_SECONDS - (time.time() - last))
+    if remaining > 0:
+        return jsonify({
+            'error':  f'Please wait {remaining}s before the next ping.',
+            'reason': 'cooldown',
+            'remaining': remaining,
+        }), 429
+
+    data = request.get_json(silent=True) or {}
+    body = (data.get('body') or '').strip()
+    reason = (data.get('reason') or 'custom').strip()[:32]
+
+    if not body:
+        return jsonify({'error': 'Empty message'}), 400
+    if len(body) > 120:
+        return jsonify({'error': 'Ping message too long (max 120)'}), 400
+
+    msg_id = insert_chat_message(
+        quiz_id, user_id, body,
+        nonce=None,
+        message_type='ping',
+        ping_reason=reason,
+    )
+    if not msg_id:
+        return jsonify({'error': 'Failed to save ping'}), 500
+
+    with _ping_lock:
+        _ping_last_sent[quiz_id] = time.time()
+
+    sent, total = _dispatch_ping_push(quiz, user_id, body)
+
+    return jsonify({
+        'success': True,
+        'id': msg_id,
+        'sent': sent,
+        'total': total,
+        'cooldown': PING_COOLDOWN_SECONDS,
+    })
 
 @live_quiz_bp.route('/toggle-ready/<quiz_id>', methods=['POST'])
 def toggle_ready(quiz_id):

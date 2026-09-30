@@ -1372,5 +1372,15 @@
   "live_quiz.waiting.chat_send_error": "Send failed — try again",
   "live_quiz.waiting.chat_rate_limited": "Slow down a bit.",
   "live_quiz.waiting.chat_id_copied": "ID copied",
-  "live_quiz.waiting.chat_new_pill": "New message"
+  "live_quiz.waiting.chat_new_pill": "New message",
+  "live_quiz.waiting.ping_open_title": "Ping everyone",
+  "live_quiz.waiting.ping_open_sub": "Send a loud alert to all participants",
+  "live_quiz.waiting.ping_cooldown_fmt": "Next ping available in {s}s",
+  "live_quiz.waiting.ping_sheet_title": "Ping everyone",
+  "live_quiz.waiting.ping_sheet_lead": "Choose a reason — it will be sent to all participants instantly.",
+  "live_quiz.waiting.ping_or": "or",
+  "live_quiz.waiting.ping_custom_placeholder": "Type a custom message…",
+  "live_quiz.waiting.ping_send_btn": "Send ping to everyone",
+  "live_quiz.waiting.ping_sent_fmt": "📣 Ping sent · {sent}/{total} reached",
+  "live_quiz.waiting.ping_error": "Could not send ping. Try again."
 }
