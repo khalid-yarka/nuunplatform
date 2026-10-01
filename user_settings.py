@@ -36,12 +36,12 @@ DEFAULT_SETTINGS = {
     "notifications.admin_announcement": 1,
     "notifications.participant_joined": 1,
     "notifications.new_live_quiz": 1,
+    "notifications.telegram_broadcast": 1,
     "onboarding.telegram_prompt_dismissed": 0,
     "notifications.new_pdf": 1,
     "notifications.daily_digest": 0,
     "notifications.achievement_unlock": 1,
     "notifications.live_quiz_reminder": 1,
-    "notifications.weekly_summary": 0,
     "notifications.weekly_summary": 0,
     "notifications.push_enabled": 1,
     # Per-type push preferences (only consulted when push_enabled = 1)
@@ -50,8 +50,8 @@ DEFAULT_SETTINGS = {
     "notifications.push_participant_joined": 1,
     "notifications.push_admin_announcement": 1,
     "notifications.push_quiz_complete":    0,
-    
-    # ----- Privacy -----  
+
+    # ----- Privacy -----
     "privacy.show_on_leaderboard": 1,
     "privacy.show_public_id": 1,
 

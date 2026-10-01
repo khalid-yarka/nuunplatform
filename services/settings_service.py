@@ -27,6 +27,28 @@ class SettingsService:
             logger.error(f"Failed to update session settings for user {user_id}: {e}")
 
     @staticmethod
+    def _sync_telegram_broadcast(user_id: int, enabled: bool) -> None:
+        """
+        Best-effort push of the Telegram broadcast toggle to
+        bot_data.db. Never raises. Silent no-op when the user has no
+        linked Telegram chat yet — the preference is stored in
+        user_settings and will apply the next time the user
+        subscribes via the bot.
+        """
+        try:
+            public_id = (session.get('public_id') or '').strip()
+            if not public_id:
+                logger.debug(
+                    f"telegram_broadcast sync skipped for user {user_id}: "
+                    f"no public_id in session"
+                )
+                return
+            from bot.db import set_broadcast_preference_by_public_id
+            set_broadcast_preference_by_public_id(public_id, bool(enabled))
+        except Exception as e:
+            logger.debug(f"telegram_broadcast sync non-fatal: {e}")
+
+    @staticmethod
     def get_all(user_id: int) -> Dict[str, Any]:
         """
         Get effective settings. Migrate if necessary.
@@ -160,7 +182,9 @@ class SettingsService:
         """
         Batch update settings.
         Validates, enforces entitlement/tier, persists, reads back to confirm.
-        On success, refreshes the session.
+        On success, refreshes the session and syncs the Telegram
+        broadcast preference to bot_data.db if it was part of this
+        update.
         """
         normalized = {}
         for key, value in updates.items():
@@ -190,6 +214,16 @@ class SettingsService:
                 raise RuntimeError(f"Persistence verification failed for key {key}")
 
         SettingsService._update_session(user_id)
+
+        # Best-effort mirror of the Telegram broadcast preference to
+        # bot_data.db. Only fires when the toggle was actually part
+        # of this update — never for unrelated settings.
+        if 'notifications.telegram_broadcast' in normalized:
+            SettingsService._sync_telegram_broadcast(
+                user_id,
+                bool(normalized['notifications.telegram_broadcast']),
+            )
+
         return SettingsService.get_all(user_id)
 
     @staticmethod

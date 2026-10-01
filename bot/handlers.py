@@ -15,6 +15,8 @@ from bot.db import (
     get_join_gate, set_join_gate, delete_join_gate,
     bump_join_gate_attempts,
     upsert_bot_contact, mark_bot_contact_fetched_pdf,
+    mark_bot_contact_subscribed, mark_bot_contact_unsubscribed,
+    get_bot_contact,
 )
 from config import Config
 
@@ -471,6 +473,115 @@ def _recheck_join(bot, chat_id, user_id, prompt_message=None):
 
 
 # ============================================
+# BROADCAST SUBSCRIPTION
+# ============================================
+# Plain text — no parse_mode — so user-supplied names cannot break
+# Telegram's entity parser. All strings are hardcoded Somali so the
+# wording is consistent for every user regardless of UI language.
+# ============================================
+
+def _send_subscribe_welcome(bot, message, public_id=None):
+    """
+    Confirmation sent when a user subscribes via the lobby banner
+    deeplink (?start=subscribe_<public_id>) or /subscribe.
+
+    If public_id is provided, links this Telegram chat to the
+    platform user so the website settings toggle can reach the same
+    chat on the next change.
+    """
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    first_name = (message.from_user.first_name or '').strip()
+
+    # Best-effort: mark subscribed and link the platform user.
+    try:
+        mark_bot_contact_subscribed(chat_id, public_id=public_id)
+    except Exception as e:
+        logger.debug(f"mark_bot_contact_subscribed non-fatal: {e}")
+
+    greeting = f'👋 Salaan {first_name}!' if first_name else '👋 Salaan!'
+
+    text = (
+        f"{greeting}\n\n"
+        "✅ Waad ku biirtay ogeysiiska tartamada cusub.\n\n"
+        "Marka tartan cusub la abuuro, waxaan halkan kugu soo\n"
+        "diri doonaa fariin si aad uga qayb gasho.\n\n"
+        "Amarrada:\n"
+        "/subscribe   — Daar ogeysiiska\n"
+        "/unsubscribe — Dam ogeysiiska\n"
+        "/broadcast   — Muuji xaaladda\n"
+        "/help        — Muuji caawinaad"
+    )
+
+    markup = None
+    if is_admin(user_id):
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton(
+            "📚 PDF-yada Sugaya",
+            callback_data="pdf_admin_pending",
+        ))
+
+    try:
+        bot.send_message(chat_id, text, reply_markup=markup)
+    except Exception as e:
+        logger.error(f"_send_subscribe_welcome failed: {e}", exc_info=True)
+
+
+def handle_subscribe(bot, message):
+    """Handle the /subscribe command (no public_id)."""
+    _send_subscribe_welcome(bot, message, public_id=None)
+
+
+def handle_unsubscribe(bot, message):
+    """Handle the /unsubscribe command."""
+    chat_id = message.chat.id
+    try:
+        mark_bot_contact_unsubscribed(chat_id)
+    except Exception as e:
+        logger.debug(f"mark_bot_contact_unsubscribed non-fatal: {e}")
+
+    try:
+        bot.send_message(
+            chat_id,
+            "🔕 Ogeysiiska tartamada cusub waa la damiyay.\n\n"
+            "Ma heli doontid fariin marka tartan cusub la abuuro.\n"
+            "Dib u daaran: /subscribe"
+        )
+    except Exception as e:
+        logger.error(f"handle_unsubscribe failed: {e}", exc_info=True)
+
+
+def handle_broadcast_status(bot, message):
+    """Handle the /broadcast command — show current subscription state."""
+    chat_id = message.chat.id
+    subscribed = False
+    try:
+        row = get_bot_contact(chat_id)
+        if row:
+            subscribed = bool(row.get('subscribed_broadcast')) \
+                or bool(row.get('fetched_pdf'))
+    except Exception as e:
+        logger.debug(f"handle_broadcast_status read non-fatal: {e}")
+
+    if subscribed:
+        text = (
+            "🔔 Xaaladda: FIRFIRCOON\n\n"
+            "Waxaad heli doontaa ogeysiis marka tartan cusub la abuuro.\n"
+            "Dam: /unsubscribe"
+        )
+    else:
+        text = (
+            "🔕 Xaaladda: DAM\n\n"
+            "Ma heli doontid ogeysiis tartamada cusub.\n"
+            "Daar: /subscribe"
+        )
+    try:
+        bot.send_message(chat_id, text)
+    except Exception as e:
+        logger.error(f"handle_broadcast_status failed: {e}", exc_info=True)
+
+
+# ============================================
 # UPDATE ROUTER
 # ============================================
 
@@ -518,6 +629,19 @@ def handle_message(bot, message):
                 return
         except Exception as e:
             logger.warning(f"admin_handlers dispatch failed: {e}")
+
+    # ── Broadcast subscription commands ──
+    # Checked before /start and before the force-join gate so a user
+    # can always manage their subscription regardless of gate state.
+    if text.startswith('/subscribe'):
+        handle_subscribe(bot, message)
+        return
+    if text.startswith('/unsubscribe'):
+        handle_unsubscribe(bot, message)
+        return
+    if text.startswith('/broadcast'):
+        handle_broadcast_status(bot, message)
+        return
 
     is_start = text.startswith('/start')
     is_start_with_code = is_start and len(text.split()) > 1
@@ -580,7 +704,7 @@ def handle_start(bot, message):
 
 
 # ============================================
-# /start <code>  (delivers a stored PDF)
+# /start <code>  (delivers a stored PDF, or subscribes)
 # ============================================
 
 def handle_start_with_code(bot, message):
@@ -593,6 +717,18 @@ def handle_start_with_code(bot, message):
         return
 
     code = parts[1].strip()
+
+    # ── Lobby banner deeplink ──
+    # payload is `subscribe_<public_id>` (or bare `subscribe` for
+    # legacy/manual cases). Handled before the PDF lookup because
+    # these payloads are never valid PDF codes.
+    if code == 'subscribe' or code.startswith('subscribe_'):
+        public_id = ''
+        if code.startswith('subscribe_'):
+            public_id = code[len('subscribe_'):].strip() or ''
+        _send_subscribe_welcome(bot, message, public_id=public_id or None)
+        return
+
     bot_pdf = get_bot_pdf_by_code(code)
 
     if not bot_pdf:
@@ -647,6 +783,10 @@ def handle_help(bot, message):
         "Ii soo dir PDF (fayl kasta oo leh .pdf).\n"
         "Waxaan hubinayaa haddii uu horey u jiray nidaamka.\n"
         "Haddii uu cusub yahay, waxaa lagu darayaa liiska sugayaasha.\n\n"
+        "Ogeysiiska tartamada:\n"
+        "/subscribe   — Daar ogeysiiska\n"
+        "/unsubscribe — Dam ogeysiiska\n"
+        "/broadcast   — Muuji xaaladda\n\n"
         "Maamulayaasha: Isticmaal badhanka PDF-yada Sugaya si aad u maamusho."
     )
 

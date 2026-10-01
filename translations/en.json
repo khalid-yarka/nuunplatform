@@ -1398,5 +1398,7 @@
 "settings.notifications.types.new_live_quiz.desc": "When someone creates a new public competition.",
 "settings.notifications.types.live_quiz_result.desc": "When a competition you joined ends.",
 "settings.notifications.types.participant_joined.desc": "When someone joins a competition you host.",
-"settings.notifications.types.admin_announcement.desc": "Important platform updates."
+"settings.notifications.types.admin_announcement.desc": "Important platform updates.",
+  "settings.notifications.push.types.telegram_broadcast": "Telegram Quiz Announcements",
+  "settings.notifications.types.telegram_broadcast.desc": "Get a message on Telegram when a new public competition is created."
 }

@@ -589,11 +589,17 @@ def clean_stale_join_gates(hours=24):
 # BOT CONTACTS (broadcast audience)
 # ============================================================
 # Every user who has ever talked to the bot is recorded here.
-# Users who have successfully fetched at least one PDF via the
-# bot are flagged with fetched_pdf = 1. The new-quiz broadcast
-# targets only flagged users — a user who has downloaded at
-# least one PDF is a real platform user, not a stranger who
-# just said hi.
+# Eligibility for the new-quiz broadcast is either:
+#   · fetched_pdf = 1        — has fetched a PDF via the bot, or
+#   · subscribed_broadcast = 1 — opted in via the lobby banner
+#                                 deeplink (`?start=subscribe_<id>`)
+#                                 or the /subscribe command.
+# A blocked chat is never eligible.
+#
+# platform_user_id links a chat back to the platform user via their
+# public_id. It is set when the user subscribes through the lobby
+# banner (which carries the public_id in the deeplink payload). It
+# lets the web settings toggle reach the same chat.
 # ============================================================
 
 def init_bot_contacts_table():
@@ -620,6 +626,31 @@ def init_bot_contacts_table():
             "CREATE INDEX IF NOT EXISTS idx_bot_contacts_last_seen "
             "ON bot_contacts(last_seen_at DESC)"
         )
+
+        # Idempotent column additions for the broadcast-subscription
+        # feature. Same PRAGMA pattern used for the pdfs table above.
+        cursor.execute("PRAGMA table_info(bot_contacts)")
+        existing_cols = {row[1] for row in cursor.fetchall()}
+
+        if 'subscribed_broadcast' not in existing_cols:
+            cursor.execute(
+                "ALTER TABLE bot_contacts "
+                "ADD COLUMN subscribed_broadcast INTEGER NOT NULL DEFAULT 0"
+            )
+            logger.info("Added subscribed_broadcast column to bot_contacts")
+
+        if 'platform_user_id' not in existing_cols:
+            cursor.execute(
+                "ALTER TABLE bot_contacts "
+                "ADD COLUMN platform_user_id TEXT DEFAULT NULL"
+            )
+            logger.info("Added platform_user_id column to bot_contacts")
+
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bot_contacts_platform_user "
+            "ON bot_contacts(platform_user_id)"
+        )
+
         conn.commit()
         conn.close()
         logger.info("bot_contacts table ready")
@@ -631,6 +662,11 @@ def upsert_bot_contact(chat_id, username='', first_name='', last_name=''):
     """
     Insert or update a bot contact on every incoming message.
     Never raises.
+
+    On conflict, the name fields and last_seen_at are refreshed.
+    Neither subscribed_broadcast nor platform_user_id is touched —
+    those are managed by mark_bot_contact_subscribed and the
+    settings sync path, not by ordinary updates.
     """
     if not chat_id:
         return False
@@ -695,6 +731,129 @@ def mark_bot_contact_fetched_pdf(chat_id):
         return False
 
 
+def mark_bot_contact_subscribed(chat_id, public_id=None):
+    """
+    Set subscribed_broadcast = 1 for a chat and, when provided,
+    link it to a platform user via public_id. Called when a user
+    taps the lobby banner deeplink or sends /subscribe.
+    """
+    if not chat_id:
+        return False
+    try:
+        cid = int(chat_id)
+    except (TypeError, ValueError):
+        return False
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        if public_id:
+            cursor.execute("""
+                UPDATE bot_contacts
+                SET subscribed_broadcast = 1,
+                    platform_user_id = ?,
+                    last_seen_at = datetime('now','localtime')
+                WHERE chat_id = ?
+            """, (str(public_id)[:64], cid))
+        else:
+            cursor.execute("""
+                UPDATE bot_contacts
+                SET subscribed_broadcast = 1,
+                    last_seen_at = datetime('now','localtime')
+                WHERE chat_id = ?
+            """, (cid,))
+        affected = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return affected > 0
+    except Exception as e:
+        logger.warning(f"mark_bot_contact_subscribed failed for {chat_id}: {e}")
+        return False
+
+
+def mark_bot_contact_unsubscribed(chat_id):
+    """
+    Set subscribed_broadcast = 0 for a chat. fetched_pdf is
+    untouched — a user who has fetched a PDF stays eligible for
+    broadcasts until they explicitly block or the admin removes them.
+    """
+    if not chat_id:
+        return False
+    try:
+        cid = int(chat_id)
+    except (TypeError, ValueError):
+        return False
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE bot_contacts
+            SET subscribed_broadcast = 0,
+                last_seen_at = datetime('now','localtime')
+            WHERE chat_id = ?
+        """, (cid,))
+        affected = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return affected > 0
+    except Exception as e:
+        logger.warning(f"mark_bot_contact_unsubscribed failed for {chat_id}: {e}")
+        return False
+
+
+def get_bot_contact(chat_id):
+    """Return the bot_contacts row for a chat, or None."""
+    if not chat_id:
+        return None
+    try:
+        cid = int(chat_id)
+    except (TypeError, ValueError):
+        return None
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM bot_contacts WHERE chat_id = ?", (cid,))
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
+    except Exception as e:
+        logger.warning(f"get_bot_contact failed for {chat_id}: {e}")
+        return None
+
+
+def set_broadcast_preference_by_public_id(public_id, enabled):
+    """
+    Sync a web-side settings toggle to the bot-side contact row.
+    Called from services/settings_service.py when the user flips
+    `notifications.telegram_broadcast`.
+
+    Returns True if a matching row was updated, False otherwise
+    (including the common case where the user has no Telegram link
+    yet — the preference is still saved server-side and applied the
+    next time the user subscribes via the bot).
+    """
+    if not public_id:
+        return False
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE bot_contacts
+            SET subscribed_broadcast = ?,
+                last_seen_at = datetime('now','localtime')
+            WHERE platform_user_id = ?
+        """, (1 if enabled else 0, str(public_id)[:64]))
+        affected = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return affected > 0
+    except Exception as e:
+        logger.warning(
+            f"set_broadcast_preference_by_public_id failed "
+            f"for public_id={public_id!r}: {e}"
+        )
+        return False
+
+
 def mark_bot_contact_blocked(chat_id):
     """
     Set blocked = 1 for a chat that returned HTTP 403 on delivery.
@@ -724,8 +883,8 @@ def mark_bot_contact_blocked(chat_id):
 def get_broadcast_recipients():
     """
     Return the list of chat_ids that should receive a new-quiz
-    broadcast: users who have fetched at least one PDF and are
-    not blocked.
+    broadcast: users who have fetched at least one PDF OR explicitly
+    subscribed to the broadcast, and are not blocked.
     """
     try:
         conn = _get_connection()
@@ -733,7 +892,8 @@ def get_broadcast_recipients():
         cursor.execute("""
             SELECT chat_id
             FROM bot_contacts
-            WHERE fetched_pdf = 1 AND blocked = 0
+            WHERE blocked = 0
+              AND (fetched_pdf = 1 OR subscribed_broadcast = 1)
             ORDER BY last_seen_at DESC
         """)
         rows = cursor.fetchall()
@@ -751,7 +911,8 @@ def count_broadcast_recipients():
         cursor = conn.cursor()
         cursor.execute(
             "SELECT COUNT(*) AS n FROM bot_contacts "
-            "WHERE fetched_pdf = 1 AND blocked = 0"
+            "WHERE blocked = 0 "
+            "AND (fetched_pdf = 1 OR subscribed_broadcast = 1)"
         )
         row = cursor.fetchone()
         conn.close()

@@ -245,9 +245,10 @@
     </div>
 
     {# ── Telegram join panel ──
-       Renders once per user, above the filter bar. Server-side gated by
-       show_telegram_prompt. Dismissal sets a persistent flag so it does
-       not reappear across devices. #}
+       Renders whenever the bot username is configured. The X button
+       hides it for the current page view only; it reappears on the
+       next load. The deeplink payload carries the user's public_id
+       so the bot can link the chat to a platform account. #}
     {% if show_telegram_prompt %}
     <div class="lobby-tg-panel" id="lobbyTgPanel">
         <div class="lobby-tg-panel__icon" aria-hidden="true">📣</div>
@@ -255,7 +256,7 @@
             Ku biir bot-keena Telegram si aad u hesho ogeysiis marka tartan cusub la abuuro.
         </div>
         <a class="lobby-tg-panel__cta"
-           href="https://t.me/{{ telegram_bot_username }}?start=subscribe"
+           href="https://t.me/{{ telegram_bot_username }}?start={{ telegram_deeplink_payload }}"
            target="_blank"
            rel="noopener noreferrer"
            id="lobbyTgCta">

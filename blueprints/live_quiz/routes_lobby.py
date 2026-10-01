@@ -11,6 +11,10 @@
 #   · The Telegram join prompt flag — computed here so the template
 #     stays declarative. The prompt is gated only by configuration;
 #     dismissal is client-side and does not persist.
+#   · The Telegram deeplink payload — carries the user's public_id
+#     so the bot can link the chat to a platform account on
+#     subscribe. Falls back to the bare `subscribe` payload when no
+#     public_id is available in the session.
 # ============================================================
 
 import logging
@@ -115,6 +119,17 @@ def lobby():
     bot_username = (getattr(_Cfg, 'TELEGRAM_BOT_USERNAME', '') or '').strip()
     show_telegram_prompt = bool(bot_username)
 
+    # Deeplink payload: `subscribe_<public_id>` links the Telegram
+    # chat back to the platform user, so the settings toggle on the
+    # website can reach the same chat. Falls back to bare
+    # `subscribe` when the session has no public_id yet — the bot
+    # still subscribes the chat, just without the linkage.
+    public_id = (session.get('public_id') or '').strip()
+    if public_id:
+        telegram_deeplink_payload = f'subscribe_{public_id}'
+    else:
+        telegram_deeplink_payload = 'subscribe'
+
     return render_template(
         'dashboard/live_quiz/lobby.html',
         quizzes=quizzes,
@@ -131,6 +146,7 @@ def lobby():
         can_create=can_create,
         show_telegram_prompt=show_telegram_prompt,
         telegram_bot_username=bot_username,
+        telegram_deeplink_payload=telegram_deeplink_payload,
     )
 
 

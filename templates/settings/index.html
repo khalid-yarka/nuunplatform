@@ -382,6 +382,23 @@
                         </span>
                     </label>
 
+                    {# ── Telegram broadcast toggle ── #}
+                    <label class="notif-row">
+                        <span class="notif-row__icon" aria-hidden="true">📨</span>
+                        <span class="notif-row__body">
+                            <span class="notif-row__title">{{ _('settings.notifications.push.types.telegram_broadcast') }}</span>
+                            <span class="notif-row__desc">{{ _('settings.notifications.types.telegram_broadcast.desc') }}</span>
+                        </span>
+                        <span class="notif-row__switch">
+                            <input type="checkbox" class="notif-row__input" id="notify_telegram_broadcast" {% if settings['notifications.telegram_broadcast'] %}checked{% endif %}>
+                            <span class="notif-row__slider"></span>
+                        </span>
+                        <span class="notif-row__state" aria-hidden="true">
+                            <span class="notif-row__state-on">ON</span>
+                            <span class="notif-row__state-off">OFF</span>
+                        </span>
+                    </label>
+
                 </div>
             </div>
 
@@ -726,6 +743,7 @@
         'notify_participant_joined':   'notifications.participant_joined',
         'notify_admin_announcement':   'notifications.admin_announcement',
         'notify_new_live_quiz':        'notifications.new_live_quiz',
+        'notify_telegram_broadcast':   'notifications.telegram_broadcast',
         'notify_daily_digest':         'notifications.daily_digest',
         'notify_achievement_unlock':   'notifications.achievement_unlock',
         'notify_live_quiz_reminder':   'notifications.live_quiz_reminder',
@@ -940,7 +958,8 @@
                 'notifications.live_quiz_result':    document.getElementById('notify_live_quiz_result').checked,
                 'notifications.participant_joined':  document.getElementById('notify_participant_joined').checked,
                 'notifications.admin_announcement':  document.getElementById('notify_admin_announcement').checked,
-                'notifications.new_live_quiz':       document.getElementById('notify_new_live_quiz').checked
+                'notifications.new_live_quiz':       document.getElementById('notify_new_live_quiz').checked,
+                'notifications.telegram_broadcast':  document.getElementById('notify_telegram_broadcast').checked
             };
             submitForm(notifForm, '/settings/api', payload, 'Notification preferences saved!');
         });

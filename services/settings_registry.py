@@ -234,7 +234,7 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "requires_confirmation": False,
         "sensitive": False,
     },
-    
+
     "notifications.new_live_quiz": {
         "type": "boolean",
         "default": True,
@@ -246,7 +246,24 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "requires_confirmation": False,
         "sensitive": False,
     },
-  
+
+    # Telegram broadcast subscription. Distinct from the in-app
+    # new_live_quiz preference — this one controls whether the
+    # Telegram bot sends new-quiz messages to the linked chat.
+    # Toggling it here updates bot_data.db via the settings save
+    # hook (see services/settings_service.py).
+    "notifications.telegram_broadcast": {
+        "type": "boolean",
+        "default": True,
+        "category": "notifications",
+        "label": "Telegram Quiz Announcements",
+        "description": "Get a message on Telegram when a new public competition is created.",
+        "tier_required": None,
+        "live": True,
+        "requires_confirmation": False,
+        "sensitive": False,
+    },
+
     "notifications.daily_digest": {
         "type": "boolean",
         "default": False,
