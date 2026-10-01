@@ -230,56 +230,35 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // ============================================================
-    // TELEGRAM JOIN PANEL
-    // The X sets a server-side flag so the panel does not reappear
-    // on any device. The CTA opens the bot; the flag is also set so
-    // the panel is not shown again on the next page load after the
-    // user has already acted.
-    // ============================================================
+    // ── Telegram join panel ──
+    // Pure client-side dismiss. The X removes the panel for the
+    // current page view only. No server write, no persistence.
+    // Reloading the page brings it back — the server re-renders it
+    // whenever TELEGRAM_BOT_USERNAME is configured.
     (function setupTelegramPanel() {
         var panel = document.getElementById('lobbyTgPanel');
         if (!panel) return;
-
+    
         var closeBtn = document.getElementById('lobbyTgClose');
-        var ctaBtn   = document.getElementById('lobbyTgCta');
-
-        function persistDismissal() {
-            try {
-                fetch('/settings/api', {
-                    method: 'PATCH',
-                    credentials: 'same-origin',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-Token': csrfToken
-                    },
-                    body: JSON.stringify({
-                        'onboarding.telegram_prompt_dismissed': true
-                    })
-                }).catch(function () { /* silent */ });
-            } catch (e) { /* silent */ }
-        }
-
+    
         function dismiss() {
             panel.classList.add('is-dismissing');
             setTimeout(function () {
-                if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
+                if (panel && panel.parentNode) {
+                    panel.parentNode.removeChild(panel);
+                }
             }, 260);
-            persistDismissal();
         }
-
+    
         if (closeBtn) {
             closeBtn.addEventListener('click', function (e) {
                 e.preventDefault();
                 dismiss();
             });
         }
-
-        if (ctaBtn) {
-            ctaBtn.addEventListener('click', function () {
-                persistDismissal();
-            });
-        }
+    
+        // CTA: the <a target="_blank"> opens Telegram by itself.
+        // No JS needed, and nothing is persisted.
     })();
 
     updateClearButtonVisibility();

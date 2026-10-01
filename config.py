@@ -232,6 +232,8 @@ class Config:
         os.getenv('TELEGRAM_FORCE_JOIN_MAX_ATTEMPTS', '10')
     )
 
+  
+
     # ============================================
     # SOCIAL LINKS
     # ============================================

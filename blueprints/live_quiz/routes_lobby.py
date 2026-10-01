@@ -9,7 +9,8 @@
 #   · /api/recent-public-quizzes — kept for compatibility; not used
 #     by any client code today but harmless to leave in place.
 #   · The Telegram join prompt flag — computed here so the template
-#     stays declarative.
+#     stays declarative. The prompt is gated only by configuration;
+#     dismissal is client-side and does not persist.
 # ============================================================
 
 import logging
@@ -107,15 +108,12 @@ def lobby():
     can_create = can_create_live_quiz()
 
     # ── Telegram join prompt ──
-    # Shown once per user on the lobby page until dismissed. The
-    # dismissal is stored server-side so it does not reappear across
-    # devices. The bot username comes from Config; if it is not
-    # configured, the prompt is never shown.
+    # The panel is gated only by configuration. It reappears on every
+    # page load so returning users always see the invitation; the X
+    # button hides it for the current view only (client-side).
     from config import Config as _Cfg
     bot_username = (getattr(_Cfg, 'TELEGRAM_BOT_USERNAME', '') or '').strip()
-    settings = session.get('settings', {}) or {}
-    dismissed = bool(settings.get('onboarding.telegram_prompt_dismissed', 0))
-    show_telegram_prompt = bool(bot_username) and not dismissed
+    show_telegram_prompt = bool(bot_username)
 
     return render_template(
         'dashboard/live_quiz/lobby.html',
