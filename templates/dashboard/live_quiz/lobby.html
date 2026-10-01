@@ -244,6 +244,33 @@
         <div class="lobby-stat total"><div class="number">{{ stats.total_participants or 0 }}</div><div class="label">👥 {{ _('live_quiz.lobby.stat_participants') }}</div></div>
     </div>
 
+    {# ── Telegram join panel ──
+       Renders once per user, above the filter bar. Server-side gated by
+       show_telegram_prompt. Dismissal sets a persistent flag so it does
+       not reappear across devices. #}
+    {% if show_telegram_prompt %}
+    <div class="lobby-tg-panel" id="lobbyTgPanel">
+        <div class="lobby-tg-panel__icon" aria-hidden="true">📣</div>
+        <div class="lobby-tg-panel__text">
+            Ku biir bot-keena Telegram si aad u hesho ogeysiis marka tartan cusub la abuuro.
+        </div>
+        <a class="lobby-tg-panel__cta"
+           href="https://t.me/{{ telegram_bot_username }}?start=subscribe"
+           target="_blank"
+           rel="noopener noreferrer"
+           id="lobbyTgCta">
+            <i class="fab fa-telegram-plane"></i>
+            <span>Ku biir</span>
+        </a>
+        <button type="button"
+                class="lobby-tg-panel__close"
+                id="lobbyTgClose"
+                aria-label="Xir">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    {% endif %}
+
     <div class="lobby-filters" id="filterBar">
         <div class="search-wrapper">
             <i class="fas fa-search"></i>

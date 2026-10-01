@@ -26,7 +26,6 @@ def init_bot_db():
     conn = _get_connection()
     cursor = conn.cursor()
 
-    # ---- Pending PDFs (intake) ----
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS pending_pdfs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +41,6 @@ def init_bot_db():
         "ON pending_pdfs(uploaded_at DESC)"
     )
 
-    # ---- Fulfilled Bot PDFs (staging) ----
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS pdfs (
             id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,7 +68,6 @@ def init_bot_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bot_pdfs_subject ON pdfs(subject)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bot_pdfs_published ON pdfs(published)")
 
-    # ---- Idempotent migrations for existing installs ----
     try:
         cursor.execute("PRAGMA table_info(pdfs)")
         existing_cols = {row[1] for row in cursor.fetchall()}
@@ -98,10 +95,10 @@ def init_bot_db():
     conn.commit()
     conn.close()
 
-    # ---- Join gate (separate connection, idempotent) ----
     init_join_gate_table()
+    init_bot_contacts_table()
 
-    logger.info("Bot database initialized with pending_pdfs, pdfs, and join_gate tables")
+    logger.info("Bot database initialized (pending_pdfs, pdfs, join_gate, bot_contacts)")
 
 
 # ============================================================
@@ -137,7 +134,6 @@ def get_pending_pdf_by_id(pending_id):
 
 
 def get_pending_pdf_list(limit=100, offset=0, search=''):
-    """Return pending PDFs. Optional filename search."""
     conn = _get_connection()
     cursor = conn.cursor()
     if search:
@@ -160,7 +156,6 @@ def get_pending_pdf_list(limit=100, offset=0, search=''):
 
 
 def count_pending_pdfs(search=''):
-    """Total pending count. If search is set, counts matches only."""
     conn = _get_connection()
     cursor = conn.cursor()
     if search:
@@ -205,11 +200,6 @@ def is_pending_duplicate(file_unique_id):
 # ============================================================
 
 def insert_bot_pdf(data):
-    """
-    data keys: code, title, description, curriculum, class, subject,
-               chapter, tags, is_premium, file_id, file_unique_id,
-               uploaded_by, original_filename
-    """
     try:
         conn = _get_connection()
         cursor = conn.cursor()
@@ -262,17 +252,10 @@ def get_bot_pdf_by_id(pdf_id):
 
 
 def _build_published_clause(published_filter):
-    """
-    published_filter:
-        None  → no filter (return all rows)
-        False → only unpublished (published = 0 or NULL)
-        True  → only published   (published = 1)
-    """
     if published_filter is None:
         return "", []
     if published_filter is True:
         return " AND COALESCE(published, 0) = 1", []
-    # False
     return " AND COALESCE(published, 0) = 0", []
 
 
@@ -368,10 +351,6 @@ def update_bot_pdf(pdf_id, data):
 
 
 def mark_bot_pdf_published(pdf_id, published=True):
-    """
-    Flag a staging row as published (or revert). Does NOT delete.
-    The row stays in bot_data.db as a permanent backup of the file_id.
-    """
     try:
         conn = _get_connection()
         cursor = conn.cursor()
@@ -396,10 +375,6 @@ def mark_bot_pdf_published(pdf_id, published=True):
 
 
 def delete_bot_pdf(pdf_id):
-    """
-    Hard-delete a staging row. Used by the admin panel's manual delete.
-    Normal publish flow does NOT call this — it marks as published instead.
-    """
     try:
         conn = _get_connection()
         cursor = conn.cursor()
@@ -424,15 +399,14 @@ def is_bot_duplicate(file_unique_id):
 
 
 def is_duplicate_in_bot(file_unique_id):
-    """Check both pending and bot pdfs."""
     return is_pending_duplicate(file_unique_id) or is_bot_duplicate(file_unique_id)
 
+
 # ============================================================
-# FILE SIZE + BATCH LOOKUP (for direct-download gating)
+# FILE SIZE + BATCH LOOKUP
 # ============================================================
 
 def list_bot_pdfs_missing_size(limit=50):
-    """Return bot PDFs whose file_size has not yet been resolved."""
     conn = _get_connection()
     try:
         cur = conn.cursor()
@@ -450,7 +424,6 @@ def list_bot_pdfs_missing_size(limit=50):
 
 
 def update_bot_pdf_file_size(pdf_id, file_size):
-    """Set file_size for a bot PDF row. Idempotent, non-raising."""
     try:
         conn = _get_connection()
         cur = conn.cursor()
@@ -466,10 +439,6 @@ def update_bot_pdf_file_size(pdf_id, file_size):
 
 
 def get_bot_pdfs_by_codes(codes):
-    """
-    Batch lookup bot PDF rows by code. Returns {code: row_dict}.
-    Chunks to stay under SQLite's parameter limit.
-    """
     if not codes:
         return {}
     result = {}
@@ -491,20 +460,10 @@ def get_bot_pdfs_by_codes(codes):
 
 
 # ============================================================
-# JOIN GATE (force-join membership state)
-# ============================================================
-# One row per Telegram user. Tracks the current stage of the
-# force-join gate and the PDF code the user asked for.
-#
-# Upserted on stage transitions. Deleted on successful delivery,
-# on /start <code> re-entry, or on the daily cleanup task.
-#
-# All functions are non-raising. The gate is a courtesy — never
-# let a DB failure block a legitimate delivery.
+# JOIN GATE
 # ============================================================
 
 def init_join_gate_table():
-    """Create the join_gate table and its index if missing."""
     try:
         conn = _get_connection()
         cursor = conn.cursor()
@@ -529,7 +488,6 @@ def init_join_gate_table():
 
 
 def get_join_gate(user_id):
-    """Return the pending gate row for a user, or None. Non-raising."""
     try:
         conn = _get_connection()
         cursor = conn.cursor()
@@ -547,11 +505,6 @@ def get_join_gate(user_id):
 
 
 def set_join_gate(user_id, stage, code):
-    """
-    Upsert the gate row for a user. `stage` must be 'channel' or 'group'.
-    `code` may be None (e.g. user typed the plain /start with a pending row).
-    Non-raising; returns True on success.
-    """
     if stage not in ('channel', 'group'):
         logger.warning(f"set_join_gate: invalid stage {stage!r}")
         return False
@@ -575,7 +528,6 @@ def set_join_gate(user_id, stage, code):
 
 
 def delete_join_gate(user_id):
-    """Delete the gate row for a user. Non-raising."""
     try:
         conn = _get_connection()
         cursor = conn.cursor()
@@ -589,10 +541,6 @@ def delete_join_gate(user_id):
 
 
 def bump_join_gate_attempts(user_id):
-    """
-    Increment attempts and return the new count, or None on failure.
-    Non-raising.
-    """
     try:
         conn = _get_connection()
         cursor = conn.cursor()
@@ -619,10 +567,6 @@ def bump_join_gate_attempts(user_id):
 
 
 def clean_stale_join_gates(hours=24):
-    """
-    Delete gate rows older than `hours`. Called from daily_tasks.py.
-    Returns the number of rows deleted (or 0 on failure).
-    """
     try:
         hours = max(1, int(hours))
         conn = _get_connection()
@@ -638,4 +582,179 @@ def clean_stale_join_gates(hours=24):
         return n
     except Exception as e:
         logger.warning(f"clean_stale_join_gates failed: {e}")
+        return 0
+
+
+# ============================================================
+# BOT CONTACTS (broadcast audience)
+# ============================================================
+# Every user who has ever talked to the bot is recorded here.
+# Users who have successfully fetched at least one PDF via the
+# bot are flagged with fetched_pdf = 1. The new-quiz broadcast
+# targets only flagged users — a user who has downloaded at
+# least one PDF is a real platform user, not a stranger who
+# just said hi.
+# ============================================================
+
+def init_bot_contacts_table():
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bot_contacts (
+                chat_id       INTEGER PRIMARY KEY,
+                username      TEXT DEFAULT '',
+                first_name    TEXT DEFAULT '',
+                last_name     TEXT DEFAULT '',
+                first_seen_at TEXT DEFAULT (datetime('now','localtime')),
+                last_seen_at  TEXT DEFAULT (datetime('now','localtime')),
+                fetched_pdf   INTEGER NOT NULL DEFAULT 0,
+                blocked       INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bot_contacts_fetched "
+            "ON bot_contacts(fetched_pdf, blocked)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bot_contacts_last_seen "
+            "ON bot_contacts(last_seen_at DESC)"
+        )
+        conn.commit()
+        conn.close()
+        logger.info("bot_contacts table ready")
+    except Exception as e:
+        logger.error(f"init_bot_contacts_table failed: {e}")
+
+
+def upsert_bot_contact(chat_id, username='', first_name='', last_name=''):
+    """
+    Insert or update a bot contact on every incoming message.
+    Never raises.
+    """
+    if not chat_id:
+        return False
+    try:
+        cid = int(chat_id)
+    except (TypeError, ValueError):
+        return False
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO bot_contacts
+                (chat_id, username, first_name, last_name,
+                 first_seen_at, last_seen_at, fetched_pdf, blocked)
+            VALUES (?, ?, ?, ?, datetime('now','localtime'),
+                    datetime('now','localtime'), 0, 0)
+            ON CONFLICT(chat_id) DO UPDATE SET
+                username     = excluded.username,
+                first_name   = excluded.first_name,
+                last_name    = excluded.last_name,
+                last_seen_at = datetime('now','localtime')
+        """, (
+            cid,
+            (username or '')[:64],
+            (first_name or '')[:64],
+            (last_name or '')[:64],
+        ))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.warning(f"upsert_bot_contact failed for chat {chat_id}: {e}")
+        return False
+
+
+def mark_bot_contact_fetched_pdf(chat_id):
+    """
+    Set fetched_pdf = 1 for a chat. Called after a successful
+    PDF delivery via the bot.
+    """
+    if not chat_id:
+        return False
+    try:
+        cid = int(chat_id)
+    except (TypeError, ValueError):
+        return False
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE bot_contacts
+            SET fetched_pdf = 1,
+                last_seen_at = datetime('now','localtime')
+            WHERE chat_id = ?
+        """, (cid,))
+        affected = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return affected > 0
+    except Exception as e:
+        logger.warning(f"mark_bot_contact_fetched_pdf failed for {chat_id}: {e}")
+        return False
+
+
+def mark_bot_contact_blocked(chat_id):
+    """
+    Set blocked = 1 for a chat that returned HTTP 403 on delivery.
+    Prunes it from future broadcasts.
+    """
+    if not chat_id:
+        return False
+    try:
+        cid = int(chat_id)
+    except (TypeError, ValueError):
+        return False
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE bot_contacts SET blocked = 1 WHERE chat_id = ?",
+            (cid,),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.warning(f"mark_bot_contact_blocked failed for {chat_id}: {e}")
+        return False
+
+
+def get_broadcast_recipients():
+    """
+    Return the list of chat_ids that should receive a new-quiz
+    broadcast: users who have fetched at least one PDF and are
+    not blocked.
+    """
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT chat_id
+            FROM bot_contacts
+            WHERE fetched_pdf = 1 AND blocked = 0
+            ORDER BY last_seen_at DESC
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+        return [int(r['chat_id']) for r in rows]
+    except Exception as e:
+        logger.warning(f"get_broadcast_recipients failed: {e}")
+        return []
+
+
+def count_broadcast_recipients():
+    """Return the number of eligible broadcast recipients."""
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) AS n FROM bot_contacts "
+            "WHERE fetched_pdf = 1 AND blocked = 0"
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return int(row['n']) if row else 0
+    except Exception:
         return 0

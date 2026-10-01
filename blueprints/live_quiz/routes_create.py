@@ -284,7 +284,7 @@ def create():
     })
 
     try:
-        if (quiz.get('is_public') and quiz.get('status') == 'waiting'):
+        if quiz.get('is_public'):
             from services.notification_service import broadcast_new_quiz
             join_url = '/live-quiz/j/' + quiz['join_code']
             cname = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'NuunPlatform'
@@ -412,7 +412,7 @@ def create_with_available():
     })
 
     try:
-        if (quiz.get('is_public') and quiz.get('status') == 'waiting'):
+        if quiz.get('is_public'):
             from services.notification_service import broadcast_new_quiz
             join_url = '/live-quiz/j/' + quiz['join_code']
             cname = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'NuunPlatform'

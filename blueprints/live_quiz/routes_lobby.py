@@ -4,10 +4,19 @@
 # Lobby index, quiz listing, and the JSON join endpoint that the
 # lobby cards use. Every quiz_id in the URL is declared as
 # <int:quiz_id> so the state manager receives ints — not strings.
+#
+# Also hosts:
+#   · /api/recent-public-quizzes — kept for compatibility; not used
+#     by any client code today but harmless to leave in place.
+#   · The Telegram join prompt flag — computed here so the template
+#     stays declarative.
+# ============================================================
 
 import logging
 
-from flask import request, session, flash, redirect, url_for, jsonify, render_template
+from flask import (
+    request, session, flash, redirect, url_for, jsonify, render_template,
+)
 
 from db import (
     get_live_quiz_by_id,
@@ -16,6 +25,7 @@ from db import (
     get_live_quiz_stats,
     can_join_live_quiz,
     get_user_active_quiz,
+    execute_with_retry,
 )
 from utils import validate_csrf
 from subjects_config import get_all_subjects
@@ -96,6 +106,17 @@ def lobby():
     total_pages = (total + per_page - 1) // per_page if total > 0 else 1
     can_create = can_create_live_quiz()
 
+    # ── Telegram join prompt ──
+    # Shown once per user on the lobby page until dismissed. The
+    # dismissal is stored server-side so it does not reappear across
+    # devices. The bot username comes from Config; if it is not
+    # configured, the prompt is never shown.
+    from config import Config as _Cfg
+    bot_username = (getattr(_Cfg, 'TELEGRAM_BOT_USERNAME', '') or '').strip()
+    settings = session.get('settings', {}) or {}
+    dismissed = bool(settings.get('onboarding.telegram_prompt_dismissed', 0))
+    show_telegram_prompt = bool(bot_username) and not dismissed
+
     return render_template(
         'dashboard/live_quiz/lobby.html',
         quizzes=quizzes,
@@ -110,6 +131,8 @@ def lobby():
         total_pages=total_pages,
         user_tier=user_tier,
         can_create=can_create,
+        show_telegram_prompt=show_telegram_prompt,
+        telegram_bot_username=bot_username,
     )
 
 
@@ -152,10 +175,11 @@ def lobby_join(quiz_id):
     if not can_join:
         return jsonify({'error': reason}), 400
 
-    # Atomic add: count + insert inside one transaction.
     question_ids = quiz.get('question_ids', []) or []
     max_participants = quiz.get('max_participants', 50)
-    ok, code = _atomic_add_participant(quiz_id, user_id, question_ids, max_participants)
+    ok, code = _atomic_add_participant(
+        quiz_id, user_id, question_ids, max_participants,
+    )
     if not ok:
         if code == 'full':
             return jsonify({'error': 'This quiz is full.'}), 400
@@ -166,9 +190,6 @@ def lobby_join(quiz_id):
             })
         return jsonify({'error': 'Failed to join quiz'}), 500
 
-    # Bring the user into the in-memory state. If either step
-    # fails we surface a real error rather than redirecting into a
-    # state that does not know the user exists.
     if not ensure_participant_in_state(quiz_id, user_id):
         return jsonify({'error': 'Quiz state could not be loaded'}), 500
 
@@ -190,7 +211,6 @@ def available_count():
         return jsonify({'error': 'Not logged in'}), 401
 
     from question_utils import VALID_GRADES
-    from db import execute_with_retry
 
     subject_code = (request.args.get('subject') or '').strip()
     grade = (request.args.get('grade') or '').strip().upper()
@@ -245,83 +265,3 @@ def available_count():
         'total_subject': total_subject,
         'error': err_text,
     })
-
-@live_quiz_bp.route('/api/recent-public-quizzes')
-def api_recent_public_quizzes():
-    """
-    Poll target for static/js/live_quiz/new_quiz_watcher.js.
-
-    Query params:
-        since   — last quiz id the client has already seen (default 0)
-
-    Response:
-        {
-          "latest_id": <int>,           # current max public quiz id
-          "quizzes": [                   # up to 5 quizzes with id > since
-            {
-              "id":           <int>,
-              "title":        <str>,
-              "subject_code": <str>,
-              "join_code":    <str>,
-              "creator_first":<str>,
-              "creator_last": <str>
-            }, ...
-          ]
-        }
-
-    When `since` is 0 or missing, `quizzes` is always empty — the caller
-    uses `latest_id` only, to record a starting point without notifying.
-    """
-    if 'user_id' not in session:
-        return jsonify({'error': 'Not logged in'}), 401
-
-    try:
-        since = int(request.args.get('since', 0) or 0)
-    except (TypeError, ValueError):
-        since = 0
-
-    user_id = session['user_id']
-
-    # Current max public quiz id (excluding the caller's own)
-    latest_id = 0
-    try:
-        row = execute_with_retry(
-            "SELECT COALESCE(MAX(id), 0) AS m FROM live_quizzes "
-            "WHERE is_public = 1 AND creator_id != ?",
-            (user_id,),
-        ).fetchone()
-        latest_id = int(row['m']) if row else 0
-    except Exception as e:
-        logger.warning(f"recent-public-quizzes: max query failed: {e}")
-
-    # First-ever poll — return only the max id, no quiz list
-    if since <= 0:
-        return jsonify({'latest_id': latest_id, 'quizzes': []})
-
-    quizzes = []
-    try:
-        cursor = execute_with_retry("""
-            SELECT lq.id, lq.title, lq.subject_code, lq.join_code,
-                   s.first_name AS creator_first,
-                   s.last_name  AS creator_last
-            FROM live_quizzes lq
-            LEFT JOIN students s ON s.id = lq.creator_id
-            WHERE lq.is_public = 1
-              AND lq.creator_id != ?
-              AND lq.id > ?
-            ORDER BY lq.id DESC
-            LIMIT 5
-        """, (user_id, since))
-        for row in cursor.fetchall():
-            quizzes.append({
-                'id':            row['id'],
-                'title':         row['title'] or 'Tartan',
-                'subject_code':  row['subject_code'] or '',
-                'join_code':     row['join_code'] or '',
-                'creator_first': row['creator_first'] or '',
-                'creator_last':  row['creator_last'] or '',
-            })
-    except Exception as e:
-        logger.warning(f"recent-public-quizzes: query failed: {e}")
-
-    return jsonify({'latest_id': latest_id, 'quizzes': quizzes})

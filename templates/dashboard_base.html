@@ -427,7 +427,6 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/upgrade.css') }}?v=3" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/prompt-cards.css') }}?v=3" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/discount-chip.css') }}?v=3" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz/notify.css') }}?v=1" />
 {% block dashboard_css %}{% endblock %}
 {% endblock %}
 
@@ -886,14 +885,6 @@
 <script src="{{ url_for('static', filename='js/font-size-fix.js') }}"></script>
 <script src="{{ url_for('static', filename='js/discount-chip.js') }}?v=3" defer></script>
 <script src="{{ url_for('static', filename='js/app_badge.js') }}" defer></script>
-<script>
-window.__LQ_NEW_QUIZ = {
-    enabled: {{ 'true' if settings.get('notifications.new_live_quiz', 1) else 'false' }},
-    pollMs: 30000,
-    storageKey: 'nuun_lq_last_seen_quiz_id'
-};
-</script>
-<script src="{{ url_for('static', filename='js/live_quiz/new_quiz_watcher.js') }}" defer></script>
 {% block dashboard_js %}{% endblock %}
 
 {% if session.user_id %}

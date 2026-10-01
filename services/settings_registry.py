@@ -355,6 +355,17 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "requires_confirmation": False,
         "sensitive": False,
     },
+    "onboarding.telegram_prompt_dismissed": {
+        "type": "boolean",
+        "default": False,
+        "category": "notifications",
+        "label": "Telegram Prompt Dismissed",
+        "description": "Internal flag. Set to true when the user dismisses the Telegram join prompt on the lobby.",
+        "tier_required": None,
+        "live": True,
+        "requires_confirmation": False,
+        "sensitive": False,
+    },
 }
 
 

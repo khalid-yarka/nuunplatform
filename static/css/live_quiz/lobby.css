@@ -559,3 +559,150 @@
         letter-spacing: 1px;
     }
 }
+
+
+/* ============================================
+   TELEGRAM JOIN PANEL
+   One-line prompt at the top of the lobby.
+   Dismissible via the X. Sets a server-side flag.
+   ============================================ */
+
+.lobby-tg-panel {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid #229ED9;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.lobby-tg-panel.is-dismissing {
+    opacity: 0;
+    transform: translateY(-6px);
+}
+
+.lobby-tg-panel__icon {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #229ED9 0%, #1a7ca8 100%);
+    color: #ffffff;
+    box-shadow: 0 3px 8px rgba(34, 158, 217, 0.28);
+}
+
+.lobby-tg-panel__text {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+.lobby-tg-panel__cta {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #229ED9;
+    color: #ffffff !important;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+}
+
+.lobby-tg-panel__cta i {
+    font-size: 13px;
+}
+
+.lobby-tg-panel__cta:hover,
+.lobby-tg-panel__cta:focus-visible {
+    background: #1a7ca8;
+    color: #ffffff !important;
+    text-decoration: none;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(34, 158, 217, 0.35);
+    outline: none;
+}
+
+.lobby-tg-panel__close {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.lobby-tg-panel__close:hover,
+.lobby-tg-panel__close:focus-visible {
+    background: var(--primary-light);
+    color: var(--primary);
+    border-color: var(--primary);
+    outline: none;
+}
+
+/* Dark mode — panel keeps its blue accent, the surface follows the theme */
+[data-theme="dark"] .lobby-tg-panel {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    border-left-color: #229ED9 !important;
+}
+
+[data-theme="dark"] .lobby-tg-panel__text {
+    color: var(--text-secondary);
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+    .lobby-tg-panel {
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 12px 14px;
+    }
+
+    .lobby-tg-panel__text {
+        font-size: 13px;
+        flex-basis: calc(100% - 50px);
+    }
+
+    .lobby-tg-panel__cta {
+        padding: 7px 14px;
+        font-size: 12.5px;
+    }
+
+    .lobby-tg-panel__close {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 26px;
+        height: 26px;
+    }
+
+    .lobby-tg-panel {
+        position: relative;
+        padding-top: 14px;
+    }
+}

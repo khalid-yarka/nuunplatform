@@ -1,9 +1,9 @@
 /* ============================================================
    static/js/live_quiz/lobby.js
    ============================================================
-   Extracted verbatim from templates/dashboard/live_quiz/lobby.html.
+   Extracted from templates/dashboard/live_quiz/lobby.html.
    Bridge objects expected on window:
-     window.__LQ_I18N   — translations (joining, joined_ok, ...)
+     window.__LQ_I18N   — translations
      window.__LQ        — currently unused; reserved
    ============================================================ */
 
@@ -229,6 +229,58 @@ document.addEventListener('DOMContentLoaded', function() {
             alert(message);
         }
     }
+
+    // ============================================================
+    // TELEGRAM JOIN PANEL
+    // The X sets a server-side flag so the panel does not reappear
+    // on any device. The CTA opens the bot; the flag is also set so
+    // the panel is not shown again on the next page load after the
+    // user has already acted.
+    // ============================================================
+    (function setupTelegramPanel() {
+        var panel = document.getElementById('lobbyTgPanel');
+        if (!panel) return;
+
+        var closeBtn = document.getElementById('lobbyTgClose');
+        var ctaBtn   = document.getElementById('lobbyTgCta');
+
+        function persistDismissal() {
+            try {
+                fetch('/settings/api', {
+                    method: 'PATCH',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken
+                    },
+                    body: JSON.stringify({
+                        'onboarding.telegram_prompt_dismissed': true
+                    })
+                }).catch(function () { /* silent */ });
+            } catch (e) { /* silent */ }
+        }
+
+        function dismiss() {
+            panel.classList.add('is-dismissing');
+            setTimeout(function () {
+                if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
+            }, 260);
+            persistDismissal();
+        }
+
+        if (closeBtn) {
+            closeBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                dismiss();
+            });
+        }
+
+        if (ctaBtn) {
+            ctaBtn.addEventListener('click', function () {
+                persistDismissal();
+            });
+        }
+    })();
 
     updateClearButtonVisibility();
 });
