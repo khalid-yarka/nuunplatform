@@ -35,6 +35,7 @@ DEFAULT_SETTINGS = {
     "notifications.live_quiz_result": 1,
     "notifications.admin_announcement": 1,
     "notifications.participant_joined": 1,
+    "notifications.new_live_quiz": 1,
     "notifications.new_pdf": 1,
     "notifications.daily_digest": 0,
     "notifications.achievement_unlock": 1,

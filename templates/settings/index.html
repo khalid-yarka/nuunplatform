@@ -245,6 +245,7 @@
                 <label class="notif-check"><input type="checkbox" id="notify_live_quiz_result" {% if settings['notifications.live_quiz_result'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.live_result') }}</span></label>
                 <label class="notif-check"><input type="checkbox" id="notify_participant_joined" {% if settings['notifications.participant_joined'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.participant') }}</span></label>
                 <label class="notif-check"><input type="checkbox" id="notify_admin_announcement" {% if settings['notifications.admin_announcement'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.announcement') }}</span></label>
+                <label class="notif-check"><input type="checkbox" id="notify_new_live_quiz" {% if settings['notifications.new_live_quiz'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.new_live_quiz') }}</span></label>
             </div>
             <div class="form-row">
                 <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {{ _('common.save_changes') }}<span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span></button>
@@ -587,6 +588,7 @@
         'notify_live_quiz_result':     'notifications.live_quiz_result',
         'notify_participant_joined':   'notifications.participant_joined',
         'notify_admin_announcement':   'notifications.admin_announcement',
+        'notify_new_live_quiz':        'notifications.new_live_quiz',
         'notify_daily_digest':         'notifications.daily_digest',
         'notify_achievement_unlock':   'notifications.achievement_unlock',
         'notify_live_quiz_reminder':   'notifications.live_quiz_reminder',
@@ -801,7 +803,8 @@
                 'notifications.live_quiz_start':     document.getElementById('notify_live_quiz_start').checked,
                 'notifications.live_quiz_result':    document.getElementById('notify_live_quiz_result').checked,
                 'notifications.participant_joined':  document.getElementById('notify_participant_joined').checked,
-                'notifications.admin_announcement':  document.getElementById('notify_admin_announcement').checked
+                'notifications.admin_announcement':  document.getElementById('notify_admin_announcement').checked,
+                'notifications.new_live_quiz':       document.getElementById('notify_new_live_quiz').checked
             };
             submitForm(notifForm, '/settings/api', payload, 'Notification preferences saved!');
         });

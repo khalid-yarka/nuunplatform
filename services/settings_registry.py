@@ -234,6 +234,19 @@ SETTINGS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "requires_confirmation": False,
         "sensitive": False,
     },
+    
+    "notifications.new_live_quiz": {
+        "type": "boolean",
+        "default": True,
+        "category": "notifications",
+        "label": "New Competition Announcements",
+        "description": "Get a push notification when someone creates a new public competition.",
+        "tier_required": None,
+        "live": True,
+        "requires_confirmation": False,
+        "sensitive": False,
+    },
+  
     "notifications.daily_digest": {
         "type": "boolean",
         "default": False,

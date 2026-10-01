@@ -213,6 +213,7 @@
   "settings.notifications.push.types.participant": "Qof ayaa ku biiray tartanka aan martigelinayo",
   "settings.notifications.push.types.announcement": "Ogeysiisyada barta",
   "settings.notifications.push.types.quiz_complete": "Tababarka aan qaato waa la kaydiyay",
+  "settings.notifications.push.types.new_live_quiz": "Tartan cusub ba furmay",
   "quiz.setup.page_title": "Bilow Tababar",
   "quiz.setup.title": "Bilow Tababar",
   "quiz.setup.subtitle": "Dooro maado iyo tirada su'aalaha.",

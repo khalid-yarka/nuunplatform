@@ -213,6 +213,7 @@
   "settings.notifications.push.types.participant": "Someone joined a competition I'm hosting",
   "settings.notifications.push.types.announcement": "Platform announcements",
   "settings.notifications.push.types.quiz_complete": "A practice I take is saved",
+  "settings.notifications.push.types.new_live_quiz": "A new competition is created",
   "quiz.setup.page_title": "Start a Practice",
   "quiz.setup.title": "Start a Practice",
   "quiz.setup.subtitle": "Select a subject and number of questions.",

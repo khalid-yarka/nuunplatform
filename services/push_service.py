@@ -51,6 +51,7 @@ _MAX_BODY_CHARS = 200
 _MAX_ENDPOINT_CHARS = 2048
 
 _DEFAULT_ICON = '/static/images/icon-192.png'
+_DEFAULT_BADGE = '/static/images/badge-nuun.png'
 _DEFAULT_TAG = 'nuun-default'
 
 
@@ -167,7 +168,7 @@ def _build_payload(title, body, url, icon, tag, data) -> str:
         'body':  body or '',
         'url':   url or '/',
         'icon':  icon or _DEFAULT_ICON,
-        'badge': _DEFAULT_ICON,
+        'badge': _DEFAULT_BADGE,
         'tag':   tag or _DEFAULT_TAG,
         'data':  data or {},
     }

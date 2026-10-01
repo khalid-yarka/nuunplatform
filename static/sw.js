@@ -13,7 +13,6 @@ const CACHE_VERSION = 'nuun-v3-20261002';
 const SHELL_CACHE   = 'nuun-shell-' + CACHE_VERSION;
 const RUNTIME_CACHE = 'nuun-runtime-' + CACHE_VERSION;
 
-// The shell is small. Everything else is cached lazily at runtime.
 const SHELL_ASSETS = [
     '/offline.html',
     '/manifest.json',
@@ -72,14 +71,16 @@ self.addEventListener('message', function (event) {
 /* ============================================================
    PUSH HANDLER
    ============================================================
-   Fires when the browser delivers a Web Push message from the
-   server. Renders a notification and applies priority defaults
-   for high-attention types.
+   Renders an OS notification for every Web Push message the
+   browser delivers. Reads payload fields the server sets:
 
-   Priority defaults for live_quiz_start:
-     requireInteraction — stays on screen until the user acts
-     renotify           — re-alerts even if `tag` already exists
-     vibrate            — Android vibration pattern
+     title, body, url, icon, tag, data
+
+   Priority defaults per type:
+     · live_quiz_start → requireInteraction + renotify + vibrate
+     · new_live_quiz   → nothing special (informational)
+
+   Anything else falls through to the plain defaults.
    ============================================================ */
 self.addEventListener('push', function (event) {
     var payload = {};
@@ -94,31 +95,23 @@ self.addEventListener('push', function (event) {
     var body  = payload.body  || '';
     var url   = payload.url   || '/';
     var icon  = payload.icon  || '/static/images/icon-192.png';
+    var badge = payload.badge || '/static/images/badge-nuun.png';
     var tag   = payload.tag   || ('nuun-push-' + Date.now());
     var type  = (payload.data && payload.data.type) || '';
 
     var opts = {
         body: body,
         icon: icon,
-        badge: '/static/images/badge-nuun.png',
+        badge: badge,
         tag: tag,
         data: { url: url, type: type }
     };
 
-    // Priority defaults — the recipient just got a live event.
+    // Priority defaults for time-sensitive types
     if (type === 'live_quiz_start') {
         opts.requireInteraction = true;
         opts.renotify = true;
         opts.vibrate = [200, 100, 200, 100, 200];
-    }
-
-    // Optional per-push overrides from data.options (future-proofing)
-    if (payload.data && payload.data.options) {
-        var o = payload.data.options;
-        if (typeof o.requireInteraction === 'boolean') opts.requireInteraction = o.requireInteraction;
-        if (typeof o.renotify === 'boolean')           opts.renotify = o.renotify;
-        if (Array.isArray(o.vibrate))                  opts.vibrate = o.vibrate;
-        if (typeof o.silent === 'boolean')             opts.silent = o.silent;
     }
 
     event.waitUntil(self.registration.showNotification(title, opts));
@@ -150,7 +143,6 @@ self.addEventListener('fetch', function (event) {
 
     if (_shouldBypass(url.pathname)) return;
 
-    // ── Navigation requests: network-first ──
     var isNav = (req.mode === 'navigate')
              || (req.headers.get('accept') || '').includes('text/html');
 
@@ -173,7 +165,6 @@ self.addEventListener('fetch', function (event) {
         return;
     }
 
-    // ── Static assets: stale-while-revalidate ──
     if (url.pathname.startsWith('/static/') || url.pathname === '/manifest.json') {
         event.respondWith(
             caches.open(RUNTIME_CACHE).then(function (cache) {
@@ -191,7 +182,6 @@ self.addEventListener('fetch', function (event) {
         return;
     }
 
-    // ── Everything else: network with cache fallback ──
     event.respondWith(
         fetch(req).catch(function () {
             return caches.match(req).then(function (cached) {

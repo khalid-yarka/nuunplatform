@@ -30,6 +30,27 @@ document.addEventListener('DOMContentLoaded', function() {
     const isCreator = !!window.__LQ.isCreator;
     const sessionUserId = String(window.__LQ.userId);
 
+    // ── Title shrink — 40 chars, word-boundary cut, ends with … ──
+    function shortenTitle(text, maxLen) {
+        if (!text) return '';
+        text = String(text).trim();
+        if (text.length <= maxLen) return text;
+        var budget = maxLen - 1;
+        var cut = text.slice(0, budget);
+        var lastSpace = cut.lastIndexOf(' ');
+        if (lastSpace >= budget * 0.6) {
+            return cut.slice(0, lastSpace).replace(/\s+$/, '') + '…';
+        }
+        return cut.replace(/\s+$/, '') + '…';
+    }
+
+    // ── Substitute {title} in the OS notification body ──
+    function buildQuizStartedBody() {
+        var short = shortenTitle(quizTitle, 40);
+        return (I18N.notif_quiz_started_body || '"{title}" Wuu socda, Yan Laga Tagin.')
+            .replace('{title}', short);
+    }
+
     let currentQuestionIndex = 0;
     let timer = timePerQuestion;
     let timerInterval = null;
@@ -51,36 +72,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let isRedirecting = false;
     let completedParticipantsCount = 0;
     let totalParticipantsCount = 0;
-
-    // ============================================================
-    // TITLE SHRINK — word-boundary cut for the OS notification body
-    // ============================================================
-    // Long quiz titles are unreadable inside a device notification.
-    // Cuts at the last word boundary within `maxLen - 1` characters
-    // when that boundary falls past 60% of the budget; otherwise
-    // hard-cuts. Always ends with a single '…' glyph.
-    function shortenTitle(text, maxLen) {
-        if (!text) return '';
-        text = String(text).trim();
-        if (text.length <= maxLen) return text;
-
-        var budget = maxLen - 1;
-        var cut = text.slice(0, budget);
-        var lastSpace = cut.lastIndexOf(' ');
-
-        if (lastSpace >= budget * 0.6) {
-            return cut.slice(0, lastSpace).replace(/\s+$/, '') + '…';
-        }
-        return cut.replace(/\s+$/, '') + '…';
-    }
-
-    // Build the quiz-started body from the template-provided frame.
-    // I18N.notif_quiz_started_body is: '"{title}" Wuu socda, Yan Laga Tagin.'
-    function buildQuizStartedBody() {
-        var short = shortenTitle(quizTitle, 40);
-        return (I18N.notif_quiz_started_body || '" {title} " Wuu socda, Yan Laga Tagin.')
-            .replace('{title}', short);
-    }
 
     function restoreStateFromStorage() {
         try {
@@ -345,11 +336,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.status === 'finished' && !quizEnded) {
                     quizEnded = true;
                     quizExiting = true;
-                    sendBrowserNotification(
-                        I18N.notif_quiz_complete_title,
-                        I18N.notif_quiz_complete_body,
-                        '/live-quiz/results/' + quizId
-                    );
+                    sendBrowserNotification(I18N.notif_quiz_complete_title, I18N.notif_quiz_complete_body, '/live-quiz/results/' + quizId);
                     window.location.href = data.redirect_url || '/live-quiz/results/' + quizId;
                     return;
                 }
@@ -361,10 +348,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             notificationShown = true;
                             showNotification(I18N.toast_started);
                             playNotificationSound();
-                            // High-priority OS notification: buzzes, stays
-                            // pinned until the user acts, and reuses the
-                            // same tag per quiz so a second fire replaces
-                            // the first instead of stacking.
                             sendBrowserNotification(
                                 I18N.notif_quiz_started_title,
                                 buildQuizStartedBody(),
@@ -399,11 +382,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (data.all_completed && data.status === 'active') {
                         if (data.is_completed) {
                             quizExiting = true;
-                            sendBrowserNotification(
-                                I18N.notif_all_finished_title,
-                                I18N.notif_all_finished_body,
-                                '/live-quiz/results/' + quizId
-                            );
+                            sendBrowserNotification(I18N.notif_all_finished_title, I18N.notif_all_finished_body, '/live-quiz/results/' + quizId);
                             window.location.href = '/live-quiz/results/' + quizId;
                             return;
                         }

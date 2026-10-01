@@ -18,11 +18,13 @@ caller still returns True.
 """
 
 import logging
+import threading
 import time
 
 from db import (
     create_notification,
     create_notification_for_all_users as db_create_all,
+    execute_with_retry,
 )
 from services.settings_service import SettingsService
 
@@ -38,6 +40,16 @@ PUSH_ELIGIBLE_TYPES = frozenset({
     'participant_joined',
     'quiz_complete',
     'admin_announcement',
+    'new_live_quiz',
+})
+
+
+# ---------------------------------------------------------------------
+# Types whose per-type toggle defaults to ON.
+# Everything else defaults to OFF and must be enabled by the user.
+# ---------------------------------------------------------------------
+_DEFAULT_ON_PUSH_TYPES = frozenset({
+    'new_live_quiz',
 })
 
 
@@ -50,6 +62,7 @@ _PER_TYPE_KEY = {
     'participant_joined': 'notifications.push_participant_joined',
     'admin_announcement': 'notifications.push_admin_announcement',
     'quiz_complete':      'notifications.push_quiz_complete',
+    'new_live_quiz':      'notifications.new_live_quiz',
 }
 
 
@@ -60,21 +73,29 @@ def _user_wants_push(user_id: int) -> bool:
     """True if the user's master push toggle is on."""
     try:
         from user_settings import get_user_setting
-        return bool(get_user_setting(user_id, 'notifications.push_enabled', 0))
+        return bool(get_user_setting(user_id, 'notifications.push_enabled', 1))
     except Exception:
-        return False
+        return True
 
 
 def _user_wants_push_type(user_id: int, notification_type: str) -> bool:
-    """True if the user's per-type push preference allows this type."""
+    """
+    True if the user's per-type push preference allows this type.
+
+    The default when no preference has ever been stored depends on
+    the type:
+        · Types in _DEFAULT_ON_PUSH_TYPES → default True
+        · Everything else                  → default False
+    """
     key = _PER_TYPE_KEY.get(notification_type)
     if not key:
         return False
+    default = 1 if notification_type in _DEFAULT_ON_PUSH_TYPES else 0
     try:
         from user_settings import get_user_setting
-        return bool(get_user_setting(user_id, key, 0))
+        return bool(get_user_setting(user_id, key, default))
     except Exception:
-        return False
+        return notification_type in _DEFAULT_ON_PUSH_TYPES
 
 
 def _fanout_push(
@@ -162,7 +183,6 @@ def send_notification_to_all(
     if force:
         return db_create_all(notification_type, title, body, link, icon)
 
-    from db import execute_with_retry
     cursor = execute_with_retry("SELECT id FROM students")
     users = cursor.fetchall()
     sent = 0
@@ -194,8 +214,6 @@ def _query_push_eligible_users(
 
     Capped at max_recipients.
     """
-    from db import execute_with_retry
-
     cursor = execute_with_retry(
         "SELECT DISTINCT user_id FROM push_subscriptions LIMIT ?",
         (max_recipients * 3,),
@@ -227,21 +245,7 @@ def broadcast_announcement(
 
     * Always writes the in-app notification row for every user.
     * If also_push is True, delivers Web Push to users who have opted in.
-
-    Returns:
-        {
-          'in_app': int,              # rows written to notifications
-          'push': {
-            'sent': int,
-            'failed': int,
-            'pruned': int,
-            'recipients': int,
-            'capped': bool,           # True if max_recipients was hit
-            'skipped': str | None,    # reason push was skipped
-          }
-        }
     """
-    # 1. In-app — synchronous, fast, always happens
     inapp_count = send_notification_to_all(
         'admin_announcement', title, body, link, icon, force=True,
     )
@@ -255,7 +259,6 @@ def broadcast_announcement(
         push_result['skipped'] = 'not_requested'
         return {'in_app': inapp_count, 'push': push_result}
 
-    # 2. Push — check service availability first
     try:
         from services import push_service
         if not push_service.is_available():
@@ -266,7 +269,6 @@ def broadcast_announcement(
         push_result['skipped'] = 'push_unavailable'
         return {'in_app': inapp_count, 'push': push_result}
 
-    # 3. Find who should receive push
     user_ids = _query_push_eligible_users('admin_announcement', max_recipients)
     if not user_ids:
         push_result['skipped'] = 'no_recipients'
@@ -278,7 +280,6 @@ def broadcast_announcement(
             "broadcast_announcement: capped at %d recipients", max_recipients,
         )
 
-    # 4. Deliver in chunks
     try:
         for i in range(0, len(user_ids), _BROADCAST_CHUNK_SIZE):
             chunk = user_ids[i:i + _BROADCAST_CHUNK_SIZE]
@@ -306,46 +307,119 @@ def broadcast_announcement(
 
 
 # ---------------------------------------------------------------------
-# Broadcast — new public quiz created
+# Broadcast — new public quiz created (PUSH-ONLY)
 # ---------------------------------------------------------------------
+# This is the only notification path that does not touch the
+# notifications table. The recipient sees a fleeting OS notification
+# and nothing else — no bell row, no unread badge bump. If they swipe
+# it away, it is gone for good.
+#
+# Runs in a background daemon thread so the create-quiz request returns
+# immediately even when there are hundreds of subscribers to reach.
+# ---------------------------------------------------------------------
+
 def broadcast_new_quiz(quiz_title, creator_name, join_url, creator_id):
     """
-    Notify every verified user (except the creator) that a new public
-    competition exists. One bulk INSERT regardless of user count.
+    Push-only announcement that a new public quiz exists.
 
-    Hardcoded Somali text (per user request).
-    Respects `notifications.new_live_quiz` preference — users can
-    opt out via Settings → Notifications.
+    Every subscribed user who has not opted out receives a Somali
+    OS notification. No DB rows are written.
 
-    Returns the number of notification rows written.
+    Returns immediately — the actual fan-out happens on a daemon thread.
     """
-    from db import execute_with_retry, now as db_now
+    threading.Thread(
+        target=_do_broadcast_new_quiz,
+        args=(quiz_title, creator_name, join_url, creator_id),
+        daemon=True,
+        name='new-quiz-push',
+    ).start()
+    return True
 
-    # Hardcoded Somali
-    title = "🎯 Tartan cusub"
-    body  = f'"{quiz_title}" — {creator_name}. Taabo si aad u biirto.'
-    icon  = "🎯"
-    ntype = "new_live_quiz"
 
+def _do_broadcast_new_quiz(quiz_title, creator_name, join_url, creator_id):
+    """
+    The actual push fan-out. Runs in a daemon thread.
+    Never raises — every failure is logged and swallowed.
+    """
     try:
-        cursor = execute_with_retry("""
-            INSERT INTO notifications
-                (user_id, type, title, body, link, icon, is_read, created_at)
-            SELECT s.id, ?, ?, ?, ?, ?, 0, ?
-            FROM students s
-            WHERE s.id != ?
-              AND NOT EXISTS (
-                  SELECT 1 FROM notification_preferences np
-                  WHERE np.user_id = s.id
-                    AND np.notification_type = ?
-                    AND np.enabled = 0
-              )
-        """, (
-            ntype, title, body, join_url, icon, db_now(),
-            creator_id,
-            ntype,
-        ), commit=True)
-        return cursor.rowcount or 0
+        from services import push_service
+        if not push_service.is_available():
+            logger.debug("broadcast_new_quiz: push not configured; nothing sent")
+            return 0
+
+        # ── Find users with subscriptions, excluding the creator ──
+        try:
+            cursor = execute_with_retry(
+                "SELECT DISTINCT user_id FROM push_subscriptions WHERE user_id != ?",
+                (creator_id,),
+            )
+            candidate_ids = [row['user_id'] for row in cursor.fetchall()]
+        except Exception as e:
+            logger.warning(f"broadcast_new_quiz: subscriber query failed: {e}")
+            return 0
+
+        if not candidate_ids:
+            logger.info("broadcast_new_quiz: no subscribers to notify")
+            return 0
+
+        # ── Filter by opt-in ──
+        eligible = [
+            uid for uid in candidate_ids
+            if _user_wants_push(uid)
+            and _user_wants_push_type(uid, 'new_live_quiz')
+        ]
+        if not eligible:
+            logger.info("broadcast_new_quiz: all subscribers opted out")
+            return 0
+
+        # ── Build Somali text ──
+        creator_name = (creator_name or '').strip() or 'NuunPlatform'
+        first_name = creator_name.split()[0] if creator_name else 'Nuun'
+
+        title = f'🎯 Tartan cusub - {first_name}'
+        body = (
+            f'"{quiz_title}" — {creator_name}\n'
+            f'Taabo si aad ugu qayb gasho tartanka.'
+        )
+
+        # ── Per-quiz tag so two announcements stack ──
+        code = (join_url or '').rstrip('/').rsplit('/', 1)[-1] or 'quiz'
+        tag = f'new-quiz-{code}'
+
+        # ── Push in chunks ──
+        total_reached = 0
+        chunk_size = 50
+        for i in range(0, len(eligible), chunk_size):
+            chunk = eligible[i:i + chunk_size]
+            try:
+                r = push_service.deliver_batch(
+                    chunk,
+                    title=title,
+                    body=body,
+                    url=join_url,
+                    icon=None,
+                    tag=tag,
+                    data={
+                        'type': 'new_live_quiz',
+                        'url': join_url,
+                        'quiz_code': code,
+                    },
+                )
+                total_reached += r.get('users_reached', 0)
+            except Exception as e:
+                logger.warning(f"broadcast_new_quiz: chunk failed: {e}")
+
+            if i + chunk_size < len(eligible):
+                time.sleep(0.5)
+
+        logger.info(
+            f"broadcast_new_quiz: pushed to {total_reached}/{len(eligible)} "
+            f"subscribers for quiz '{quiz_title}'"
+        )
+        return total_reached
+
     except Exception as e:
-        logger.error(f"broadcast_new_quiz failed: {e}", exc_info=True)
+        logger.error(
+            f"broadcast_new_quiz worker crashed: {e}", exc_info=True,
+        )
         return 0
