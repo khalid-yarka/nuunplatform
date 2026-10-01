@@ -1,0 +1,75 @@
+{
+  "common": {
+    "buttons": {
+      "home":           "🏠 Bogga",
+      "live_quiz":      "🎯 Tartamada",
+      "pdfs":           "📚 PDF-yada",
+      "practice":       "✏️ Tababar",
+      "history":        "📊 Horumarka",
+      "achievements":   "🏆 Guulaha",
+      "contact":        "💬 La xiriir Maamulka",
+      "pending_pdfs":   "📚 PDF-yada Sugaya"
+    },
+    "paths": {
+      "home":           "/home",
+      "live_quiz":      "/live-quiz/lobby",
+      "pdfs":           "/pdfs",
+      "practice":       "/quiz/setup",
+      "history":        "/history",
+      "achievements":   "/achievements"
+    }
+  },
+
+  "welcome": {
+    "greeting":         "👋 Salaan {first_name}!",
+    "greeting_no_name": "👋 Salaan!",
+    "body":             "Ku soo dhawoow NuunPlatform — madasha waxbarashada Soomaaliyeed ee ardayda dugsiga sare.",
+    "features_title":   "Halkan waxaad ka heli kartaa:",
+    "features":         "📚 PDF-yada waxbarashada\n🎯 Tartamada tooska ah\n📊 Horumarkaaga",
+    "cta":              "Taabo badamada hoos si aad u bilowdo."
+  },
+
+  "subscribe": {
+    "body":     "✅ Waad ku biirtay ogeysiiska tartamada cusub.",
+    "info":     "Marka tartan cusub la abuuro, waxaan halkan kugu soo diri doonaa fariin.",
+    "off_hint": "Haddii aad rabto inaad damiso ogeysiiska, ka dami boggaaga: Settings → Notifications.",
+    "cta":      "Taabo badamada hoos si aad u gasho bogga."
+  },
+
+  "unknown": {
+    "body": "Fariintaada waa la helay.",
+    "cta":  "Taabo badamada hoos si aad u gasho bogga."
+  },
+
+  "help": {
+    "title":        "📖 Caawinaad",
+    "intro":        "NuunPlatform waxay siisaa:",
+    "list":         "• PDF-yada waxbarashada oo bilaash ah\n• Tartamo toos ah oo lala tartamo ardayda kale\n• Falanqayn iyo horumar gaar ah",
+    "cta":          "Taabo badanka hoos si aad bogga u gasho.",
+    "contact_hint": "Haddii aad u baahan tahay caawinaad dheeraad ah, kala xiriir maamulka."
+  },
+
+  "gate": {
+    "channel_prompt":       "📢 Hal tallaabo oo kooban ka hor PDF-kaaga:\n\nFadlan marka hore ku biir channel-keena.\nKadibna taabo ✅ Waan ku biiray hoosta.",
+    "group_prompt":         "👥 Ku dhow baad tahay:\n\nFadlan marka hore ku biir group-keena.\nKadibna taabo ✅ Waan ku biiray hoosta.",
+    "join_channel_button":  "📢 Ku biir channel",
+    "join_group_button":    "👥 Ku biir group",
+    "confirm_button":       "✅ Waan ku biiray",
+    "not_yet_channel":      "❌ Weli ma aadan ku biirin channel-ka. Fadlan ku biir, kadibna taabo ✅ Waan ku biiray.",
+    "not_yet_group":        "❌ Weli ma aadan ku biirin group-ka. Fadlan ku biir, kadibna taabo ✅ Waan ku biiray.",
+    "too_many_attempts":    "❗ Isku dayo badan. Fadlan mar kale dir /start <code> si aad dib ugu bilowdo."
+  },
+
+  "pdf": {
+    "delivery_caption_title":  "📄 {title}",
+    "delivery_caption_code":   "📌 Code: {code}",
+    "delivery_caption_footer": "🔗 Waxaa laga heli karaa madashayada oo leh waxbarasho dheeraad ah!",
+    "delivery_button":         "📚 Eeg PDF-yo Kale",
+    "delivery_error":          "❌ Waan ka xumahay, ma heli karo PDF-ka. Fadlan isku day mar dambe.",
+    "intake_confirmation":     "✅ PDF-ka waa la helay oo wuxuu sugayaa maamulka.\n\n📄 {filename}\n🆔 ID: #{pending_id}",
+    "intake_error":            "❌ Ma keydin karo PDF-ka. Fadlan isku day mar dambe.",
+    "duplicate":               "⚠️ PDF-kan horey ayaa loo helay (ama la daabacay ama wali sugaya).",
+    "pending_list_empty":      "PDF-yo sugaya ma jiraan.",
+    "pending_manage_hint":     "Isticmaal guddiga maamulka ee web-ka."
+  }
+}
