@@ -229,6 +229,7 @@
             </div>
         </div>
     </div>
+
     <div class="notif-secondary">
         <div class="notif-secondary__header">
             <div class="notif-secondary__badge"><i class="fas fa-inbox"></i></div>
@@ -238,17 +239,157 @@
             </div>
         </div>
         <form id="notif-form" class="settings-form">
-            <div class="notif-secondary__grid">
-                <label class="notif-check"><input type="checkbox" id="notify_quiz_complete" {% if settings['notifications.quiz_complete'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.quiz_complete') }}</span></label>
-                <label class="notif-check"><input type="checkbox" id="notify_new_pdf" {% if settings['notifications.new_pdf'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.new_pdf') }}</span></label>
-                <label class="notif-check"><input type="checkbox" id="notify_live_quiz_start" {% if settings['notifications.live_quiz_start'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.live_start') }}</span></label>
-                <label class="notif-check"><input type="checkbox" id="notify_live_quiz_result" {% if settings['notifications.live_quiz_result'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.live_result') }}</span></label>
-                <label class="notif-check"><input type="checkbox" id="notify_participant_joined" {% if settings['notifications.participant_joined'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.participant') }}</span></label>
-                <label class="notif-check"><input type="checkbox" id="notify_admin_announcement" {% if settings['notifications.admin_announcement'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.announcement') }}</span></label>
-                <label class="notif-check"><input type="checkbox" id="notify_new_live_quiz" {% if settings['notifications.new_live_quiz'] %}checked{% endif %}><span class="notif-check__label">{{ _('settings.notifications.push.types.new_live_quiz') }}</span></label>
+
+            {# ── Group: Learning ── #}
+            <div class="notif-group">
+                <div class="notif-group__title">
+                    <i class="fas fa-graduation-cap"></i>
+                    <span>{{ _('settings.notifications.groups.learning') }}</span>
+                </div>
+                <div class="notif-group__list">
+
+                    <label class="notif-row">
+                        <span class="notif-row__icon" aria-hidden="true">📝</span>
+                        <span class="notif-row__body">
+                            <span class="notif-row__title">{{ _('settings.notifications.push.types.quiz_complete') }}</span>
+                            <span class="notif-row__desc">{{ _('settings.notifications.types.quiz_complete.desc') }}</span>
+                        </span>
+                        <span class="notif-row__switch">
+                            <input type="checkbox" class="notif-row__input" id="notify_quiz_complete" {% if settings['notifications.quiz_complete'] %}checked{% endif %}>
+                            <span class="notif-row__slider"></span>
+                        </span>
+                        <span class="notif-row__state" aria-hidden="true">
+                            <span class="notif-row__state-on">ON</span>
+                            <span class="notif-row__state-off">OFF</span>
+                        </span>
+                    </label>
+
+                    <label class="notif-row">
+                        <span class="notif-row__icon" aria-hidden="true">📄</span>
+                        <span class="notif-row__body">
+                            <span class="notif-row__title">{{ _('settings.notifications.push.types.new_pdf') }}</span>
+                            <span class="notif-row__desc">{{ _('settings.notifications.types.new_pdf.desc') }}</span>
+                        </span>
+                        <span class="notif-row__switch">
+                            <input type="checkbox" class="notif-row__input" id="notify_new_pdf" {% if settings['notifications.new_pdf'] %}checked{% endif %}>
+                            <span class="notif-row__slider"></span>
+                        </span>
+                        <span class="notif-row__state" aria-hidden="true">
+                            <span class="notif-row__state-on">ON</span>
+                            <span class="notif-row__state-off">OFF</span>
+                        </span>
+                    </label>
+
+                </div>
             </div>
+
+            {# ── Group: Competitions ── #}
+            <div class="notif-group">
+                <div class="notif-group__title">
+                    <i class="fas fa-bolt"></i>
+                    <span>{{ _('settings.notifications.groups.competitions') }}</span>
+                </div>
+                <div class="notif-group__list">
+
+                    <label class="notif-row">
+                        <span class="notif-row__icon" aria-hidden="true">🚀</span>
+                        <span class="notif-row__body">
+                            <span class="notif-row__title">{{ _('settings.notifications.push.types.live_start') }}</span>
+                            <span class="notif-row__desc">{{ _('settings.notifications.types.live_quiz_start.desc') }}</span>
+                        </span>
+                        <span class="notif-row__switch">
+                            <input type="checkbox" class="notif-row__input" id="notify_live_quiz_start" {% if settings['notifications.live_quiz_start'] %}checked{% endif %}>
+                            <span class="notif-row__slider"></span>
+                        </span>
+                        <span class="notif-row__state" aria-hidden="true">
+                            <span class="notif-row__state-on">ON</span>
+                            <span class="notif-row__state-off">OFF</span>
+                        </span>
+                    </label>
+
+                    <label class="notif-row">
+                        <span class="notif-row__icon" aria-hidden="true">🎯</span>
+                        <span class="notif-row__body">
+                            <span class="notif-row__title">{{ _('settings.notifications.push.types.new_live_quiz') }}</span>
+                            <span class="notif-row__desc">{{ _('settings.notifications.types.new_live_quiz.desc') }}</span>
+                        </span>
+                        <span class="notif-row__switch">
+                            <input type="checkbox" class="notif-row__input" id="notify_new_live_quiz" {% if settings['notifications.new_live_quiz'] %}checked{% endif %}>
+                            <span class="notif-row__slider"></span>
+                        </span>
+                        <span class="notif-row__state" aria-hidden="true">
+                            <span class="notif-row__state-on">ON</span>
+                            <span class="notif-row__state-off">OFF</span>
+                        </span>
+                    </label>
+
+                    <label class="notif-row">
+                        <span class="notif-row__icon" aria-hidden="true">🏆</span>
+                        <span class="notif-row__body">
+                            <span class="notif-row__title">{{ _('settings.notifications.push.types.live_result') }}</span>
+                            <span class="notif-row__desc">{{ _('settings.notifications.types.live_quiz_result.desc') }}</span>
+                        </span>
+                        <span class="notif-row__switch">
+                            <input type="checkbox" class="notif-row__input" id="notify_live_quiz_result" {% if settings['notifications.live_quiz_result'] %}checked{% endif %}>
+                            <span class="notif-row__slider"></span>
+                        </span>
+                        <span class="notif-row__state" aria-hidden="true">
+                            <span class="notif-row__state-on">ON</span>
+                            <span class="notif-row__state-off">OFF</span>
+                        </span>
+                    </label>
+
+                    <label class="notif-row">
+                        <span class="notif-row__icon" aria-hidden="true">👤</span>
+                        <span class="notif-row__body">
+                            <span class="notif-row__title">{{ _('settings.notifications.push.types.participant') }}</span>
+                            <span class="notif-row__desc">{{ _('settings.notifications.types.participant_joined.desc') }}</span>
+                        </span>
+                        <span class="notif-row__switch">
+                            <input type="checkbox" class="notif-row__input" id="notify_participant_joined" {% if settings['notifications.participant_joined'] %}checked{% endif %}>
+                            <span class="notif-row__slider"></span>
+                        </span>
+                        <span class="notif-row__state" aria-hidden="true">
+                            <span class="notif-row__state-on">ON</span>
+                            <span class="notif-row__state-off">OFF</span>
+                        </span>
+                    </label>
+
+                </div>
+            </div>
+
+            {# ── Group: Platform ── #}
+            <div class="notif-group">
+                <div class="notif-group__title">
+                    <i class="fas fa-bullhorn"></i>
+                    <span>{{ _('settings.notifications.groups.platform') }}</span>
+                </div>
+                <div class="notif-group__list">
+
+                    <label class="notif-row">
+                        <span class="notif-row__icon" aria-hidden="true">📣</span>
+                        <span class="notif-row__body">
+                            <span class="notif-row__title">{{ _('settings.notifications.push.types.announcement') }}</span>
+                            <span class="notif-row__desc">{{ _('settings.notifications.types.admin_announcement.desc') }}</span>
+                        </span>
+                        <span class="notif-row__switch">
+                            <input type="checkbox" class="notif-row__input" id="notify_admin_announcement" {% if settings['notifications.admin_announcement'] %}checked{% endif %}>
+                            <span class="notif-row__slider"></span>
+                        </span>
+                        <span class="notif-row__state" aria-hidden="true">
+                            <span class="notif-row__state-on">ON</span>
+                            <span class="notif-row__state-off">OFF</span>
+                        </span>
+                    </label>
+
+                </div>
+            </div>
+
             <div class="form-row">
-                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {{ _('common.save_changes') }}<span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span></button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> {{ _('common.save_changes') }}
+                    <span class="settings-saved-note" data-saved-note style="display:none; margin-left:8px; font-size:12px; opacity:0.9;"></span>
+                </button>
             </div>
         </form>
     </div>
@@ -525,7 +666,6 @@
         color: #34D399;
     }
 
-    /* Language segmented toggle */
     .lang-toggle {
         display: inline-flex;
         background: var(--background);
@@ -570,9 +710,6 @@
 (function () {
     'use strict';
 
-    // ================================================================
-    // FIELD ↔ SETTING MAPPING
-    // ================================================================
     var FIELD_TO_SETTING = {
         'font_size':                   'appearance.font_size',
         'compact_mode':                'appearance.compact_mode',
@@ -754,7 +891,6 @@
         });
     }
 
-    // ─── Form handlers ───────────────────────────────────────
     var appearanceForm = document.getElementById('appearance-form');
     if (appearanceForm) {
         attachTracking(appearanceForm);
@@ -877,7 +1013,6 @@
         });
     }
 
-    // ─── Language toggle ─────────────────────────────────────
     var langToggle = document.getElementById('lang-toggle');
     var currentLang = 'en';
     try {
@@ -917,7 +1052,6 @@
         });
     }
 
-    // ─── Visual selectors ────────────────────────────────────
     document.querySelectorAll('.theme-option').forEach(function (opt) {
         opt.addEventListener('click', function () {
             document.querySelectorAll('.theme-option').forEach(function (o) { o.classList.remove('active'); });
@@ -946,7 +1080,6 @@
         });
     }
 
-    // ─── Password strength + match ───────────────────────────
     var newPwInput = document.getElementById('new_password');
     var confirmPwInput = document.getElementById('confirm_password');
     if (newPwInput) {
@@ -971,7 +1104,6 @@
         else { match.textContent = '❌ Passwords do not match'; match.className = 'password-match no-match'; }
     }
 
-    // ─── Upgrade buttons ─────────────────────────────────────
     document.querySelectorAll('.upgrade-btn').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
             e.stopPropagation();
@@ -983,7 +1115,6 @@
         });
     });
 
-    // ─── Data buttons ────────────────────────────────────────
     var exportBtn = document.getElementById('exportDataBtn');
     if (exportBtn) {
         exportBtn.addEventListener('click', function () {
@@ -991,7 +1122,6 @@
         });
     }
 
-    // ─── Logout modal ────────────────────────────────────────
     var openLogoutBtn = document.getElementById('openLogoutModalBtn');
     if (openLogoutBtn) {
         openLogoutBtn.addEventListener('click', function () {
@@ -1015,9 +1145,6 @@
         }
     });
 
-    // ================================================================
-    // NAVIGATION
-    // ================================================================
     var landing = document.getElementById('landing');
     var sections = document.querySelectorAll('.settings-section');
     var navItems = document.querySelectorAll('.settings-nav-item');
@@ -1087,7 +1214,6 @@
         showLanding();
     }
 
-    // ─── Feature card popup ──────────────────────────────────
     window.toggleFeatureInfo = function (card) {
         document.querySelectorAll('.feature-card').forEach(function (c) {
             if (c !== card) c.classList.remove('active');

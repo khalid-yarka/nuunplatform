@@ -1384,5 +1384,19 @@
   "live_quiz.waiting.ping_error": "Could not send ping. Try again.",
   "live_quiz.waiting.copy_link": "Copy invite link",
   "live_quiz.waiting.link_copied": "Link copied",
-  "live_quiz.waiting.share_options": "Share options"
+  "live_quiz.waiting.share_options": "Share options",
+  "settings.notifications.groups.learning": "Learning",
+"settings.notifications.groups.competitions": "Competitions",
+"settings.notifications.groups.platform": "Platform",
+
+"settings.notifications.push.types.new_pdf": "New PDF Uploaded",
+"settings.notifications.push.types.quiz_complete": "Practice Complete",
+
+"settings.notifications.types.quiz_complete.desc": "When you finish a practice session.",
+"settings.notifications.types.new_pdf.desc": "When a new PDF is added.",
+"settings.notifications.types.live_quiz_start.desc": "When a competition you joined begins.",
+"settings.notifications.types.new_live_quiz.desc": "When someone creates a new public competition.",
+"settings.notifications.types.live_quiz_result.desc": "When a competition you joined ends.",
+"settings.notifications.types.participant_joined.desc": "When someone joins a competition you host.",
+"settings.notifications.types.admin_announcement.desc": "Important platform updates."
 }

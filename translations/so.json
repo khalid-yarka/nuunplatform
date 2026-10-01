@@ -1384,5 +1384,19 @@
   "live_quiz.waiting.ping_error": "Digniinta lama diri karin. Isku day mar kale.",
   "live_quiz.waiting.copy_link": "Koobi xiriirka",
   "live_quiz.waiting.link_copied": "Xiriirka waa la koobiyay",
-  "live_quiz.waiting.share_options": "Ikhtiyaarada wadaagista"
+  "live_quiz.waiting.share_options": "Ikhtiyaarada wadaagista",
+  "settings.notifications.groups.learning": "Waxbarasho",
+  "settings.notifications.groups.competitions": "Tartannada",
+  "settings.notifications.groups.platform": "Madasha",
+  
+  "settings.notifications.push.types.new_pdf": "PDF Cusub",
+  "settings.notifications.push.types.quiz_complete": "Tababar Dhammaystiran",
+  
+  "settings.notifications.types.quiz_complete.desc": "Marka aad dhamayso tababar.",
+  "settings.notifications.types.new_pdf.desc": "Marka PDF cusub lagu daro.",
+  "settings.notifications.types.live_quiz_start.desc": "Marka tartan aad ku biirtay bilaabmo.",
+  "settings.notifications.types.new_live_quiz.desc": "Marka qof abuuro tartan dadweyne oo cusub.",
+  "settings.notifications.types.live_quiz_result.desc": "Marka tartan aad ku biirtay dhammaado.",
+  "settings.notifications.types.participant_joined.desc": "Marka qof ku biiro tartanka aad martigeliso.",
+  "settings.notifications.types.admin_announcement.desc": "Ogeysiisyada muhiimka ah ee madasha."
 }
