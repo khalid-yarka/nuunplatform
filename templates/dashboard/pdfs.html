@@ -442,7 +442,7 @@
 
                         {# ── GET PDF ── #}
                         {% if gt_state == 'enabled' %}
-                            <a href="https://t.me/{{ bot_username }}?start={{ pdf.code }}"
+                            <a href="https://t.me/{{ bot_username }}?start=pdf{{ pdf.code }}{{ user_public_id or '' }}"
                                target="_blank" rel="noopener"
                                class="pdf-card__btn pdf-card__btn--telegram"
                                title="{{ _('pdfs.get_telegram_title') }}">

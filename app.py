@@ -171,7 +171,8 @@ _file_backups = 5 if Config.DEBUG else Config.LOG_BACKUP_COUNT
 
 WEB_PREFIXES = ('blueprints.', 'services.', 'nuun.', 'app', 'utils', '__main__', 'templates.',)
 WORKER_PREFIXES = ('db', 'cache', 'live_quiz_state', 'history_logger', 'activity_logger',
-                   'platform_activity', 'redis_state', 'bot.', 'startup', 'migrate',)
+                   'platform_activity', 'redis_state', 'bot.', 'startup', 'migrate',
+                   'daily_tasks',)
 
 
 def _make_rotating_handler(path, level, allow_prefixes=None):
@@ -481,6 +482,34 @@ def _load_maintenance_state():
     _MAINTENANCE_CACHE['loaded_at'] = now
     return state
 
+_MAINT_EXPIRED_LOGGED = False
+
+
+def _maintenance_is_expired(state) -> bool:
+    """
+    True when a maintenance window has been on longer than
+    MAINTENANCE_MAX_MINUTES. Used as a self-heal guard: if the daily
+    runner crashed mid-flight and left the flag ON with no thread
+    alive to clear it, the web layer stops honoring the flag once
+    the window ages out.
+
+    The flag itself is not rewritten here — the next admin action or
+    the next trigger still sees it, and the log records the event.
+    """
+    if not state.get('enabled'):
+        return False
+    since_raw = state.get('since')
+    if not since_raw:
+        # No timestamp — cannot evaluate. Do not expire.
+        return False
+    try:
+        since = datetime.fromisoformat(str(since_raw).replace('Z', '+00:00'))
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=timezone.utc)
+        age_minutes = (datetime.now(timezone.utc) - since).total_seconds() / 60.0
+        return age_minutes > Config.MAINTENANCE_MAX_MINUTES
+    except Exception:
+        return False
 
 @app.route('/maintenance', endpoint='maintenance_page')
 def maintenance_page():
@@ -496,6 +525,8 @@ def maintenance_page():
 @app.before_request
 def enforce_maintenance_mode():
     path = request.path or '/'
+
+    # ── Always-allowed paths ──
     if path.startswith('/static/'):
         return None
     if path in ('/login', '/logout', '/auth/check-phone'):
@@ -505,8 +536,40 @@ def enforce_maintenance_mode():
     if path in ('/favicon.ico', '/health'):
         return None
 
+    # ── Webhook and legacy telegram endpoint ──
+    # These must remain reachable so the bot handler can decide what
+    # to reply. If they were redirected, Telegram would see a 3xx
+    # and treat it as delivery failure, queueing updates until the
+    # window closed. The bot's own guard (in bot/handlers.py) is what
+    # actually blocks non-admin replies during maintenance.
+    if path.startswith('/webhook/'):
+        return None
+    if path.startswith('/telegram/'):
+        return None
+
+    # ── Daily trigger ──
+    # The route itself is responsible for auth and for refusing to
+    # run while maintenance is already on. It must not be redirected
+    # to the maintenance page, or the external caller would get a 3xx
+    # it cannot interpret.
+    if path == '/daily/trigger':
+        return None
+
     state = _load_maintenance_state()
     if not state.get('enabled'):
+        return None
+
+    # ── Self-heal: expire a stuck window ──
+    global _MAINT_EXPIRED_LOGGED
+    if _maintenance_is_expired(state):
+        if not _MAINT_EXPIRED_LOGGED:
+            logger.critical(
+                f"Maintenance window exceeded {Config.MAINTENANCE_MAX_MINUTES} "
+                f"minutes — auto-recovering. Traffic is flowing again. "
+                f"Flag remains ON (since={state.get('since')}); clear it "
+                f"via /admin/system/maintenance."
+            )
+            _MAINT_EXPIRED_LOGGED = True
         return None
 
     user_id = session.get('user_id')
@@ -533,7 +596,6 @@ def enforce_maintenance_mode():
         }), 503
 
     return redirect(url_for('maintenance_page'))
-
 
 # ============================================
 # CSRF PROTECTION
@@ -1097,6 +1159,201 @@ def backup_status():
         logger.error(f"Backup status error: {e}")
         return jsonify({'error': str(e)}), 500
 
+# ============================================
+# DAILY TASK TRIGGER
+# ============================================
+# POST-only. Token-authenticated. Refuses to run when the token is
+# unset, is a known default, or when a run is already in progress.
+#
+# The external caller receives 202 Accepted before any work begins.
+# The work runs in a daemon thread inside this worker. When the
+# thread finishes — successfully or by exception — it clears the
+# maintenance flag in a finally block. If the worker itself is
+# reaped mid-run, the max-age guard in enforce_maintenance_mode is
+# the safety net.
+# ============================================
+
+_DEFAULT_DAILY_TOKENS = {
+    '',
+    'change_this_token_in_production',
+    'changeme',
+    'default',
+}
+
+
+def _read_daily_token_from_request():
+    header = request.headers.get('X-Daily-Token')
+    if header:
+        return header.strip()
+    return (request.args.get('token') or '').strip()
+
+
+def _write_maintenance_json(payload):
+    """Atomically replace maintenance.json and bust the cache."""
+    try:
+        tmp_path = _MAINTENANCE_STATE_PATH + '.tmp'
+        with open(tmp_path, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, indent=2)
+        os.replace(tmp_path, _MAINTENANCE_STATE_PATH)
+    except Exception as e:
+        logger.error(f"Could not write maintenance state: {e}")
+        raise
+    _MAINTENANCE_CACHE['state'] = None
+    _MAINTENANCE_CACHE['loaded_at'] = 0.0
+
+
+def _run_daily_from_trigger():
+    """
+    Runs inside the daemon thread spawned by /daily/trigger.
+    Acquires the daily lock, runs the full task suite, then clears
+    maintenance. Never raises.
+    """
+    import daily_tasks as _dt
+    import argparse as _argparse
+
+    cleared = False
+    try:
+        if not _dt.acquire_lock():
+            logger.warning("daily trigger: could not acquire daily lock — aborting")
+            return
+
+        try:
+            # Build the same namespace main() would build. We call
+            # run_all directly, bypassing argparse and setup_logging,
+            # because setup_logging() removes the root logger's
+            # handlers — which would silence the Flask logs for the
+            # duration of the run.
+            args = _argparse.Namespace(
+                dry_run=False,
+                preview_telegram=False,
+                task=None,
+                category=None,
+                list=False,
+                no_telegram=False,
+                no_snapshot=False,
+                verbose=False,
+            )
+            rc = _dt.run_all(args, _dt.log)
+            logger.info(f"daily trigger: run finished rc={rc}")
+        finally:
+            try:
+                _dt.release_lock()
+            except Exception:
+                pass
+            try:
+                _dt.close_db_connections()
+            except Exception:
+                pass
+
+    except Exception as e:
+        logger.error(f"daily trigger: run crashed: {e}", exc_info=True)
+
+    finally:
+        try:
+            _write_maintenance_json({
+                'enabled': False,
+                'title': "We'll be back soon",
+                'message': (
+                    "We're performing scheduled maintenance. "
+                    "Please check back shortly."
+                ),
+                'eta': '',
+                'since': None,
+            })
+            cleared = True
+            logger.info("daily trigger: maintenance cleared")
+        except Exception as e:
+            logger.error(f"daily trigger: could not clear maintenance: {e}")
+
+
+@app.route('/daily/trigger', methods=['POST'])
+def daily_trigger():
+    # ── Config hygiene ──
+    expected = (Config.DAILY_TRIGGER_TOKEN or '').strip()
+    if not expected or expected.lower() in _DEFAULT_DAILY_TOKENS:
+        logger.critical(
+            "Daily trigger refused: DAILY_TRIGGER_TOKEN is unset or is "
+            "a known default. Set a strong random value in .env."
+        )
+        return jsonify({
+            'error': 'Daily trigger is not configured securely.',
+        }), 503
+
+    # ── Auth ──
+    provided = _read_daily_token_from_request()
+    if not provided or not secrets.compare_digest(provided, expected):
+        logger.warning(
+            f"Unauthorized daily trigger from {request.remote_addr}"
+        )
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    # ── Lock check ──
+    # If a run is in progress, refuse. Do not touch maintenance.
+    try:
+        lock_path = os.path.join(BASE_DIR, '.daily_tasks.lock')
+        if os.path.exists(lock_path):
+            age = time.time() - os.path.getmtime(lock_path)
+            if age < 2 * 3600:
+                return jsonify({
+                    'status': 'already_running',
+                    'lock_age_seconds': int(age),
+                }), 409
+    except Exception as e:
+        logger.warning(f"daily trigger: lock check failed: {e}")
+
+    # ── Never overwrite an existing maintenance window ──
+    # A window that is ON is either a manually-enabled state or a
+    # previous stuck run. Either way, the trigger should not touch
+    # it. An admin clears it via /admin/system/maintenance.
+    current = _load_maintenance_state()
+    if current.get('enabled'):
+        return jsonify({
+            'status': 'maintenance_already_on',
+            'since': current.get('since'),
+        }), 409
+
+    # ── Import check first ──
+    # If daily_tasks cannot be imported, fail before touching the
+    # maintenance flag. Otherwise the flag would be written and no
+    # thread would exist to clear it.
+    try:
+        import daily_tasks as _dt   # noqa: F401
+    except Exception as e:
+        logger.error(f"daily trigger: import failed: {e}", exc_info=True)
+        return jsonify({
+            'error': f'Daily tasks unavailable: {e}',
+        }), 503
+
+    # ── Enable maintenance ──
+    since_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        _write_maintenance_json({
+            'enabled': True,
+            'title': 'Daily maintenance',
+            'message': (
+                "The platform is running its daily maintenance. "
+                "Usually back within a few minutes."
+            ),
+            'eta': 'A few minutes',
+            'since': since_iso,
+        })
+    except Exception as e:
+        logger.error(f"daily trigger: could not enable maintenance: {e}")
+        return jsonify({'error': 'Could not enable maintenance'}), 500
+
+    # ── Spawn the runner ──
+    t = threading.Thread(
+        target=_run_daily_from_trigger,
+        daemon=True,
+        name='daily-runner',
+    )
+    t.start()
+
+    logger.info(f"daily trigger: accepted, runner started, since={since_iso}")
+    return jsonify({
+        'status': 'accepted',
+        'since': since_iso,
+    }), 202
 
 # ============================================
 # DOCS HELP URL CONTEXT

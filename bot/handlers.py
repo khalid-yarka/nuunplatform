@@ -77,6 +77,53 @@ def _m(key, **kwargs):
             return node
     return node
 
+# ============================================
+# MAINTENANCE MODE (bot-side read)
+# ============================================
+# Reads the same instance/maintenance.json that app.py writes. A
+# short local cache (5 seconds, matching the web layer) avoids a
+# filesystem read on every Telegram update.
+#
+# Super admins bypass this gate. Every other user gets the Somali
+# maintenance reply and their update is not otherwise processed.
+# Document intake still runs (see handle_document) so the pending
+# queue stays accurate during the window.
+# ============================================
+
+_MAINT_STATE_PATH = None
+_MAINT_CACHE = {'loaded_at': 0.0, 'state': None}
+_MAINT_CACHE_TTL = 5
+
+
+def _get_maintenance_state():
+    global _MAINT_STATE_PATH
+    if _MAINT_STATE_PATH is None:
+        try:
+            base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            _MAINT_STATE_PATH = os.path.join(base, 'instance', 'maintenance.json')
+        except Exception:
+            _MAINT_STATE_PATH = ''
+
+    now = time.time()
+    if (_MAINT_CACHE['state'] is not None
+            and now - _MAINT_CACHE['loaded_at'] < _MAINT_CACHE_TTL):
+        return _MAINT_CACHE['state']
+
+    state = {'enabled': False, 'since': None}
+    try:
+        if _MAINT_STATE_PATH and os.path.exists(_MAINT_STATE_PATH):
+            with open(_MAINT_STATE_PATH, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            state = {
+                'enabled': bool(data.get('enabled', False)),
+                'since': data.get('since') or None,
+            }
+    except Exception:
+        pass
+
+    _MAINT_CACHE['state'] = state
+    _MAINT_CACHE['loaded_at'] = now
+    return state
 
 # ============================================
 # PROTECT CONTENT POLICY
@@ -710,6 +757,44 @@ def _parse_subscribe_payload(payload):
 # UPDATE ROUTER
 # ============================================
 
+def _intake_document_silently(bot, message):
+    """
+    Save a document into pending_pdfs without replying to the user.
+    Called only from the maintenance gate. PDFs only; non-PDFs are
+    forwarded to super admins as usual. Never raises.
+    """
+    try:
+        document = message.document
+        if not document:
+            return
+        user_id = message.from_user.id
+        file_name = document.file_name or ''
+        is_pdf = (
+            document.mime_type == 'application/pdf'
+            or file_name.lower().endswith('.pdf')
+        )
+        if not is_pdf:
+            if not is_admin(user_id):
+                _forward_to_super_admins(bot, message)
+            return
+        try:
+            if is_duplicate_in_bot(document.file_unique_id):
+                return
+        except Exception:
+            pass
+        try:
+            save_pending_pdf(
+                document.file_id,
+                document.file_unique_id,
+                file_name or 'unknown.pdf',
+                user_id,
+            )
+        except Exception:
+            pass
+    except Exception as e:
+        logger.debug(f"_intake_document_silently non-fatal: {e}")
+
+
 def process_telegram_update(bot: telebot.TeleBot, update_data: dict):
     try:
         update = types.Update.de_json(update_data)
@@ -720,6 +805,7 @@ def process_telegram_update(bot: telebot.TeleBot, update_data: dict):
         elif update.callback_query and update.callback_query.message:
             chat = update.callback_query.message.chat
 
+        # ── 1. Group lock ──
         if chat is not None and getattr(chat, 'type', 'private') != 'private':
             logger.debug(
                 "dropping update from chat type=%s chat_id=%s",
@@ -727,17 +813,60 @@ def process_telegram_update(bot: telebot.TeleBot, update_data: dict):
             )
             return
 
-        if update.message:
+        # ── 2. Contact tracking ──
+        # Runs before the maintenance gate, so the audience keeps
+        # growing even while maintenance is on.
+        sender_id = None
+        if update.message and update.message.from_user:
+            sender_id = update.message.from_user.id
             _track_contact_from_user(update.message.from_user)
+        elif update.callback_query and update.callback_query.from_user:
+            sender_id = update.callback_query.from_user.id
+            _track_contact_from_user(update.callback_query.from_user)
+
+        # ── 3. Super admin bypass ──
+        is_sa = False
+        if sender_id is not None:
+            try:
+                is_sa = bool(is_super_admin(sender_id))
+            except Exception:
+                is_sa = False
+
+        # ── 4. Maintenance gate ──
+        # Non-super-admin users get a single reply and their update
+        # is not otherwise processed. Documents are still saved by
+        # the intake path (see handle_document) so the pending queue
+        # stays accurate — but the sender gets the maintenance reply,
+        # not the intake confirmation.
+        if not is_sa:
+            state = _get_maintenance_state()
+            if state.get('enabled'):
+                chat_id = getattr(chat, 'id', None) if chat else None
+                if chat_id:
+                    # If this is a document, still save it silently
+                    # before replying. Losing a mid-window upload
+                    # would be worse than the small write.
+                    try:
+                        if update.message and update.message.document:
+                            _intake_document_silently(bot, update.message)
+                    except Exception as e:
+                        logger.debug(f"silent intake during maintenance: {e}")
+
+                    try:
+                        bot.send_message(chat_id, _m('maintenance.bot_message'))
+                    except Exception as e:
+                        logger.debug(f"maintenance reply send failed: {e}")
+                return
+
+        # ── 5. Normal dispatch ──
+        if update.message:
             handle_message(bot, update.message)
         elif update.callback_query:
-            _track_contact_from_user(update.callback_query.from_user)
             handle_callback(bot, update.callback_query)
         else:
             logger.debug("Unhandled update type.")
     except Exception as e:
         logger.error(f"Error processing update: {e}", exc_info=True)
-
 
 def _track_contact_from_user(user):
     if not user:

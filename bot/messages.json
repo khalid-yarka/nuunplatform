@@ -71,5 +71,8 @@
     "duplicate":               "⚠️ PDF-kan horey ayaa loo helay (ama la daabacay ama wali sugaya).",
     "pending_list_empty":      "PDF-yo sugaya ma jiraan.",
     "pending_manage_hint":     "Isticmaal guddiga maamulka ee web-ka."
+  },
+  "maintenance": {
+    "bot_message": "🛠️ Madasha ayaa hadda ku jirta dayactir.\n\nWaxaan soo laaban doonnaa dhawaan. Fadlan wakhti Yar\nka dib isku day mar kale.\n\nMahadsanid dulqaadkaaga."
   }
 }

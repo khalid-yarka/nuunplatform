@@ -81,6 +81,9 @@ class Config:
     VAPID_SUBJECT     = os.getenv('VAPID_SUBJECT', 'mailto:admin@yourdomain.com')
     PUSH_ENABLED      = bool(VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY)
 
+    DAILY_TRIGGER_TOKEN = os.getenv('DAILY_TRIGGER_TOKEN', '')
+    MAINTENANCE_MAX_MINUTES = int(os.getenv('MAINTENANCE_MAX_MINUTES', '30'))
+
     # ============================================
     # PATHS
     # ============================================
