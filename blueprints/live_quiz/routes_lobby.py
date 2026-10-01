@@ -245,3 +245,83 @@ def available_count():
         'total_subject': total_subject,
         'error': err_text,
     })
+
+@live_quiz_bp.route('/api/recent-public-quizzes')
+def api_recent_public_quizzes():
+    """
+    Poll target for static/js/live_quiz/new_quiz_watcher.js.
+
+    Query params:
+        since   — last quiz id the client has already seen (default 0)
+
+    Response:
+        {
+          "latest_id": <int>,           # current max public quiz id
+          "quizzes": [                   # up to 5 quizzes with id > since
+            {
+              "id":           <int>,
+              "title":        <str>,
+              "subject_code": <str>,
+              "join_code":    <str>,
+              "creator_first":<str>,
+              "creator_last": <str>
+            }, ...
+          ]
+        }
+
+    When `since` is 0 or missing, `quizzes` is always empty — the caller
+    uses `latest_id` only, to record a starting point without notifying.
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+
+    try:
+        since = int(request.args.get('since', 0) or 0)
+    except (TypeError, ValueError):
+        since = 0
+
+    user_id = session['user_id']
+
+    # Current max public quiz id (excluding the caller's own)
+    latest_id = 0
+    try:
+        row = execute_with_retry(
+            "SELECT COALESCE(MAX(id), 0) AS m FROM live_quizzes "
+            "WHERE is_public = 1 AND creator_id != ?",
+            (user_id,),
+        ).fetchone()
+        latest_id = int(row['m']) if row else 0
+    except Exception as e:
+        logger.warning(f"recent-public-quizzes: max query failed: {e}")
+
+    # First-ever poll — return only the max id, no quiz list
+    if since <= 0:
+        return jsonify({'latest_id': latest_id, 'quizzes': []})
+
+    quizzes = []
+    try:
+        cursor = execute_with_retry("""
+            SELECT lq.id, lq.title, lq.subject_code, lq.join_code,
+                   s.first_name AS creator_first,
+                   s.last_name  AS creator_last
+            FROM live_quizzes lq
+            LEFT JOIN students s ON s.id = lq.creator_id
+            WHERE lq.is_public = 1
+              AND lq.creator_id != ?
+              AND lq.id > ?
+            ORDER BY lq.id DESC
+            LIMIT 5
+        """, (user_id, since))
+        for row in cursor.fetchall():
+            quizzes.append({
+                'id':            row['id'],
+                'title':         row['title'] or 'Tartan',
+                'subject_code':  row['subject_code'] or '',
+                'join_code':     row['join_code'] or '',
+                'creator_first': row['creator_first'] or '',
+                'creator_last':  row['creator_last'] or '',
+            })
+    except Exception as e:
+        logger.warning(f"recent-public-quizzes: query failed: {e}")
+
+    return jsonify({'latest_id': latest_id, 'quizzes': quizzes})
