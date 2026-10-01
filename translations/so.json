@@ -1400,5 +1400,7 @@
   "settings.notifications.types.participant_joined.desc": "Marka qof ku biiro tartanka aad martigeliso.",
   "settings.notifications.types.admin_announcement.desc": "Ogeysiisyada muhiimka ah ee madasha.",
 "settings.notifications.push.types.telegram_broadcast": "Ogeysiiska tartamada Telegram",
+"settings.notifications.types.telegram_broadcast.desc": "Hel fariin Telegram marka tartan cusub oo dadweyne la abuuro.",
+"settings.notifications.push.types.telegram_broadcast": "Ogeysiiska tartamada Telegram",
 "settings.notifications.types.telegram_broadcast.desc": "Hel fariin Telegram marka tartan cusub oo dadweyne la abuuro."
 }

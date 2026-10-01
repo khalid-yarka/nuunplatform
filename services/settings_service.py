@@ -32,6 +32,24 @@ class SettingsService:
         Best-effort push of the Telegram broadcast toggle to
         bot_data.db. Never raises. Silent no-op when the user has no
         linked Telegram chat yet — the preference is stored in
+        user_settings and reapplied the next time the user subscribes
+        via the bot.
+        """
+        try:
+            public_id = (session.get('public_id') or '').strip()
+            if not public_id:
+                return
+            from bot.db import set_broadcast_preference_by_public_id
+            set_broadcast_preference_by_public_id(public_id, bool(enabled))
+        except Exception as e:
+            logger.debug(f"telegram_broadcast sync non-fatal: {e}")
+
+    @staticmethod
+    def _sync_telegram_broadcast(user_id: int, enabled: bool) -> None:
+        """
+        Best-effort push of the Telegram broadcast toggle to
+        bot_data.db. Never raises. Silent no-op when the user has no
+        linked Telegram chat yet — the preference is stored in
         user_settings and will apply the next time the user
         subscribes via the bot.
         """
@@ -224,6 +242,12 @@ class SettingsService:
                 bool(normalized['notifications.telegram_broadcast']),
             )
 
+        if 'notifications.telegram_broadcast' in normalized:
+            SettingsService._sync_telegram_broadcast(
+                user_id,
+                bool(normalized['notifications.telegram_broadcast']),
+            )
+      
         return SettingsService.get_all(user_id)
 
     @staticmethod

@@ -1,20 +1,15 @@
 # bot/handlers.py
 # Message and callback handlers for telebot.
 #
-# Texts live in bot/messages.json. Edit that file to change any
-# bot-facing string without touching code.
+# All texts live in bot/messages.json.
 #
-# Behaviour summary:
-#   · Only private chats are served. Group/channel updates are
-#     dropped before any handler runs.
-#   · Any message that isn't /start (with or without a payload) or
-#     /help gets the platform-help reply with inline buttons.
-#   · Non-admin documents are forwarded to super admins in the
-#     background; the sender sees the same platform-help reply.
-#   · Users inside the force-join gate only see gate prompts; the
-#     platform-help reply never fires during a gate step.
-#   · /start subscribe_<public_id> (the lobby banner) subscribes the
-#     chat and links it to the platform user.
+# Payload shapes accepted on /start <payload>:
+#   subscribe_<public_id>          — lobby banner (link + subscribe)
+#   pdf<code><public_id>           — PDF deeplink (link + subscribe + deliver)
+#   <legacy_code>                  — legacy PDF code, deliver only
+#
+# Group chats are dropped before any handler runs.
+# Non-text messages fall through to the platform-help reply.
 
 import json
 import logging
@@ -34,7 +29,7 @@ from bot.db import (
     get_join_gate, set_join_gate, delete_join_gate,
     bump_join_gate_attempts,
     upsert_bot_contact, mark_bot_contact_fetched_pdf,
-    mark_bot_contact_subscribed,
+    link_bot_contact,
 )
 from config import Config
 
@@ -42,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 _DIAGNOSTIC_DONE = {'done': False}
 _warned_forward_failures = set()
+
 
 # ============================================
 # MESSAGES
@@ -66,10 +62,6 @@ def _load_messages():
 
 
 def _m(key, **kwargs):
-    """
-    Look up a dotted key like 'welcome.body' and format with kwargs.
-    Missing keys return a placeholder so it is visible in testing.
-    """
     node = _load_messages()
     for part in key.split('.'):
         if isinstance(node, dict) and part in node:
@@ -273,9 +265,7 @@ def _is_member_of(bot, chat_id, user_id):
             return None
 
         if 'chat not found' in err_lower:
-            logger.warning(
-                "force_join: chat %r NOT FOUND.", chat_id,
-            )
+            logger.warning("force_join: chat %r NOT FOUND.", chat_id)
             return None
 
         logger.warning(
@@ -370,7 +360,6 @@ def _prompt_join_group(bot, chat_id, code):
 # ============================================
 
 def _super_admin_whatsapp_url():
-    """Return the digits-only wa.me URL, or None when unset."""
     try:
         raw = (getattr(Config, 'SUPER_ADMIN_PHONE', '') or '').strip()
     except Exception:
@@ -396,14 +385,9 @@ def _platform_button(label_key, path_key):
 
 def _build_platform_keyboard(for_admin=False):
     """
-    Seven buttons, four rows:
-      Row 1: Bogga              | Tartamada
-      Row 2: PDF-yada           | Tababar
-      Row 3: Horumarka          | Guulaha
-      Row 4: La xiriir Maamulka (full width)
-
-    The admin-only "PDF-yada Sugaya" callback is appended as a
-    final row when for_admin is True.
+    Four rows: home + live_quiz | pdfs + practice |
+    history + achievements | contact (full width).
+    Admin callback appended as an extra full-width row.
     """
     markup = types.InlineKeyboardMarkup(row_width=2)
 
@@ -434,20 +418,15 @@ def _build_platform_keyboard(for_admin=False):
 
 
 def _send_platform_help(bot, message, *, first_time=True):
-    """
-    Send the platform-help reply with the button keyboard.
-    first_time=True  → full welcome body (/start)
-    first_time=False → short acknowledgement (any other input)
-    """
     user_id = message.from_user.id
     chat_id = message.chat.id
     first_name = (message.from_user.first_name or '').strip()
 
     if first_time:
-        if first_name:
-            greeting = _m('welcome.greeting', first_name=first_name)
-        else:
-            greeting = _m('welcome.greeting_no_name')
+        greeting = (
+            _m('welcome.greeting', first_name=first_name)
+            if first_name else _m('welcome.greeting_no_name')
+        )
         text = (
             f"{greeting}\n\n"
             f"{_m('welcome.body')}\n\n"
@@ -466,19 +445,16 @@ def _send_platform_help(bot, message, *, first_time=True):
 
 
 def _send_subscribe_welcome(bot, message, public_id=None):
-    """
-    Confirmation sent after /start subscribe_<public_id>.
-    Links the Telegram chat to the platform user when public_id is
-    present, then shows the same platform keyboard.
-    """
     user_id = message.from_user.id
     chat_id = message.chat.id
     first_name = (message.from_user.first_name or '').strip()
 
-    try:
-        mark_bot_contact_subscribed(chat_id, public_id=public_id)
-    except Exception as e:
-        logger.debug(f"mark_bot_contact_subscribed non-fatal: {e}")
+    if public_id:
+        try:
+            link_bot_contact(chat_id, public_id,
+                             mark_subscribed=True, mark_fetched=False)
+        except Exception as e:
+            logger.debug(f"link_bot_contact (subscribe) non-fatal: {e}")
 
     greeting = (
         _m('welcome.greeting', first_name=first_name)
@@ -503,7 +479,6 @@ def _send_subscribe_welcome(bot, message, public_id=None):
 # ============================================
 
 def _forward_to_super_admins(bot, message):
-    """Fire-and-forget forward of a message to every super admin."""
     threading.Thread(
         target=_do_forward_to_super_admins,
         args=(bot, message),
@@ -544,10 +519,12 @@ def _do_forward_to_super_admins(bot, message):
 # PDF DELIVERY
 # ============================================
 
-def _deliver_pdf(bot, chat_id, user_id, code, bot_pdf):
+def _deliver_pdf(bot, chat_id, user_id, code, bot_pdf, public_id=None):
     """
-    Send a stored PDF. On success, marks the contact as having
-    fetched a PDF so it becomes eligible for the new-quiz broadcast.
+    Deliver a stored PDF. If public_id is present, the chat has
+    already been linked by the caller (or the caller passes it in
+    so we can mark fetched_pdf on the linked row). Otherwise we
+    fall back to mark_bot_contact_fetched_pdf for legacy callers.
     """
     try:
         file_id = bot_pdf['file_id']
@@ -576,9 +553,14 @@ def _deliver_pdf(bot, chat_id, user_id, code, bot_pdf):
         logger.info("force_join: delivered code=%r to user=%s", code, user_id)
 
         try:
-            mark_bot_contact_fetched_pdf(chat_id)
+            if public_id:
+                # Already linked upstream; ensure fetched_pdf set.
+                link_bot_contact(chat_id, public_id,
+                                 mark_subscribed=True, mark_fetched=True)
+            else:
+                mark_bot_contact_fetched_pdf(chat_id)
         except Exception as e:
-            logger.debug(f"mark_bot_contact_fetched_pdf non-fatal: {e}")
+            logger.debug(f"post-delivery mark non-fatal: {e}")
 
     except Exception as e:
         logger.error(f"_deliver_pdf failed for code {code}: {e}", exc_info=True)
@@ -596,7 +578,7 @@ def _deliver_pdf(bot, chat_id, user_id, code, bot_pdf):
 # GATE RECHECK
 # ============================================
 
-def _recheck_join(bot, chat_id, user_id, prompt_message=None):
+def _recheck_join(bot, chat_id, user_id, prompt_message=None, public_id=None):
     try:
         row = get_join_gate(user_id)
     except Exception:
@@ -613,7 +595,7 @@ def _recheck_join(bot, chat_id, user_id, prompt_message=None):
         if code:
             bot_pdf = get_bot_pdf_by_code(code)
             if bot_pdf:
-                _deliver_pdf(bot, chat_id, user_id, code, bot_pdf)
+                _deliver_pdf(bot, chat_id, user_id, code, bot_pdf, public_id=public_id)
         return
 
     attempts = bump_join_gate_attempts(user_id)
@@ -643,7 +625,7 @@ def _recheck_join(bot, chat_id, user_id, prompt_message=None):
                 if code:
                     bot_pdf = get_bot_pdf_by_code(code)
                     if bot_pdf:
-                        _deliver_pdf(bot, chat_id, user_id, code, bot_pdf)
+                        _deliver_pdf(bot, chat_id, user_id, code, bot_pdf, public_id=public_id)
             return
         result = _is_member_of(bot, cfg['channel_id'], user_id)
         if result is False:
@@ -661,7 +643,7 @@ def _recheck_join(bot, chat_id, user_id, prompt_message=None):
             if code:
                 bot_pdf = get_bot_pdf_by_code(code)
                 if bot_pdf:
-                    _deliver_pdf(bot, chat_id, user_id, code, bot_pdf)
+                    _deliver_pdf(bot, chat_id, user_id, code, bot_pdf, public_id=public_id)
         return
 
     if stage == 'group':
@@ -671,7 +653,7 @@ def _recheck_join(bot, chat_id, user_id, prompt_message=None):
             if code:
                 bot_pdf = get_bot_pdf_by_code(code)
                 if bot_pdf:
-                    _deliver_pdf(bot, chat_id, user_id, code, bot_pdf)
+                    _deliver_pdf(bot, chat_id, user_id, code, bot_pdf, public_id=public_id)
             return
         result = _is_member_of(bot, cfg['group_id'], user_id)
         if result is False:
@@ -685,8 +667,43 @@ def _recheck_join(bot, chat_id, user_id, prompt_message=None):
         if code:
             bot_pdf = get_bot_pdf_by_code(code)
             if bot_pdf:
-                _deliver_pdf(bot, chat_id, user_id, code, bot_pdf)
+                _deliver_pdf(bot, chat_id, user_id, code, bot_pdf, public_id=public_id)
         return
+
+
+# ============================================
+# PAYLOAD PARSING
+# ============================================
+
+def _parse_pdf_payload(payload):
+    """
+    Parse 'pdf' + <code> + <public_id>.
+    public_id is always the LAST 4 characters. code is everything
+    between the leading 'pdf' and the last 4 chars.
+    Returns (code, public_id) or (None, None).
+    """
+    if not payload or not payload.startswith('pdf'):
+        return None, None
+    rest = payload[3:]
+    if len(rest) < 5:
+        return None, None
+    public_id = rest[-4:]
+    code = rest[:-4]
+    if not code or not public_id:
+        return None, None
+    return code, public_id
+
+
+def _parse_subscribe_payload(payload):
+    """
+    Parse 'subscribe' or 'subscribe_<public_id>'.
+    Returns '' (bare), a public_id string, or None (not a subscribe).
+    """
+    if payload == 'subscribe':
+        return ''
+    if payload.startswith('subscribe_'):
+        return payload[len('subscribe_'):].strip()
+    return None
 
 
 # ============================================
@@ -703,7 +720,6 @@ def process_telegram_update(bot: telebot.TeleBot, update_data: dict):
         elif update.callback_query and update.callback_query.message:
             chat = update.callback_query.message.chat
 
-        # Group lock — the bot only speaks in private chats.
         if chat is not None and getattr(chat, 'type', 'private') != 'private':
             logger.debug(
                 "dropping update from chat type=%s chat_id=%s",
@@ -724,7 +740,6 @@ def process_telegram_update(bot: telebot.TeleBot, update_data: dict):
 
 
 def _track_contact_from_user(user):
-    """Upsert the incoming user into bot_contacts on every update."""
     if not user:
         return
     try:
@@ -742,7 +757,7 @@ def handle_message(bot, message):
     user_id = message.from_user.id
     text = (message.text or '').strip()
 
-    # ── 1. Admin commands take priority ──
+    # 1. Admin commands
     if text.startswith('/'):
         try:
             from bot import admin_handlers
@@ -751,15 +766,12 @@ def handle_message(bot, message):
         except Exception as e:
             logger.warning(f"admin_handlers dispatch failed: {e}")
 
-    # ── 2. /start with payload (subscribe or PDF code) ──
+    # 2. /start <payload>
     if text.startswith('/start') and len(text.split()) > 1:
         handle_start_with_code(bot, message)
         return
 
-    # ── 3. Gate guard ──
-    # Fires for ANY message (text or not) from a gated user. This is
-    # the "step progress" exception — no other reply is sent while a
-    # user is walking through the gate.
+    # 3. Gate guard — any message (text or not) from a gated user
     if not is_admin(user_id):
         try:
             pending_gate = get_join_gate(user_id)
@@ -769,22 +781,22 @@ def handle_message(bot, message):
             _recheck_join(bot, message.chat.id, user_id)
             return
 
-    # ── 4. Documents ──
+    # 4. Documents
     if message.document:
         handle_document(bot, message)
         return
 
-    # ── 5. /start without payload ──
+    # 5. /start (no payload)
     if text.startswith('/start'):
         handle_start(bot, message)
         return
 
-    # ── 6. /help ──
+    # 6. /help
     if text.startswith('/help'):
         handle_help(bot, message)
         return
 
-    # ── 7. Everything else ──
+    # 7. Everything else
     _send_platform_help(bot, message, first_time=False)
 
 
@@ -806,23 +818,38 @@ def handle_start(bot, message):
 
 def handle_start_with_code(bot, message):
     user_id = message.from_user.id
+    chat_id = message.chat.id
     parts = message.text.split(maxsplit=1)
-    code = parts[1].strip()
+    payload = parts[1].strip()
 
-    # Subscribe deeplink from the lobby banner.
-    if code == 'subscribe' or code.startswith('subscribe_'):
-        public_id = ''
-        if code.startswith('subscribe_'):
-            public_id = code[len('subscribe_'):].strip() or ''
-        _send_subscribe_welcome(bot, message, public_id=public_id or None)
+    # ── Subscribe deeplink ──
+    sub_public_id = _parse_subscribe_payload(payload)
+    if sub_public_id is not None:
+        _send_subscribe_welcome(bot, message, public_id=sub_public_id or None)
         return
+
+    # ── PDF deeplink (new format) ──
+    code, pdf_public_id = _parse_pdf_payload(payload)
+
+    # ── Legacy PDF code ──
+    legacy = False
+    if not code:
+        code = payload
+        legacy = True
 
     bot_pdf = get_bot_pdf_by_code(code)
-
-    # Unknown payload — treat as /start.
     if not bot_pdf:
+        # Unknown payload — fall back to the generic /start reply.
         handle_start(bot, message)
         return
+
+    # ── Link the chat to the platform user (new format only) ──
+    if not legacy and pdf_public_id:
+        try:
+            link_bot_contact(chat_id, pdf_public_id,
+                             mark_subscribed=True, mark_fetched=False)
+        except Exception as e:
+            logger.debug(f"link_bot_contact (pdf deeplink) non-fatal: {e}")
 
     try:
         delete_join_gate(user_id)
@@ -830,35 +857,41 @@ def handle_start_with_code(bot, message):
         pass
 
     if is_admin(user_id):
-        _deliver_pdf(bot, message.chat.id, user_id, code, bot_pdf)
+        _deliver_pdf(bot, chat_id, user_id, code, bot_pdf,
+                     public_id=pdf_public_id if not legacy else None)
         return
 
     cfg = _force_join_config()
     if not cfg:
-        _deliver_pdf(bot, message.chat.id, user_id, code, bot_pdf)
+        _deliver_pdf(bot, chat_id, user_id, code, bot_pdf,
+                     public_id=pdf_public_id if not legacy else None)
         return
 
     status = _check_force_join(bot, user_id, cfg)
 
     if status == 'ok':
-        _deliver_pdf(bot, message.chat.id, user_id, code, bot_pdf)
+        _deliver_pdf(bot, chat_id, user_id, code, bot_pdf,
+                     public_id=pdf_public_id if not legacy else None)
         return
 
     if status == 'channel':
         if not set_join_gate(user_id, 'channel', code):
-            _deliver_pdf(bot, message.chat.id, user_id, code, bot_pdf)
+            _deliver_pdf(bot, chat_id, user_id, code, bot_pdf,
+                         public_id=pdf_public_id if not legacy else None)
             return
-        _prompt_join_channel(bot, message.chat.id, code)
+        _prompt_join_channel(bot, chat_id, code)
         return
 
     if status == 'group':
         if not set_join_gate(user_id, 'group', code):
-            _deliver_pdf(bot, message.chat.id, user_id, code, bot_pdf)
+            _deliver_pdf(bot, chat_id, user_id, code, bot_pdf,
+                         public_id=pdf_public_id if not legacy else None)
             return
-        _prompt_join_group(bot, message.chat.id, code)
+        _prompt_join_group(bot, chat_id, code)
         return
 
-    _deliver_pdf(bot, message.chat.id, user_id, code, bot_pdf)
+    _deliver_pdf(bot, chat_id, user_id, code, bot_pdf,
+                 public_id=pdf_public_id if not legacy else None)
 
 
 # ============================================
@@ -874,7 +907,9 @@ def handle_help(bot, message):
         f"{_m('help.contact_hint')}"
     )
     try:
-        markup = _build_platform_keyboard(for_admin=is_admin(message.from_user.id))
+        markup = _build_platform_keyboard(
+            for_admin=is_admin(message.from_user.id)
+        )
         bot.send_message(message.chat.id, text, reply_markup=markup)
     except Exception as e:
         logger.error(f"handle_help failed: {e}", exc_info=True)
@@ -886,10 +921,9 @@ def handle_help(bot, message):
 
 def handle_document(bot, message):
     """
-    Non-admin senders: intake is saved silently, the document is
-    forwarded to super admins in the background, and the sender
-    gets the platform-help reply. Admins get the intake
-    confirmation as before.
+    Non-admins: intake is saved silently, the document is forwarded
+    to super admins in the background, and the sender gets the
+    platform-help reply. Admins get the intake confirmation.
     """
     user_id = message.from_user.id
     usr_is_admin = is_admin(user_id)
@@ -906,14 +940,12 @@ def handle_document(bot, message):
         or file_name.lower().endswith('.pdf')
     )
 
-    # Non-PDF — nothing to intake; forward (if non-admin) and reply.
     if not is_pdf:
         if not usr_is_admin:
             _forward_to_super_admins(bot, message)
         _send_platform_help(bot, message, first_time=False)
         return
 
-    # PDF intake
     file_id = document.file_id
     file_unique_id = document.file_unique_id
     filename = file_name or 'unknown.pdf'
@@ -933,7 +965,6 @@ def handle_document(bot, message):
         except Exception:
             pending_id = 0
 
-    # Admin path — same confirmation as before.
     if usr_is_admin:
         try:
             if duplicate:
@@ -953,7 +984,6 @@ def handle_document(bot, message):
             pass
         return
 
-    # Non-admin path — forward silently, then platform help.
     _forward_to_super_admins(bot, message)
     _send_platform_help(bot, message, first_time=False)
 

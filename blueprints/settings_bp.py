@@ -39,13 +39,8 @@ def index():
     can_create = can_create_live_quiz()
     user_subjects = get_user_subject_list(user_id)
 
-    # Language switching is available to every user regardless of tier.
-    # This flag exists only so the template can keep its current shape.
     language_allowed = True
 
-    # Build the "Plan & Features" grid. Entries with `feature_key` are
-    # resolved through the entitlement service; entries with only
-    # `tier_required` use the legacy comparison.
     tier_features = []
     for key, definition in SETTINGS_REGISTRY.items():
         feature_key = definition.get('feature_key')
@@ -71,6 +66,22 @@ def index():
             'category': definition.get('category', ''),
         })
 
+    # ── Telegram broadcast state ──
+    # Derived from bot_data.db, not from user_settings. The toggle
+    # renders OFF when the user has no linked Telegram chat or has
+    # blocked the bot. The only way to reach ON is the deeplink.
+    public_id = (session.get('public_id') or '').strip()
+    telegram_linked = False
+    telegram_broadcast_active = False
+    if public_id:
+        try:
+            from bot.db import get_broadcast_state_by_public_id
+            linked, subscribed, _blocked = get_broadcast_state_by_public_id(public_id)
+            telegram_linked = bool(linked)
+            telegram_broadcast_active = bool(linked and subscribed)
+        except Exception as e:
+            logger.warning(f"telegram broadcast state lookup failed: {e}")
+
     return render_template('settings/index.html',
                            tier=tier,
                            settings=settings,
@@ -78,7 +89,9 @@ def index():
                            can_create_live=can_create,
                            user_subjects=user_subjects,
                            tier_features=tier_features,
-                           language_allowed=language_allowed)
+                           language_allowed=language_allowed,
+                           telegram_linked=telegram_linked,
+                           telegram_broadcast_active=telegram_broadcast_active)
 
 
 @settings_bp.route('/api', methods=['GET'])
@@ -199,9 +212,6 @@ def api_password():
     })
 
 
-# ============================================
-# TEST ENDPOINT (debug only)
-# ============================================
 @settings_bp.route('/test-save', methods=['GET'])
 @login_required
 def test_save():
@@ -215,7 +225,6 @@ def test_save():
 
     user_id = session['user_id']
     try:
-        from services.settings_service import SettingsService
         result = SettingsService.update(user_id, {'appearance.theme': 'dark'})
         return jsonify({'status': 'ok', 'result': result})
     except Exception as e:

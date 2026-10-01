@@ -388,7 +388,7 @@ def list_pdfs():
 
     seconds_to_reset = _seconds_to_quota_reset() if user_id else 0
     reset_time_str = _format_reset_time(seconds_to_reset) if user_id else ''
-
+    user_public_id = (session.get('public_id') or '').strip()
     return render_template(
         'dashboard/pdfs.html',
         pdfs=pdfs,
@@ -423,6 +423,7 @@ def list_pdfs():
         download_limit=download_limit,
         seconds_to_reset=seconds_to_reset,
         reset_time_str=reset_time_str,
+        user_public_id=user_public_id,
     )
 
 
@@ -570,8 +571,14 @@ def telegram_download(code):
         )
 
     bot_username = Config.TELEGRAM_BOT_USERNAME or 'nuunplatform_bot'
-    return redirect(f"https://t.me/{bot_username}?start={code}")
-
+    public_id = (session.get('public_id') or '').strip()
+    if public_id:
+        # New payload: pdf<code><public_id>
+        payload = f"pdf{code}{public_id}"
+    else:
+        # Fallback: legacy code only (link not created)
+        payload = code
+    return redirect(f"https://t.me/{bot_username}?start={payload}")
 
 # ============================================================
 # DIRECT DOWNLOAD (streams from Telegram as attachment)

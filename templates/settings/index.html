@@ -382,7 +382,12 @@
                         </span>
                     </label>
 
-                    {# ── Telegram broadcast toggle ── #}
+                    {# ── Telegram broadcast toggle ──
+                       Rendered state is derived from bot_data.db (linked chat +
+                       subscribed_broadcast), NOT from user_settings. When the
+                       user has no linked Telegram chat, data-requires-link="1"
+                       causes the JS listener to snap the checkbox back and
+                       open the deeplink instead of toggling. #}
                     <label class="notif-row">
                         <span class="notif-row__icon" aria-hidden="true">📨</span>
                         <span class="notif-row__body">
@@ -390,7 +395,9 @@
                             <span class="notif-row__desc">{{ _('settings.notifications.types.telegram_broadcast.desc') }}</span>
                         </span>
                         <span class="notif-row__switch">
-                            <input type="checkbox" class="notif-row__input" id="notify_telegram_broadcast" {% if settings['notifications.telegram_broadcast'] %}checked{% endif %}>
+                            <input type="checkbox" class="notif-row__input" id="notify_telegram_broadcast"
+                                   {% if telegram_broadcast_active %}checked{% endif %}
+                                   data-requires-link="{{ '0' if telegram_linked else '1' }}">
                             <span class="notif-row__slider"></span>
                         </span>
                         <span class="notif-row__state" aria-hidden="true">
@@ -722,6 +729,14 @@
     }
 </style>
 
+{# ── Bridge for the Telegram broadcast toggle ── #}
+<script>
+window.__TG = {
+    botUsername: {{ (config.TELEGRAM_BOT_USERNAME or '')|tojson }},
+    publicId:    {{ (session.get('public_id') or '')|tojson }},
+    toastMsg:    "Fur Telegram oo taabo START. Xaaladda waxay soo cusboonaysiin doontaa marka aad soo noqoto."
+};
+</script>
 <script src="{{ url_for('static', filename='js/push-client.js') }}"></script>
 <script>
 (function () {
@@ -743,7 +758,6 @@
         'notify_participant_joined':   'notifications.participant_joined',
         'notify_admin_announcement':   'notifications.admin_announcement',
         'notify_new_live_quiz':        'notifications.new_live_quiz',
-        'notify_telegram_broadcast':   'notifications.telegram_broadcast',
         'notify_daily_digest':         'notifications.daily_digest',
         'notify_achievement_unlock':   'notifications.achievement_unlock',
         'notify_live_quiz_reminder':   'notifications.live_quiz_reminder',
@@ -753,6 +767,9 @@
         'default_time_per_question':   'live_quiz.default_time_per_question',
         'default_max_participants':    'live_quiz.default_max_participants'
     };
+    // NOTE: notify_telegram_broadcast is intentionally NOT in the map.
+    // Its rendered state is server-derived from bot_data.db, not from
+    // user_settings. applySettingsToForm must not clobber it.
 
     function isTruthy(v) {
         if (v === true || v === 1) return true;
@@ -951,6 +968,7 @@
         attachTracking(notifForm);
         notifForm.addEventListener('submit', function (e) {
             e.preventDefault();
+            var tgBroadcastEl = document.getElementById('notify_telegram_broadcast');
             var payload = {
                 'notifications.quiz_complete':       document.getElementById('notify_quiz_complete').checked,
                 'notifications.new_pdf':             document.getElementById('notify_new_pdf').checked,
@@ -959,7 +977,7 @@
                 'notifications.participant_joined':  document.getElementById('notify_participant_joined').checked,
                 'notifications.admin_announcement':  document.getElementById('notify_admin_announcement').checked,
                 'notifications.new_live_quiz':       document.getElementById('notify_new_live_quiz').checked,
-                'notifications.telegram_broadcast':  document.getElementById('notify_telegram_broadcast').checked
+                'notifications.telegram_broadcast':  tgBroadcastEl ? tgBroadcastEl.checked : false
             };
             submitForm(notifForm, '/settings/api', payload, 'Notification preferences saved!');
         });
@@ -1239,6 +1257,44 @@
         });
         card.classList.toggle('active');
     };
+
+    // ── Telegram broadcast toggle ──
+    // When the user has no linked Telegram chat, the checkbox carries
+    // data-requires-link="1". Clicking it does NOT toggle — instead we
+    // prevent default, open the subscribe deeplink in a new tab, and
+    // show a toast. The link is created on Telegram's side; the toggle
+    // reflects the new state on the next page load.
+    (function setupTelegramBroadcastToggle() {
+        var cb = document.getElementById('notify_telegram_broadcast');
+        if (!cb) return;
+        if (cb.dataset.requiresLink !== '1') return;
+
+        cb.addEventListener('click', function (e) {
+            // At click time, cb.checked is still the PRE-click value.
+            // If it's true, the user is trying to turn it OFF — allow.
+            if (cb.checked) return;
+
+            // Trying to turn it ON without a linked chat. Block the
+            // toggle and route the user to the Telegram bot.
+            e.preventDefault();
+
+            var tg = window.__TG || {};
+            var botUsername = tg.botUsername || '';
+            var publicId = tg.publicId || '';
+
+            if (botUsername && publicId) {
+                var url = 'https://t.me/' + botUsername + '?start=subscribe_' + publicId;
+                window.open(url, '_blank', 'noopener,noreferrer');
+            }
+
+            if (typeof window.showToast === 'function') {
+                window.showToast(
+                    tg.toastMsg || 'Fur Telegram oo taabo START.',
+                    'info'
+                );
+            }
+        });
+    })();
 })();
 </script>
 {% endblock %}
