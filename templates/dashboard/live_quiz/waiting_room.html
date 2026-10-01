@@ -73,9 +73,7 @@
             </button>
         </div>
 
-        {# ============================================
-           PANEL: PARTICIPANTS
-           ============================================ #}
+        {# ── PANEL: PARTICIPANTS ── #}
         <div class="wr-panel" id="panel-participants" role="tabpanel">
 
             {% if quiz.status == 'scheduled' and starts_in_seconds is not none and starts_in_seconds > 0 %}
@@ -98,7 +96,6 @@
             </div>
             {% endif %}
 
-            {# ── SHARE SECTION ── #}
             <div class="wr-share-section" id="wrShareSection">
                 <div class="wr-share-bar">
                     <button type="button" class="wr-share-chip" id="shareChip"
@@ -182,9 +179,7 @@
             <div class="wr-tip">💡 {{ _('live_quiz.waiting.tip') }}</div>
         </div>
 
-        {# ============================================
-           PANEL: CHAT
-           ============================================ #}
+        {# ── PANEL: CHAT ── #}
         <div class="wr-panel" id="panel-chat" role="tabpanel" hidden>
 
             <button type="button" class="wr-chat-mute" id="chatMuteBtn"
@@ -319,9 +314,6 @@
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
-// ── Notification text — hardcoded Somali ──
-// T-60 countdown title and body. The body wraps the quiz title,
-// truncated to keep the collapsed Android notification readable.
 const NOTIFY_T60_TITLE = "🚀 1 daqiiqo ka hartay";
 const NOTIFY_T60_BODY_TAIL = " wuu soo dhowaaday. Taabo si aad ugu soo biirto. Haderbu bilaban.";
 
@@ -379,19 +371,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const quizId = '{{ quiz.id }}';
     const userId = '{{ session.user_id }}';
     const isCreator = {{ 'true' if is_creator else 'false' }};
-    const totalQuestions = {{ quiz.question_count }};
-    const timePerQuestion = {{ quiz.time_per_question or 30 }};
     const chatPollMs = 2000;
     const chatPollMsHidden = 20000;
 
-    // ── Share data ──
     const JOIN_CODE = '{{ quiz.join_code }}';
     const SHARE_URL = window.location.origin + '/live-quiz/j/' + JOIN_CODE;
     const QUIZ_TITLE = {{ (quiz.title or 'Live Quiz')|tojson }};
     const SUBJECT_CODE = '{{ (quiz.subject_code or "")|upper }}';
     const QUIZ_GRADE = '{{ quiz.grade or "" }}';
 
-    // ── Short title for the T-60 notification (fits collapsed Android) ──
     function shortTitle() {
         var t = QUIZ_TITLE;
         if (t.length > 30) t = t.substring(0, 28) + '…';
@@ -682,7 +670,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ============================================================
-    // AUDIO — shared context, chat pop, ping chime
+    // AUDIO
     // ============================================================
     let _audioCtx = null;
     function getAudioCtx() {
@@ -743,9 +731,11 @@ document.addEventListener('DOMContentLoaded', function() {
         chatSoundMuted = sessionStorage.getItem('nuun_chat_muted') === '1';
     } catch (e) {}
 
+    // NOTE: the visibility check has been removed — sound now attempts to
+    // play even when the tab is hidden. Whether Android actually plays it
+    // depends on the OS. The OS notification is the reliable path.
     function shouldPlayChatSound() {
         if (chatSoundMuted) return false;
-        if (document.visibilityState === 'hidden') return false;
         if (document.activeElement === chatInputEl) return false;
         const now = Date.now();
         if (now - lastChatSoundAt < CHAT_SOUND_THROTTLE_MS) return false;
@@ -755,26 +745,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ============================================================
     // IN-PAGE BROWSER NOTIFICATION
+    // kind: 'ping'   → persistent, strong vibrate, replaces previous ping
+    //       'chat'   → soft vibrate, auto-dismiss, replaces previous chat
+    //       'system' → the T-60 warning, gentle
     // ============================================================
     function sendBrowserNotification(title, body, url, kind) {
         if (!('Notification' in window)) return;
         if (Notification.permission !== 'granted') return;
 
         var isPing = (kind === 'ping');
+        var isChat = (kind === 'chat');
 
         var opts = {
             body: body,
             icon: '/static/images/logo.png',
             badge: '/static/images/badge-nuun.png',
-            tag: isPing
-                ? ('live-quiz-ping-' + quizId)
-                : ('live-quiz-start-' + quizId),
+            tag: isPing ? ('live-quiz-ping-' + quizId)
+                 : isChat ? ('live-quiz-chat-' + quizId)
+                 : ('live-quiz-start-' + quizId),
             requireInteraction: isPing,
             silent: false,
-            renotify: isPing,
+            renotify: isPing || isChat,
             data: { url: url }
         };
         if (isPing) opts.vibrate = [200, 100, 200, 100, 200];
+        if (isChat) opts.vibrate = [80, 40, 80];
 
         try {
             var n = new Notification(title, opts);
@@ -833,6 +828,26 @@ document.addEventListener('DOMContentLoaded', function() {
     let lastShownPingId   = 0;
     let pollsCompleted    = 0;
     const renderedChatIds = new Set();
+
+    // Throttle for chat OS notifications when the tab is hidden
+    let lastChatNotifyAt = 0;
+    const CHAT_NOTIFY_THROTTLE_MS = 15000;
+
+    function maybeNotifyChat(senderName, body) {
+        if (document.visibilityState !== 'hidden') return;
+        if (chatSoundMuted) return;
+        const now = Date.now();
+        if (now - lastChatNotifyAt < CHAT_NOTIFY_THROTTLE_MS) return;
+        lastChatNotifyAt = now;
+        var shortBody = body || '';
+        if (shortBody.length > 120) shortBody = shortBody.substring(0, 118) + '…';
+        sendBrowserNotification(
+            '💬 ' + senderName,
+            shortBody,
+            '/live-quiz/waiting-room/' + quizId,
+            'chat'
+        );
+    }
 
     function formatTime12h(raw) {
         if (!raw) return '';
@@ -988,8 +1003,18 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 const isMine = String(m.user_id) === String(userId);
                 frag.appendChild(isMine ? buildMineMessageEl(m) : buildOtherMessageEl(m));
-                if (!isMine && !m.is_deleted && shouldPlayChatSound()) {
-                    playChatSound();
+
+                if (!isMine && !m.is_deleted) {
+                    if (document.visibilityState === 'hidden') {
+                        // In another app / another tab — fire OS notification
+                        maybeNotifyChat(
+                            m.name || 'Participant',
+                            m.body || ''
+                        );
+                    } else if (shouldPlayChatSound()) {
+                        // Visible tab — play the soft pop
+                        playChatSound();
+                    }
                 }
             }
         });
@@ -1341,7 +1366,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ============================================================
-    // COUNTDOWN — Somali T-60 hardcoded
+    // COUNTDOWN (Somali T-60)
     // ============================================================
     function startCountdown(seconds) {
         if (countdownInterval) clearInterval(countdownInterval);
@@ -1364,7 +1389,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (remaining <= 60 && remaining > 55 && !notificationSent) {
                 notificationSent = true;
-                // Hardcoded Somali — no translation lookup
                 sendBrowserNotification(
                     NOTIFY_T60_TITLE,
                     '"' + shortTitle() + '"' + NOTIFY_T60_BODY_TAIL,
