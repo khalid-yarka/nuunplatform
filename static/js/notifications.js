@@ -69,6 +69,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // ============================================
     // RENDER NOTIFICATIONS
     // ============================================
+    // Rows with type === 'live_quiz_start' get extra chrome:
+    //   · .lq-notif class     → green accent bar (see notify.css)
+    //   · .lq-live-chip       → green "● LIVE" pill in the title
+    //   · .lq-join-btn        → inline "Ku biir →" button
     
     function renderNotifications(notifications) {
         if (!notificationList) return;
@@ -87,15 +91,32 @@ document.addEventListener('DOMContentLoaded', function() {
         notifications.forEach(function(n) {
             const isUnread = n.is_read === 0;
             const timeAgo = getTimeAgo(n.created_at);
+            const isLive = n.type === 'live_quiz_start';
+            
+            const rowClasses = 'notification-item'
+                + (isUnread ? ' unread' : '')
+                + (isLive ? ' lq-notif' : '');
+            
+            const liveChip = isLive
+                ? '<span class="lq-live-chip"><span class="lq-live-dot"></span>LIVE</span>'
+                : '';
+            
+            const joinBtn = isLive
+                ? `<button type="button" class="lq-join-btn"
+                           onclick="event.stopPropagation(); handleNotificationClick(${n.id}, '${escapeAttr(n.link || '')}')">
+                       Ku biir <span aria-hidden="true">→</span>
+                   </button>`
+                : '';
             
             html += `
-                <div class="notification-item ${isUnread ? 'unread' : ''}" 
+                <div class="${rowClasses}" 
                      data-id="${n.id}"
-                     onclick="handleNotificationClick(${n.id}, '${n.link || ''}')">
+                     data-notif-type="${escapeAttr(n.type || '')}"
+                     onclick="handleNotificationClick(${n.id}, '${escapeAttr(n.link || '')}')">
                     <span class="n-icon">${n.icon || '🔔'}</span>
                     <div class="n-content">
-                        <div class="n-title">${escapeHtml(n.title)}</div>
-                        <div class="n-body">${escapeHtml(n.body)}</div>
+                        <div class="n-title">${escapeHtml(n.title)}${liveChip}</div>
+                        <div class="n-body">${escapeHtml(n.body)}${joinBtn}</div>
                         <div class="n-time">${timeAgo}</div>
                     </div>
                     ${isUnread ? `<button class="n-mark-read" onclick="event.stopPropagation(); markNotificationRead(${n.id})">✓</button>` : ''}
@@ -212,7 +233,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // ============================================
-    // ESCAPE HTML
+    // ESCAPE HELPERS
     // ============================================
     
     function escapeHtml(text) {
@@ -220,6 +241,18 @@ document.addEventListener('DOMContentLoaded', function() {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+    
+    // Safe for use inside HTML attribute values and single-quoted JS
+    // strings embedded in an onclick handler.
+    function escapeAttr(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
     }
     
     // ============================================
@@ -261,17 +294,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // ============================================
     // BROWSER NOTIFICATION DISPLAY HELPER
     // ============================================
-    // This function is called from other parts of the app when a
-    // notification needs to be shown as a browser-level popup.
-    //
-    // NOTE: This function NEVER asks for permission. Permission is
-    //       handled exclusively by the floating prompt card
-    //       (see prompt-cards.js). If the user hasn't granted
-    //       permission, this function silently no-ops.
-    //
+    // Permission is handled exclusively by prompt-cards.js.
     // Prefers the service worker's showNotification() so that
-    // notifications display when the tab is in the background or
-    // closed (as long as sw.js handles the push event).
+    // notifications display when the tab is in the background
+    // or closed (as long as sw.js handles the push event).
     // ============================================
     
     window.showBrowserNotification = function(title, body, link, icon) {

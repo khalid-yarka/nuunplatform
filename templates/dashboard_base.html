@@ -211,16 +211,9 @@
 
     /* ============================================
        NOTIFICATION DROPDOWN — BASE
-       Desktop (>768px): stays right-aligned to the bell (unchanged).
-       Mobile (≤768px): recomputed below as a floating centred card.
        ============================================ */
     .notification-dropdown.open { display: flex; }
 
-    /* ----------------------------------------------------------
-       DESKTOP NOTIFICATION DROPDOWN — anchored to the bell,
-       right-aligned. Explicit so no mobile rule can leak up.
-       (Mobile overrides live inside the @media blocks below.)
-       ---------------------------------------------------------- */
     @media (min-width: 769px) {
         .notification-wrapper { position: relative; }
 
@@ -248,7 +241,6 @@
        TOP NAVBAR — RESPONSIVE LAYOUT
        ============================================ */
 
-    /* Tablet */
     @media (max-width: 1024px) {
         .top-navbar { padding: 0 16px; gap: 8px; }
         .top-navbar .navbar-right { gap: 6px; }
@@ -260,7 +252,6 @@
         .navbar-right .discount-chip .dc-time  { font-size: 11px; }
     }
 
-    /* Mobile */
     @media (max-width: 768px) {
         .top-navbar {
             padding: 0 10px;
@@ -342,11 +333,6 @@
             width: 34px; height: 34px; font-size: 13px;
         }
 
-        /* ---------------------------------------------------
-           NOTIFICATION DROPDOWN — NARROW FLOATING CARD (mobile)
-           Fixed-width, centred with equal breathing room.
-           Desktop keeps the original right-anchored layout.
-           --------------------------------------------------- */
         .navbar-right .notification-dropdown {
             position: fixed;
             top: 70px;
@@ -399,7 +385,6 @@
         .navbar-right .notification-dropdown { animation: none; }
     }
 
-    /* Very small */
     @media (max-width: 480px) {
         .top-navbar { padding: 0 8px; }
         .top-navbar .navbar-left .page-title {
@@ -422,7 +407,6 @@
             font-size: 16px; margin: 0;
         }
 
-        /* Tighter card on small phones */
         .navbar-right .notification-dropdown {
             top: 62px;
             width: calc(100vw - 40px);
@@ -443,6 +427,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/upgrade.css') }}?v=3" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/prompt-cards.css') }}?v=3" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/discount-chip.css') }}?v=3" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz/notify.css') }}?v=1" />
 {% block dashboard_css %}{% endblock %}
 {% endblock %}
 
@@ -772,12 +757,6 @@
             {% block dashboard_content %}{% endblock %}
         </div>
 
-        {# ────────────────────────────────────────────────────────
-           FOOTER BLOCK
-           Overridable so focus screens (e.g. the live-quiz waiting
-           room) can hide the footer entirely. Every other page
-           inherits the full footer below.
-           ──────────────────────────────────────────────────────── #}
         {% block dashboard_footer %}
         <footer class="app-footer">
             <div class="footer-container">
@@ -885,11 +864,6 @@
     </div>
 </div>
 
-{# ────────────────────────────────────────────────────────
-   WHATSAPP COMMUNITY FAB
-   Overridable so focus screens (e.g. the live-quiz waiting
-   room) can hide the floating WhatsApp button entirely.
-   ──────────────────────────────────────────────────────── #}
 {% block whatsapp_fab %}
 {% if whatsapp_group_url %}
 <a href="{{ whatsapp_group_url }}"

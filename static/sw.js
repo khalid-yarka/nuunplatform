@@ -26,16 +26,12 @@ const SHELL_ASSETS = [
 self.addEventListener('install', function (event) {
     event.waitUntil(
         caches.open(SHELL_CACHE).then(function (cache) {
-            // Tolerate individual failures — a missing icon must not
-            // block the SW from installing.
             return Promise.all(
                 SHELL_ASSETS.map(function (url) {
                     return cache.add(url).catch(function () { /* skip */ });
                 })
             );
         }).then(function () {
-            // Activate as soon as possible. Registration code will
-            // reload open clients once they receive controllerchange.
             return self.skipWaiting();
         })
     );
@@ -48,7 +44,6 @@ self.addEventListener('activate', function (event) {
             return Promise.all(
                 keys
                     .filter(function (k) {
-                        // Keep only the current two caches.
                         return k.startsWith('nuun-')
                             && k !== SHELL_CACHE
                             && k !== RUNTIME_CACHE;
@@ -56,8 +51,6 @@ self.addEventListener('activate', function (event) {
                     .map(function (k) { return caches.delete(k); })
             );
         }).then(function () {
-            // Take control of every open tab so the reload happens now,
-            // not on the next open.
             return self.clients.claim();
         })
     );
@@ -76,9 +69,63 @@ self.addEventListener('message', function (event) {
     }
 });
 
+/* ============================================================
+   PUSH HANDLER
+   ============================================================
+   Fires when the browser delivers a Web Push message from the
+   server. Renders a notification and applies priority defaults
+   for high-attention types.
+
+   Priority defaults for live_quiz_start:
+     requireInteraction — stays on screen until the user acts
+     renotify           — re-alerts even if `tag` already exists
+     vibrate            — Android vibration pattern
+   ============================================================ */
+self.addEventListener('push', function (event) {
+    var payload = {};
+    try {
+        payload = event.data ? event.data.json() : {};
+    } catch (e) {
+        try { payload = { title: 'NuunPlatform', body: event.data.text() }; }
+        catch (e2) { payload = { title: 'NuunPlatform', body: 'New notification' }; }
+    }
+
+    var title = payload.title || 'NuunPlatform';
+    var body  = payload.body  || '';
+    var url   = payload.url   || '/';
+    var icon  = payload.icon  || '/static/images/icon-192.png';
+    var tag   = payload.tag   || ('nuun-push-' + Date.now());
+    var type  = (payload.data && payload.data.type) || '';
+
+    var opts = {
+        body: body,
+        icon: icon,
+        badge: '/static/images/badge-nuun.png',
+        tag: tag,
+        data: { url: url, type: type }
+    };
+
+    // Priority defaults — the recipient just got a live event.
+    if (type === 'live_quiz_start') {
+        opts.requireInteraction = true;
+        opts.renotify = true;
+        opts.vibrate = [200, 100, 200, 100, 200];
+    }
+
+    // Optional per-push overrides from data.options (future-proofing)
+    if (payload.data && payload.data.options) {
+        var o = payload.data.options;
+        if (typeof o.requireInteraction === 'boolean') opts.requireInteraction = o.requireInteraction;
+        if (typeof o.renotify === 'boolean')           opts.renotify = o.renotify;
+        if (Array.isArray(o.vibrate))                  opts.vibrate = o.vibrate;
+        if (typeof o.silent === 'boolean')             opts.silent = o.silent;
+    }
+
+    event.waitUntil(self.registration.showNotification(title, opts));
+});
+
 /* ---------- fetch ---------- */
 function _shouldBypass(pathname) {
-    // Endpoints that must always hit the live server, never the cache.
     return (
         pathname.startsWith('/admin') ||
         pathname.startsWith('/webhook') ||
@@ -94,13 +141,11 @@ function _shouldBypass(pathname) {
 self.addEventListener('fetch', function (event) {
     var req = event.request;
 
-    // Only GET is cacheable.
     if (req.method !== 'GET') return;
 
     var url;
     try { url = new URL(req.url); } catch (e) { return; }
 
-    // Same-origin only. Cross-origin (Telegram, CDN) passes straight through.
     if (url.origin !== self.location.origin) return;
 
     if (_shouldBypass(url.pathname)) return;
@@ -113,7 +158,6 @@ self.addEventListener('fetch', function (event) {
         event.respondWith(
             fetch(req)
                 .then(function (res) {
-                    // Cache a fresh copy for offline use.
                     var copy = res.clone();
                     caches.open(RUNTIME_CACHE).then(function (c) {
                         c.put(req, copy).catch(function () {});
@@ -140,8 +184,6 @@ self.addEventListener('fetch', function (event) {
                         }
                         return res;
                     }).catch(function () { return cached; });
-                    // Return cached immediately if present, but keep the
-                    // network fetch alive so the cache refreshes.
                     return cached || network;
                 });
             })
@@ -161,15 +203,6 @@ self.addEventListener('fetch', function (event) {
 
 /* ============================================================
    NOTIFICATION CLICK HANDLER
-   ============================================================
-   Fires when a user taps a notification created via
-   `reg.showNotification()`. Looks for an existing tab at this
-   origin, focuses it, and navigates it to the URL stored in
-   `event.notification.data.url`. Falls back to opening a new
-   window when no same-origin tab exists.
-
-   Without this handler, tapping a service-worker-created
-   notification simply dismisses it — nothing opens.
    ============================================================ */
 self.addEventListener('notificationclick', function (event) {
     event.notification.close();
@@ -181,7 +214,6 @@ self.addEventListener('notificationclick', function (event) {
         }
     } catch (e) { /* keep default */ }
 
-    // Resolve target to an absolute URL.
     var absoluteUrl;
     try {
         absoluteUrl = new URL(targetUrl, self.location.origin).href;
@@ -192,8 +224,6 @@ self.addEventListener('notificationclick', function (event) {
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true })
             .then(function (windowClients) {
-
-                // 1. Prefer an existing window already at the target path.
                 for (var i = 0; i < windowClients.length; i++) {
                     var c = windowClients[i];
                     try {
@@ -205,7 +235,6 @@ self.addEventListener('notificationclick', function (event) {
                     } catch (e) { /* skip */ }
                 }
 
-                // 2. Otherwise focus a same-origin window and navigate it.
                 for (var j = 0; j < windowClients.length; j++) {
                     var w = windowClients[j];
                     try {
@@ -222,7 +251,6 @@ self.addEventListener('notificationclick', function (event) {
                     } catch (e) { /* skip */ }
                 }
 
-                // 3. No same-origin window — open a new one.
                 return clients.openWindow(absoluteUrl);
             })
     );

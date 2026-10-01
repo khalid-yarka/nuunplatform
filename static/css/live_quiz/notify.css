@@ -1,0 +1,136 @@
+/* ============================================================
+   static/css/live_quiz/notify.css
+   ============================================================
+   Green chrome for the "quiz started" notification row in the
+   navbar dropdown. Applied by notifications.js when a row's
+   `type` is `live_quiz_start`.
+   ============================================================ */
+
+:root {
+    --lq-green:       #10B981;
+    --lq-green-hover: #059669;
+    --lq-green-glow:  rgba(16, 185, 129, 0.35);
+}
+
+/* ── Row base ── */
+.notification-item.lq-notif {
+    position: relative;
+    padding-left: 18px !important;
+    background: linear-gradient(90deg,
+        rgba(16, 185, 129, 0.06) 0%,
+        rgba(16, 185, 129, 0.00) 45%);
+}
+
+/* ── Left accent bar ── */
+.notification-item.lq-notif::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 8px; bottom: 8px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--lq-green);
+    transform-origin: top;
+    animation: lq-bar-in 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes lq-bar-in {
+    from { transform: scaleY(0.25); opacity: 0; }
+    to   { transform: scaleY(1);    opacity: 1; }
+}
+
+/* ── LIVE chip ── */
+.notification-item.lq-notif .lq-live-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    padding: 1px 7px 2px;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    line-height: 1.4;
+    color: #fff;
+    background: var(--lq-green);
+    border-radius: 8px;
+    vertical-align: middle;
+    box-shadow: 0 1px 4px var(--lq-green-glow);
+    flex-shrink: 0;
+}
+
+.notification-item.lq-notif .lq-live-dot {
+    display: inline-block;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: #fff;
+    animation: lq-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes lq-pulse {
+    0%, 100% { opacity: 1;   transform: scale(1); }
+    50%      { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* ── Inline "Ku biir" button ── */
+.notification-item.lq-notif .lq-join-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    padding: 3px 11px 4px;
+    font-size: 11.5px;
+    font-weight: 700;
+    font-family: inherit;
+    color: #fff;
+    background: var(--lq-green);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    box-shadow: 0 2px 6px var(--lq-green-glow);
+}
+
+.notification-item.lq-notif .lq-join-btn:hover,
+.notification-item.lq-notif .lq-join-btn:focus-visible {
+    background: var(--lq-green-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.5);
+    color: #fff;
+    outline: none;
+}
+
+.notification-item.lq-notif .lq-join-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px var(--lq-green-glow);
+}
+
+/* ── Reduced motion ── */
+.reduced-motion .notification-item.lq-notif::before,
+.reduced-motion .notification-item.lq-notif .lq-live-dot {
+    animation: none;
+}
+
+/* ── Dark theme ── */
+[data-theme="dark"] .notification-item.lq-notif {
+    background: linear-gradient(90deg,
+        rgba(16, 185, 129, 0.12) 0%,
+        rgba(16, 185, 129, 0.00) 45%);
+}
+
+[data-theme="dark"] .notification-item.lq-notif .lq-live-chip,
+[data-theme="dark"] .notification-item.lq-notif .lq-join-btn {
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.45);
+}
+
+/* ── Mobile ── */
+@media (max-width: 480px) {
+    .notification-item.lq-notif .lq-join-btn {
+        font-size: 11px;
+        padding: 3px 10px 4px;
+    }
+    .notification-item.lq-notif .lq-live-chip {
+        font-size: 9px;
+        padding: 1px 6px 2px;
+    }
+}

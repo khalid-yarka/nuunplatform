@@ -155,9 +155,11 @@ def finalize_live_quiz(quiz_id):
 # ============================================================
 # SCHEDULED AUTO-START
 # ============================================================
-# Runs inside every /quiz-state poll. No background threads — on
-# the free PythonAnywhere tier, spinning up daemons is a CPU-quota
-# risk. Polls fire every 3s per participant, so this is free.
+# Runs inside every /quiz-state poll. No background threads.
+#
+# Notifications: one bulk INSERT for the in-app rows (fast), then
+# one batched Web Push carrying priority flags read by sw.js from
+# data.type === 'live_quiz_start'.
 
 def _maybe_auto_start_scheduled(quiz):
     quiz_id = quiz['id']
@@ -216,7 +218,18 @@ def _maybe_auto_start_scheduled(quiz):
         except Exception as e:
             logger.warning(f"auto-start: memory sync failed for {quiz_id}: {e}")
 
+        # ── Notifications ──
+        # Same text as manual start. In-app rows via one bulk INSERT
+        # (fast) and push via one batched call.
         try:
+            from .notify import (
+                build_message, notify_quiz_started_batch,
+                NOTIFICATION_ICON,
+            )
+
+            title, body = build_message(quiz.get('title'))
+            link = f'/live-quiz/play/{quiz_id}'
+
             execute_with_retry("""
                 INSERT INTO notifications
                     (user_id, type, title, body, link, icon, is_read, created_at)
@@ -225,13 +238,27 @@ def _maybe_auto_start_scheduled(quiz):
                 WHERE lqp.quiz_id = ? AND lqp.status != 'left'
             """, (
                 'live_quiz_start',
-                '🚀 Tartanku wuu bilaabmay!',
-                f'"{quiz.get("title") or "Live Quiz"}" wuu bilaabmay. Hadda ciyaar!',
-                f'/live-quiz/play/{quiz_id}',
-                '⚡',
+                title,
+                body,
+                link,
+                NOTIFICATION_ICON,
                 get_somali_time_db(),
                 quiz_id,
             ), commit=True)
+
+            try:
+                cursor = execute_with_retry(
+                    "SELECT student_id FROM live_quiz_participants "
+                    "WHERE quiz_id = ? AND status != 'left'",
+                    (quiz_id,),
+                )
+                participant_ids = [r['student_id'] for r in cursor.fetchall()]
+            except Exception:
+                participant_ids = []
+
+            if participant_ids:
+                notify_quiz_started_batch(participant_ids, quiz)
+
         except Exception as e:
             logger.warning(f"auto-start: notify failed for {quiz_id}: {e}")
 

@@ -15,7 +15,6 @@ from flask import request, session, jsonify, url_for
 from db import get_live_quiz_by_id, update_live_quiz
 from config import Config
 from utils import validate_csrf, get_somali_time_db
-from services.notification_service import send_notification
 
 from . import live_quiz_bp
 from ._shared import (
@@ -23,6 +22,7 @@ from ._shared import (
     RATING_TIME,
 )
 from .finalize import finalize_live_quiz, _maybe_auto_start_scheduled
+from .notify import notify_quiz_started
 
 logger = logging.getLogger(__name__)
 
@@ -71,16 +71,16 @@ def start_quiz(quiz_id):
         'payload': json.dumps({}),
     })
 
+    # Identical text and priority to the scheduled auto-start path.
     participants = quiz_state.get_all_participants()
     for p in participants:
-        send_notification(
-            user_id=p['student_id'],
-            notification_type='live_quiz_start',
-            title='🚀 Quiz Started!',
-            body=f'"{quiz.get("title", "Live Quiz")}" has started! Join now!',
-            link=f'/live-quiz/play/{quiz_id}',
-            icon='⚡',
-        )
+        try:
+            notify_quiz_started(p['student_id'], quiz)
+        except Exception as e:
+            logger.warning(
+                f"quiz-start notify failed for user {p.get('student_id')} "
+                f"in quiz {quiz_id}: {e}"
+            )
 
     return jsonify({
         'success': True,
@@ -129,8 +129,6 @@ def quiz_state_endpoint(quiz_id):
 
     p = quiz_state.get_participant(user_id)
     if not p and quiz_view['creator_id'] != user_id:
-        # Distinguish "not yet synced in memory" from "quiz gone".
-        # 409 is retryable; 404 means the quiz was deleted.
         return jsonify({
             'error': 'Not a participant',
             'reason': 'not_synced',
