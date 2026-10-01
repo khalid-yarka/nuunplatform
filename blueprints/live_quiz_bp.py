@@ -60,7 +60,7 @@ from db import (
     insert_chat_message,
     get_chat_messages_since,
     count_chat_messages,
-    soft_delete_chat_message, 
+    soft_delete_chat_message,
     insert_chat_message,
     get_chat_messages_since,
     count_chat_messages,
@@ -131,6 +131,10 @@ check_single_worker()
 # notification loop twice for the same quiz. State-layer idempotency
 # also guards this, but the flag makes the second caller short-circuit
 # before any DB work.
+#
+# All keys are ints — routes now declare <int:quiz_id>, and
+# finalize_live_quiz() casts its argument to int defensively, so the
+# lock dict cannot accidentally hold both 42 and '42'.
 
 _finalize_lock = threading.Lock()
 _finalize_in_progress: dict = {}
@@ -227,7 +231,7 @@ def _dispatch_ping_push(quiz, creator_id, body):
 
     return total
 
-  
+
 # ============================================
 # SHARED HELPERS
 # ============================================
@@ -417,7 +421,7 @@ def _rejoin_if_left(quiz_id: int, user_id: int) -> bool:
         return False
 
 
-def finalize_live_quiz(quiz_id: int) -> dict:
+def finalize_live_quiz(quiz_id) -> dict:
     """
     Compute final standings, write them, and dispatch notifications.
 
@@ -430,6 +434,13 @@ def finalize_live_quiz(quiz_id: int) -> dict:
         even if the participant loop later fails, the DB reflects the
         terminal status.
     """
+    # Defensive: everyone calls this with an int, but a stray string
+    # call must not create a second lock entry.
+    try:
+        quiz_id = int(quiz_id)
+    except (TypeError, ValueError):
+        return {'error': 'Invalid quiz_id'}
+
     with _finalize_lock:
         if _finalize_in_progress.get(quiz_id):
             return {'error': 'Finalization already in progress'}
@@ -616,7 +627,7 @@ def lobby():
     )
 
 
-@live_quiz_bp.route('/lobby/join/<quiz_id>', methods=['POST'])
+@live_quiz_bp.route('/lobby/join/<int:quiz_id>', methods=['POST'])
 def lobby_join(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Please login first'}), 401
@@ -669,23 +680,29 @@ def lobby_join(quiz_id):
             })
         return jsonify({'error': 'Failed to join quiz'}), 500
 
+    # Add to in-memory state. Both calls can fail independently; if
+    # either does we surface a real error instead of redirecting into
+    # a state that does not know the user exists.
     manager = get_state_manager()
     if not manager.ensure_quiz_in_memory(quiz_id):
+        logger.error(f"lobby_join: quiz {quiz_id} could not be loaded into memory")
         return jsonify({'error': 'Quiz state could not be loaded'}), 500
 
     quiz_state = manager.get_quiz(quiz_id)
-    if quiz_state:
-        user = get_student_by_id(user_id)
-        name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
-        quiz_state.add_participant(user_id, name, user.get('public_id', '----'))
+    if quiz_state is None:
+        logger.error(f"lobby_join: quiz {quiz_id} has no in-memory state after ensure")
+        return jsonify({'error': 'Quiz state not available'}), 500
+
+    user = get_student_by_id(user_id)
+    name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
+    added = quiz_state.add_participant(user_id, name, user.get('public_id', '----'))
+    if added:
         manager.enqueue_event({
             'quiz_id': quiz_id,
             'user_id': user_id,
             'event_type': 'JOIN',
             'payload': json.dumps({'name': name}),
         })
-    else:
-        return jsonify({'error': 'Quiz state not available'}), 500
 
     creator_id = quiz.get('creator_id')
     if creator_id and creator_id != user_id:
@@ -1010,7 +1027,7 @@ def create():
         'event_type': 'JOIN',
         'payload': json.dumps({'name': name}),
     })
-    
+
     # Broadcast to the community — public + waiting quizzes only.
     try:
         if (quiz.get('is_public') and quiz.get('status') == 'waiting'):
@@ -1025,7 +1042,7 @@ def create():
             )
     except Exception as e:
         logger.warning(f"new-quiz broadcast failed: {e}")
-    
+
     flash('Quiz created successfully! Share the join code.', 'success')
     return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
 
@@ -1139,7 +1156,7 @@ def create_with_available():
         'event_type': 'JOIN',
         'payload': json.dumps({'name': name}),
     })
-    
+
     try:
         if (quiz.get('is_public') and quiz.get('status') == 'waiting'):
             from services.notification_service import broadcast_new_quiz
@@ -1153,12 +1170,12 @@ def create_with_available():
             )
     except Exception as e:
         logger.warning(f"new-quiz broadcast failed: {e}")
-    
+
     flash(f'Quiz created with {available} questions!', 'success')
     return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
 
 
-@live_quiz_bp.route('/abandon/<quiz_id>', methods=['POST'])
+@live_quiz_bp.route('/abandon/<int:quiz_id>', methods=['POST'])
 def abandon_quiz(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -1349,7 +1366,7 @@ def join():
     return render_template('dashboard/live_quiz/join.html')
 
 
-@live_quiz_bp.route('/waiting-room/<quiz_id>')
+@live_quiz_bp.route('/waiting-room/<int:quiz_id>')
 def waiting_room(quiz_id):
     if 'user_id' not in session:
         flash('Please login first.', 'error')
@@ -1368,6 +1385,20 @@ def waiting_room(quiz_id):
                 _rejoin_if_left(quiz_id, user_id)
         except Exception as e:
             logger.warning(f"auto-rejoin attempt failed for user {user_id} in quiz {quiz_id}: {e}")
+
+    # Ensure the in-memory QuizState has this participant. If the memory
+    # was rebuilt from a checkpoint that predates the participant's
+    # JOIN, this hydrates them from the DB so /quiz-state polls no
+    # longer return "not a participant". This is the belt-and-braces
+    # alongside the JOIN replay fix in live_quiz_state.py.
+    try:
+        manager = get_state_manager()
+        manager.ensure_participant_in_memory(quiz_id, user_id)
+    except Exception as e:
+        logger.warning(
+            f"ensure_participant_in_memory failed for quiz {quiz_id} "
+            f"user {user_id}: {e}"
+        )
 
     participant = get_live_quiz_participant(quiz_id, user_id)
     if not participant and quiz['creator_id'] != user_id:
@@ -1407,7 +1438,7 @@ def waiting_room(quiz_id):
     chat_can_send   = (quiz['status'] in ('waiting', 'scheduled')
                        and _can_send_chat(user_id))
     chat_count      = count_chat_messages(quiz_id)
-    
+
     return render_template(
         'dashboard/live_quiz/waiting_room.html',
         quiz=quiz,
@@ -1424,7 +1455,7 @@ def waiting_room(quiz_id):
     )
 
 
-@live_quiz_bp.route('/waiting-room/participants/<quiz_id>')
+@live_quiz_bp.route('/waiting-room/participants/<int:quiz_id>')
 def waiting_room_participants(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -1459,6 +1490,7 @@ def waiting_room_participants(quiz_id):
         'count': len(formatted),
         'total': len(formatted),
     })
+
 
 @live_quiz_bp.route('/j/<code>', methods=['GET'])
 def direct_join(code):
@@ -1537,20 +1569,39 @@ def direct_join(code):
         flash('Failed to join quiz. Please try again.', 'error')
         return redirect(url_for('live_quiz.lobby'))
 
-    # Bring the user into the in-memory state.
+    # Bring the user into the in-memory state. Both calls can fail
+    # independently; if either does we surface a real error instead of
+    # redirecting into a state that does not know the user exists.
     manager = get_state_manager()
-    manager.ensure_quiz_in_memory(quiz['id'])
+    if not manager.ensure_quiz_in_memory(quiz['id']):
+        logger.error(
+            f"direct_join: quiz {quiz['id']} could not be loaded into memory "
+            f"for user {user_id}"
+        )
+        flash('Quiz could not be loaded. Please try again.', 'error')
+        return redirect(url_for('live_quiz.lobby'))
+
     quiz_state = manager.get_quiz(quiz['id'])
-    if quiz_state:
-        user = get_student_by_id(user_id)
-        name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
-        quiz_state.add_participant(user_id, name, user.get('public_id', '----'))
+    if quiz_state is None:
+        logger.error(
+            f"direct_join: quiz {quiz['id']} has no in-memory state after "
+            f"ensure for user {user_id}"
+        )
+        flash('Quiz could not be loaded. Please try again.', 'error')
+        return redirect(url_for('live_quiz.lobby'))
+
+    user = get_student_by_id(user_id)
+    name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or 'Participant'
+    added = quiz_state.add_participant(user_id, name, user.get('public_id', '----'))
+    if added:
         manager.enqueue_event({
             'quiz_id': quiz['id'],
             'user_id': user_id,
             'event_type': 'JOIN',
             'payload': json.dumps({'name': name}),
         })
+    # If `added` is False, the participant already exists in memory as
+    # active. That's fine — proceed.
 
     # Notify the creator.
     creator_id = quiz.get('creator_id')
@@ -1580,8 +1631,8 @@ def direct_join(code):
 
     return redirect(url_for('live_quiz.waiting_room', quiz_id=quiz['id']))
 
-  
-@live_quiz_bp.route('/waiting-room/<quiz_id>/chat', methods=['GET'])
+
+@live_quiz_bp.route('/waiting-room/<int:quiz_id>/chat', methods=['GET'])
 def waiting_room_chat_fetch(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -1617,7 +1668,7 @@ def waiting_room_chat_fetch(quiz_id):
     })
 
 
-@live_quiz_bp.route('/waiting-room/<quiz_id>/chat', methods=['POST'])
+@live_quiz_bp.route('/waiting-room/<int:quiz_id>/chat', methods=['POST'])
 def waiting_room_chat_send(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -1672,7 +1723,7 @@ def waiting_room_chat_send(quiz_id):
     return jsonify({'success': True, 'id': msg_id})
 
 
-@live_quiz_bp.route('/waiting-room/<quiz_id>/ping', methods=['POST'])
+@live_quiz_bp.route('/waiting-room/<int:quiz_id>/ping', methods=['POST'])
 def waiting_room_ping_send(quiz_id):
     """Creator-only broadcast ping. Delivered via push + in-page banner."""
     if 'user_id' not in session:
@@ -1726,7 +1777,7 @@ def waiting_room_ping_send(quiz_id):
         _ping_last_sent[quiz_id] = time.time()
 
     recipients = _dispatch_ping_push(quiz, user_id, body)
-    
+
     return jsonify({
         'success': True,
         'id': msg_id,
@@ -1734,7 +1785,8 @@ def waiting_room_ping_send(quiz_id):
         'cooldown': PING_COOLDOWN_SECONDS,
     })
 
-@live_quiz_bp.route('/toggle-ready/<quiz_id>', methods=['POST'])
+
+@live_quiz_bp.route('/toggle-ready/<int:quiz_id>', methods=['POST'])
 def toggle_ready(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -1757,7 +1809,7 @@ def toggle_ready(quiz_id):
     return jsonify({'error': 'Failed to update ready status'}), 500
 
 
-@live_quiz_bp.route('/start/<quiz_id>', methods=['POST'])
+@live_quiz_bp.route('/start/<int:quiz_id>', methods=['POST'])
 def start_quiz(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -1819,7 +1871,7 @@ def start_quiz(quiz_id):
     })
 
 
-@live_quiz_bp.route('/quiz-state/<quiz_id>')
+@live_quiz_bp.route('/quiz-state/<int:quiz_id>')
 def quiz_state_endpoint(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -1854,7 +1906,14 @@ def quiz_state_endpoint(quiz_id):
 
     p = quiz_state.get_participant(user_id)
     if not p and quiz['creator_id'] != user_id:
-        return jsonify({'error': 'Not a participant'}), 404
+        # Distinguish "not yet synced in memory" from "quiz gone".
+        # A 409 is retryable; a 404 means the quiz was deleted.
+        # The client treats 404 as cancellation and 409 as
+        # "keep polling".
+        return jsonify({
+            'error': 'Not a participant',
+            'reason': 'not_synced',
+        }), 409
 
     total_questions = len(quiz_state.question_ids)
     current_index = p.current_question_index if p else 0
@@ -2052,7 +2111,7 @@ def _maybe_auto_start_scheduled(quiz):
             logger.warning(f"auto-start: flip-to-waiting failed for {quiz_id}: {e}")
 
 
-@live_quiz_bp.route('/get-question/<quiz_id>')
+@live_quiz_bp.route('/get-question/<int:quiz_id>')
 def get_question(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -2111,11 +2170,19 @@ def submit_answer():
 
     user_id = session['user_id']
     data = request.get_json()
-    quiz_id = data.get('quiz_id')
-    question_id = data.get('question_id')
+    # Coerce quiz_id and question_id to int — the JSON body arrives
+    # with strings and the state manager keys everything by int.
+    try:
+        quiz_id = int(data.get('quiz_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid quiz_id'}), 400
+    try:
+        question_id = int(data.get('question_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid question_id'}), 400
     answer = data.get('answer')
 
-    if not quiz_id or not question_id or not answer:
+    if not answer:
         return jsonify({'error': 'Missing required fields'}), 400
 
     manager = get_state_manager()
@@ -2155,11 +2222,14 @@ def skip_question():
 
     user_id = session['user_id']
     data = request.get_json()
-    quiz_id = data.get('quiz_id')
-    question_id = data.get('question_id')
-
-    if not quiz_id or not question_id:
-        return jsonify({'error': 'Missing required fields'}), 400
+    try:
+        quiz_id = int(data.get('quiz_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid quiz_id'}), 400
+    try:
+        question_id = int(data.get('question_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid question_id'}), 400
 
     manager = get_state_manager()
     if not manager.ensure_quiz_in_memory(quiz_id):
@@ -2193,11 +2263,14 @@ def advance_question():
 
     user_id = session['user_id']
     data = request.get_json() or {}
-    quiz_id = data.get('quiz_id')
-    question_id = data.get('question_id')
-
-    if not quiz_id or not question_id:
-        return jsonify({'error': 'Missing required fields'}), 400
+    try:
+        quiz_id = int(data.get('quiz_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid quiz_id'}), 400
+    try:
+        question_id = int(data.get('question_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid question_id'}), 400
 
     manager = get_state_manager()
     if not manager.ensure_quiz_in_memory(quiz_id):
@@ -2233,11 +2306,14 @@ def submit_rating_shim():
         return jsonify({'error': 'CSRF token missing or invalid'}), 403
 
     data = request.get_json() or {}
-    quiz_id = data.get('quiz_id')
-    question_id = data.get('question_id')
-
-    if not quiz_id or not question_id:
-        return jsonify({'error': 'Missing required fields'}), 400
+    try:
+        quiz_id = int(data.get('quiz_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid quiz_id'}), 400
+    try:
+        question_id = int(data.get('question_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid question_id'}), 400
 
     manager = get_state_manager()
     if not manager.ensure_quiz_in_memory(quiz_id):
@@ -2268,7 +2344,7 @@ def submit_rating_shim():
 # REACTIONS
 # ============================================
 
-@live_quiz_bp.route('/interaction/<quiz_id>/status', methods=['GET'])
+@live_quiz_bp.route('/interaction/<int:quiz_id>/status', methods=['GET'])
 def interaction_status(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -2288,7 +2364,7 @@ def interaction_status(quiz_id):
     return jsonify(quiz_state.get_reaction_status(session['user_id'], question_id))
 
 
-@live_quiz_bp.route('/interaction/<quiz_id>/like', methods=['POST'])
+@live_quiz_bp.route('/interaction/<int:quiz_id>/like', methods=['POST'])
 def interaction_like(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -2318,7 +2394,7 @@ def interaction_like(quiz_id):
     return jsonify({'liked': liked})
 
 
-@live_quiz_bp.route('/interaction/<quiz_id>/save', methods=['POST'])
+@live_quiz_bp.route('/interaction/<int:quiz_id>/save', methods=['POST'])
 def interaction_save(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -2367,7 +2443,7 @@ def interaction_save(quiz_id):
     return jsonify({'saved': saved})
 
 
-@live_quiz_bp.route('/interaction/<quiz_id>/report', methods=['POST'])
+@live_quiz_bp.route('/interaction/<int:quiz_id>/report', methods=['POST'])
 def interaction_report(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -2407,7 +2483,7 @@ def interaction_report(quiz_id):
     return jsonify({'success': True})
 
 
-@live_quiz_bp.route('/leaderboard/<quiz_id>')
+@live_quiz_bp.route('/leaderboard/<int:quiz_id>')
 def get_leaderboard(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -2426,7 +2502,7 @@ def get_leaderboard(quiz_id):
     return jsonify({'leaderboard': leaderboard, 'user_rank': user_rank})
 
 
-@live_quiz_bp.route('/play/<quiz_id>')
+@live_quiz_bp.route('/play/<int:quiz_id>')
 def play(quiz_id):
     if 'user_id' not in session:
         flash('Please login first.', 'error')
@@ -2450,7 +2526,7 @@ def play(quiz_id):
     return render_template('dashboard/live_quiz/play.html', quiz=quiz)
 
 
-@live_quiz_bp.route('/leave/<quiz_id>', methods=['POST'])
+@live_quiz_bp.route('/leave/<int:quiz_id>', methods=['POST'])
 def leave_quiz(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -2498,7 +2574,7 @@ def leave_quiz(quiz_id):
     return jsonify({'error': 'Failed to leave quiz'}), 500
 
 
-@live_quiz_bp.route('/rejoin/<quiz_id>', methods=['POST'])
+@live_quiz_bp.route('/rejoin/<int:quiz_id>', methods=['POST'])
 def rejoin_quiz(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -2533,13 +2609,15 @@ def rejoin_quiz(quiz_id):
     return jsonify({'error': 'Failed to rejoin quiz'}), 500
 
 
-@live_quiz_bp.route('/delete/<quiz_id>', methods=['POST'])
+@live_quiz_bp.route('/delete/<int:quiz_id>', methods=['POST'])
 def delete_quiz(quiz_id):
     """
     Delete a competition.
 
     Allowed when:
       · The caller is the creator AND the quiz is not active, OR
+      · The caller is any admin (super or normal) AND the quiz is not
+        active, OR
       · The caller is a super admin (any status)
 
     Body (JSON, optional):
@@ -2548,6 +2626,11 @@ def delete_quiz(quiz_id):
     When `announce` is true and the quiz was active or waiting:
       · Every active participant receives an in-app notification
         "Tartanku waa la joojiyay" with a link to the lobby.
+
+    The permission ladder matches the lobby template exactly:
+      _can_delete = _super or ((is_creator or session.is_admin) and not _is_active)
+    so a normal admin sees the button and can act on it — no more
+    "Permission denied" for a quiz the UI clearly offered.
     """
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -2565,9 +2648,10 @@ def delete_quiz(quiz_id):
     # Who's allowed?
     from services.admin.roles import is_super_admin
     super_admin = is_super_admin()
+    normal_admin = is_admin(user_id)
 
     if not super_admin:
-        if not is_creator:
+        if not is_creator and not normal_admin:
             return jsonify({'error': 'Permission denied'}), 403
         if is_active:
             return jsonify({
@@ -2589,7 +2673,7 @@ def delete_quiz(quiz_id):
             VALUES (?, ?, ?, ?, ?, ?, ?, 'warning', ?)
         """, (
             user_id,
-            'super' if super_admin else ('admin' if is_admin(user_id) else 'user'),
+            'super' if super_admin else ('admin' if normal_admin else 'user'),
             'live_quiz.force_cancel' if (super_admin and is_active) else 'live_quiz.delete',
             'live_quiz',
             quiz_id,
@@ -2599,6 +2683,7 @@ def delete_quiz(quiz_id):
                 'creator_id': quiz.get('creator_id'),
                 'announce': announce,
                 'by_super_admin': super_admin,
+                'by_normal_admin': bool(normal_admin and not super_admin),
             }),
             f'Deleted live quiz {quiz_id}',
             get_somali_time_db(),
@@ -2655,7 +2740,7 @@ def delete_quiz(quiz_id):
     return jsonify({'error': 'Failed to delete quiz'}), 500
 
 
-@live_quiz_bp.route('/results/<quiz_id>')
+@live_quiz_bp.route('/results/<int:quiz_id>')
 def results(quiz_id):
     if 'user_id' not in session:
         flash('Please login first.', 'error')
@@ -2700,7 +2785,7 @@ def results(quiz_id):
     )
 
 
-@live_quiz_bp.route('/analysis/<quiz_id>')
+@live_quiz_bp.route('/analysis/<int:quiz_id>')
 def analysis(quiz_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -2747,7 +2832,7 @@ def analysis(quiz_id):
     return jsonify({'most_correct': most_correct, 'most_wrong': most_wrong})
 
 
-@live_quiz_bp.route('/export/<quiz_id>')
+@live_quiz_bp.route('/export/<int:quiz_id>')
 def export_results(quiz_id):
     if 'user_id' not in session:
         flash('Please login first.', 'error')

@@ -2840,3 +2840,31 @@
     background: var(--surface-alt, var(--surface));
     border-color: var(--border);
 }
+
+/* ============================================
+   LOBBY CANCEL BUTTON — active-quiz variant
+   ============================================ */
+
+.btn-sm.danger.is-active-cancel {
+    background: #DC2626;
+    color: #ffffff !important;
+    border-color: #DC2626;
+    animation: pulse-cancel 2s ease-in-out infinite;
+}
+
+.btn-sm.danger.is-active-cancel:hover {
+    background: #B91C1C;
+    border-color: #B91C1C;
+}
+
+@keyframes pulse-cancel {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5); }
+    50%      { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+}
+
+/* Lobby card — the shared modal re-uses .modal-overlay and
+   .modal-content which already exist in dashboard.css.
+   This ensures the modal sits above the sticky sidebar. */
+#lobbyCancelModal {
+    z-index: 10000;
+}

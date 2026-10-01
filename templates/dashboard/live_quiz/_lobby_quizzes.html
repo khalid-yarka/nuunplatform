@@ -1,7 +1,12 @@
 <!-- dashboard/live_quiz/_lobby_quizzes.html -->
 {% if quizzes %}
+    {% set _super = is_super_admin() %}
+
     {% for quiz in quizzes %}
-        <div class="quiz-card" data-id="{{ quiz.id }}">
+        {% set _is_active = (quiz.status == 'active') %}
+        {% set _can_delete = _super
+                             or ((quiz.is_creator or session.is_admin) and not _is_active) %}
+        <div class="quiz-card" data-id="{{ quiz.id }}" data-title="{{ quiz.title or _('live_quiz.lobby.untitled_quiz') }}" data-active="{{ '1' if _is_active else '0' }}">
             <div class="status-indicator {{ quiz.status }}"></div>
 
             <div class="card-body">
@@ -84,9 +89,20 @@
                     </a>
                 {% endif %}
 
-                {% if (quiz.is_creator or session.is_admin) and quiz.status != 'active' %}
-                    <button class="btn-sm danger" onclick="deleteQuiz('{{ quiz.id }}', '{{ quiz.title or _("live_quiz.lobby.untitled_quiz") }}')">
-                        <i class="fas fa-trash"></i>
+                {# Delete / Cancel button:
+                   · Super admins — always visible, any status
+                   · Creator or regular admin — non-active only
+                   The trigger calls openLobbyCancel() which handles
+                   the shared modal below. #}
+                {% if _can_delete %}
+                    <button type="button"
+                            class="btn-sm danger {% if _is_active %}is-active-cancel{% endif %}"
+                            data-quiz-id="{{ quiz.id }}"
+                            data-quiz-title="{{ quiz.title or _('live_quiz.lobby.untitled_quiz') }}"
+                            data-quiz-active="{{ '1' if _is_active else '0' }}"
+                            onclick="openLobbyCancel(this)"
+                            title="{% if _is_active %}Cancel competition{% else %}Delete competition{% endif %}">
+                        <i class="fas {% if _is_active %}fa-circle-stop{% else %}fa-trash{% endif %}"></i>
                     </button>
                 {% endif %}
             </div>
@@ -122,6 +138,199 @@
             </div>
         </div>
     {% endif %}
+
+    {# ════════════════════════════════════════════════════════════
+       SHARED CANCEL / DELETE MODAL
+       One modal for the whole page. openLobbyCancel(button) sets
+       the title and quiz ID, then shows it.
+       ════════════════════════════════════════════════════════════ #}
+    <div class="modal-overlay" id="lobbyCancelModal">
+        <div class="modal-content">
+            <div style="text-align: center; margin-bottom: 16px;">
+                <div style="font-size: 48px; margin-bottom: 8px;" id="lobbyCancelIcon">⚠️</div>
+                <h3 class="modal-title" id="lobbyCancelHeading">Delete competition</h3>
+                <p class="modal-body">
+                    Ma hubtaa inaad joojiso
+                    <strong id="lobbyCancelTitle">…</strong>?
+                </p>
+                <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;">
+                    Ficilkan <strong style="color: #EF4444;">lama noqon karo</strong>.
+                </p>
+            </div>
+
+            <label class="modal-checkbox" id="lobbyCancelAnnounceWrap" hidden>
+                <input type="checkbox" id="lobbyCancelAnnounce" checked>
+                <span>U dir ogeysiis dhammaan ka-qaybgalayaasha</span>
+            </label>
+
+            <div class="modal-actions">
+                <button type="button" onclick="closeLobbyCancelModal()"
+                        class="btn btn-secondary">Jooji</button>
+                <button type="button" id="lobbyCancelConfirm"
+                        class="btn btn-danger">
+                    <i class="fas fa-trash"></i> Tirtir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        'use strict';
+
+        var _activeQuizId = null;
+        var _activeQuizIsActive = false;
+
+        var modal = document.getElementById('lobbyCancelModal');
+        var titleEl = document.getElementById('lobbyCancelTitle');
+        var headingEl = document.getElementById('lobbyCancelHeading');
+        var iconEl = document.getElementById('lobbyCancelIcon');
+        var announceWrap = document.getElementById('lobbyCancelAnnounceWrap');
+        var announceInput = document.getElementById('lobbyCancelAnnounce');
+        var confirmBtn = document.getElementById('lobbyCancelConfirm');
+
+        if (!modal) return;
+
+        function openModal(quizId, quizTitle, isActive) {
+            _activeQuizId = quizId;
+            _activeQuizIsActive = !!isActive;
+
+            if (titleEl) titleEl.textContent = quizTitle || 'Live Quiz';
+            if (headingEl) {
+                headingEl.textContent = isActive
+                    ? 'Jooji tartanka'
+                    : 'Tirtir tartanka';
+            }
+            if (iconEl) iconEl.textContent = isActive ? '🚫' : '⚠️';
+            if (confirmBtn) {
+                confirmBtn.innerHTML = isActive
+                    ? '<i class="fas fa-circle-stop"></i> Jooji'
+                    : '<i class="fas fa-trash"></i> Tirtir';
+                confirmBtn.disabled = false;
+            }
+
+            // Show the "notify participants" checkbox for active or
+            // any quiz that could have participants. We default to
+            // visible when the quiz is active; hidden for finished
+            // quizzes to avoid an unnecessary checkbox.
+            if (announceWrap) {
+                if (isActive) {
+                    announceWrap.hidden = false;
+                    announceWrap.style.display = '';
+                    if (announceInput) announceInput.checked = true;
+                } else {
+                    announceWrap.hidden = true;
+                    announceWrap.style.display = 'none';
+                }
+            }
+
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal() {
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            _activeQuizId = null;
+            _activeQuizIsActive = false;
+        }
+
+        window.openLobbyCancel = function (button) {
+            if (!button) return;
+            var quizId = button.getAttribute('data-quiz-id');
+            var quizTitle = button.getAttribute('data-quiz-title') || '';
+            var isActive = button.getAttribute('data-quiz-active') === '1';
+            if (!quizId) return;
+            openModal(quizId, quizTitle, isActive);
+        };
+
+        window.closeLobbyCancelModal = closeModal;
+
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal) closeModal();
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && modal.classList.contains('active')) {
+                closeModal();
+            }
+        });
+
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', function () {
+                if (!_activeQuizId) return;
+                var doAnnounce = announceInput
+                    ? !!announceInput.checked
+                    : _activeQuizIsActive;
+                // Only send announce flag when the checkbox was shown
+                if (!_activeQuizIsActive) doAnnounce = true;
+
+                confirmBtn.disabled = true;
+                confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' +
+                    (_activeQuizIsActive ? 'Cancelling…' : 'Deleting…');
+
+                var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+                fetch('/live-quiz/delete/' + _activeQuizId, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrf
+                    },
+                    body: JSON.stringify({ announce: doAnnounce })
+                })
+                .then(function (r) {
+                    return r.json().then(function (j) { return { ok: r.ok, body: j }; });
+                })
+                .then(function (res) {
+                    if (res.ok && res.body && res.body.success) {
+                        closeModal();
+                        if (typeof window.showToast === 'function') {
+                            window.showToast(
+                                _activeQuizIsActive
+                                    ? 'Tartanku waa la joojiyay'
+                                    : 'Tartanku waa la tirtiray',
+                                'success'
+                            );
+                        }
+                        // Remove the card from the DOM immediately, then
+                        // refresh the lobby listing silently so counts and
+                        // pagination stay correct.
+                        try {
+                            var card = document.querySelector(
+                                '.quiz-card[data-id="' + _activeQuizId + '"]'
+                            );
+                            if (card) card.remove();
+                        } catch (e) {}
+                        setTimeout(function () {
+                            window.location.reload();
+                        }, 600);
+                    } else {
+                        var msg = (res.body && res.body.error) || 'Failed';
+                        if (typeof window.showToast === 'function') {
+                            window.showToast(msg, 'error');
+                        } else {
+                            alert(msg);
+                        }
+                        confirmBtn.disabled = false;
+                        confirmBtn.innerHTML = _activeQuizIsActive
+                            ? '<i class="fas fa-circle-stop"></i> Jooji'
+                            : '<i class="fas fa-trash"></i> Tirtir';
+                    }
+                })
+                .catch(function () {
+                    if (typeof window.showToast === 'function') {
+                        window.showToast('Khalad shabnka', 'error');
+                    }
+                    confirmBtn.disabled = false;
+                    confirmBtn.innerHTML = _activeQuizIsActive
+                        ? '<i class="fas fa-circle-stop"></i> Jooji'
+                        : '<i class="fas fa-trash"></i> Tirtir';
+                });
+            });
+        }
+    })();
+    </script>
 
 {% else %}
     <div class="lobby-empty">

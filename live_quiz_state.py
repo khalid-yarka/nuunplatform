@@ -8,9 +8,9 @@ Idempotency contract:
   ── submit_answer: if the question was already answered (by this user,
      for this question), the recorded result is returned unchanged.
      A second submit for the same question is a no-op that returns the
-     same payload as the first. If the recorded answer differs from
-     the new submission, the RECORDED answer is returned (server is
-     the source of truth).
+     same payload as the first. If the recorded answer differs from the
+     new submission, the RECORDED answer is returned (server is the
+     source of truth).
   ── skip_question: if the question was already skipped, returns
      (True, 'already_skipped') — not an error.
   ── advance_question: if the participant has already moved past the
@@ -21,6 +21,16 @@ Convergence contract:
   ── Any endpoint that would return an error for a benign race instead
      returns the current authoritative state, so the client can render
      it and move on.
+
+Membership contract (added):
+  ── The database is authoritative for quiz membership. A checkpoint
+     may lag by up to one flush interval, so after restoring from a
+     checkpoint the state manager MUST merge every participant present
+     in `live_quiz_participants` into the in-memory QuizState.
+  ── A JOIN event is idempotent and creating: if the participant is
+     not already in memory, the event synthesises a ParticipantState.
+     This closes the window where a checkpoint taken before the join
+     would otherwise discard the join event on replay.
 """
 
 import json
@@ -855,6 +865,11 @@ class LiveQuizStateManager:
         """
         Ensure the quiz is in memory. On a miss, rebuild from checkpoint
         or DB. Safe under concurrent callers.
+
+        After restoring from a checkpoint the DB participants are merged
+        in — the DB is authoritative for membership, the checkpoint is
+        authoritative for transient answer state. A checkpoint that
+        predates a join can therefore never hide the join.
         """
         self._ensure_threads_alive()
 
@@ -887,6 +902,9 @@ class LiveQuizStateManager:
                     'as_of_sequence', cp_data.get('version', 0),
                 )
                 self._replay_events_after(quiz, replay_from)
+                # Defence in depth: DB is authoritative for membership.
+                # Anything the checkpoint missed is added here.
+                self._merge_participants_from_db(quiz)
             else:
                 quiz = QuizState(quiz_id, quiz_data, question_ids, questions_cache)
                 self._load_participants_from_db(quiz)
@@ -903,6 +921,90 @@ class LiveQuizStateManager:
             logger.error(f"Failed to recover quiz {quiz_id} on demand: {e}",
                          exc_info=True)
             return False
+
+    def _merge_participants_from_db(self, quiz: QuizState):
+        """
+        Ensure every DB participant is present in the in-memory QuizState.
+
+        A checkpoint is written on a 5s cadence by a background thread;
+        a JOIN event is written on a 2s cadence by a different thread.
+        In the window between a join and the next checkpoint, the
+        checkpoint does not know about the new participant — but the
+        DB does. Restoring from that checkpoint alone would hide the
+        participant from every subsequent /quiz-state poll.
+
+        This method closes that window. Existing participants are
+        synced by status only (answer state may be newer in memory);
+        missing participants are hydrated from the DB entirely.
+        """
+        try:
+            cursor = execute_with_retry(
+                "SELECT student_id, score, current_question_index, "
+                "correct_count, wrong_count, skipped_count, "
+                "answers, ratings, status, is_ready "
+                "FROM live_quiz_participants WHERE quiz_id = ?",
+                (quiz.id,),
+            )
+            rows = cursor.fetchall()
+        except Exception as e:
+            logger.warning(
+                f"_merge_participants_from_db read failed for "
+                f"quiz {quiz.id}: {e}"
+            )
+            return
+
+        merged = 0
+        for pr in rows:
+            sid = pr['student_id']
+            if sid in quiz.participants:
+                existing = quiz.participants[sid]
+                db_status = pr['status'] or 'active'
+                if existing.status != db_status:
+                    existing.status = db_status
+                    quiz._update_leaderboard()
+                    quiz.version += 1
+                continue
+
+            # Missing from memory — hydrate from DB.
+            try:
+                student = execute_with_retry(
+                    "SELECT first_name, last_name, public_id "
+                    "FROM students WHERE id = ?",
+                    (sid,),
+                ).fetchone()
+            except Exception:
+                student = None
+            if not student:
+                continue
+
+            name = (
+                f"{student['first_name']} {student['last_name']}"
+            ).strip() or 'Participant'
+            try:
+                answers = json.loads(pr['answers']) if pr['answers'] else {}
+            except Exception:
+                answers = {}
+
+            quiz.restore_participant(
+                user_id=sid,
+                name=name,
+                public_id=student['public_id'] or '----',
+                score=pr['score'] or 0,
+                current_question_index=pr['current_question_index'] or 0,
+                answers=answers,
+                correct_count=pr['correct_count'] or 0,
+                wrong_count=pr['wrong_count'] or 0,
+                skipped_count=pr['skipped_count'] or 0,
+                is_ready=bool(pr['is_ready']),
+                status=pr['status'] or 'active',
+            )
+            merged += 1
+
+        if merged:
+            logger.info(
+                f"Merged {merged} DB participant(s) into quiz {quiz.id} "
+                f"(missing from checkpoint)"
+            )
 
     def ensure_participant_in_memory(self, quiz_id: int,
                                      user_id: int) -> bool:
@@ -1205,6 +1307,7 @@ class LiveQuizStateManager:
                         'as_of_sequence', cp_data.get('version', 0),
                     )
                     self._replay_events_after(quiz, replay_from)
+                    self._merge_participants_from_db(quiz)
                     with self._lock:
                         self._quizzes[quiz_id] = quiz
                     logger.info(
@@ -1390,11 +1493,20 @@ class LiveQuizStateManager:
                         quiz.version += 1
 
                 elif event_type == 'JOIN':
+                    # A JOIN event is idempotent and creating. If the
+                    # participant is already in memory it just flips
+                    # status back to active; otherwise it synthesises
+                    # the ParticipantState from the event payload. This
+                    # is what closes the "checkpoint taken before the
+                    # join discards the join on replay" hole.
                     p = quiz.participants.get(user_id)
-                    if p:
+                    if p is None:
+                        name = (payload or {}).get('name') or 'Participant'
+                        quiz.restore_participant(user_id, name=name)
+                    else:
                         p.status = 'active'
-                        quiz._update_leaderboard()
-                        quiz.version += 1
+                    quiz._update_leaderboard()
+                    quiz.version += 1
 
                 elif event_type == 'START':
                     quiz.status = 'active'
