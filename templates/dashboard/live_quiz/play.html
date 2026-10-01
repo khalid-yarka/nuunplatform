@@ -184,6 +184,10 @@
 </div>
 
 {# ── Bridge for static/js/live_quiz/play.js ── #}
+{# The quiz-started OS notification is intentionally hardcoded Somali so it
+   reads the same regardless of the user's chosen UI language. The body uses
+   a {title} placeholder — play.js substitutes a shrunk quiz title before
+   handing the string to the OS notification API. #}
 <script>
 window.__LQ = {
     quizId:          {{ quiz.id|tojson }},
@@ -194,8 +198,11 @@ window.__LQ = {
     userId:          {{ session.user_id|tojson }}
 };
 window.__LQ_I18N = {
-    notif_quiz_started_title: "{{ _('live_quiz.playing.bnotif_started_title') }}",
-    notif_quiz_started_body:  "{{ _('live_quiz.playing.bnotif_started_body', title=quiz.title or _('live_quiz.lobby.untitled_quiz')) }}",
+    /* Quiz-started notification (always Somali, no translation) */
+    notif_quiz_started_title: "🚀 Tartanka Wuu bilabmay",
+    notif_quiz_started_body:  '"{title}" Wuu socda, Yan Laga Tagin.',
+
+    /* Other notifications — keep bilingual */
     notif_all_finished_title: "{{ _('live_quiz.playing.bnotif_all_finished_title') }}",
     notif_all_finished_body:  "{{ _('live_quiz.playing.bnotif_all_finished_body') }}",
     notif_quiz_complete_title:"{{ _('live_quiz.playing.bnotif_complete_title') }}",

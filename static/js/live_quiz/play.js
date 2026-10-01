@@ -52,6 +52,36 @@ document.addEventListener('DOMContentLoaded', function() {
     let completedParticipantsCount = 0;
     let totalParticipantsCount = 0;
 
+    // ============================================================
+    // TITLE SHRINK — word-boundary cut for the OS notification body
+    // ============================================================
+    // Long quiz titles are unreadable inside a device notification.
+    // Cuts at the last word boundary within `maxLen - 1` characters
+    // when that boundary falls past 60% of the budget; otherwise
+    // hard-cuts. Always ends with a single '…' glyph.
+    function shortenTitle(text, maxLen) {
+        if (!text) return '';
+        text = String(text).trim();
+        if (text.length <= maxLen) return text;
+
+        var budget = maxLen - 1;
+        var cut = text.slice(0, budget);
+        var lastSpace = cut.lastIndexOf(' ');
+
+        if (lastSpace >= budget * 0.6) {
+            return cut.slice(0, lastSpace).replace(/\s+$/, '') + '…';
+        }
+        return cut.replace(/\s+$/, '') + '…';
+    }
+
+    // Build the quiz-started body from the template-provided frame.
+    // I18N.notif_quiz_started_body is: '"{title}" Wuu socda, Yan Laga Tagin.'
+    function buildQuizStartedBody() {
+        var short = shortenTitle(quizTitle, 40);
+        return (I18N.notif_quiz_started_body || '" {title} " Wuu socda, Yan Laga Tagin.')
+            .replace('{title}', short);
+    }
+
     function restoreStateFromStorage() {
         try {
             const saved = sessionStorage.getItem('live_quiz_' + quizId);
@@ -87,18 +117,34 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ── Browser notification: prefers the service worker path (works
     //    in hidden tabs on Android Chrome); falls back to in-page API.
-    function sendBrowserNotification(title, body, url) {
+    //
+    //    `priority` is an optional object that overrides the defaults:
+    //      priority.tag                 — replaces any notification with
+    //                                     the same tag (idempotent)
+    //      priority.vibrate             — Android vibration pattern
+    //      priority.requireInteraction  — stays until the user acts
+    //      priority.renotify            — re-alerts even if tag matches
+    // ────────────────────────────────────────────────────────────────
+    function sendBrowserNotification(title, body, url, priority) {
         if (!('Notification' in window)) return;
         if (Notification.permission !== 'granted') return;
+
+        priority = priority || {};
 
         var opts = {
             body: body,
             icon: '/static/images/logo.png',
             badge: '/static/images/badge-nuun.png',
-            tag: 'live-quiz-' + quizId,
-            requireInteraction: true,
+            tag: priority.tag || ('live-quiz-' + quizId),
+            requireInteraction: priority.requireInteraction !== undefined
+                ? priority.requireInteraction
+                : true,
             data: { url: url }
         };
+
+        if (Array.isArray(priority.vibrate)) opts.vibrate = priority.vibrate;
+        if (priority.renotify) opts.renotify = true;
+        if (typeof priority.silent === 'boolean') opts.silent = priority.silent;
 
         if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
             navigator.serviceWorker.ready.then(function (reg) {
@@ -299,7 +345,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.status === 'finished' && !quizEnded) {
                     quizEnded = true;
                     quizExiting = true;
-                    sendBrowserNotification(I18N.notif_quiz_complete_title, I18N.notif_quiz_complete_body, '/live-quiz/results/' + quizId);
+                    sendBrowserNotification(
+                        I18N.notif_quiz_complete_title,
+                        I18N.notif_quiz_complete_body,
+                        '/live-quiz/results/' + quizId
+                    );
                     window.location.href = data.redirect_url || '/live-quiz/results/' + quizId;
                     return;
                 }
@@ -307,7 +357,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.status === 'active') {
                     if (!quizStarted) {
                         quizStarted = true;
-                        if (!notificationShown) { notificationShown = true; showNotification(I18N.toast_started); playNotificationSound(); sendBrowserNotification(I18N.notif_quiz_started_title, I18N.notif_quiz_started_body, '/live-quiz/play/' + quizId); }
+                        if (!notificationShown) {
+                            notificationShown = true;
+                            showNotification(I18N.toast_started);
+                            playNotificationSound();
+                            // High-priority OS notification: buzzes, stays
+                            // pinned until the user acts, and reuses the
+                            // same tag per quiz so a second fire replaces
+                            // the first instead of stacking.
+                            sendBrowserNotification(
+                                I18N.notif_quiz_started_title,
+                                buildQuizStartedBody(),
+                                '/live-quiz/play/' + quizId,
+                                {
+                                    tag: 'live-quiz-start-' + quizId,
+                                    vibrate: [200, 100, 200, 100, 200],
+                                    renotify: true,
+                                    requireInteraction: true
+                                }
+                            );
+                        }
                         loadQuestion();
                         resetPollTimer();
                         return;
@@ -330,7 +399,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (data.all_completed && data.status === 'active') {
                         if (data.is_completed) {
                             quizExiting = true;
-                            sendBrowserNotification(I18N.notif_all_finished_title, I18N.notif_all_finished_body, '/live-quiz/results/' + quizId);
+                            sendBrowserNotification(
+                                I18N.notif_all_finished_title,
+                                I18N.notif_all_finished_body,
+                                '/live-quiz/results/' + quizId
+                            );
                             window.location.href = '/live-quiz/results/' + quizId;
                             return;
                         }

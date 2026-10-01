@@ -528,8 +528,6 @@
   "live_quiz.playing.leave_btn": "Leave Competition",
   "live_quiz.playing.leave_confirm": "Are you sure you want to leave this competition?",
   "live_quiz.playing.leaving": "Leaving...",
-  "live_quiz.playing.bnotif_started_title": "🚀 Competition Started!",
-  "live_quiz.playing.bnotif_started_body": "\"{title}\" has begun!",
   "live_quiz.playing.bnotif_all_finished_title": "🏆 All Finished!",
   "live_quiz.playing.bnotif_all_finished_body": "All participants have completed!",
   "live_quiz.playing.bnotif_complete_title": "🏆 Competition Complete!",

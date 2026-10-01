@@ -528,8 +528,6 @@
   "live_quiz.playing.leave_btn": "Ka bax Tartanka",
   "live_quiz.playing.leave_confirm": "Ma hubtaa inaad ka baxdo tartankan?",
   "live_quiz.playing.leaving": "Waa la baxayaa...",
-  "live_quiz.playing.bnotif_started_title": "🚀 Tartanku wuu bilaabmay!",
-  "live_quiz.playing.bnotif_started_body": "\"{title}\" wuu bilaabmay!",
   "live_quiz.playing.bnotif_all_finished_title": "🏆 Dhammaan Way Dhammeeyeen!",
   "live_quiz.playing.bnotif_all_finished_body": "Dhammaan ka qaybgalayaashu way dhammeeyeen!",
   "live_quiz.playing.bnotif_complete_title": "🏆 Tartanku Wuu Dhammaaday!",
