@@ -1,0 +1,145 @@
+{# ============================================================
+   Reusable super-admin cancel / delete button + modal.
+   Include this partial on any page that shows a live quiz.
+
+   Requires in the enclosing template's context:
+     · quiz  — the quiz dict (must have .id and .title)
+     · session.user_id  — the currently logged-in user
+
+   Shows the trigger button only when:
+     · The current user is a super admin, OR
+     · The current user is the creator AND the quiz is not active
+   ============================================================ #}
+
+{% set _quiz_id = quiz.id %}
+{% set _quiz_title = quiz.title or 'Live Quiz' %}
+{% set _is_active = (quiz.status == 'active') %}
+{% set _is_creator = (quiz.creator_id == session.user_id) %}
+{% set _can_cancel = is_super_admin() or (_is_creator and not _is_active) %}
+
+{% if _can_cancel %}
+<button type="button"
+        class="quiz-cancel-trigger {% if _is_active %}is-danger{% endif %}"
+        id="quizCancelTrigger"
+        data-quiz-id="{{ _quiz_id }}"
+        data-quiz-title="{{ _quiz_title }}"
+        data-quiz-active="{{ '1' if _is_active else '0' }}"
+        aria-label="{% if _is_active %}Cancel competition{% else %}Delete competition{% endif %}">
+    <i class="fas {% if _is_active %}fa-circle-stop{% else %}fa-trash{% endif %}"></i>
+    <span>{% if _is_active %}Jooji tartanka{% else %}Tirtir tartanka{% endif %}</span>
+</button>
+
+<div class="modal-overlay" id="quizCancelModal">
+    <div class="modal-content">
+        <div style="text-align: center; margin-bottom: 16px;">
+            <div style="font-size: 48px; margin-bottom: 8px;">
+                {% if _is_active %}🚫{% else %}⚠️{% endif %}
+            </div>
+            <h3 class="modal-title">
+                {% if _is_active %}Jooji tartanka{% else %}Tirtir tartanka{% endif %}
+            </h3>
+            <p class="modal-body">
+                Ma hubtaa inaad joojiso
+                <strong id="quizCancelTitle">{{ _quiz_title }}</strong>?
+            </p>
+            <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;">
+                Ficilkan <strong style="color: #EF4444;">lama noqon karo</strong>.
+            </p>
+        </div>
+
+        <label class="modal-checkbox">
+            <input type="checkbox" id="quizCancelAnnounce" checked>
+            <span>U dir ogeysiis dhammaan ka-qaybgalayaasha</span>
+        </label>
+
+        <div class="modal-actions">
+            <button type="button" onclick="closeQuizCancelModal()"
+                    class="btn btn-secondary">Jooji</button>
+            <button type="button" id="quizCancelConfirm"
+                    class="btn btn-danger">
+                <i class="fas fa-trash"></i> Tirtir
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+    var trigger = document.getElementById('quizCancelTrigger');
+    var modal   = document.getElementById('quizCancelModal');
+    var confirm = document.getElementById('quizCancelConfirm');
+    var titleEl = document.getElementById('quizCancelTitle');
+    var announce = document.getElementById('quizCancelAnnounce');
+    if (!trigger || !modal || !confirm) return;
+
+    var quizId = trigger.getAttribute('data-quiz-id');
+    var quizTitle = trigger.getAttribute('data-quiz-title') || 'Live Quiz';
+    var isActive = trigger.getAttribute('data-quiz-active') === '1';
+
+    function open() {
+        if (titleEl) titleEl.textContent = quizTitle;
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+    function close() {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+    window.closeQuizCancelModal = close;
+
+    trigger.addEventListener('click', open);
+
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) close();
+    });
+
+    confirm.addEventListener('click', function () {
+        var doAnnounce = announce ? announce.checked : true;
+        confirm.disabled = true;
+        confirm.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' +
+                            (isActive ? 'Cancelling…' : 'Deleting…');
+
+        var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+        fetch('/live-quiz/delete/' + quizId, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrf
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ announce: doAnnounce })
+        })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (res) {
+            if (res.ok && res.body && res.body.success) {
+                close();
+                // If we were on a play or waiting room for this quiz, leave
+                // to the lobby. Otherwise just refresh.
+                if (window.location.pathname.indexOf('/live-quiz/') === 0) {
+                    window.location.href = '/live-quiz/lobby';
+                } else {
+                    window.location.reload();
+                }
+            } else {
+                var msg = (res.body && res.body.error) || 'Failed';
+                if (typeof window.showToast === 'function') {
+                    window.showToast(msg, 'error');
+                } else {
+                    alert(msg);
+                }
+                confirm.disabled = false;
+                confirm.innerHTML = '<i class="fas fa-trash"></i> Tirtir';
+            }
+        })
+        .catch(function () {
+            if (typeof window.showToast === 'function') {
+                window.showToast('Khalad shabakad', 'error');
+            }
+            confirm.disabled = false;
+            confirm.innerHTML = '<i class="fas fa-trash"></i> Tirtir';
+        });
+    });
+})();
+</script>
+{% endif %}

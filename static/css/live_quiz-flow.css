@@ -2749,3 +2749,94 @@
         right: 6px;
     }
 }
+
+/* ============================================
+   QUIZ CANCEL / DELETE — super-admin button + modal checkbox
+   ============================================ */
+
+.wr-danger-zone {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--border-light);
+}
+
+.quiz-cancel-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 14px;
+    background: transparent;
+    color: #EF4444;
+    border: 1.5px solid rgba(239, 68, 68, 0.5);
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+    justify-content: center;
+}
+
+.quiz-cancel-trigger:hover,
+.quiz-cancel-trigger:focus-visible {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: #EF4444;
+    color: #DC2626;
+    outline: none;
+}
+
+.quiz-cancel-trigger.is-danger {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: #EF4444;
+}
+
+.quiz-cancel-trigger > i {
+    font-size: 14px;
+}
+
+.modal-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    margin: 16px 0 8px;
+    background: var(--background);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    user-select: none;
+    font-size: 13px;
+    color: var(--text);
+}
+
+.modal-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    flex-shrink: 0;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.modal-checkbox span {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.35;
+}
+
+[data-theme="dark"] .quiz-cancel-trigger {
+    color: #F87171;
+    border-color: rgba(248, 113, 113, 0.5);
+}
+[data-theme="dark"] .quiz-cancel-trigger:hover,
+[data-theme="dark"] .quiz-cancel-trigger:focus-visible {
+    background: rgba(248, 113, 113, 0.12);
+    border-color: #F87171;
+    color: #FCA5A5;
+}
+[data-theme="dark"] .modal-checkbox {
+    background: var(--surface-alt, var(--surface));
+    border-color: var(--border);
+}

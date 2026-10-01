@@ -2535,6 +2535,20 @@ def rejoin_quiz(quiz_id):
 
 @live_quiz_bp.route('/delete/<quiz_id>', methods=['POST'])
 def delete_quiz(quiz_id):
+    """
+    Delete a competition.
+
+    Allowed when:
+      · The caller is the creator AND the quiz is not active, OR
+      · The caller is a super admin (any status)
+
+    Body (JSON, optional):
+      { "announce": true|false }   default true
+
+    When `announce` is true and the quiz was active or waiting:
+      · Every active participant receives an in-app notification
+        "Tartanku waa la joojiyay" with a link to the lobby.
+    """
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
     if not validate_csrf():
@@ -2545,8 +2559,26 @@ def delete_quiz(quiz_id):
     if not quiz:
         return jsonify({'error': 'Quiz not found'}), 404
 
-    if quiz['creator_id'] != user_id and not is_admin(user_id):
-        return jsonify({'error': 'Permission denied'}), 403
+    is_creator = (quiz['creator_id'] == user_id)
+    is_active = (quiz['status'] == 'active')
+
+    # Who's allowed?
+    from services.admin.roles import is_super_admin
+    super_admin = is_super_admin()
+
+    if not super_admin:
+        if not is_creator:
+            return jsonify({'error': 'Permission denied'}), 403
+        if is_active:
+            return jsonify({
+                'error': 'Cannot delete an active quiz. Contact a super admin.',
+            }), 403
+
+    # Read the announce flag
+    payload = request.get_json(silent=True) or {}
+    announce = True
+    if isinstance(payload, dict) and 'announce' in payload:
+        announce = bool(payload.get('announce'))
 
     # Audit BEFORE the destructive delete
     try:
@@ -2554,16 +2586,19 @@ def delete_quiz(quiz_id):
             INSERT INTO admin_audit_log
                 (actor_id, actor_role, action, target_type, target_id,
                  before_value, note, severity, created_at)
-            VALUES (?, ?, 'live_quiz.delete', 'live_quiz', ?,
-                    ?, ?, 'warning', ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'warning', ?)
         """, (
             user_id,
-            'admin' if is_admin(user_id) else 'user',
+            'super' if super_admin else ('admin' if is_admin(user_id) else 'user'),
+            'live_quiz.force_cancel' if (super_admin and is_active) else 'live_quiz.delete',
+            'live_quiz',
             quiz_id,
             json.dumps({
                 'title': quiz.get('title'),
                 'status': quiz.get('status'),
                 'creator_id': quiz.get('creator_id'),
+                'announce': announce,
+                'by_super_admin': super_admin,
             }),
             f'Deleted live quiz {quiz_id}',
             get_somali_time_db(),
@@ -2571,27 +2606,51 @@ def delete_quiz(quiz_id):
     except Exception as e:
         logger.warning(f"audit write for live_quiz.delete failed: {e}")
 
+    # Notify participants if requested
+    if announce:
+        try:
+            title = '🚫 Tartanku waa la joojiyay'
+            body = f'"{quiz.get("title") or "Live Quiz"}" waa la joojiyay. Ku soo laabo hoolka.'
+            execute_with_retry("""
+                INSERT INTO notifications
+                    (user_id, type, title, body, link, icon, is_read, created_at)
+                SELECT lqp.student_id, ?, ?, ?, ?, ?, 0, ?
+                FROM live_quiz_participants lqp
+                WHERE lqp.quiz_id = ? AND lqp.status != 'left'
+            """, (
+                'live_quiz_cancelled',
+                title,
+                body,
+                '/live-quiz/lobby',
+                '🚫',
+                get_somali_time_db(),
+                quiz_id,
+            ), commit=True)
+        except Exception as e:
+            logger.warning(f"cancel notification failed for quiz {quiz_id}: {e}")
+
+    # Remove from memory
     manager = get_state_manager()
     manager.delete_quiz(quiz_id)
 
-    # Cascade to events and checkpoints. Both are orphaned otherwise
-    # because the schema does not declare ON DELETE CASCADE for them.
+    # Cascade-delete events and checkpoints
     try:
-        execute_with_retry(
-            "DELETE FROM live_quiz_events WHERE quiz_id = ?",
-            (quiz_id,), commit=True,
-        )
-        execute_with_retry(
-            "DELETE FROM live_quiz_checkpoints WHERE quiz_id = ?",
-            (quiz_id,), commit=True,
-        )
+        execute_with_retry("DELETE FROM live_quiz_events WHERE quiz_id = ?",
+                           (quiz_id,), commit=True)
+        execute_with_retry("DELETE FROM live_quiz_checkpoints WHERE quiz_id = ?",
+                           (quiz_id,), commit=True)
     except Exception as e:
         logger.warning(f"cascade delete for quiz {quiz_id} failed: {e}")
 
     success = db_delete_live_quiz(quiz_id)
     if success:
         invalidate_quiz_cache(quiz_id)
-        return jsonify({'success': True, 'message': 'Quiz deleted'})
+        return jsonify({
+            'success': True,
+            'message': 'Quiz deleted',
+            'was_active': is_active,
+            'announced': announce,
+        })
 
     return jsonify({'error': 'Failed to delete quiz'}), 500
 
