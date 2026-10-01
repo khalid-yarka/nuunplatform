@@ -6,8 +6,8 @@
 
 {% block extra_css %}
 {{ super() }}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-core.css') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz-shared.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz/core.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_quiz/shared.css') }}" />
 {% endblock %}
 
 {% block dashboard_content %}
@@ -32,7 +32,7 @@
         </div>
 
         <form method="POST" action="{{ url_for('live_quiz.join') }}">
-            {# CSRF token is required by validate_csrf() in live_quiz_bp.join() #}
+            {# CSRF token is required by validate_csrf() in the join handler #}
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
             <div class="form-group" style="margin-bottom: 20px;">

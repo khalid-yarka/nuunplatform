@@ -68,7 +68,7 @@ from blueprints.onboarding_bp import onboarding_bp
 from blueprints.groups_bp import groups_bp
 from blueprints.pdfs_bp import pdfs_bp
 from blueprints.quiz_bp import quiz_bp
-from blueprints.live_quiz_bp import live_quiz_bp
+from blueprints.live_quiz import live_quiz_bp
 from blueprints.notifications_bp import notifications_bp
 from blueprints.push_bp import push_bp
 from blueprints.saved_content_bp import saved_content_bp

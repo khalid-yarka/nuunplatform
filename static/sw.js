@@ -9,7 +9,7 @@
    Bump CACHE_VERSION on any release that must reach old clients.
    ============================================================ */
 
-const CACHE_VERSION = 'nuun-v3-20260930';
+const CACHE_VERSION = 'nuun-v3-20261002';
 const SHELL_CACHE   = 'nuun-shell-' + CACHE_VERSION;
 const RUNTIME_CACHE = 'nuun-runtime-' + CACHE_VERSION;
 
