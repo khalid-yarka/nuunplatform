@@ -9,7 +9,7 @@
 {% block admin_title_icon %}<i class="fas fa-rocket header-icon"></i>{% endblock %}
 {% block admin_title %}Request {{ r.request_id }}{% endblock %}
 {% block admin_subtitle %}
-    Submitted {{ (r.created_at or '')[:16] }}
+    Submitted {{ r.created_at | dt }}
 {% endblock %}
 
 {% block admin_breadcrumb %}
@@ -47,8 +47,8 @@
             <div class="rsb-body">
                 <div class="rsb-title">Approved</div>
                 <div class="rsb-sub">
-                    Approved on {{ (r.approved_at or '')[:16] }}
-                    {% if r.expiry_date %} · expires {{ r.expiry_date[:10] }}{% endif %}
+                    Approved on {{ r.approved_at | dt }}
+                    {% if r.expiry_date %} · expires {{ r.expiry_date | dt_date }}{% endif %}
                 </div>
             </div>
         </div>
@@ -58,7 +58,7 @@
             <div class="rsb-body">
                 <div class="rsb-title">Rejected</div>
                 <div class="rsb-sub">
-                    Rejected on {{ (r.rejected_at or '')[:16] }}
+                    Rejected on {{ r.rejected_at | dt }}
                 </div>
             </div>
         </div>

@@ -11,3 +11,6 @@
 {"user_id": 10, "entry_type": "quiz_attempt", "action": "completed", "entry_id": null, "metadata": {"subject": "ict", "score": 0, "total": 10, "percentage": 0.0, "ended_early": true}, "created_at": "2026-09-28T09:29:24.974729+03:00"}
 {"user_id": 50, "entry_type": "pdf_view", "action": "viewed", "entry_id": null, "metadata": {"title": "Book GP F4", "subject": "gp", "code": "R445-UJGX"}, "created_at": "2026-09-28T16:33:08.678948+03:00"}
 {"user_id": 1, "entry_type": "pdf_view", "action": "viewed", "entry_id": null, "metadata": {"title": "Form 4 Fartuuuuun", "subject": null, "code": "T2BU-YNQS"}, "created_at": "2026-09-29T23:46:39.097324+03:00"}
+{"user_id": 50, "entry_type": "pdf_download", "action": "downloaded", "entry_id": null, "metadata": {"title": "Af Somali F4", "subject": "af_somali", "code": "GJ8R-YLEA"}, "created_at": "2026-10-02T07:03:51.931666+03:00"}
+{"user_id": 50, "entry_type": "pdf_download", "action": "downloaded", "entry_id": null, "metadata": {"title": "Untitled", "subject": null, "code": "UBS7-BO2H"}, "created_at": "2026-10-02T07:04:00.985221+03:00"}
+{"user_id": 50, "entry_type": "pdf_download", "action": "downloaded", "entry_id": null, "metadata": {"title": "Untitled", "subject": null, "code": "UBS7-BO2H"}, "created_at": "2026-10-02T07:04:09.391114+03:00"}

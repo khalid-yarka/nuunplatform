@@ -371,7 +371,7 @@
                     {% endif %}
 
                     <div class="pdf-card__meta">
-                        <span><i class="fas fa-calendar"></i> {{ (pdf.uploaded_at or '')[:10] }}</span>
+                        <span><i class="fas fa-calendar"></i> {{ pdf.uploaded_at | dt_date }}</span>
                     </div>
 
                     {# ───── ACTION GRID (2×2) ───── #}
@@ -431,6 +431,14 @@
                                 <i class="fas fa-lock"></i>
                                 <span>{{ _('pdfs.view_btn') }}</span>
                             </button>
+                        {% elif vw_state == 'locked_quota' %}
+                            <button type="button"
+                                    class="pdf-card__btn pdf-card__btn--locked js-quota-locked"
+                                    data-reset-text="{{ reset_time_str }}"
+                                    title="{{ _('pdfs.download_locked_quota') }}">
+                                <i class="fas fa-lock"></i>
+                                <span>{{ _('pdfs.view_btn') }}</span>
+                            </button>
                         {% elif vw_state == 'locked_login' %}
                             <a href="{{ url_for('auth.login', next=request.url) }}"
                                class="pdf-card__btn pdf-card__btn--locked"
@@ -440,9 +448,13 @@
                             </a>
                         {% endif %}
 
-                        {# ── GET PDF ── #}
+                        {# ── GET PDF ──
+                           Routed through the platform, NOT directly to
+                           t.me, so the free-tier quota is decremented
+                           before the user is handed off to Telegram.
+                           Premium users are passed through unchanged. #}
                         {% if gt_state == 'enabled' %}
-                            <a href="https://t.me/{{ bot_username }}?start=pdf{{ pdf.code }}{{ user_public_id or '' }}"
+                            <a href="{{ url_for('pdfs.telegram_download', code=pdf.code) }}"
                                target="_blank" rel="noopener"
                                class="pdf-card__btn pdf-card__btn--telegram"
                                title="{{ _('pdfs.get_telegram_title') }}">
@@ -457,6 +469,15 @@
                                     title="{{ _('pdfs.premium_lock_upgrade') }}">
                                 <i class="fas fa-lock"></i>
                                 <span>{{ _('pdfs.get_pdf_btn') }}</span>
+                            </button>
+                        {% elif gt_state == 'locked_quota' %}
+                            <button type="button"
+                                    class="pdf-card__btn pdf-card__btn--locked js-quota-locked"
+                                    data-reset-text="{{ reset_time_str }}"
+                                    title="{{ _('pdfs.download_locked_quota') }}">
+                                <i class="fas fa-lock"></i>
+                                <span>{{ _('pdfs.get_pdf_btn') }}</span>
+                                <span class="pdf-card__btn-badge">0</span>
                             </button>
                         {% elif gt_state == 'locked_login' %}
                             <a href="{{ url_for('auth.login', next=request.url) }}"

@@ -75,7 +75,7 @@
             <div class="fname">{{ b.filename }}</div>
             <span class="btype">{{ b.type or 'manual' }}</span>
             <span class="bsize">{{ (b.size_bytes / 1024)|round(1) }} KB</span>
-            <span class="btime">{{ (b.timestamp or '')[:16] }}</span>
+            <span class="btime">{{ b.timestamp | dt }}</span>
             <div class="bstatus">
                 {% if b.integrity_status == 'valid' %}
                     <span class="status-badge resolved">Valid</span>

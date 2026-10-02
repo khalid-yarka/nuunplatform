@@ -393,7 +393,7 @@ def get_user_tier(user_id: Optional[int] = None) -> str:
 def _usage_today(user_id: int, metric_code: str) -> int:
     """Return today's usage count for a metric."""
     try:
-        today = date.today().isoformat()
+        today = datetime.now(SOMALI_TIMEZONE).date().isoformat()
         cursor = execute_with_retry(
             "SELECT usage_count FROM user_usage "
             "WHERE user_id = ? AND metric_code = ? AND period_start = ?",
@@ -538,7 +538,7 @@ def consume(user_id: Optional[int], feature_key: str) -> bool:
     if uid is None:
         return False
 
-    today = date.today().isoformat()
+    today = datetime.now(SOMALI_TIMEZONE).date().isoformat()
     try:
         conn = get_db()
         cursor = conn.cursor()

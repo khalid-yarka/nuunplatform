@@ -57,7 +57,7 @@
                         </code>
                     </td>
                     <td class="hide-mobile" style="font-size:12px;color:var(--text-secondary);">
-                        {{ (r.created_at or '')[:10] }}
+                        {{ r.created_at | dt_date }}
                     </td>
                     <td style="text-align:right;">
                         {% if admin_can('questions.edit') %}

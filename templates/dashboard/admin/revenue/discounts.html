@@ -165,7 +165,7 @@
 
                     <td class="hide-mobile" style="font-size:12px;color:var(--text-secondary);">
                         {% if d.expires_at %}
-                            {{ d.expires_at[:10] }}
+                            {{ d.expires_at | dt_date }}
                         {% else %}
                             <span style="color:var(--text-muted);">Never</span>
                         {% endif %}

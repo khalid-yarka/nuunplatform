@@ -6,7 +6,7 @@
 {% block admin_title %}{{ 'New Question' if is_new else 'Edit Question' }}{% endblock %}
 {% block admin_subtitle %}
     {% if is_new %}Create a new question for the bank.
-    {% else %}Question #{{ question.id }} · created {{ (question.created_at or '')[:10] }}{% endif %}
+    {% else %}Question #{{ question.id }} · created {{ question.created_at | dt_date }}{% endif %}
 {% endblock %}
 
 {% block admin_breadcrumb %}

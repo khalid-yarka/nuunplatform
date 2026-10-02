@@ -47,7 +47,7 @@
                     <div class="p">#{{ s.public_id or '----' }}</div>
                 </div>
             </div>
-            <div class="time">{{ (s.last_login_at or '')[:16] }}</div>
+            <div class="time">{{ s.last_login_at | dt }}</div>
             {% if admin_can('sessions.manage') %}
                 <button type="button"
                         class="admin-btn danger sm"

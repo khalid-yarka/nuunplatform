@@ -34,7 +34,7 @@ def _to_somali(dt):
 
 def _format_core(dt, include_seconds=False):
     """
-    Canonical formatter.
+    Canonical formatter (internal + log format).
       without seconds:  2027/9/12 11:09 pm Mon
       with seconds:     2027/9/12 11:09:42 pm Mon
     """
@@ -52,14 +52,116 @@ def _format_core(dt, include_seconds=False):
     return f"{dt.year}/{dt.month}/{dt.day} {time_part} {am_pm} {weekday}"
 
 
+# ────────────────────────────────────────────
+# PLATFORM DISPLAY FORMAT
+# ────────────────────────────────────────────
+# The exact format shown to users on every template:
+#     D/M/YYYY h:mmam/pm
+# Example: 2/9/2026 5:48pm
+#
+# Rules:
+#   • Day and month: no leading zero
+#   • Year: full 4 digits
+#   • Hour: 12-hour, no leading zero (5pm, 12pm, 12am)
+#   • Minute: 2 digits (5:05pm)
+#   • am/pm: lowercase, no space, no dot
+#   • Date and time separated by a single space
+#
+# Storage stays ISO 8601 in the DB. This only affects the three
+# Jinja filters below, which feed the user-facing templates.
+
+def _parse_any_datetime(value, tz=None):
+    """
+    Parse any timestamp format found in the DB into a tz-aware
+    datetime in the target timezone (default: Somali).
+
+    Handles:
+      - ISO with offset:     2026-10-02T12:00:00+03:00  (kept as-is)
+      - ISO microseconds:    2026-10-02T09:00:00.123456 (assumed UTC)
+      - ISO no offset:       2026-10-02T09:00:00        (assumed UTC)
+      - Space separated:     2026-10-02 09:00:00        (assumed UTC)
+      - Date only:           2026-10-02                 (midnight UTC)
+      - Slash format:        2027/9/12 11:09 pm Mon
+      - datetime object:     returned tz-normalised
+      - None / empty:        returns None
+    """
+    if value is None:
+        return None
+    if tz is None:
+        tz = SOMALI_TIMEZONE
+
+    # Already a datetime — just normalise the timezone.
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(tz)
+
+    s = str(value).strip()
+    if not s:
+        return None
+
+    # ISO 8601 — the DB format.
+    try:
+        dt = datetime.fromisoformat(s.replace('Z', '+00:00'))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(tz)
+    except (ValueError, TypeError):
+        pass
+
+    # Space-separated: 2026-10-02 09:00:00 or 2026-10-02
+    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d'):
+        try:
+            dt = datetime.strptime(s[:19], fmt)
+            return dt.replace(tzinfo=timezone.utc).astimezone(tz)
+        except (ValueError, TypeError):
+            continue
+
+    # Slash format produced by _format_core (from older records).
+    try:
+        return parse_somali_time(s)
+    except (ValueError, TypeError):
+        return None
+
+
+def _format_display_datetime(dt, include_date=True, include_time=True,
+                             include_seconds=False):
+    """
+    Produce the platform display format:
+        D/M/YYYY h:mmam/pm
+    Example: 2/9/2026 5:48pm
+    """
+    if dt is None:
+        return ''
+    parts = []
+    if include_date:
+        parts.append(f'{dt.day}/{dt.month}/{dt.year}')
+    if include_time:
+        hour = dt.hour % 12
+        if hour == 0:
+            hour = 12
+        am_pm = 'am' if dt.hour < 12 else 'pm'
+        if include_seconds:
+            parts.append(f'{hour}:{dt.minute:02d}:{dt.second:02d}{am_pm}')
+        else:
+            parts.append(f'{hour}:{dt.minute:02d}{am_pm}')
+    return ' '.join(parts)
+
+
 # ============================================
-# CANONICAL FORMATTERS
+# CANONICAL FORMATTERS (log / internal)
 # ============================================
 
 def format_somali_time(dt=None) -> str:
     """
-    Canonical display format used platform-wide.
+    Internal canonical format (log files, error reports, health endpoints).
     Example:  2027/9/12 11:09 pm Mon
+
+    NOTE: This function is registered as `fmt_dt` in Jinja globals by
+    app.py. If a template calls `fmt_dt(x)`, it renders this internal
+    format. Templates that need the user-facing format should use the
+    `| dt`, `| dt_time`, or `| dt_date` filters instead, which are the
+    three filters defined below.
     """
     return _format_core(_to_somali(dt), include_seconds=False)
 
@@ -79,7 +181,7 @@ def get_somali_time() -> datetime:
 
 
 def get_somali_time_display() -> str:
-    """Current time formatted for display."""
+    """Current time formatted for internal display (log lines, health)."""
     return format_somali_time()
 
 
@@ -158,73 +260,56 @@ def parse_somali_time(time_str: str) -> datetime:
 
 
 # ============================================
-# JINJA FILTERS
+# JINJA FILTERS — user-facing display format
 # ============================================
 
 def somali_dt_filter(value, include_seconds=False):
     """
-    Format any DB timestamp (ISO string, datetime object, or None)
-    using the canonical Somali display format.
-
-    Usage in templates:
-        {{ user.created_at | somali_dt }}
-        {{ error.timestamp | somali_dt(true) }}   → with seconds
+    Full date + time in the platform display format.
+        {{ user.created_at | somali_dt }}          → 2/9/2026 5:48pm
+        {{ error.timestamp | somali_dt(true) }}    → 2/9/2026 5:48:42pm
     """
     if value is None or value == '':
         return ''
 
     try:
-        if isinstance(value, datetime):
-            dt = value
-        else:
-            s = str(value).strip()
-            if not s:
-                return ''
-            try:
-                dt = _ISO_TRY(s)
-            except (ValueError, TypeError):
-                # Last-resort: try the slash format, then date-only.
-                try:
-                    dt = parse_somali_time(s)
-                except ValueError:
-                    try:
-                        dt = datetime.strptime(s[:10], '%Y-%m-%d')
-                        dt = dt.replace(tzinfo=SOMALI_TIMEZONE)
-                    except ValueError:
-                        return s  # give back what we got
-
-        return _format_core(dt, include_seconds=include_seconds)
+        dt = _parse_any_datetime(value)
+        if dt is None:
+            # Last resort — hand back what we got rather than blank.
+            return str(value)
+        return _format_display_datetime(dt, include_seconds=include_seconds)
     except Exception:
         return str(value)
 
 
 def somali_time_only_filter(value):
     """
-    Time-of-day only: 11:09 pm
-    Useful for compact activity feeds.
+    Time of day only.
+        {{ x | somali_time }}  → 5:48pm
     """
     if not value:
         return ''
     try:
-        dt = value if isinstance(value, datetime) else _ISO_TRY(str(value))
-        hour12 = dt.hour % 12
-        if hour12 == 0:
-            hour12 = 12
-        am_pm = 'am' if dt.hour < 12 else 'pm'
-        return f"{hour12}:{dt.minute:02d} {am_pm}"
+        dt = _parse_any_datetime(value)
+        if dt is None:
+            return str(value)
+        return _format_display_datetime(dt, include_date=False)
     except Exception:
         return str(value)
 
 
 def somali_date_only_filter(value):
     """
-    Date only: 2027/9/12 Sun
+    Date only.
+        {{ x | somali_date }}  → 2/9/2026
     """
     if not value:
         return ''
     try:
-        dt = value if isinstance(value, datetime) else _ISO_TRY(str(value))
-        return f"{dt.year}/{dt.month}/{dt.day} {WEEKDAY_ABBR[dt.weekday()]}"
+        dt = _parse_any_datetime(value)
+        if dt is None:
+            return str(value)
+        return _format_display_datetime(dt, include_time=False)
     except Exception:
         return str(value)
 

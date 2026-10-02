@@ -9,6 +9,9 @@ from services.settings_service import SettingsService
 from services.settings_registry import SETTINGS_REGISTRY, get_all_categories
 from services.tier_service import get_current_user_tier, can_create_live_quiz, is_tier_at_least
 from services import entitlement_service
+from services.settings_content import (
+    get_feature_copy, get_category_label, get_category_order,
+)
 from utils import validate_csrf
 from db import get_user_subject_list
 import logging
@@ -27,6 +30,54 @@ def login_required(f):
     return decorated
 
 
+def _build_tier_features(user_id, tier):
+    """
+    Return every feature the user's current tier includes, grouped
+    and ordered for the settings page.
+
+    Source of truth is the entitlement policy — this list changes
+    automatically when an admin toggles a feature on the tier. Copy
+    comes from settings_content.FEATURE_COPY when present, falling
+    back to the seed's display_name/description otherwise.
+    """
+    try:
+        all_features = entitlement_service.list_features()
+    except Exception as e:
+        logger.warning(f"tier_features: list_features failed: {e}")
+        return []
+
+    out = []
+    for f in all_features:
+        if not f.get('is_global_active'):
+            continue
+
+        policy = (f.get('policies') or {}).get(tier) or {}
+        if not policy.get('is_enabled'):
+            continue
+
+        key = f.get('feature_key')
+        if not key:
+            continue
+
+        copy = get_feature_copy(key)
+        category = f.get('category', 'general')
+
+        out.append({
+            'key':            key,
+            'label':          copy.get('name') or f.get('display_name', key),
+            'description':    copy.get('description') or f.get('description', ''),
+            'icon':           copy.get('icon', '⚙️'),
+            'category':       category,
+            'category_label': get_category_label(category),
+            'available':      True,
+            'tier_required':  None,
+            'order':          f.get('sort_order', 500),
+        })
+
+    out.sort(key=lambda x: (get_category_order(x['category']), x['order'], x['key']))
+    return out
+
+
 @settings_bp.route('/')
 @login_required
 def index():
@@ -41,35 +92,13 @@ def index():
 
     language_allowed = True
 
-    tier_features = []
-    for key, definition in SETTINGS_REGISTRY.items():
-        feature_key = definition.get('feature_key')
-        tier_required = definition.get('tier_required')
-
-        if feature_key:
-            available = entitlement_service.check(user_id, feature_key)
-            required_label = None
-        elif tier_required is None:
-            available = True
-            required_label = None
-        else:
-            available = is_tier_at_least(tier, tier_required)
-            required_label = tier_required
-
-        tier_features.append({
-            'key': key,
-            'label': definition.get('label', key),
-            'description': definition.get('description', ''),
-            'icon': definition.get('icon', '⚙️'),
-            'available': available,
-            'tier_required': required_label,
-            'category': definition.get('category', ''),
-        })
+    # Features of the user's current tier, grouped + ordered.
+    # Replaces the old SETTINGS_REGISTRY-derived list, which showed
+    # settings toggles (font size, theme, etc.) as if they were tier
+    # features.
+    tier_features = _build_tier_features(user_id, tier)
 
     # ── Telegram broadcast state ──
-    # Derived from bot_data.db, not from user_settings. The toggle
-    # renders OFF when the user has no linked Telegram chat or has
-    # blocked the bot. The only way to reach ON is the deeplink.
     public_id = (session.get('public_id') or '').strip()
     telegram_linked = False
     telegram_broadcast_active = False

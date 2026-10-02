@@ -377,14 +377,23 @@ def list_pdfs():
             p['_get_state'] = 'enabled'
         else:
             # Free user
+            # Quota gate: once the daily Get PDF quota is exhausted,
+            # both View and Get PDF lock. The user can still Share
+            # and read the metadata card.
+            free_quota_ok = downloads_unlimited or (remaining_downloads or 0) > 0
+        
             if is_premium_pdf:
                 p['_download_state'] = 'locked_premium'
                 p['_view_state']     = 'locked_premium'
                 p['_get_state']      = 'locked_premium'
             else:
-                p['_download_state'] = 'locked_premium'
-                p['_view_state']     = 'enabled' if streamable else 'hidden'
-                p['_get_state']      = 'enabled'
+                p['_download_state'] = 'locked_premium'   # direct download never on Free
+                if free_quota_ok:
+                    p['_view_state'] = 'enabled' if streamable else 'hidden'
+                    p['_get_state']  = 'enabled'
+                else:
+                    p['_view_state'] = 'locked_quota'
+                    p['_get_state']  = 'locked_quota'
 
     seconds_to_reset = _seconds_to_quota_reset() if user_id else 0
     reset_time_str = _format_reset_time(seconds_to_reset) if user_id else ''
@@ -493,6 +502,23 @@ def view_pdf(pdf_id):
         flash('This is a premium resource. Upgrade to access it.', 'error')
         return redirect(url_for('pdfs.list_pdfs'))
 
+    # ── Free-tier quota gate ──
+    # View does not consume the quota — it is quota-dependent. Once
+    # a Free user's Get PDF quota hits zero, View locks as well so
+    # the whole reading flow pauses until the reset. Premium users
+    # are never blocked here.
+    user_tier = get_user_tier(user_id)
+    if user_tier != 'premium':
+        try:
+            remaining = get_resource_downloads_remaining(user_id)
+        except Exception:
+            remaining = 999
+        # tier_service returns 999+ for unlimited; 0..998 for finite
+        # remaining. Below 999 and <= 0 means exhausted.
+        if remaining < 999 and remaining <= 0:
+            flash('Daily PDF limit reached. Resets tomorrow.', 'warning')
+            return redirect(url_for('pdfs.list_pdfs'))
+
     new_count = increment_pdf_view(pdf_id)
     if new_count is not None:
         pdf['view_count'] = new_count
@@ -504,9 +530,7 @@ def view_pdf(pdf_id):
         metadata={'title': pdf['title'], 'subject': pdf.get('subject'),
                   'code': pdf['code']},
     )
-    user_tier = get_user_tier(user_id)
     return render_template('dashboard/pdf_view.html', pdf=pdf, user_tier=user_tier)
-
 
 # ============================================================
 # DOWNLOAD (legacy route — redirects to Telegram)
@@ -556,30 +580,46 @@ def telegram_download(code):
         flash('PDF not found.', 'error')
         return redirect(url_for('pdfs.list_pdfs'))
 
+    # ── Guest ──
+    # Guests have no quota to consume. Log the attempt and let the
+    # bot handle the login prompt on the Telegram side.
     if 'user_id' not in session:
         _log_guest_attempt('telegram_get', pdf=pdf)
+        return _telegram_redirect(code)
 
+    user_id = session['user_id']
+    user_tier = get_user_tier(user_id)
+
+    # ── Free-tier quota gate ──
+    # One click = one decrement. Same atomic consume the premium
+    # direct download uses. Premium users skip this branch entirely:
+    # their Telegram access is unlimited by design.
+    if user_tier != 'premium':
+        if not consume_resource_download(user_id):
+            flash('Daily PDF limit reached. Resets tomorrow.', 'warning')
+            return redirect(url_for('pdfs.list_pdfs'))
+
+    # ── Success path ──
     increment_pdf_view_by_code(code)
+    add_history_entry(
+        user_id=user_id,
+        entry_type='pdf_download',
+        action='downloaded',
+        metadata={'title': pdf['title'], 'subject': pdf.get('subject'),
+                  'code': pdf['code']},
+    )
+    return _telegram_redirect(code)
 
-    if 'user_id' in session:
-        add_history_entry(
-            user_id=session['user_id'],
-            entry_type='pdf_download',
-            action='downloaded',
-            metadata={'title': pdf['title'], 'subject': pdf.get('subject'),
-                      'code': pdf['code']},
-        )
 
+def _telegram_redirect(code):
+    """Build the t.me deeplink and return a redirect to it."""
     bot_username = Config.TELEGRAM_BOT_USERNAME or 'nuunplatform_bot'
     public_id = (session.get('public_id') or '').strip()
     if public_id:
-        # New payload: pdf<code><public_id>
         payload = f"pdf{code}{public_id}"
     else:
-        # Fallback: legacy code only (link not created)
         payload = code
     return redirect(f"https://t.me/{bot_username}?start={payload}")
-
 # ============================================================
 # DIRECT DOWNLOAD (streams from Telegram as attachment)
 # ============================================================

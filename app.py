@@ -1500,6 +1500,26 @@ def utility_processor():
     from services.admin.roles import is_any_admin as _is_any_admin
     from services.admin.roles import is_super_admin as _is_super_admin
 
+    # ── Upgrade sheet content ──
+    # Curated benefit copy for the upgrade sheet, per user language.
+    # Kept out of the JS so content edits never require a code deploy.
+    upgrade_content = None
+    try:
+        from services.upgrade_content import get_content as _get_upgrade_content
+        _user_lang = 'en'
+        if 'user_id' in session:
+            try:
+                _s = session.get('settings') or {}
+                _user_lang = (_s.get('appearance.language') or 'en')
+            except Exception:
+                _user_lang = 'en'
+        upgrade_content = _get_upgrade_content(_user_lang)
+    except Exception as e:
+        logging.getLogger(__name__).warning(
+            f"upgrade_content load failed: {e}"
+        )
+        upgrade_content = None
+  
     return {
         'session': session,
         'is_admin': session.get('is_admin', False),
@@ -1520,6 +1540,7 @@ def utility_processor():
         'push_enabled': Config.PUSH_ENABLED,
         'discount_chip': discount_chip,
         'trial_banner': trial_banner,
+        'upgrade_content': upgrade_content,
     }
 
 

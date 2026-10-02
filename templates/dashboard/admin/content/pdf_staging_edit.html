@@ -43,7 +43,7 @@
                 </div>
                 <div class="pdf-info-item">
                     <span class="k">Uploaded</span>
-                    <span class="v">{{ (pdf.uploaded_at or '')[:10] }}</span>
+                    <span class="v">{{ pdf.uploaded_at | dt_date }}</span>
                 </div>
                 <div class="pdf-info-item">
                     <span class="k">Telegram ID</span>

@@ -103,7 +103,7 @@
                 {% for e in errors %}
                 <tr>
                     <td style="white-space:nowrap;font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;">
-                        {{ (e.timestamp or '')[:16] }}
+                        {{ e.timestamp | dt }}
                     </td>
                     <td>
                         <span class="severity-badge {{ e.severity|lower }}">{{ e.severity }}</span>

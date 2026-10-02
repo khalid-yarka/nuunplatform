@@ -63,7 +63,7 @@
         <div class="rc-meta">
             <span>👤 <strong>{{ r.first_name or 'Unknown' }} {{ r.last_name or '' }}</strong>{% if r.public_id %} (#{{ r.public_id }}){% endif %}</span>
             <span>🏷️ <strong>{{ r.report_reason or 'unspecified' }}</strong></span>
-            <span>📅 {{ (r.created_at or '')[:16] }}</span>
+            <span>📅 {{ r.created_at | dt }}</span>
             {% if r.resolved_by %}
                 <span>✔️ by admin #{{ r.resolved_by }}</span>
             {% endif %}

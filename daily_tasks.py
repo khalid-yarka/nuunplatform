@@ -23,6 +23,20 @@
 #   tier.followup_3d         T+3 days post-expiry nudge
 #   tier.winback_14d         T+14 days winback
 # All five tasks are idempotent — re-running the same day is a no-op.
+#
+# ── Date-format alignment (this revision) ──
+# All tier comparisons now bind a Somali ISO timestamp as a query
+# parameter instead of using datetime('now'). The stored column
+# values (tier_expires_at, tier_updated_at) are ISO with offset;
+# comparing them against SQLite's default datetime() string broke
+# at character position 10 ('T' vs space) and caused the T-0 task
+# to fire ~24 hours late. Both sides are now the same format and
+# the same timezone.
+#
+# Cooldown windows still bind a matching Somali ISO boundary.
+# The `notifications.created_at` writer remains on
+# datetime('now', 'localtime') for backward compatibility with
+# existing rows; the boundary matches that format.
 # ===============================================================
 
 import os
@@ -155,10 +169,42 @@ def somali_format(dt: Optional[datetime] = None, style: str = 'long') -> str:
     return dt.isoformat()
 
 
+def display_datetime(dt: Optional[datetime] = None) -> str:
+    """
+    Platform display format for reports and captions:
+        D/M/YYYY h:mmam/pm
+    Example: 2/9/2026 5:48pm
+    """
+    if dt is None:
+        dt = somali_now()
+    hour = dt.hour % 12
+    if hour == 0:
+        hour = 12
+    am_pm = 'am' if dt.hour < 12 else 'pm'
+    return f"{dt.day}/{dt.month}/{dt.year} {hour}:{dt.minute:02d}{am_pm}"
+
+
 def metric_date_key(dt: Optional[datetime] = None) -> str:
     if dt is None:
         dt = somali_now()
     return dt.strftime('%Y-%m-%d')
+
+
+def _somali_start_of_today_iso() -> str:
+    """ISO timestamp for today at 00:00 Somali time."""
+    base = somali_now().replace(hour=0, minute=0, second=0, microsecond=0)
+    return somali_format(base, 'iso')
+
+
+def _somali_offset_days_iso(days: int) -> str:
+    """ISO timestamp for (today at 00:00 Somali) + days."""
+    base = somali_now().replace(hour=0, minute=0, second=0, microsecond=0)
+    return somali_format(base + timedelta(days=days), 'iso')
+
+
+def _somali_now_iso() -> str:
+    """ISO timestamp for the current Somali moment."""
+    return somali_format(somali_now(), 'iso')
 
 
 def _days_until(iso_str: Optional[str]) -> Optional[int]:
@@ -307,6 +353,8 @@ class TaskContext:
         self.tables: Dict[str, Dict[str, Any]] = {}
         self.kv_sections: Dict[str, List[Tuple[str, Any]]] = {}
         self.log = log
+        # Stash for cross-task communication (e.g. backup task → report)
+        self._daily_backup: Optional[Dict[str, Any]] = None
 
     def set_metric(self, key: str, value: Any, category: str = 'general',
                    unit: Optional[str] = None, text: Optional[str] = None) -> None:
@@ -620,6 +668,99 @@ def task_db_table_sizes(ctx):
     )
     ctx.set_metric('health.db_total_rows', total_rows, 'health', 'rows')
     return {'items': len(rows)}
+
+
+# ===============================================================
+# BACKUP TASK
+# ===============================================================
+# Runs before cleanup (order 190) so the backup reflects the
+# pre-cleanup state. If a manual backup is in progress (via
+# /backup/trigger), skip cleanly — that manual run satisfies the
+# day's backup requirement.
+# ===============================================================
+
+@daily_task('backup.daily', category='backup', critical=True, order=190)
+def task_backup_daily(ctx):
+    if ctx.dry_run:
+        return {'items': 0, 'status': 'skipped'}
+
+    try:
+        from backup import (
+            BackupManager, acquire_backup_lock, release_backup_lock,
+            is_backup_locked,
+        )
+    except Exception as e:
+        ctx.warn(f'Backup module unavailable: {e}')
+        ctx.set_metric('backup.daily_failed', 1, 'backup', 'bool')
+        return {'items': 0, 'status': 'failed'}
+
+    if is_backup_locked():
+        ctx.log.info("backup.daily: another backup is in progress — skipping")
+        ctx.set_metric('backup.daily_skipped', 1, 'backup', 'bool')
+        return {'items': 0, 'status': 'skipped'}
+
+    lock_fd = acquire_backup_lock()
+    if lock_fd is None:
+        ctx.warn('Could not acquire backup lock')
+        ctx.set_metric('backup.daily_failed', 1, 'backup', 'bool')
+        return {'items': 0, 'status': 'failed'}
+
+    try:
+        manager = BackupManager()
+        result = manager.create_backup('daily')
+    except Exception as e:
+        ctx.warn(f"Daily backup raised: {e}")
+        ctx.set_metric('backup.daily_failed', 1, 'backup', 'bool')
+        return {'items': 0, 'status': 'failed'}
+    finally:
+        try:
+            release_backup_lock(lock_fd)
+        except Exception:
+            pass
+
+    if not result.get('success'):
+        msg = result.get('message') or 'unknown error'
+        ctx.warn(f"Daily backup failed: {msg}")
+        ctx.set_metric('backup.daily_failed', 1, 'backup', 'bool')
+        return {'items': 0, 'status': 'failed'}
+
+    filename = result.get('filename') or ''
+    size_bytes = int(result.get('size_bytes') or 0)
+    duration = float(result.get('duration') or 0)
+    full_path = os.path.join(Config.BACKUP_DIR, filename)
+
+    ctx.set_metric('backup.daily_ok', 1, 'backup', 'bool')
+    ctx.set_metric('backup.filename', filename, 'backup', 'text')
+    ctx.set_metric('backup.size_bytes', size_bytes, 'backup', 'bytes')
+    ctx.set_metric('backup.size_mb', round(size_bytes / (1024 * 1024), 2), 'backup', 'MB')
+    ctx.set_metric('backup.duration_seconds', duration, 'backup', 's')
+
+    ctx._daily_backup = {
+        'filename': filename,
+        'full_path': full_path,
+        'size_bytes': size_bytes,
+        'size_mb': round(size_bytes / (1024 * 1024), 2),
+        'duration': duration,
+        'created_display': display_datetime(),
+    }
+
+    # Prune per retention policy — daily/weekly/monthly counts defined
+    # inside backup.py. Idempotent; running daily is fine.
+    pruned = 0
+    try:
+        pr = manager.run_maintenance(dry_run=False)
+        pruned = len(pr.get('deleted') or [])
+    except Exception as e:
+        ctx.log.warning(f"backup.daily: prune failed (non-fatal): {e}")
+
+    ctx.set_metric('backup.pruned', pruned, 'backup', 'count')
+
+    ctx.log.info(
+        f"backup.daily: {filename} ({size_bytes / 1024 / 1024:.2f} MB, "
+        f"{duration:.0f}s), pruned={pruned}"
+    )
+
+    return {'items': 1}
 
 
 # ===============================================================
@@ -1005,6 +1146,12 @@ def task_refetch_pdf_sizes(ctx):
 # ===============================================================
 # TIER LIFECYCLE TASKS
 # ===============================================================
+# All comparisons now bind a Somali ISO timestamp as a query
+# parameter instead of using SQLite's datetime('now') — that
+# function produces a different string format and a different
+# timezone than the values stored in tier_expires_at and
+# tier_updated_at, and string comparison between the two was the
+# root cause of the 24-hour lag.
 
 _RENEWAL_LINK = '/home?show_upgrade=1'
 
@@ -1035,20 +1182,25 @@ def task_tier_warn_expiring_3d(ctx):
     if ctx.dry_run:
         return {'items': 0, 'status': 'skipped'}
 
-    rows = _rows(f"""
+    from_iso = _somali_offset_days_iso(TIER_WARN_3D_FROM)
+    to_iso   = _somali_offset_days_iso(TIER_WARN_3D_TO + 1)
+    cooldown_iso = somali_format(
+        somali_now() - timedelta(hours=TIER_WARN_3D_COOLDOWN_HOURS), 'iso')
+
+    rows = _rows("""
         SELECT id, first_name, last_name, public_id, tier_expires_at
         FROM students
         WHERE tier = 'premium'
           AND tier_expires_at IS NOT NULL
-          AND tier_expires_at >= datetime('now', '+{TIER_WARN_3D_FROM} days')
-          AND tier_expires_at <= datetime('now', '+{TIER_WARN_3D_TO} days')
+          AND tier_expires_at >= ?
+          AND tier_expires_at < ?
           AND NOT EXISTS (
               SELECT 1 FROM notifications n
               WHERE n.user_id = students.id
                 AND n.type = 'tier_expiring_soon'
-                AND n.created_at > datetime('now', '-{TIER_WARN_3D_COOLDOWN_HOURS} hours')
+                AND n.created_at > ?
           )
-    """)
+    """, (from_iso, to_iso, cooldown_iso))
 
     sent = 0
     detail_rows = []
@@ -1091,20 +1243,25 @@ def task_tier_warn_expiring_1d(ctx):
     if ctx.dry_run:
         return {'items': 0, 'status': 'skipped'}
 
-    rows = _rows(f"""
+    from_iso = _somali_offset_days_iso(TIER_WARN_1D_FROM)
+    to_iso   = _somali_offset_days_iso(TIER_WARN_1D_TO + 1)
+    cooldown_iso = somali_format(
+        somali_now() - timedelta(hours=TIER_WARN_1D_COOLDOWN_HOURS), 'iso')
+
+    rows = _rows("""
         SELECT id, first_name, last_name, public_id, tier_expires_at
         FROM students
         WHERE tier = 'premium'
           AND tier_expires_at IS NOT NULL
-          AND tier_expires_at >= datetime('now', '+{TIER_WARN_1D_FROM} days')
-          AND tier_expires_at <= datetime('now', '+{TIER_WARN_1D_TO} days')
+          AND tier_expires_at >= ?
+          AND tier_expires_at < ?
           AND NOT EXISTS (
               SELECT 1 FROM notifications n
               WHERE n.user_id = students.id
                 AND n.type = 'tier_expiring_tomorrow'
-                AND n.created_at > datetime('now', '-{TIER_WARN_1D_COOLDOWN_HOURS} hours')
+                AND n.created_at > ?
           )
-    """)
+    """, (from_iso, to_iso, cooldown_iso))
 
     sent = 0
     detail_rows = []
@@ -1152,17 +1309,18 @@ def task_tier_warn_expiring_1d(ctx):
 @daily_task('tier.expire_and_notify', category='tier', critical=True, order=210)
 def task_tier_expire_and_notify(ctx):
     if TIER_GRACE_HOURS > 0:
-        cutoff_expr = f"datetime('now', '-{TIER_GRACE_HOURS} hours')"
+        cutoff_iso = somali_format(
+            somali_now() - timedelta(hours=TIER_GRACE_HOURS), 'iso')
     else:
-        cutoff_expr = "datetime('now')"
+        cutoff_iso = _somali_now_iso()
 
-    rows = _rows(f"""
+    rows = _rows("""
         SELECT id, first_name, last_name, public_id, tier, tier_expires_at
         FROM students
         WHERE tier = 'premium'
           AND tier_expires_at IS NOT NULL
-          AND tier_expires_at < {cutoff_expr}
-    """)
+          AND tier_expires_at < ?
+    """, (cutoff_iso,))
 
     downgraded = 0
     detail_rows = []
@@ -1226,13 +1384,17 @@ def task_tier_followup_3d(ctx):
     if ctx.dry_run:
         return {'items': 0, 'status': 'skipped'}
 
-    rows = _rows(f"""
+    # Window: users downgraded 3–5 days ago (day-level granularity)
+    from_iso = _somali_offset_days_iso(-TIER_FOLLOWUP_TO)         # -5 days 00:00
+    to_iso   = _somali_offset_days_iso(-(TIER_FOLLOWUP_FROM - 1)) # -2 days 00:00 (exclusive)
+
+    rows = _rows("""
         SELECT s.id, s.first_name, s.last_name, s.public_id, s.tier_updated_at
         FROM students s
         WHERE s.tier = 'free'
           AND s.tier_updated_at IS NOT NULL
-          AND s.tier_updated_at >= datetime('now', '-{TIER_FOLLOWUP_TO} days')
-          AND s.tier_updated_at <= datetime('now', '-{TIER_FOLLOWUP_FROM} days')
+          AND s.tier_updated_at >= ?
+          AND s.tier_updated_at < ?
           AND EXISTS (
               SELECT 1 FROM notifications n
               WHERE n.user_id = s.id
@@ -1243,7 +1405,7 @@ def task_tier_followup_3d(ctx):
               WHERE n.user_id = s.id
                 AND n.type = 'tier_expired_followup'
           )
-    """)
+    """, (from_iso, to_iso))
 
     sent = 0
     detail_rows = []
@@ -1285,13 +1447,17 @@ def task_tier_winback_14d(ctx):
     if ctx.dry_run:
         return {'items': 0, 'status': 'skipped'}
 
-    rows = _rows(f"""
+    # Window: users downgraded 14–21 days ago
+    from_iso = _somali_offset_days_iso(-TIER_WINBACK_TO)           # -21 days 00:00
+    to_iso   = _somali_offset_days_iso(-(TIER_WINBACK_FROM - 1))   # -13 days 00:00 (exclusive)
+
+    rows = _rows("""
         SELECT s.id, s.first_name, s.last_name, s.public_id, s.tier_updated_at
         FROM students s
         WHERE s.tier = 'free'
           AND s.tier_updated_at IS NOT NULL
-          AND s.tier_updated_at >= datetime('now', '-{TIER_WINBACK_TO} days')
-          AND s.tier_updated_at <= datetime('now', '-{TIER_WINBACK_FROM} days')
+          AND s.tier_updated_at >= ?
+          AND s.tier_updated_at < ?
           AND EXISTS (
               SELECT 1 FROM notifications n
               WHERE n.user_id = s.id
@@ -1302,7 +1468,7 @@ def task_tier_winback_14d(ctx):
               WHERE n.user_id = s.id
                 AND n.type = 'tier_winback'
           )
-    """)
+    """, (from_iso, to_iso))
 
     sent = 0
     detail_rows = []
@@ -1345,26 +1511,35 @@ def task_tier_churn_metrics(ctx):
                    _scalar("SELECT COUNT(*) FROM students WHERE tier = 'premium'"),
                    'tier', 'count')
 
+    now_iso = _somali_now_iso()
+    plus7_iso = _somali_offset_days_iso(7)
+    plus30_iso = _somali_offset_days_iso(30)
+
     ctx.set_metric('tier.expiring_7d',
                    _scalar("SELECT COUNT(*) FROM students "
                            "WHERE tier = 'premium' AND tier_expires_at IS NOT NULL "
-                           "AND tier_expires_at BETWEEN datetime('now') AND datetime('now', '+7 days')"),
+                           "AND tier_expires_at >= ? AND tier_expires_at < ?",
+                           (now_iso, plus7_iso)),
                    'tier', 'count')
     ctx.set_metric('tier.expiring_30d',
                    _scalar("SELECT COUNT(*) FROM students "
                            "WHERE tier = 'premium' AND tier_expires_at IS NOT NULL "
-                           "AND tier_expires_at BETWEEN datetime('now') AND datetime('now', '+30 days')"),
+                           "AND tier_expires_at >= ? AND tier_expires_at < ?",
+                           (now_iso, plus30_iso)),
                    'tier', 'count')
 
     for label, days in (('7d', 7), ('30d', 30)):
+        from_iso = _somali_offset_days_iso(-days)
         ctx.set_metric(
             f'tier.expired_{label}',
             _scalar("SELECT COUNT(*) FROM students "
-                    f"WHERE tier = 'free' AND tier_updated_at IS NOT NULL "
-                    f"AND tier_updated_at >= datetime('now', '-{days} days')"),
+                    "WHERE tier = 'free' AND tier_updated_at IS NOT NULL "
+                    "AND tier_updated_at >= ?",
+                    (from_iso,)),
             'tier', 'count'
         )
 
+    from_30 = _somali_offset_days_iso(-30)
     ctx.set_metric(
         'tier.renewed_after_loss_30d',
         _scalar("""
@@ -2116,7 +2291,12 @@ def task_analytics_bookmarks(ctx):
 
 
 # ===============================================================
-# DB SNAPSHOT
+# DB SNAPSHOT (legacy — retained for the `--no-snapshot` path)
+# ===============================================================
+# The daily backup task (order 190) produces a verified, retained
+# backup file that is attached to the report. This snapshot function
+# is kept only as a fallback for callers that explicitly request a
+# report-only snapshot with --no-snapshot.
 # ===============================================================
 
 def create_db_snapshot() -> Tuple[Optional[str], int, Optional[str]]:
@@ -2280,6 +2460,16 @@ def build_report_message(ctx: TaskContext, run_summary: Dict[str, Any]) -> str:
         m.kv('PDF sizes resolved',
              f'{ctx.mv("content.pdf_sizes_resolved")} '
              f'(+{ctx.mv("content.pdf_sizes_too_large")} too large)')
+
+    # Backup line — shows the daily backup created this run
+    if ctx._daily_backup:
+        b = ctx._daily_backup
+        m.kv('Daily backup',
+             f'{b["filename"]} ({b["size_mb"]} MB, {b["duration"]:.0f}s)')
+        if ctx.mv('backup.pruned'):
+            m.kv('Backups pruned', ctx.mv('backup.pruned'))
+    elif ctx.mv('backup.daily_skipped'):
+        m.kv('Daily backup', 'skipped (another backup was running)')
     m.blank()
     m.divider()
 
@@ -2598,6 +2788,12 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
     L.append(f'| Activity logs purged | {ctx.mv("cleanup.activity_purged"):,} |')
     L.append(f'| Orphan live quizzes removed | {ctx.mv("cleanup.live_quizzes_purged"):,} |')
     L.append(f'| Stale join gates purged | {ctx.mv("cleanup.join_gates_purged"):,} |')
+    if ctx._daily_backup:
+        b = ctx._daily_backup
+        L.append(f'| Daily backup | {b["filename"]} ({b["size_mb"]} MB, {b["duration"]:.0f}s) |')
+        L.append(f'| Backups pruned | {ctx.mv("backup.pruned"):,} |')
+    elif ctx.mv('backup.daily_skipped'):
+        L.append(f'| Daily backup | skipped (another backup was running) |')
     L.append('')
     _render_table(ctx, 'cleanup.history_top', L)
     L.append('---')
@@ -2738,6 +2934,17 @@ def send_report_to_super_admins(ctx, run_summary, snapshot_path=None,
         send_message = '\n'.join(trimmed)
         log.info(f"Message trimmed from {len(message)} to {len(send_message)} chars")
 
+    # Build the backup document caption (using the platform display format)
+    backup_caption = None
+    if ctx._daily_backup:
+        b = ctx._daily_backup
+        backup_caption = (
+            f"📦 Daily backup · {b.get('created_display') or display_datetime()}\n"
+            f"{b.get('size_mb', 0):.2f} MB"
+        )
+        if snapshot_sha:
+            backup_caption += f" · SHA-256: {snapshot_sha[:16]}…"
+
     sent = 0
     for admin_id in admins:
         try:
@@ -2757,13 +2964,14 @@ def send_report_to_super_admins(ctx, run_summary, snapshot_path=None,
 
         if snapshot_path and os.path.exists(snapshot_path):
             try:
-                size_mb = snapshot_size / (1024 * 1024)
-                caption = (f'📎 Database snapshot · {size_mb:.2f} MB\n'
-                           f'SHA-256: {(snapshot_sha or "unknown")[:16]}…')
+                caption = backup_caption or (
+                    f'📎 Database snapshot · '
+                    f'{snapshot_size / (1024 * 1024):.2f} MB'
+                )
                 with open(snapshot_path, 'rb') as f:
                     bot.send_document(admin_id, f, caption=caption)
             except Exception as e:
-                log.warning(f"send_document (snapshot) failed: {e}")
+                log.warning(f"send_document (backup) failed: {e}")
 
         if report_path and os.path.exists(report_path):
             try:
@@ -2832,15 +3040,25 @@ def run_all(args, log_):
     else:
         log_.info("DRY RUN — skipping metric persistence")
 
+    # ── Report attachment ──
+    # Prefer the daily backup file created this run (order 190). It is
+    # already verified by BackupManager, already has retention, and is
+    # the same content as the legacy snapshot. Fall back to
+    # create_db_snapshot() only when the backup task did not run.
     snapshot_path, snapshot_size, snapshot_sha = None, 0, None
     if not args.no_snapshot and not args.dry_run:
-        snapshot_path, snapshot_size, snapshot_sha = create_db_snapshot()
-        if snapshot_path:
-            log_.info(f"Snapshot created: {snapshot_path} "
-                      f"({snapshot_size / (1024 * 1024):.2f} MB)")
+        if ctx._daily_backup and os.path.exists(ctx._daily_backup.get('full_path', '')):
+            snapshot_path = ctx._daily_backup['full_path']
+            snapshot_size = ctx._daily_backup['size_bytes']
+            # SHA not needed — BackupManager already verified integrity.
         else:
-            log_.warning("Snapshot creation failed")
-            ctx.warn('DB snapshot creation failed')
+            snapshot_path, snapshot_size, snapshot_sha = create_db_snapshot()
+            if snapshot_path:
+                log_.info(f"Fallback snapshot created: {snapshot_path} "
+                          f"({snapshot_size / (1024 * 1024):.2f} MB)")
+            else:
+                log_.warning("Snapshot fallback also failed")
+                ctx.warn('No backup or snapshot available for report attachment')
 
     if not args.no_telegram and not args.dry_run:
         sent = send_report_to_super_admins(
@@ -2944,6 +3162,7 @@ def main():
     finally:
         release_lock()
         try:
+        # close_db_connections is idempotent — safe on any exit path
             close_db_connections()
         except Exception:
             pass

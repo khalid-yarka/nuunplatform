@@ -2,16 +2,12 @@
 // UPGRADE SHEET — single-tier Premium
 // ============================================
 // Two steps:
-//   1. Plan — single Premium card with discount price
+//   1. Plan — Free vs Premium comparison + discount price
 //   2. Confirm — summary + Submit → WhatsApp handoff
 //
-// On submit:
-//   1. Reserve a new tab (WhatsApp)
-//   2. POST /upgrade/api/request
-//   3. Redirect the reserved tab to the pre-filled WhatsApp URL
-//   4. On error, close the reserved tab and show an inline message
-//
-// Somali WhatsApp message is built in buildWhatsAppUrl().
+// Feature copy is loaded from window.upgradeContent, populated by
+// the server from services/upgrade_content.py. Never hardcoded here
+// so text edits do not require touching this file.
 // ============================================
 
 (function() {
@@ -39,17 +35,6 @@
     const TIER = {
         icon: '🔑',
         name: 'Premium',
-        tagline: 'Everything in Free, plus the good stuff',
-        features: [
-            'Premium PDFs · 20 downloads/day',
-            'Progress analytics & performance charts',
-            'Subject analytics & detailed ranking',
-            'History search, trends & CSV export',
-            'Personal learning insights',
-            'Advanced focus analytics',
-            'Badge showcase on your profile',
-            'Somali language & appearance customisation',
-        ],
     };
 
     const PRICE = {
@@ -115,8 +100,6 @@
         state.requestId = null;
         state.note = options.message || '';
 
-        // Determine if the user qualifies for the first-payment discount.
-        // Prefer the server-rendered flag; fall back to false.
         state.hasDiscount = !!(window.upgradeState && window.upgradeState.hasDiscount);
 
         state.originalPrice   = PRICE.monthly;
@@ -167,6 +150,21 @@
     function money(n) { return '$' + Number(n || 0).toFixed(2); }
 
     // ============================================
+    // CONTENT
+    // ============================================
+    function getContent() {
+        var c = window.upgradeContent || {};
+        return {
+            freeTitle:       c.free_title       || 'What you already have',
+            freeSubtitle:    c.free_subtitle    || '',
+            premiumTitle:    c.premium_title    || 'What you unlock',
+            premiumSubtitle: c.premium_subtitle || 'Everything in Free, plus the extras.',
+            freeFeatures:    Array.isArray(c.free_features)    ? c.free_features    : [],
+            premiumFeatures: Array.isArray(c.premium_features) ? c.premium_features : [],
+        };
+    }
+
+    // ============================================
     // ROUTER
     // ============================================
     function renderStep() {
@@ -179,9 +177,11 @@
     }
 
     // ============================================
-    // STEP 1 — PLAN
+    // STEP 1 — PLAN (Free vs Premium comparison)
     // ============================================
     function renderPlan() {
+        const ctx = getContent();
+
         const ctxMsg = state.note
             ? `<div class="sf-context">${escapeHtml(state.note)}</div>`
             : '';
@@ -207,6 +207,14 @@
                 </div>
             `;
 
+        const freeListHtml = ctx.freeFeatures
+            .map(f => `<li><i class="fas fa-check-circle"></i><span>${escapeHtml(f)}</span></li>`)
+            .join('');
+
+        const premiumListHtml = ctx.premiumFeatures
+            .map(f => `<li><i class="fas fa-star"></i><span>${escapeHtml(f)}</span></li>`)
+            .join('');
+
         return `
             <div class="sf-step" data-step="1">
                 <div class="sf-head">
@@ -218,20 +226,30 @@
 
                 ${ctxMsg}
 
+                <div class="sf-tier-block sf-tier-block--free">
+                    <div class="sf-tier-head">
+                        <span class="sf-tier-badge sf-tier-badge--free">FREE</span>
+                        <span class="sf-tier-title">${escapeHtml(ctx.freeTitle)}</span>
+                    </div>
+                    <ul class="sf-tier-list">
+                        ${freeListHtml}
+                    </ul>
+                </div>
+
                 <div class="sf-plan-card ${state.hasDiscount ? 'sf-plan-card--discount' : ''}">
                     ${discountRibbon}
                     <div class="sf-plan-head">
                         <div class="sf-plan-badge">${TIER.icon}</div>
                         <div class="sf-plan-title">
                             <span class="sf-plan-name">${TIER.name}</span>
-                            <span class="sf-plan-tag">${TIER.tagline}</span>
+                            <span class="sf-plan-tag">${escapeHtml(ctx.premiumSubtitle)}</span>
                         </div>
                     </div>
 
                     ${priceBlock}
 
                     <ul class="sf-plan-list">
-                        ${TIER.features.map(f => `<li><i class="fas fa-check"></i> ${f}</li>`).join('')}
+                        ${premiumListHtml}
                     </ul>
                 </div>
 
@@ -421,10 +439,8 @@
 
             if (waWindow && !waWindow.closed) {
                 waWindow.location.href = waUrl;
-                // Close the sheet behind the new tab
                 setTimeout(closeSheet, 300);
             } else {
-                // Popup blocked — navigate the current tab
                 window.location.href = waUrl;
             }
         })

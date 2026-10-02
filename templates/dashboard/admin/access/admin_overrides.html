@@ -226,7 +226,7 @@
                 {% for item in recent %}
                 <div class="perm-timeline-item">
                     <div class="when">
-                        {{ item.created_at[:16] if item.created_at else '' }}
+                        {{ item.created_at | dt }}
                     </div>
                     <div class="what">
                         <strong>{{ item.actor_first_name or 'System' }} {{ item.actor_last_name or '' }}</strong>

@@ -1293,7 +1293,7 @@
                                 <span class="qa-tag qa-tag--miss-none">Not attempted</span>
                             {% endif %}
 
-                            <span class="qa-tag qa-tag--id">#{{ q.id }} · {{ (q.created_at or '')[:10] }}</span>
+                            <span class="qa-tag qa-tag--id">#{{ q.id }} · {{ q.created_at | dt_date }}</span>
                         </div>
                     </div>
 

@@ -113,7 +113,7 @@
                 {% for e in entries %}
                 <tr>
                     <td style="white-space: nowrap; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums;">
-                        {{ e.created_at[:16] if e.created_at else '' }}
+                        {{ e.created_at | dt }}
                     </td>
 
                     <td>

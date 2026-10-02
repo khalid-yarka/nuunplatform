@@ -530,57 +530,83 @@
             <h3><i class="fas fa-crown"></i> {{ _('settings.category.tier') }}</h3>
             <p>{{ _('home.limits.tier_label', tier=_('tier.' ~ t)) }}</p>
         </div>
-        <div class="tier-summary">
-            <div class="tier-info-box">
-                <div class="tier-icon">{% if t == 'premium' %}🔑{% else %}🔓{% endif %}</div>
-                <div>
-                    <h4>{{ _('tier.' ~ t) }}</h4>
-                    <p class="tier-desc">
-                        {% if t == 'free' %}
-                            Unlimited practice, competitions, groups, and free PDFs (3 downloads/day).
-                        {% else %}
-                            Everything in Free, plus premium PDFs, analytics, and higher limits.
-                        {% endif %}
-                    </p>
+
+        {# ── Tier panel ──
+           One panel, styled according to the user's current tier:
+             · Premium → warm gold, elevated cards, richer weight
+             · Free    → clean green, flat cards, quieter weight
+           The list is the *full* set of features the current tier
+           includes, grouped by category. No locked items — the
+           point is confirmation, not upselling. #}
+        <div class="tier-panel tier-panel--{{ t }}">
+
+            <div class="tier-panel__head">
+                <div class="tier-panel__badge" aria-hidden="true">
+                    {% if t == 'premium' %}🔑{% else %}🔓{% endif %}
                 </div>
-            </div>
-            {% if t == 'free' %}
-                <div class="upgrade-prompt">
-                    <button class="btn btn-primary upgrade-btn" data-feature="upgrade" data-required-tier="premium">
+                <div class="tier-panel__title-block">
+                    <div class="tier-panel__name">
+                        {% if t == 'premium' %}
+                            {{ _('tier.premium') }}
+                            <span style="font-size:11px; font-weight:800; letter-spacing:0.7px; padding:3px 9px; border-radius:20px; background:linear-gradient(135deg,#FCD34D,#F59E0B); color:#78350F; text-transform:uppercase;">ACTIVE</span>
+                        {% else %}
+                            {{ _('tier.free') }}
+                        {% endif %}
+                    </div>
+                    <div class="tier-panel__subtitle">
+                        {% if t == 'premium' %}
+                            Everything in Free, plus premium PDFs, analytics, and higher limits.
+                        {% else %}
+                            Unlimited practice, competitions, groups, and free PDFs (3 downloads/day).
+                        {% endif %}
+                    </div>
+                </div>
+                {% if t == 'free' %}
+                    <button type="button"
+                            class="btn btn-primary upgrade-btn"
+                            data-feature="upgrade"
+                            data-required-tier="premium"
+                            style="flex-shrink:0;">
+                        <i class="fas fa-rocket"></i>
                         {{ _('home.tier.upgrade_to', tier=_('tier.premium')) }}
                     </button>
-                </div>
-            {% endif %}
-        </div>
-        <div class="features-grid">
-            {% for feature in tier_features %}
-                <div class="feature-card {% if not feature.available %}locked{% endif %}"
-                     data-feature="{{ feature.key }}"
-                     data-required-tier="{{ feature.tier_required or 'free' }}"
-                     onclick="toggleFeatureInfo(this)">
-                    <div class="feature-icon">{{ feature.icon or '⚙️' }}</div>
-                    <div class="feature-content">
-                        <div class="feature-name">{{ feature.label }}</div>
-                        <div class="feature-desc">{{ feature.description }}</div>
-                    </div>
-                    <div class="feature-status">
-                        {% if feature.available %}<span class="status-badge available">✅</span>
-                        {% else %}<span class="status-badge locked">🔒</span>{% endif %}
-                    </div>
-                    <div class="feature-popup">
-                        <div class="popup-content">
-                            <strong>{{ feature.label }}</strong>
-                            <p>{{ feature.description }}</p>
-                            {% if not feature.available and feature.tier_required %}
-                                <p class="upgrade-hint">Requires <strong>{{ _('tier.' ~ feature.tier_required) }}</strong></p>
-                                <button class="btn btn-sm btn-primary upgrade-btn" data-feature="{{ feature.key }}" data-required-tier="{{ feature.tier_required }}">
-                                    Upgrade
-                                </button>
-                            {% endif %}
+                {% endif %}
+            </div>
+
+            {% if tier_features %}
+                {% for category_label, group in tier_features|groupby('category_label') %}
+                    <div class="tier-group">
+                        <h5 class="tier-group__title">{{ category_label }}</h5>
+                        <div class="tier-group__grid">
+                            {% for feature in group %}
+                                <div class="tier-feature">
+                                    <span class="tier-feature__icon" aria-hidden="true">
+                                        {{ feature.icon or '⚙️' }}
+                                    </span>
+                                    <div class="tier-feature__body">
+                                        <span class="tier-feature__name">{{ feature.label }}</span>
+                                        {% if feature.description %}
+                                            <span class="tier-feature__desc">{{ feature.description }}</span>
+                                        {% endif %}
+                                    </div>
+                                    <span class="tier-feature__check" aria-hidden="true">
+                                        {% if t == 'premium' %}
+                                            <i class="fas fa-check"></i>
+                                        {% else %}
+                                            <i class="fas fa-check-circle"></i>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            {% endfor %}
                         </div>
                     </div>
+                {% endfor %}
+            {% else %}
+                <div class="tier-panel__empty">
+                    <p>No features loaded. If this persists, reload the page or contact support.</p>
                 </div>
-            {% endfor %}
+            {% endif %}
+
         </div>
     </div>
 </section>
@@ -726,6 +752,348 @@
     .lang-option .lang-flag { font-size: 16px; }
     @media (max-width: 480px) {
         .lang-option { padding: 8px 14px; font-size: 13px; }
+    }
+
+    /* ============================================================
+       TIER FEATURES — Best-of-breed per tier
+       ============================================================
+       Premium: warm gold accents, elevated cards, richer visual
+                weight. Feels like a reward.
+       Free:    clean green accents, flatter cards, quieter visual
+                weight. Feels honest and uncluttered.
+       ============================================================ */
+
+    /* ── Panel wrapper ── */
+    .tier-panel {
+        margin-top: 20px;
+        padding: 20px 20px 24px;
+        border-radius: 18px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* ── Panel: PREMIUM (rich) ── */
+    .tier-panel--premium {
+        background:
+            radial-gradient(1200px 240px at 0% 0%, rgba(245, 158, 11, 0.10), transparent 60%),
+            radial-gradient(800px 200px at 100% 100%, rgba(252, 211, 77, 0.08), transparent 55%),
+            var(--surface);
+        border: 1px solid rgba(245, 158, 11, 0.32);
+        box-shadow:
+            0 0 0 4px rgba(245, 158, 11, 0.06),
+            0 10px 30px rgba(245, 158, 11, 0.10);
+    }
+    .tier-panel--premium::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #FCD34D, #F59E0B, #FCD34D);
+    }
+
+    /* ── Panel: FREE (clean) ── */
+    .tier-panel--free {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-sm);
+    }
+
+    /* ── Panel header ── */
+    .tier-panel__head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding-bottom: 16px;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--border-light);
+        position: relative;
+        z-index: 1;
+        flex-wrap: wrap;
+    }
+
+    .tier-panel__badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 52px;
+        height: 52px;
+        border-radius: 16px;
+        font-size: 26px;
+        flex-shrink: 0;
+        position: relative;
+    }
+
+    .tier-panel--premium .tier-panel__badge {
+        background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+        box-shadow:
+            0 6px 18px rgba(245, 158, 11, 0.30),
+            inset 0 0 0 1px rgba(245, 158, 11, 0.28);
+    }
+    [data-theme="dark"] .tier-panel--premium .tier-panel__badge {
+        background: linear-gradient(135deg, #3A2E1A 0%, #4A3620 100%);
+        box-shadow:
+            0 6px 18px rgba(245, 158, 11, 0.28),
+            inset 0 0 0 1px rgba(245, 158, 11, 0.35);
+    }
+
+    .tier-panel--free .tier-panel__badge {
+        background: var(--background);
+        box-shadow: inset 0 0 0 1px var(--border);
+    }
+
+    .tier-panel__title-block {
+        flex: 1;
+        min-width: 200px;
+    }
+
+    .tier-panel__name {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -0.3px;
+        line-height: 1.2;
+        flex-wrap: wrap;
+    }
+
+    .tier-panel--premium .tier-panel__name {
+        background: linear-gradient(90deg, #B45309, #F59E0B);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        -webkit-text-fill-color: transparent;
+    }
+    [data-theme="dark"] .tier-panel--premium .tier-panel__name {
+        background: linear-gradient(90deg, #FCD34D, #F59E0B);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .tier-panel__subtitle {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-top: 3px;
+        line-height: 1.45;
+    }
+
+    .tier-group {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .tier-group + .tier-group {
+        margin-top: 20px;
+    }
+
+    .tier-group__title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin: 0;
+        padding-left: 2px;
+    }
+    .tier-panel--premium .tier-group__title {
+        color: #B45309;
+    }
+    [data-theme="dark"] .tier-panel--premium .tier-group__title {
+        color: #FCD34D;
+    }
+
+    .tier-group__title::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 2px;
+        background: var(--text-muted);
+        opacity: 0.6;
+        flex-shrink: 0;
+    }
+    .tier-panel--premium .tier-group__title::before {
+        background: #F59E0B;
+        opacity: 1;
+    }
+
+    .tier-group__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 10px;
+    }
+
+    /* ── Feature card: PREMIUM (elevated) ── */
+    .tier-panel--premium .tier-feature {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px 14px 14px 16px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(245, 158, 11, 0.22);
+        border-radius: 14px;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+    [data-theme="dark"] .tier-panel--premium .tier-feature {
+        background: rgba(58, 46, 26, 0.55);
+        border-color: rgba(245, 158, 11, 0.30);
+    }
+    .tier-panel--premium .tier-feature::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; bottom: 0;
+        width: 3px;
+        background: linear-gradient(180deg, #FCD34D, #F59E0B);
+    }
+    .tier-panel--premium .tier-feature:hover {
+        transform: translateY(-2px);
+        border-color: rgba(245, 158, 11, 0.45);
+        box-shadow: 0 8px 20px rgba(245, 158, 11, 0.15);
+    }
+
+    /* ── Feature card: FREE (clean) ── */
+    .tier-panel--free .tier-feature {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 12px 14px 12px 16px;
+        background: var(--background);
+        border: 1px solid var(--border-light);
+        border-radius: 12px;
+        position: relative;
+        overflow: hidden;
+        transition: border-color 0.18s ease, background 0.18s ease;
+    }
+    .tier-panel--free .tier-feature::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; bottom: 0;
+        width: 3px;
+        background: #10B981;
+        opacity: 0.75;
+    }
+    .tier-panel--free .tier-feature:hover {
+        background: var(--surface);
+        border-color: var(--border);
+    }
+
+    /* ── Feature icon ── */
+    .tier-feature__icon {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+    }
+    .tier-panel--premium .tier-feature__icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        font-size: 17px;
+        background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+        box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.35);
+    }
+    [data-theme="dark"] .tier-panel--premium .tier-feature__icon {
+        background: linear-gradient(135deg, #4A3620, #3A2E1A);
+        box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.40);
+    }
+    .tier-panel--free .tier-feature__icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        font-size: 16px;
+        background: var(--surface);
+        box-shadow: inset 0 0 0 1px var(--border);
+    }
+
+    /* ── Feature body ── */
+    .tier-feature__body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+    .tier-feature__name {
+        font-size: 13.5px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.3;
+    }
+    .tier-panel--premium .tier-feature__name {
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: -0.15px;
+    }
+    .tier-feature__desc {
+        font-size: 12px;
+        color: var(--text-secondary);
+        line-height: 1.45;
+    }
+
+    /* ── Feature checkmark ── */
+    .tier-feature__check {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 2px;
+    }
+    .tier-panel--premium .tier-feature__check {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #FCD34D, #F59E0B);
+        color: #FFFFFF;
+        font-size: 10px;
+        box-shadow: 0 2px 6px rgba(245, 158, 11, 0.40);
+    }
+    .tier-panel--free .tier-feature__check {
+        color: #10B981;
+        font-size: 15px;
+    }
+
+    /* ── Empty / fallback ── */
+    .tier-panel__empty {
+        padding: 22px;
+        text-align: center;
+        background: var(--background);
+        border: 1px dashed var(--border);
+        border-radius: 12px;
+        color: var(--text-muted);
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+        .tier-panel {
+            padding: 16px 14px 20px;
+            border-radius: 14px;
+        }
+        .tier-panel__head {
+            gap: 12px;
+            padding-bottom: 14px;
+            margin-bottom: 16px;
+        }
+        .tier-panel__badge {
+            width: 44px;
+            height: 44px;
+            font-size: 22px;
+            border-radius: 13px;
+        }
+        .tier-panel__name { font-size: 18px; }
+        .tier-group__grid {
+            grid-template-columns: 1fr;
+        }
+        .tier-panel--premium .tier-feature { padding: 12px 12px 12px 14px; }
+        .tier-panel--free .tier-feature { padding: 10px 12px 10px 14px; }
     }
 </style>
 

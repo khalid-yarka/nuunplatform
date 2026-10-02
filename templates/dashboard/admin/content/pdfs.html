@@ -928,7 +928,7 @@
 
                     <div class="lib-card__meta">
                         <span title="Views"><i class="fas fa-eye"></i> {{ p.view_count or 0 }}</span>
-                        <span title="Uploaded"><i class="fas fa-clock"></i> {{ (p.uploaded_at or '')[:10] }}</span>
+                        <span title="Uploaded"><i class="fas fa-clock"></i> {{ p.uploaded_at | dt_date }}</span>
                         {% if p.file_url %}
                             <span title="Local file"><i class="fas fa-hdd"></i> Local</span>
                         {% elif p.file_id %}
@@ -1042,7 +1042,7 @@
                         <div class="pdf-intake-title">{{ p.filename or 'unknown.pdf' }}</div>
                         <div class="pdf-intake-meta">
                             {% if p.uploaded_by %}<span class="pdf-meta-chip">TG #{{ p.uploaded_by }}</span>{% endif %}
-                            <span>{{ (p.uploaded_at or '')[:16] }}</span>
+                            <span>{{ p.uploaded_at | dt }}</span>
                         </div>
                     </div>
                     <div class="pdf-intake-actions">

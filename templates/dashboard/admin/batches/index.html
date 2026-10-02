@@ -89,7 +89,7 @@
                         {{ b.admin_first_name or '—' }} {{ b.admin_last_name or '' }}
                     </td>
                     <td class="hide-mobile" style="font-size:12px;color:var(--text-muted);">
-                        {{ (b.updated_at or '')[:16] }}
+                        {{ b.updated_at | dt }}
                     </td>
                     <td style="text-align:right;white-space:nowrap;">
                         <a href="{{ url_for('admin_batches.detail', batch_id=b.id) }}"

@@ -40,7 +40,7 @@
                     </div>
                 </div>
                 <div style="font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;">
-                    {{ (r.started_at or '')[:16] }}
+                    {{ r.started_at | dt }}
                 </div>
                 <div class="task-actions">
                     {% if admin_can('tasks.trigger') %}

@@ -750,7 +750,7 @@
                         <div class="pdf-stat">
                             <div class="pdf-stat__label">Uploaded</div>
                             <div class="pdf-stat__value small">
-                                {{ (pdf.uploaded_at or '—')[:10] }}
+                                {{ (pdf.uploaded_at | dt_date) or '—' }}
                             </div>
                         </div>
                         <div class="pdf-stat">

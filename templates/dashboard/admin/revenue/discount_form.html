@@ -12,7 +12,7 @@
     {% if is_new %}
         Create a promo code for upgrade checkouts.
     {% else %}
-        Editing code #{{ discount.id }} · created {{ (discount.created_at or '')[:10] }}
+        Editing code #{{ discount.id }} · created {{ discount.created_at | dt_date }}
     {% endif %}
 {% endblock %}
 

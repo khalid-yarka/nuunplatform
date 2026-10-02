@@ -8,7 +8,7 @@
 {% block admin_title %}{{ batch.name }}{% endblock %}
 {% block admin_subtitle %}
     {{ batch.kind|capitalize }} batch · created
-    {{ (batch.created_at or '')[:16] }}
+    {{ batch.created_at | dt }}
 {% endblock %}
 
 {% block admin_breadcrumb %}

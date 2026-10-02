@@ -445,7 +445,7 @@
             {% if tier == 'premium' %}
                 {% if has_expiry %}
                     <span class="tier-expiry-chip limited" title="Premium expires {{ expires_raw|somali_dt }}">
-                        ⏳ until {{ expires_raw[:10] }}
+                        ⏳ until {{ expires_raw | dt_date }}
                     </span>
                 {% elif is_permanent %}
                     <span class="tier-expiry-chip permanent" title="Premium is permanent">

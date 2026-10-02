@@ -280,7 +280,7 @@
             <span class="admin-pill {{ current_tier }}">{{ current_tier|upper }}</span>
             {% if current_tier == 'premium' %}
                 {% if current_expiry %}
-                    <span style="font-size:11px;color:var(--text-muted);">until {{ current_expiry[:10] }}</span>
+                    <span style="font-size:11px;color:var(--text-muted);">until {{ current_expiry | dt_date }}</span>
                 {% else %}
                     <span style="font-size:11px;color:var(--text-muted);">permanent</span>
                 {% endif %}

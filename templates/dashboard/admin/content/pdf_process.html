@@ -9,7 +9,7 @@
 {% block admin_title_icon %}<i class="fas fa-clipboard-check header-icon"></i>{% endblock %}
 {% block admin_title %}Process PDF{% endblock %}
 {% block admin_subtitle %}
-    {{ pending.filename or 'unknown.pdf' }} · uploaded {{ (pending.uploaded_at or '')[:16] }}
+    {{ pending.filename or 'unknown.pdf' }} · uploaded {{ pending.uploaded_at | dt }}
 {% endblock %}
 
 {% block admin_breadcrumb %}
@@ -44,7 +44,7 @@
                     </div>
                     <div class="pdf-info-item">
                         <span class="k">Uploaded</span>
-                        <span class="v">{{ (pending.uploaded_at or '')[:16] }}</span>
+                        <span class="v">{{ pending.uploaded_at | dt }}</span>
                     </div>
                     <div class="pdf-info-item">
                         <span class="k">Telegram ID</span>

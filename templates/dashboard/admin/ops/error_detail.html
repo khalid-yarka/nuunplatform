@@ -7,7 +7,7 @@
 {% block admin_title_icon %}<i class="fas fa-bug header-icon"></i>{% endblock %}
 {% block admin_title %}{{ error.error_type or 'Error' }}{% endblock %}
 {% block admin_subtitle %}
-    Request {{ error.request_id }} · {{ (error.timestamp or '')[:16] }}
+    Request {{ error.request_id }} · {{ error.timestamp | dt }}
 {% endblock %}
 
 {% block admin_breadcrumb %}
@@ -33,7 +33,7 @@
                 {{ error.error_type or 'Unknown' }}
             </div>
             <div class="sub">
-                {{ (error.timestamp or '')[:19] }}
+                {{ error.timestamp | dt(true) }}
                 {% if error.occurrence_count and error.occurrence_count > 1 %}
                     · seen <strong>{{ error.occurrence_count }}</strong> times
                 {% endif %}

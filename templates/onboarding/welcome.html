@@ -1,9 +1,18 @@
 {# ============================================================
    templates/onboarding/welcome.html
    First-login modal — soft gate.
+
+   Feature lists are sourced from services/upgrade_content.py
+   via the global context processor (upgrade_content), so the
+   onboarding comparison and the in-app upgrade sheet always
+   match. Falls back to inline defaults if the context is not
+   populated.
+
+   Everything surrounding the feature lists is translated
+   inline below, keyed off settings.appearance.language.
    ============================================================ #}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ (settings.get('appearance.language') if settings is defined else 'en') or 'en' }}">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -29,6 +38,57 @@
 </head>
 <body class="onboarding-page">
 
+{# ─── Language + copy ─── #}
+{% set lang = (settings.get('appearance.language') if settings is defined else 'en') or 'en' %}
+{% set t = {
+    'en': {
+        'close_aria':   'Continue on Free',
+        'heading':      'Welcome, ' ~ (student.first_name or 'student') ~ '.',
+        'subtitle':     "Pick how you'd like to start. You can change your mind anytime.",
+        'free_tagline': 'Forever · No card needed',
+        'free_cta':     'Start free',
+        'prem_tagline': 'Everything Free has, plus:',
+        'prem_cta':     'Upgrade — $0.50 first month',
+        'trial_ready':  'Not ready to decide?',
+        'trial_desc':   'Try Premium free for ' ~ trial_hours ~ ' hours. No card, no commitment.',
+        'trial_cta':    'Try ' ~ trial_hours ~ 'h trial',
+        'skip':         'No thanks, continue on Free'
+    },
+    'so': {
+        'close_aria':   'Ku sii soco Bilaash',
+        'heading':      'Ku soo dhawow, ' ~ (student.first_name or 'ardey') ~ '.',
+        'subtitle':     "Dooro sida aad rabto inaad ku bilowdo. Waad beddeli kartaa goorta kasta.",
+        'free_tagline': 'Weligaa · Kaadh la\u2019aan',
+        'free_cta':     'Ku bilow Bilaash',
+        'prem_tagline': 'Wax walba oo Bilaash leeyahay, iyo:',
+        'prem_cta':     'Kor u qaad — $0.50 bishii hore',
+        'trial_ready':  'Ma diyaar baad tahay inaad go\u2019aansato?',
+        'trial_desc':   'Tijaabi Premium bilaash ' ~ trial_hours ~ ' saacadood. Kaadh la\u2019aan.',
+        'trial_cta':    'Tijaabi ' ~ trial_hours ~ 's',
+        'skip':         'Maya mahadsanid, ku sii soco Bilaash'
+    }
+} %}
+{% set txt = t.get(lang, t['en']) %}
+
+{# ─── Feature lists (from services/upgrade_content.py) ─── #}
+{% set content = upgrade_content or {} %}
+{% set free_features = content.get('free_features') or [
+    'Unlimited practice sessions',
+    'Every live competition',
+    'Every study group',
+    '3 PDF downloads per day',
+    'Read PDFs in the app',
+    'Basic statistics & answer review'
+] %}
+{% set premium_features = content.get('premium_features') or [
+    'The full PDF library unlocked',
+    'Unlimited PDF downloads',
+    'Direct downloads — 20 per day',
+    'Progress, subject & performance charts',
+    'Personal learning insights',
+    'History search, trends & CSV export'
+] %}
+
 <div class="onboarding-scrim"></div>
 
 <main class="onboarding-shell" role="dialog" aria-modal="true" aria-labelledby="onbTitle">
@@ -36,14 +96,14 @@
     <button type="button"
             class="onboarding-close"
             id="onboardingClose"
-            aria-label="Continue on Free">
+            aria-label="{{ txt.close_aria }}">
         <i class="fas fa-times" aria-hidden="true"></i>
     </button>
 
     <header class="onboarding-header">
         <span class="onboarding-icon" aria-hidden="true">👋</span>
-        <h1 id="onbTitle">Welcome, {{ student.first_name or 'student' }}.</h1>
-        <p>Pick how you'd like to start. You can change your mind anytime.</p>
+        <h1 id="onbTitle">{{ txt.heading }}</h1>
+        <p>{{ txt.subtitle }}</p>
     </header>
 
     <div class="onboarding-cards">
@@ -54,22 +114,23 @@
                 <span class="onb-card__icon" aria-hidden="true">🔓</span>
                 <div class="onb-card__title-block">
                     <h2 class="onb-card__name">Free</h2>
-                    <p class="onb-card__tagline">Forever · No card needed</p>
+                    <p class="onb-card__tagline">{{ txt.free_tagline }}</p>
                 </div>
             </div>
 
             <ul class="onb-card__list">
-                <li><i class="fas fa-check"></i> Unlimited practice</li>
-                <li><i class="fas fa-check"></i> Host competitions</li>
-                <li><i class="fas fa-check"></i> Join any group</li>
-                <li><i class="fas fa-check"></i> Free PDFs · 3 downloads/day</li>
-                <li><i class="fas fa-check"></i> Basic stats &amp; streaks</li>
+                {% for feature in free_features %}
+                    <li>
+                        <i class="fas fa-check-circle" aria-hidden="true"></i>
+                        <span>{{ feature }}</span>
+                    </li>
+                {% endfor %}
             </ul>
 
             <button type="button"
                     class="onb-card__cta onb-card__cta--secondary"
                     data-choice="free">
-                Start free
+                {{ txt.free_cta }}
             </button>
         </article>
 
@@ -84,7 +145,7 @@
                 <span class="onb-card__icon" aria-hidden="true">🔑</span>
                 <div class="onb-card__title-block">
                     <h2 class="onb-card__name">Premium</h2>
-                    <p class="onb-card__tagline">Everything Free has, plus:</p>
+                    <p class="onb-card__tagline">{{ txt.prem_tagline }}</p>
                 </div>
             </div>
 
@@ -96,18 +157,18 @@
             </div>
 
             <ul class="onb-card__list">
-                <li><i class="fas fa-check"></i> Everything in Free</li>
-                <li><i class="fas fa-check"></i> Premium PDFs · 20 downloads/day</li>
-                <li><i class="fas fa-check"></i> Progress analytics &amp; charts</li>
-                <li><i class="fas fa-check"></i> History search &amp; export</li>
-                <li><i class="fas fa-check"></i> Personal insights</li>
-                <li><i class="fas fa-check"></i> Advanced focus analytics</li>
+                {% for feature in premium_features %}
+                    <li>
+                        <i class="fas fa-star" aria-hidden="true"></i>
+                        <span>{{ feature }}</span>
+                    </li>
+                {% endfor %}
             </ul>
 
             <button type="button"
                     class="onb-card__cta onb-card__cta--primary"
                     data-choice="upgrade">
-                <i class="fas fa-rocket"></i> Upgrade — $0.50 first month
+                <i class="fas fa-rocket" aria-hidden="true"></i> {{ txt.prem_cta }}
             </button>
         </article>
 
@@ -117,13 +178,13 @@
     <aside class="onboarding-trial">
         <span class="trial__icon" aria-hidden="true">🎁</span>
         <div class="trial__text">
-            <strong>Not ready to decide?</strong>
-            <span>Try Premium free for {{ trial_hours }} hours. No card, no commitment.</span>
+            <strong>{{ txt.trial_ready }}</strong>
+            <span>{{ txt.trial_desc }}</span>
         </div>
         <button type="button"
                 class="trial__cta"
                 data-choice="trial">
-            Try {{ trial_hours }}h trial
+            {{ txt.trial_cta }}
         </button>
     </aside>
 
@@ -131,7 +192,7 @@
         <button type="button"
                 class="onboarding-skip"
                 data-choice="free">
-            No thanks, continue on Free
+            {{ txt.skip }}
         </button>
     </footer>
 

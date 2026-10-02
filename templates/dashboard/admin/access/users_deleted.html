@@ -60,7 +60,7 @@
                         {% endif %}
                     </td>
                     <td style="font-size: 12px; color: var(--text-secondary);">
-                        {{ (d.deleted_at or '')[:16] }}
+                        {{ d.deleted_at | dt }}
                     </td>
                     <td class="cell-actions">
                         <form method="POST"

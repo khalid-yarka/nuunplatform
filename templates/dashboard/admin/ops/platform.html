@@ -188,7 +188,7 @@
                     <div class="title">{{ f.title|safe }}</div>
                     <div class="meta">
                         <span>{{ f.subtitle }}</span>
-                        <span>{{ (f.timestamp or '')[:16] }}</span>
+                        <span>{{ f.timestamp | dt }}</span>
                     </div>
                 </div>
             </div>

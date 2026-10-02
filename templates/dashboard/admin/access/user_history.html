@@ -87,7 +87,7 @@
                         </span>
                     </div>
                     <div class="meta">
-                        <span>{{ (e.created_at or '')[:16] }}</span>
+                        <span>{{ e.created_at | dt }}</span>
                         {% if e.metadata %}
                             <span style="font-family: 'Courier New', monospace; font-size: 11px;">
                                 {{ e.metadata[:80] }}{% if e.metadata|length > 80 %}…{% endif %}

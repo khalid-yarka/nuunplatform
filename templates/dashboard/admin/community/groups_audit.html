@@ -67,7 +67,7 @@
                 {% for l in logs %}
                 <tr>
                     <td style="white-space:nowrap;font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;">
-                        {{ (l.created_at or '')[:16] }}
+                        {{ l.created_at | dt }}
                     </td>
                     <td>
                         <span style="font-weight:600;font-size:13px;">

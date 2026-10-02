@@ -29,6 +29,7 @@ from flask import session
 from db import execute_with_retry
 from tier_config import normalize_tier, get_tier_level
 from services import entitlement_service
+from utils import SOMALI_TIMEZONE, get_somali_time_db
 
 logger = logging.getLogger(__name__)
 
@@ -78,11 +79,25 @@ def get_current_user_tier() -> str:
     return entitlement_service.get_user_tier(user_id)
 
 
+def _somali_now_iso() -> str:
+    """
+    Current time in the canonical Somali ISO format that the daily
+    runner and entitlement system both use:
+        2026-10-02T12:00:00+03:00
+    Kept as a private helper so the format string lives in one place.
+    """
+    return datetime.now(SOMALI_TIMEZONE).isoformat(timespec='seconds')
+
+
 def set_user_tier(user_id: int, new_tier: str,
                   admin_id: Optional[int] = None) -> bool:
     """
     Set a user's tier. Accepts canonical or legacy input; stores canonical.
     Also flags the user's session for refresh on their next request.
+
+    Writes tier_updated_at in the same Somali ISO format the daily
+    tier-lifecycle tasks use, so follow-up and winback windows compute
+    correctly regardless of which writer touched the row last.
     """
     new_tier = normalize_tier(new_tier)
     if new_tier not in entitlement_service.VALID_TIERS:
@@ -90,7 +105,7 @@ def set_user_tier(user_id: int, new_tier: str,
 
     execute_with_retry(
         "UPDATE students SET tier = ?, tier_updated_at = ? WHERE id = ?",
-        (new_tier, datetime.now().isoformat(), user_id),
+        (new_tier, _somali_now_iso(), user_id),
         commit=True,
     )
     # Signal session refresh (app.py's before_request picks this up)

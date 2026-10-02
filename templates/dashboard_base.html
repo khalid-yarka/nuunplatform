@@ -916,6 +916,7 @@
         userId: "{{ session.user_id or '' }}",
         tier: "{{ normalize_tier(session.tier) if session.tier else 'free' }}"
     };
+    window.upgradeContent = {{ (upgrade_content or {})|tojson }};
 </script>
 
 <script>

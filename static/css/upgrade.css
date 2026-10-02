@@ -333,7 +333,7 @@
     gap: 8px;
 }
 .sf-plan-list li i {
-    color: #10B981;
+    color: #F59E0B;
     font-size: 11px;
     margin-top: 4px;
     flex-shrink: 0;
@@ -575,4 +575,142 @@
         transition: none !important;
         animation: none !important;
     }
+}
+
+/* ============================================
+   FREE TIER BLOCK (in-sheet comparison)
+   ============================================ */
+.sf-tier-block {
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+}
+.sf-tier-block::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    width: 3px;
+    background: #10B981;
+    opacity: 0.75;
+}
+
+.sf-tier-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.sf-tier-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px 4px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    line-height: 1;
+}
+
+.sf-tier-badge--free {
+    background: #E5E7EB;
+    color: #4B5563;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+.sf-tier-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.1px;
+}
+
+.sf-tier-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+}
+@media (min-width: 560px) {
+    .sf-tier-list { grid-template-columns: 1fr 1fr; }
+}
+
+.sf-tier-list li {
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.4;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+.sf-tier-list li i {
+    color: #10B981;
+    font-size: 12px;
+    margin-top: 3px;
+    flex-shrink: 0;
+}
+.sf-tier-list li span {
+    min-width: 0;
+}
+
+/* ============================================
+   DARK MODE FOR FREE BLOCK
+   ============================================ */
+[data-theme="dark"] .sf-tier-block {
+    background: var(--surface-alt);
+    border-color: var(--border);
+}
+[data-theme="dark"] .sf-tier-badge--free {
+    background: #374151;
+    color: #9CA3AF;
+}
+
+/* ============================================
+   RESPONSIVE TWEAKS
+   ============================================ */
+@media (max-width: 480px) {
+    .sf-tier-block {
+        padding: 14px 14px;
+    }
+    .sf-tier-list li {
+        font-size: 12.5px;
+    }
+}
+
+/* ============================================
+   REDUCED MOTION
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+    .sf-tier-block {
+        transition: none !important;
+    }
+}
+
+/* ============================================
+   STICKY FOOTER FIX
+   ============================================
+   .upgrade-carousel had overflow: hidden, which made it the sticky
+   scroll-container for .sf-footer. Because that element does not
+   actually scroll (its parent .upgrade-sheet__content does), the
+   sticky rule silently degraded to normal flow and the footer
+   scrolled out of view.
+
+   Fix: neutralise overflow on the carousel wrapper so sticky
+   resolves against the real scroller. */
+.upgrade-carousel {
+    overflow: visible;
+}
+
+/* Horizontal clipping is still desired at the sheet level. */
+.upgrade-sheet__content {
+    overflow-x: hidden;
 }
