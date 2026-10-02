@@ -26,6 +26,7 @@ from db import (
 from services.tier_service import (
     get_user_tier, set_user_tier, get_current_user_tier,
 )
+from services import entitlement_service
 from tier_config import normalize_tier
 from admin_users_db import (
     ensure_admin_user_schema,
@@ -62,6 +63,80 @@ def _generate_random_password() -> str:
         secrets.choice(_PASSWORD_ALPHABET)
         for _ in range(_RANDOM_PASSWORD_LENGTH)
     )
+
+
+# ============================================================
+# DOWNLOAD QUOTA STATE
+# ============================================================
+# Reads today's row from user_usage for the resource_downloads
+# metric and computes the state panel shown on the Subscription
+# tab. The metric_code written by entitlement_service.consume() is
+# 'resource_downloads'. period_start is the Somali-local date in
+# YYYY-MM-DD format.
+
+DOWNLOAD_QUOTA_METRIC = 'resource_downloads'
+DOWNLOAD_QUOTA_MAX_VALUE = 9999
+
+
+def _get_download_quota_state(user_id: int) -> dict:
+    """
+    Return the current state of the user's daily download quota.
+
+    Keys:
+        metric         — the metric_code stored in user_usage
+        period_start   — the Somali-local date string for today
+        used           — integer count of downloads consumed today
+        limit          — integer cap from the entitlement policy, or None if unlimited
+        remaining      — integer remaining, or None if unlimited
+        is_exhausted   — True if used >= limit
+        is_unlimited   — True if limit is None
+    """
+    today = datetime.now(SOMALI_TIMEZONE).date().isoformat()
+
+    # Policy limit for this user's effective tier
+    limit = None
+    try:
+        raw = entitlement_service.get_limit(user_id, DOWNLOAD_QUOTA_METRIC)
+        # get_limit returns:
+        #   None  → unlimited
+        #   int   → finite cap (0 means disabled)
+        if raw is not None:
+            limit = int(raw)
+    except Exception as e:
+        logger.warning(f"quota limit lookup failed for {user_id}: {e}")
+        limit = None
+
+    # Usage count for today
+    used = 0
+    try:
+        row = execute_with_retry(
+            "SELECT usage_count FROM user_usage "
+            "WHERE user_id = ? AND metric_code = ? AND period_start = ?",
+            (user_id, DOWNLOAD_QUOTA_METRIC, today),
+        ).fetchone()
+        if row:
+            used = int(row['usage_count'] or 0)
+    except Exception as e:
+        logger.warning(f"quota usage lookup failed for {user_id}: {e}")
+        used = 0
+
+    is_unlimited = (limit is None)
+    if is_unlimited:
+        remaining = None
+        is_exhausted = False
+    else:
+        remaining = max(0, limit - used)
+        is_exhausted = used >= limit
+
+    return {
+        'metric':       DOWNLOAD_QUOTA_METRIC,
+        'period_start': today,
+        'used':         used,
+        'limit':        limit,
+        'remaining':    remaining,
+        'is_exhausted': is_exhausted,
+        'is_unlimited': is_unlimited,
+    }
 
 
 # ============================================================
@@ -111,17 +186,6 @@ def _parse_tier_duration(form) -> tuple:
 # ============================================================
 # LIFECYCLE STAGE COMPUTATION
 # ============================================================
-# Mirrors the classification used by daily_tasks.py so the admin
-# sees the same view the automation does.
-#
-# Returns one of:
-#   'expiring_tomorrow'  — premium, expires today or tomorrow
-#   'expiring_soon'      — premium, expires in 2–7 days
-#   'active_premium'     — premium, expiry beyond 7 days or permanent
-#   'churned'            — free, tier_updated_at within last 30 days
-#   'free'               — free, no recent churn (or first-time)
-#   ''                   — unknown / malformed
-# ============================================================
 
 _TIER_EXPIRING_TOMORROW_WINDOW_HOURS = 48
 _TIER_EXPIRING_SOON_WINDOW_DAYS = 7
@@ -137,7 +201,6 @@ def _compute_lifecycle_stage(user: dict) -> str:
     if tier == 'premium':
         expires_raw = user.get('tier_expires_at')
         if not expires_raw:
-            # Permanent premium
             return 'active_premium'
         try:
             s = str(expires_raw).replace('Z', '+00:00')
@@ -147,7 +210,6 @@ def _compute_lifecycle_stage(user: dict) -> str:
             now = datetime.now(timezone.utc)
             delta = target - now
             if delta.total_seconds() < 0:
-                # Expired but the daily task hasn't caught it yet
                 return 'churned'
             if delta.total_seconds() <= _TIER_EXPIRING_TOMORROW_WINDOW_HOURS * 3600:
                 return 'expiring_tomorrow'
@@ -157,7 +219,6 @@ def _compute_lifecycle_stage(user: dict) -> str:
         except Exception:
             return 'active_premium'
 
-    # Free tier — check for recent churn
     updated_raw = user.get('tier_updated_at')
     if updated_raw:
         try:
@@ -167,9 +228,6 @@ def _compute_lifecycle_stage(user: dict) -> str:
                 updated = updated.replace(tzinfo=timezone.utc)
             now = datetime.now(timezone.utc)
             if (now - updated).days <= _TIER_CHURN_WINDOW_DAYS:
-                # Only counts as churn if they actually had premium
-                # (evidenced by tier_updated_at being set at all — the
-                # only writers are tier changes).
                 return 'churned'
         except Exception:
             pass
@@ -179,10 +237,6 @@ def _compute_lifecycle_stage(user: dict) -> str:
 
 # ============================================================
 # LIFECYCLE NOTIFICATION TEMPLATES
-# ============================================================
-# Kept in sync with daily_tasks.py::_send_tier_notification. The
-# manual trigger route uses these; the daily runner uses its own
-# copies. If the wording changes in one, change it in both.
 # ============================================================
 
 TIER_NOTIFICATION_TEMPLATES = {
@@ -231,10 +285,6 @@ _TIER_NOTIFICATION_TYPES = tuple(TIER_NOTIFICATION_TEMPLATES.keys())
 
 
 def _build_tier_notification(type_key: str, user: dict) -> dict:
-    """
-    Return {title, body, icon} for a given type + user. Substitutes
-    the {days} / {s} / {when} placeholders where applicable.
-    """
     tpl = TIER_NOTIFICATION_TEMPLATES.get(type_key)
     if not tpl:
         return None
@@ -314,8 +364,6 @@ def list_users():
     total_pages = (total + per_page - 1) // per_page if total > 0 else 1
     stats = get_users_admin_stats()
 
-    # Compute lifecycle stage for each user so the list can show a
-    # small chip next to the tier pill.
     for user in users:
         user['tier'] = user.get('tier') or 'free'
         user['lifecycle_stage'] = _compute_lifecycle_stage(user)
@@ -414,6 +462,9 @@ def user_detail(user_id):
     except Exception as e:
         logger.warning(f"tier notification history failed: {e}")
 
+    # Download quota state (metric: resource_downloads)
+    download_quota = _get_download_quota_state(user_id)
+
     suggested_password = _generate_random_password()
 
     return render_template(
@@ -429,7 +480,120 @@ def user_detail(user_id):
         default_password_preset='',
         tier_notifications=tier_notifications,
         tier_notification_types=_TIER_NOTIFICATION_TYPES,
+        download_quota=download_quota,
     )
+
+
+# ============================================================
+# DOWNLOAD QUOTA — RESET TO 0
+# ============================================================
+
+@admin_users_bp.route('/users/<int:user_id>/quota/reset',
+                      methods=['POST'],
+                      endpoint='reset_download_quota')
+@admin_can('users.reset_quota')
+def reset_download_quota(user_id):
+    validate_csrf()
+
+    user = get_student_by_id(user_id)
+    if not user:
+        flash('User not found.', 'error')
+        return redirect(url_for('admin_users.list_users'))
+
+    before = _get_download_quota_state(user_id)
+    today = before['period_start']
+
+    try:
+        execute_with_retry("""
+            INSERT INTO user_usage
+                (user_id, metric_code, period_start, usage_count)
+            VALUES (?, ?, ?, 0)
+            ON CONFLICT(user_id, metric_code, period_start) DO UPDATE SET
+                usage_count = 0,
+                updated_at = datetime('now', 'localtime')
+        """, (user_id, DOWNLOAD_QUOTA_METRIC, today), commit=True)
+    except Exception as e:
+        logger.error(f"reset_download_quota failed for user {user_id}: {e}")
+        flash('Failed to reset quota.', 'error')
+        return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                        + '#subscription')
+
+    write_audit(
+        action='user.reset_download_quota',
+        target_type='user',
+        target_id=user_id,
+        before={'used': before['used'], 'period_start': today},
+        after={'used': 0, 'period_start': today},
+        severity='warning',
+    )
+
+    name = user.get('first_name') or 'User'
+    flash(f"{name}'s download quota reset to 0 for today.", 'success')
+    return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                    + '#subscription')
+
+
+# ============================================================
+# DOWNLOAD QUOTA — SET TO CUSTOM VALUE
+# ============================================================
+
+@admin_users_bp.route('/users/<int:user_id>/quota/set',
+                      methods=['POST'],
+                      endpoint='set_download_quota')
+@admin_can('users.reset_quota')
+def set_download_quota(user_id):
+    validate_csrf()
+
+    user = get_student_by_id(user_id)
+    if not user:
+        flash('User not found.', 'error')
+        return redirect(url_for('admin_users.list_users'))
+
+    raw = (request.form.get('usage_count') or '').strip()
+    try:
+        value = int(raw)
+    except (ValueError, TypeError):
+        flash('Please enter a whole number between 0 and 9999.', 'error')
+        return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                        + '#subscription')
+
+    if value < 0 or value > DOWNLOAD_QUOTA_MAX_VALUE:
+        flash(f'Value must be between 0 and {DOWNLOAD_QUOTA_MAX_VALUE}.', 'error')
+        return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                        + '#subscription')
+
+    before = _get_download_quota_state(user_id)
+    today = before['period_start']
+
+    try:
+        execute_with_retry("""
+            INSERT INTO user_usage
+                (user_id, metric_code, period_start, usage_count)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id, metric_code, period_start) DO UPDATE SET
+                usage_count = ?,
+                updated_at = datetime('now', 'localtime')
+        """, (user_id, DOWNLOAD_QUOTA_METRIC, today, value, value),
+            commit=True)
+    except Exception as e:
+        logger.error(f"set_download_quota failed for user {user_id}: {e}")
+        flash('Failed to set quota.', 'error')
+        return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                        + '#subscription')
+
+    write_audit(
+        action='user.set_download_quota',
+        target_type='user',
+        target_id=user_id,
+        before={'used': before['used'], 'period_start': today},
+        after={'used': value, 'period_start': today},
+        severity='warning',
+    )
+
+    name = user.get('first_name') or 'User'
+    flash(f"{name}'s download quota set to {value} for today.", 'success')
+    return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                    + '#subscription')
 
 
 # ============================================================
@@ -476,7 +640,8 @@ def edit_profile(user_id):
     else:
         flash(msg or 'Failed to update profile.', 'error')
 
-    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+    return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                    + '#profile')
 
 
 # ============================================================
@@ -519,7 +684,8 @@ def verify_user(user_id):
     else:
         flash('Failed to verify user.', 'error')
 
-    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+    return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                    + '#overview')
 
 
 @admin_users_bp.route('/users/<int:user_id>/unverify', methods=['POST'],
@@ -547,7 +713,8 @@ def unverify_user(user_id):
     else:
         flash('Failed to unverify user.', 'error')
 
-    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+    return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                    + '#overview')
 
 
 # ============================================================
@@ -563,7 +730,8 @@ def set_note(user_id):
     ok = set_user_admin_note(user_id, note, session['user_id'])
     flash('Admin note saved.' if ok else 'Failed to save note.',
           'success' if ok else 'error')
-    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+    return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                    + '#overview')
 
 
 # ============================================================
@@ -584,7 +752,8 @@ def set_tier(user_id):
         flash(f'Tier updated to {new_tier.upper()}.', 'success')
     else:
         flash('Failed to update tier.', 'error')
-    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+    return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                    + '#subscription')
 
 
 # ============================================================
@@ -610,7 +779,8 @@ def toggle_admin(user_id):
         )
         flash('Admin privileges granted.' if new_state
               else 'Admin privileges revoked.', 'success')
-    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+    return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                    + '#controls')
 
 
 # ============================================================
@@ -626,7 +796,8 @@ def notify(user_id):
     body = (request.form.get('body') or '').strip()
     if not title or not body:
         flash('Title and message are required.', 'error')
-        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+        return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                        + '#overview')
 
     create_notification(user_id, 'admin_direct', title, body, '/dashboard', '📬')
     log_admin_user_action(session['user_id'], user_id, 'notify', None, title[:200])
@@ -636,15 +807,12 @@ def notify(user_id):
         before=None, after={'title': title}, severity='info',
     )
     flash('Notification sent.', 'success')
-    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+    return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                    + '#overview')
 
 
 # ============================================================
-# TRIGGER LIFECYCLE NOTIFICATION (new)
-# ============================================================
-# Manual fire of one of the five tier lifecycle notifications.
-# Useful for support ("resend the winback") and testing without
-# waiting for cron.
+# TRIGGER LIFECYCLE NOTIFICATION
 # ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/trigger-tier-notification/<type_key>',
@@ -655,18 +823,19 @@ def trigger_tier_notification(user_id, type_key):
 
     if type_key not in TIER_NOTIFICATION_TEMPLATES:
         flash(f'Unknown notification type: {type_key}', 'error')
-        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+        return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                        + '#subscription')
 
     user = get_student_by_id(user_id)
     if not user:
         flash('User not found.', 'error')
         return redirect(url_for('admin_users.list_users'))
 
-    # Enrich user dict with computed lifecycle stage for template
     payload = _build_tier_notification(type_key, user)
     if not payload:
         flash('Could not build notification payload.', 'error')
-        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+        return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                        + '#subscription')
 
     try:
         create_notification(
@@ -680,7 +849,8 @@ def trigger_tier_notification(user_id, type_key):
     except Exception as e:
         logger.error(f"trigger_tier_notification failed for user {user_id}: {e}")
         flash('Failed to send notification.', 'error')
-        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+        return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                        + '#subscription')
 
     log_admin_user_action(
         session['user_id'], user_id,
@@ -697,11 +867,12 @@ def trigger_tier_notification(user_id, type_key):
     )
 
     flash(f'Lifecycle notification sent: {payload["title"]}', 'success')
-    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+    return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                    + '#subscription')
 
 
 # ============================================================
-# PASSWORD — custom (admin types a new password)
+# PASSWORD — custom
 # ============================================================
 
 @admin_users_bp.route('/users/<int:user_id>/set-password', methods=['POST'],
@@ -721,15 +892,18 @@ def set_password(user_id):
 
     if not new_pw:
         flash('Password is required.', 'error')
-        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+        return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                        + '#controls')
 
     if len(new_pw) < 8:
         flash('Password must be at least 8 characters.', 'error')
-        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+        return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                        + '#controls')
 
     if new_pw != confirm:
         flash('Passwords do not match.', 'error')
-        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+        return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                        + '#controls')
 
     ok, msg = reset_user_password(
         user_id, new_pw, session['user_id'],
@@ -749,7 +923,8 @@ def set_password(user_id):
     else:
         flash(msg or 'Failed to update password.', 'error')
 
-    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+    return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                    + '#controls')
 
 
 # ============================================================
@@ -793,7 +968,8 @@ def reset_password_random(user_id):
     else:
         flash(msg or 'Failed to reset password.', 'error')
 
-    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+    return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                    + '#controls')
 
 
 @admin_users_bp.route('/users/<int:user_id>/reset-password-default',
@@ -822,7 +998,8 @@ def force_logout(user_id):
     flash('User will be logged out on next request.' if ok
           else 'Failed to force logout.',
           'success' if ok else 'error')
-    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+    return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                    + '#controls')
 
 
 # ============================================================
@@ -849,7 +1026,8 @@ def set_public_id(user_id):
             before=None, after={'public_id': new_id}, severity='info',
         )
     flash(msg, 'success' if ok else 'error')
-    return redirect(url_for('admin_users.user_detail', user_id=user_id))
+    return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                    + '#profile')
 
 
 # ============================================================
@@ -1040,7 +1218,8 @@ def manage_user_tier(user_id):
         else:
             flash('Failed to update tier.', 'error')
 
-        return redirect(url_for('admin_users.user_detail', user_id=user_id))
+        return redirect(url_for('admin_users.user_detail', user_id=user_id)
+                        + '#subscription')
 
     return render_template(
         'dashboard/admin/access/user_tier.html',

@@ -166,6 +166,14 @@ CAPABILITY_REGISTRY: tuple[Capability, ...] = (
         default_for_admin=False,
         reserved=False,
     ),
+    Capability(
+        key='users.reset_quota',
+        group='Users',
+        label="Reset or set a user's daily quota",
+        description='Reset a user\'s daily download counter or override it with a specific value.',
+        default_for_admin=False,
+        reserved=False,
+    ),
 
     # ---------- Questions ----------
     Capability(

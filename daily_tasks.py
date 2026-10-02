@@ -24,19 +24,12 @@
 #   tier.winback_14d         T+14 days winback
 # All five tasks are idempotent — re-running the same day is a no-op.
 #
-# ── Date-format alignment (this revision) ──
-# All tier comparisons now bind a Somali ISO timestamp as a query
-# parameter instead of using datetime('now'). The stored column
-# values (tier_expires_at, tier_updated_at) are ISO with offset;
-# comparing them against SQLite's default datetime() string broke
-# at character position 10 ('T' vs space) and caused the T-0 task
-# to fire ~24 hours late. Both sides are now the same format and
-# the same timezone.
-#
-# Cooldown windows still bind a matching Somali ISO boundary.
-# The `notifications.created_at` writer remains on
-# datetime('now', 'localtime') for backward compatibility with
-# existing rows; the boundary matches that format.
+# Date display:
+#   Every timestamp shown in the Telegram report or the markdown
+#   attachment goes through display_from_db() / display_date_from_db(),
+#   which convert DB strings (ISO or otherwise) to the platform format:
+#       D/M/YYYY h:mmam/pm     —   2/9/2026 5:48pm
+#   Raw DB values are never printed directly.
 # ===============================================================
 
 import os
@@ -184,16 +177,50 @@ def display_datetime(dt: Optional[datetime] = None) -> str:
     return f"{dt.day}/{dt.month}/{dt.year} {hour}:{dt.minute:02d}{am_pm}"
 
 
+def display_from_db(value) -> str:
+    """
+    Convert any DB timestamp string to the platform display format.
+    Accepts:
+      ISO with offset:     2026-10-02T12:00:00+03:00
+      ISO microseconds:    2026-10-02T09:00:00.123456
+      Space separated:     2026-10-02 09:00:00
+      Date only:           2026-10-02
+      datetime object
+    Returns '' on failure.
+    """
+    if value is None or value == '':
+        return ''
+    try:
+        if isinstance(value, datetime):
+            dt = value
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=SOMALI_TIMEZONE)
+        else:
+            s = str(value).strip()
+            if not s:
+                return ''
+            try:
+                dt = datetime.fromisoformat(s.replace('Z', '+00:00'))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=SOMALI_TIMEZONE)
+            except (ValueError, TypeError):
+                dt = datetime.strptime(s[:10], '%Y-%m-%d').replace(
+                    tzinfo=SOMALI_TIMEZONE)
+        return display_datetime(dt)
+    except Exception:
+        return str(value)
+
+
+def display_date_from_db(value) -> str:
+    """Same as display_from_db but returns the date part only."""
+    full = display_from_db(value)
+    return full.split(' ')[0] if full else ''
+
+
 def metric_date_key(dt: Optional[datetime] = None) -> str:
     if dt is None:
         dt = somali_now()
     return dt.strftime('%Y-%m-%d')
-
-
-def _somali_start_of_today_iso() -> str:
-    """ISO timestamp for today at 00:00 Somali time."""
-    base = somali_now().replace(hour=0, minute=0, second=0, microsecond=0)
-    return somali_format(base, 'iso')
 
 
 def _somali_offset_days_iso(days: int) -> str:
@@ -353,7 +380,7 @@ class TaskContext:
         self.tables: Dict[str, Dict[str, Any]] = {}
         self.kv_sections: Dict[str, List[Tuple[str, Any]]] = {}
         self.log = log
-        # Stash for cross-task communication (e.g. backup task → report)
+        # Cross-task stash for the daily backup — read by the report
         self._daily_backup: Optional[Dict[str, Any]] = None
 
     def set_metric(self, key: str, value: Any, category: str = 'general',
@@ -744,8 +771,6 @@ def task_backup_daily(ctx):
         'created_display': display_datetime(),
     }
 
-    # Prune per retention policy — daily/weekly/monthly counts defined
-    # inside backup.py. Idempotent; running daily is fine.
     pruned = 0
     try:
         pr = manager.run_maintenance(dry_run=False)
@@ -885,15 +910,6 @@ def task_cleanup_activity_logs(ctx):
 
 @daily_task('cleanup.join_gates', category='cleanup', order=245)
 def task_cleanup_join_gates(ctx):
-    """
-    Purge force-join gate rows older than RETENTION_JOIN_GATE_HOURS.
-
-    A gate row is created when a user starts the join flow and is
-    deleted when they deliver successfully, when they restart with
-    /start <code>, or when the attempts cutoff is reached. This task
-    is the final safety net for rows that were orphaned by a user
-    who went silent mid-flow.
-    """
     if ctx.dry_run:
         return {'items': 0, 'status': 'skipped'}
     n = 0
@@ -985,23 +1001,6 @@ def task_focus_validate_pdf_links(ctx):
 
 @daily_task('pdfs.refetch_sizes', category='content', order=310)
 def task_refetch_pdf_sizes(ctx):
-    """
-    Resolve unknown bot PDF file sizes so the platform can gate
-    direct downloads.
-
-    Sentinels written to bot_data.db > pdfs.file_size:
-        NULL  → never processed  (new uploads land here)
-        -1    → transient failure, retry next run
-        -2    → known too large or missing, never retry
-        > 0   → real size in bytes
-
-    Strategy per row:
-      1. bot.get_file()       — works up to ~20 MB
-      2. sendDocument() to    — works up to ~50 MB; the message is
-         super-admin chat       deleted immediately after we read
-                                document.file_size
-      3. Both fail            — marked -2 (app hides Download/View)
-    """
     if ctx.dry_run:
         return {'items': 0, 'status': 'skipped'}
 
@@ -1146,12 +1145,11 @@ def task_refetch_pdf_sizes(ctx):
 # ===============================================================
 # TIER LIFECYCLE TASKS
 # ===============================================================
-# All comparisons now bind a Somali ISO timestamp as a query
-# parameter instead of using SQLite's datetime('now') — that
-# function produces a different string format and a different
-# timezone than the values stored in tier_expires_at and
-# tier_updated_at, and string comparison between the two was the
-# root cause of the 24-hour lag.
+# All comparisons bind a Somali ISO timestamp as a query parameter
+# instead of using SQLite's datetime('now') — that function produces
+# a different string format and a different timezone than the values
+# stored in tier_expires_at and tier_updated_at.
+# ===============================================================
 
 _RENEWAL_LINK = '/home?show_upgrade=1'
 
@@ -1159,7 +1157,6 @@ _RENEWAL_LINK = '/home?show_upgrade=1'
 def _send_tier_notification(user_id: int, ntype: str,
                             title: str, body: str,
                             icon: str = '⏰') -> bool:
-    """Insert one notification row. Returns True on success."""
     try:
         execute_with_retry("""
             INSERT INTO notifications
@@ -1221,7 +1218,7 @@ def task_tier_warn_expiring_3d(ctx):
             sent += 1
             detail_rows.append((
                 _display_name(r), r['public_id'] or '----',
-                (r['tier_expires_at'] or '')[:10], f'{days}d'
+                display_date_from_db(r['tier_expires_at']), f'{days}d'
             ))
 
     ctx.set_metric('tier.warned_3d', sent, 'tier', 'count')
@@ -1289,7 +1286,7 @@ def task_tier_warn_expiring_1d(ctx):
             sent += 1
             detail_rows.append((
                 _display_name(r), r['public_id'] or '----',
-                (r['tier_expires_at'] or '')[:10], f'{days}d'
+                display_date_from_db(r['tier_expires_at']), f'{days}d'
             ))
 
     ctx.set_metric('tier.warned_1d', sent, 'tier', 'count')
@@ -1330,7 +1327,7 @@ def task_tier_expire_and_notify(ctx):
             downgraded += 1
             detail_rows.append((
                 _display_name(r), r['public_id'] or '----',
-                (r['tier_expires_at'] or '')[:10], 'dry-run'
+                display_date_from_db(r['tier_expires_at']), 'dry-run'
             ))
             continue
         try:
@@ -1354,7 +1351,7 @@ def task_tier_expire_and_notify(ctx):
             downgraded += 1
             detail_rows.append((
                 _display_name(r), r['public_id'] or '----',
-                (r['tier_expires_at'] or '')[:10], 'downgraded'
+                display_date_from_db(r['tier_expires_at']), 'downgraded'
             ))
         except Exception as e:
             log.warning(f"Failed to expire tier for user {uid}: {e}")
@@ -1384,9 +1381,8 @@ def task_tier_followup_3d(ctx):
     if ctx.dry_run:
         return {'items': 0, 'status': 'skipped'}
 
-    # Window: users downgraded 3–5 days ago (day-level granularity)
-    from_iso = _somali_offset_days_iso(-TIER_FOLLOWUP_TO)         # -5 days 00:00
-    to_iso   = _somali_offset_days_iso(-(TIER_FOLLOWUP_FROM - 1)) # -2 days 00:00 (exclusive)
+    from_iso = _somali_offset_days_iso(-TIER_FOLLOWUP_TO)
+    to_iso   = _somali_offset_days_iso(-(TIER_FOLLOWUP_FROM - 1))
 
     rows = _rows("""
         SELECT s.id, s.first_name, s.last_name, s.public_id, s.tier_updated_at
@@ -1425,7 +1421,7 @@ def task_tier_followup_3d(ctx):
             sent += 1
             detail_rows.append((
                 _display_name(r), r['public_id'] or '----',
-                (r['tier_updated_at'] or '')[:10], 'followup'
+                display_date_from_db(r['tier_updated_at']), 'followup'
             ))
 
     ctx.set_metric('tier.followups_sent', sent, 'tier', 'count')
@@ -1447,9 +1443,8 @@ def task_tier_winback_14d(ctx):
     if ctx.dry_run:
         return {'items': 0, 'status': 'skipped'}
 
-    # Window: users downgraded 14–21 days ago
-    from_iso = _somali_offset_days_iso(-TIER_WINBACK_TO)           # -21 days 00:00
-    to_iso   = _somali_offset_days_iso(-(TIER_WINBACK_FROM - 1))   # -13 days 00:00 (exclusive)
+    from_iso = _somali_offset_days_iso(-TIER_WINBACK_TO)
+    to_iso   = _somali_offset_days_iso(-(TIER_WINBACK_FROM - 1))
 
     rows = _rows("""
         SELECT s.id, s.first_name, s.last_name, s.public_id, s.tier_updated_at
@@ -1488,7 +1483,7 @@ def task_tier_winback_14d(ctx):
             sent += 1
             detail_rows.append((
                 _display_name(r), r['public_id'] or '----',
-                (r['tier_updated_at'] or '')[:10], 'winback'
+                display_date_from_db(r['tier_updated_at']), 'winback'
             ))
 
     ctx.set_metric('tier.winbacks_sent', sent, 'tier', 'count')
@@ -1539,7 +1534,6 @@ def task_tier_churn_metrics(ctx):
             'tier', 'count'
         )
 
-    from_30 = _somali_offset_days_iso(-30)
     ctx.set_metric(
         'tier.renewed_after_loss_30d',
         _scalar("""
@@ -1734,7 +1728,7 @@ def task_recent_signups(ctx):
         ver = '✅' if r['is_verified'] else '⏳'
         table_rows.append((name, r['public_id'] or '----', f'{loc} / {city}',
                            (r['school'] or '—')[:20], r['grade'] or '—',
-                           ver, (r['created_at'] or '')[:16]))
+                           ver, display_from_db(r['created_at'])))
     if table_rows:
         ctx.add_table(
             'users.recent_signups',
@@ -1940,7 +1934,7 @@ def task_live_quiz_recent(ctx):
         host = f"{r['first_name'] or '?'} {r['last_name'] or ''}".strip()
         table.append(((r['title'] or 'Untitled')[:40], r['subject_code'],
                       host, r['status'], r['participants'] or 0,
-                      (r['created_at'] or '')[:16]))
+                      display_from_db(r['created_at'])))
     if table:
         ctx.add_table('live_quizzes.recent', 'Recent Live Quizzes (Latest 30)',
                       ['Title', 'Subject', 'Host', 'Status', 'Participants', 'Created'],
@@ -2021,7 +2015,7 @@ def task_recent_upgrades(ctx):
         table.append((r['request_id'], f"{r['first_name']} {r['last_name'] or ''}".strip(),
                       r['public_id'] or '----', r['requested_tier'].upper(),
                       r['duration'], f"${(r['final_price_cents'] or 0) / 100:.2f}",
-                      (r['approved_at'] or '')[:16]))
+                      display_from_db(r['approved_at'])))
     if table:
         ctx.add_table('revenue.recent_upgrades', 'Recent Approved Upgrades (Last 30 Days)',
                       ['Request ID', 'User', 'Public ID', 'Tier', 'Duration', 'Amount', 'Approved'],
@@ -2143,7 +2137,7 @@ def task_errors_breakdown(ctx):
     table = []
     for r in rows:
         table.append(((r['error_type'] or 'Unknown')[:45], r['severity'],
-                      f"{r['n']:,}", (r['last_seen'] or '')[:16]))
+                      f"{r['n']:,}", display_from_db(r['last_seen'])))
     if table:
         ctx.add_table('health.errors_breakdown', 'Top Error Types (Last 7 Days)',
                       ['Type', 'Severity', 'Count', 'Last Seen'],
@@ -2160,7 +2154,7 @@ def task_errors_breakdown(ctx):
         for r in recent:
             r_rows.append((r['request_id'][:8], (r['error_type'] or '')[:30],
                            (r['error_message'] or '')[:50] + '…',
-                           (r['timestamp'] or '')[:16]))
+                           display_from_db(r['timestamp'])))
         ctx.add_table('health.recent_errors', 'Recent Unresolved Errors (Latest 20)',
                       ['Req ID', 'Type', 'Message', 'Time'],
                       r_rows, order=621, category='health')
@@ -2205,7 +2199,7 @@ def task_analytics_achievements(ctx):
     for r in recent:
         table.append((r['icon'] or '🏆', r['name'],
                       f"{r['first_name']} {r['last_name'] or ''}".strip(),
-                      r['public_id'] or '----', (r['unlocked_at'] or '')[:16]))
+                      r['public_id'] or '----', display_from_db(r['unlocked_at'])))
     if table:
         ctx.add_table('achievements.recent', 'Achievements Unlocked (Last 7 Days · Latest 30)',
                       ['', 'Achievement', 'User', 'Public ID', 'When'],
@@ -2291,7 +2285,7 @@ def task_analytics_bookmarks(ctx):
 
 
 # ===============================================================
-# DB SNAPSHOT (legacy — retained for the `--no-snapshot` path)
+# DB SNAPSHOT (legacy — retained for the --no-snapshot path)
 # ===============================================================
 # The daily backup task (order 190) produces a verified, retained
 # backup file that is attached to the report. This snapshot function
@@ -2356,11 +2350,52 @@ def get_bot_safe():
         return None
 
 
+def _build_report_keyboard():
+    """
+    Inline keyboard for the daily report message.
+    Returns a telebot InlineKeyboardMarkup or None when BASE_URL is unset.
+    """
+    if not BASE_URL:
+        return None
+    try:
+        from telebot import types
+    except Exception:
+        return None
+
+    try:
+        markup = types.InlineKeyboardMarkup(row_width=2)
+
+        markup.row(
+            types.InlineKeyboardButton(
+                "🛠️ Admin panel", url=f"{BASE_URL}/admin"),
+            types.InlineKeyboardButton(
+                "📊 Platform", url=f"{BASE_URL}/admin/ops/platform"),
+        )
+        markup.row(
+            types.InlineKeyboardButton(
+                "⚠️ Errors", url=f"{BASE_URL}/admin/ops/errors"),
+            types.InlineKeyboardButton(
+                "💾 Backups", url=f"{BASE_URL}/admin/ops/backups"),
+        )
+        markup.row(
+            types.InlineKeyboardButton(
+                "👥 Users", url=f"{BASE_URL}/admin/users"),
+            types.InlineKeyboardButton(
+                "📈 Metrics", url=f"{BASE_URL}/admin/ops/platform-metrics"),
+        )
+
+        return markup
+    except Exception as e:
+        log.warning(f"_build_report_keyboard failed: {e}")
+        return None
+
+
 def build_report_message(ctx: TaskContext, run_summary: Dict[str, Any]) -> str:
     m = Msg()
     m.h1('📊  NUUNPLATFORM — DAILY BRIEF')
-    m.italic(somali_format(ctx.now))
-    m.text(f"Run {run_summary.get('started_at', '')} → {run_summary.get('ended_at', '')}  "
+    m.italic(display_datetime(ctx.now))
+    m.text(f"Run {display_from_db(run_summary.get('started_at', ''))} → "
+           f"{display_from_db(run_summary.get('ended_at', ''))}  "
            f"({run_summary.get('duration_seconds', 0):.0f}s)")
     m.blank()
     m.divider()
@@ -2461,7 +2496,6 @@ def build_report_message(ctx: TaskContext, run_summary: Dict[str, Any]) -> str:
              f'{ctx.mv("content.pdf_sizes_resolved")} '
              f'(+{ctx.mv("content.pdf_sizes_too_large")} too large)')
 
-    # Backup line — shows the daily backup created this run
     if ctx._daily_backup:
         b = ctx._daily_backup
         m.kv('Daily backup',
@@ -2518,10 +2552,10 @@ def build_plain_markdown_report(ctx: TaskContext, run_summary: Dict[str, Any]) -
 
     L.append('# 📊 NuunPlatform — Daily Brief')
     L.append('')
-    L.append(f'**{somali_format(ctx.now)}**')
+    L.append(f'**{display_datetime(ctx.now)}**')
     L.append('')
-    L.append(f'- Run started: `{run_summary.get("started_at", "")}`')
-    L.append(f'- Run ended:   `{run_summary.get("ended_at", "")}`')
+    L.append(f'- Run started: {display_from_db(run_summary.get("started_at", ""))}')
+    L.append(f'- Run ended:   {display_from_db(run_summary.get("ended_at", ""))}')
     L.append(f'- Duration:    **{run_summary.get("duration_seconds", 0):.1f}s**')
     L.append(f'- Tasks:       **{run_summary.get("tasks_total", 0)}** total · '
              f'**{run_summary.get("tasks_success", 0)}** succeeded · '
@@ -2934,7 +2968,8 @@ def send_report_to_super_admins(ctx, run_summary, snapshot_path=None,
         send_message = '\n'.join(trimmed)
         log.info(f"Message trimmed from {len(message)} to {len(send_message)} chars")
 
-    # Build the backup document caption (using the platform display format)
+    keyboard = _build_report_keyboard()
+
     backup_caption = None
     if ctx._daily_backup:
         b = ctx._daily_backup
@@ -2948,16 +2983,22 @@ def send_report_to_super_admins(ctx, run_summary, snapshot_path=None,
     sent = 0
     for admin_id in admins:
         try:
-            bot.send_message(admin_id, send_message,
-                             parse_mode='MarkdownV2',
-                             disable_web_page_preview=True)
+            bot.send_message(
+                admin_id, send_message,
+                parse_mode='MarkdownV2',
+                disable_web_page_preview=True,
+                reply_markup=keyboard,
+            )
         except Exception as e:
             log.error(f"send_message failed for admin {admin_id}: {e}")
             time.sleep(2)
             try:
-                bot.send_message(admin_id, send_message,
-                                 parse_mode='MarkdownV2',
-                                 disable_web_page_preview=True)
+                bot.send_message(
+                    admin_id, send_message,
+                    parse_mode='MarkdownV2',
+                    disable_web_page_preview=True,
+                    reply_markup=keyboard,
+                )
             except Exception as e2:
                 log.error(f"send_message retry failed: {e2}")
                 continue
@@ -2997,10 +3038,10 @@ def run_all(args, log_):
     t_start = time.time()
     run_date = metric_date_key()
     ctx = TaskContext(dry_run=args.dry_run)
-    started_at = somali_format(ctx.now, 'time')
+    started_at = somali_format(ctx.now, 'iso')
     log_.info('=' * 60)
     log_.info(f'DAILY TASK RUN — {run_date}')
-    log_.info(f'Started: {started_at} · dry_run={args.dry_run}')
+    log_.info(f'Started: {display_datetime(ctx.now)} · dry_run={args.dry_run}')
     log_.info('=' * 60)
 
     try:
@@ -3016,7 +3057,7 @@ def run_all(args, log_):
         results.append(run_one_task(t, ctx, run_date))
 
     elapsed = time.time() - t_start
-    ended_at = somali_format(somali_now(), 'time')
+    ended_at = somali_format(somali_now(), 'iso')
     failed = [r for r in results if r['status'] == 'failed']
     success = [r for r in results if r['status'] == 'success']
     run_summary = {
@@ -3050,7 +3091,6 @@ def run_all(args, log_):
         if ctx._daily_backup and os.path.exists(ctx._daily_backup.get('full_path', '')):
             snapshot_path = ctx._daily_backup['full_path']
             snapshot_size = ctx._daily_backup['size_bytes']
-            # SHA not needed — BackupManager already verified integrity.
         else:
             snapshot_path, snapshot_size, snapshot_sha = create_db_snapshot()
             if snapshot_path:
@@ -3082,7 +3122,7 @@ def run_all(args, log_):
               f"{len(ctx.tables)} tables, {len(ctx.metrics)} metrics]\n")
 
     log_.info('=' * 60)
-    log_.info(f'DAILY TASK RUN COMPLETE — {somali_format(style="short")}')
+    log_.info(f'DAILY TASK RUN COMPLETE — {display_datetime()}')
     log_.info('=' * 60)
     return 0
 
@@ -3107,8 +3147,8 @@ def run_preview_telegram(args):
     ctx._health_backup = {'ok': True, 'text': 'preview · not checked'}
 
     run_summary = {
-        'started_at': somali_format(somali_now(), 'time'),
-        'ended_at': somali_format(somali_now(), 'time'),
+        'started_at': somali_format(somali_now(), 'iso'),
+        'ended_at': somali_format(somali_now(), 'iso'),
         'duration_seconds': 1,
         'tasks_total': len(analytics_tasks),
         'tasks_success': len(analytics_tasks),
@@ -3162,7 +3202,6 @@ def main():
     finally:
         release_lock()
         try:
-        # close_db_connections is idempotent — safe on any exit path
             close_db_connections()
         except Exception:
             pass
