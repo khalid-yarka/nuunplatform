@@ -554,14 +554,22 @@ def get_user_subject_list(user_id: int):
     for code in codes:
         subj = get_subject(code)
         if subj:
+            # SO users see the Somali exam names; everyone else keeps
+            # the English catalogue names. `name` is what every
+            # template reads, so overriding it here is enough.
+            display_name = (
+                subj.get('name_so') or subj['name']
+                if location == 'SO'
+                else subj['name']
+            )
             subjects.append({
                 'code': code,
-                'name': subj['name'],
+                'name': display_name,
                 'name_so': subj.get('name_so', ''),
+                'name_en': subj['name'],
                 'icon': subj.get('icon', '📚')
             })
     return subjects
-
 
 # ============================================
 # QUESTION FUNCTIONS
@@ -919,6 +927,10 @@ def save_quiz_attempt(student_id: int, subject_code: str, score: int, total: int
 
 def get_user_quiz_history(student_id: int, limit: int = 10):
     try:
+        from subjects_config import get_subject_display_name
+        student = get_student_by_id(student_id) or {}
+        location = student.get('location', '')
+
         cursor = execute_with_retry("""
             SELECT qa.*
             FROM quiz_attempts qa
@@ -930,8 +942,9 @@ def get_user_quiz_history(student_id: int, limit: int = 10):
         attempts = []
         for row in results:
             a = dict(row)
-            subj = get_subject(a['subject_code'])
-            a['subject'] = {'name': subj['name'] if subj else a['subject_code']}
+            a['subject'] = {
+                'name': get_subject_display_name(a['subject_code'], location)
+            }
             a['answers'] = from_json(a['answers'])
             a['ratings'] = from_json(a['ratings'])
             attempts.append(a)
@@ -1822,17 +1835,33 @@ def get_live_quiz_by_code(join_code: str):
         return None
 
 
-def get_live_quiz_with_subject(quiz_id: int):
+def get_live_quiz_with_subject(quiz_id: int, viewer_id: int = None):
+    """
+    Fetch a live quiz enriched with its subject name.
+
+    `viewer_id` decides the display name: SO users see the Somali
+    exam names, everyone else sees the English catalogue name. When
+    viewer_id is omitted, falls back to English.
+    """
     try:
-        cursor = execute_with_retry("SELECT * FROM live_quizzes WHERE id = ?", (quiz_id,))
+        from subjects_config import get_subject_display_name
+        location = ''
+        if viewer_id is not None:
+            viewer = get_student_by_id(viewer_id) or {}
+            location = viewer.get('location', '')
+
+        cursor = execute_with_retry(
+            "SELECT * FROM live_quizzes WHERE id = ?", (quiz_id,)
+        )
         result = cursor.fetchone()
-        if result:
-            quiz = dict(result)
-            quiz['question_ids'] = from_json(quiz['question_ids'])
-            subj = get_subject(quiz['subject_code'])
-            quiz['subjects'] = {'name': subj['name'] if subj else quiz['subject_code']}
-            return quiz
-        return None
+        if not result:
+            return None
+        quiz = dict(result)
+        quiz['question_ids'] = from_json(quiz['question_ids'])
+        quiz['subjects'] = {
+            'name': get_subject_display_name(quiz['subject_code'], location)
+        }
+        return quiz
     except Exception as e:
         try:
             current_app.logger.error(f"Error fetching live quiz: {e}")
@@ -2343,6 +2372,12 @@ def notify_participant_joined(quiz_id, title, participant_name, creator_id):
 
 def get_user_subject_performance(student_id: int):
     try:
+        # Same location-aware naming as get_user_subject_list, so the
+        # dashboard mastery chart uses the same vocabulary as every
+        # dropdown on the platform.
+        student = get_student_by_id(student_id) or {}
+        location = student.get('location', '')
+
         cursor = execute_with_retry("""
             SELECT
                 qa.subject_code,
@@ -2357,8 +2392,16 @@ def get_user_subject_performance(student_id: int):
         subject_perf = []
         for row in results:
             subj = get_subject(row['subject_code'])
+            if subj:
+                display_name = (
+                    subj.get('name_so') or subj['name']
+                    if location == 'SO'
+                    else subj['name']
+                )
+            else:
+                display_name = row['subject_code']
             subject_perf.append({
-                'subject_name': subj['name'] if subj else row['subject_code'],
+                'subject_name': display_name,
                 'avg_score': row['avg_score'],
                 'attempt_count': row['attempt_count']
             })
