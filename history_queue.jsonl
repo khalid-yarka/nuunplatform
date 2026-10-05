@@ -14,3 +14,4 @@
 {"user_id": 50, "entry_type": "pdf_download", "action": "downloaded", "entry_id": null, "metadata": {"title": "Af Somali F4", "subject": "af_somali", "code": "GJ8R-YLEA"}, "created_at": "2026-10-02T07:03:51.931666+03:00"}
 {"user_id": 50, "entry_type": "pdf_download", "action": "downloaded", "entry_id": null, "metadata": {"title": "Untitled", "subject": null, "code": "UBS7-BO2H"}, "created_at": "2026-10-02T07:04:00.985221+03:00"}
 {"user_id": 50, "entry_type": "pdf_download", "action": "downloaded", "entry_id": null, "metadata": {"title": "Untitled", "subject": null, "code": "UBS7-BO2H"}, "created_at": "2026-10-02T07:04:09.391114+03:00"}
+{"user_id": 50, "entry_type": "save", "action": "saved", "entry_id": 666, "metadata": {"title": "F3 الأدب", "code": "TJLL-I4NT", "type": "pdf"}, "created_at": "2026-10-06T00:43:37.055241+03:00"}

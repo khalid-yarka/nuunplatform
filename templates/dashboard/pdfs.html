@@ -28,6 +28,216 @@
         background: var(--primary-light);
     }
     .lib-shuffle-btn i { font-size: 13px; }
+
+    /* ═══════════════════════════════════════════════
+       FILTER BAR
+       ═══════════════════════════════════════════════ */
+    .lib-filter-bar {
+        margin-bottom: 20px;
+    }
+
+    .lib-filter-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    /* ─── Search input with inline submit ─── */
+    .lib-search-wrap {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+    }
+    .lib-search-wrap input {
+        width: 100%;
+        height: 48px;
+        padding: 0 56px 0 46px;
+        border-radius: 12px;
+        border: 1.5px solid var(--border);
+        background: var(--surface);
+        font-size: 14px;
+        font-family: inherit;
+        color: var(--text);
+        transition: all 0.15s;
+        -webkit-appearance: none;
+    }
+    .lib-search-wrap input::placeholder { color: var(--text-muted); }
+    .lib-search-wrap input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.10);
+    }
+    .lib-search-wrap__icon {
+        position: absolute;
+        left: 16px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        font-size: 14px;
+        pointer-events: none;
+    }
+    .lib-search-wrap__go {
+        position: absolute;
+        right: 6px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 38px;
+        height: 38px;
+        border-radius: 9px;
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        transition: all 0.15s;
+        font-family: inherit;
+    }
+    .lib-search-wrap__go:hover { filter: brightness(0.93); }
+    .lib-search-wrap__go:active { transform: translateY(-50%) scale(0.96); }
+
+    /* Locked variants (login / premium) */
+    .lib-search-wrap.is-locked input { cursor: pointer; }
+    .lib-search-wrap.is-locked .lib-search-wrap__icon { color: var(--text-muted); }
+
+    /* ─── Filter toggle button (square) ─── */
+    .lib-filter-btn {
+        position: relative;
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: var(--surface);
+        border: 1.5px solid var(--border);
+        color: var(--text-secondary);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        transition: all 0.15s;
+        flex-shrink: 0;
+        font-family: inherit;
+        text-decoration: none;
+    }
+    .lib-filter-btn:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+        background: var(--primary-light);
+    }
+    .lib-filter-btn.is-open {
+        border-color: var(--primary);
+        color: var(--primary);
+        background: var(--primary-light);
+    }
+    .lib-filter-btn__dot {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--primary);
+        box-shadow: 0 0 0 2px var(--surface);
+        animation: libDotPulse 2s ease-in-out infinite;
+    }
+    @keyframes libDotPulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50%      { transform: scale(1.15); opacity: 0.85; }
+    }
+
+    /* ─── Filter panel ─── */
+    .lib-filter-panel {
+        margin-top: 12px;
+        padding: 20px;
+        background: var(--surface);
+        border: 1.5px solid var(--border);
+        border-radius: 14px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.06);
+        animation: libFilterIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+    /* Force hidden to actually hide — beats the display:grid above */
+    .lib-filter-panel[hidden] {
+        display: none !important;
+    }
+    @keyframes libFilterIn {
+        from { opacity: 0; transform: translateY(-8px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .lib-filter-field {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .lib-filter-field label {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .lib-filter-field select {
+        width: 100%;
+        height: 46px;
+        padding: 0 40px 0 14px;
+        border-radius: 10px;
+        border: 1.5px solid var(--border);
+        background: var(--background);
+        color: var(--text);
+        font-size: 14px;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.15s;
+        -webkit-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M6 9L1 4h10z' fill='%239CA3AF'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 14px center;
+        background-size: 11px;
+    }
+    .lib-filter-field select:focus {
+        outline: none;
+        border-color: var(--primary);
+        background-color: var(--surface);
+        box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.08);
+    }
+
+    .lib-filter-actions {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+        margin-top: 4px;
+    }
+    .lib-filter-actions .lib-btn { min-width: 110px; }
+    .lib-filter-actions .lib-btn--ghost {
+        background: transparent;
+        border: 1.5px solid var(--border);
+        color: var(--text-secondary);
+        text-decoration: none;
+    }
+    .lib-filter-actions .lib-btn--ghost:hover {
+        border-color: var(--danger, #DC2626);
+        color: var(--danger, #DC2626);
+        background: transparent;
+    }
+
+    @media (max-width: 640px) {
+        .lib-filter-panel {
+            grid-template-columns: 1fr;
+            padding: 16px;
+            gap: 14px;
+        }
+        .lib-filter-row { gap: 8px; }
+        .lib-search-wrap input { height: 46px; font-size: 16px; }
+        .lib-filter-btn { width: 46px; height: 46px; }
+    }
 </style>
 {% endblock %}
 
@@ -148,75 +358,146 @@
         </div>
     </div>
 
-    {# ─── Filters (hidden on shared-PDF view) ─── #}
+    {# ═══════════════════════════════════════════════════════
+       FILTER BAR
+       ═══════════════════════════════════════════════════════ #}
     {% if not showing_shared %}
-    <form method="GET" class="lib-filters">
-        {% if saved_filter %}
-            <input type="hidden" name="saved" value="1">
-        {% endif %}
-        {% if sort %}
-            <input type="hidden" name="sort" value="{{ sort }}">
-        {% endif %}
+        {% set has_active_filters = subject_filter or class_filter %}
+        {% set premium_filters = (search_level >= 2 and is_logged_in) %}
 
-        {% if search_level == 0 or not is_logged_in %}
-            {% if not is_logged_in %}
-                <a href="{{ url_for('auth.login', next=request.url) }}"
-                   class="lib-search lib-search--locked">
-                    <i class="fas fa-search"></i>
-                    <input type="text" disabled
-                           placeholder="{{ _('pdfs.search_locked_placeholder') }}"
-                           aria-label="Search (login required)">
-                </a>
-            {% else %}
-                <button type="button"
-                        class="lib-search lib-search--locked js-upgrade"
-                        data-feature="resource_search"
-                        data-required-tier="premium">
-                    <i class="fas fa-search"></i>
-                    <input type="text" disabled
-                           placeholder="{{ _('pdfs.search_locked_placeholder') }}"
-                           aria-label="Search (premium required)">
-                </button>
+        <form method="GET" class="lib-filter-bar" id="libFiltersForm" autocomplete="off">
+            {% if saved_filter %}
+                <input type="hidden" name="saved" value="1">
             {% endif %}
-        {% else %}
-            <div class="lib-search">
-                <i class="fas fa-search"></i>
-                <input type="text" name="search" value="{{ search_query }}"
-                       placeholder="{{ _('pdfs.search_placeholder') }}"
-                       autocomplete="off" spellcheck="false">
+            {% if sort %}
+                <input type="hidden" name="sort" value="{{ sort }}">
+            {% endif %}
+
+            <div class="lib-filter-row">
+
+                {# ── Search: three states depending on tier ── #}
+                {% if not is_logged_in %}
+                    {# Anonymous — locked to login #}
+                    <div class="lib-search-wrap is-locked" style="flex:1;">
+                        <i class="fas fa-search lib-search-wrap__icon"></i>
+                        <input type="text"
+                               placeholder="{{ _('pdfs.search_locked_placeholder') }}"
+                               onclick="window.location.href='{{ url_for('auth.login', next=request.url) }}'"
+                               readonly
+                               aria-label="Search (login required)">
+                    </div>
+
+                {% elif search_level == 0 %}
+                    {# Logged in but no search access — opens upgrade sheet #}
+                    <div class="lib-search-wrap is-locked js-upgrade"
+                         style="flex:1;"
+                         data-feature="resource_search"
+                         data-required-tier="premium">
+                        <i class="fas fa-search lib-search-wrap__icon"></i>
+                        <input type="text"
+                               placeholder="{{ _('pdfs.search_locked_placeholder') }}"
+                               readonly
+                               aria-label="Search (premium required)">
+                    </div>
+
+                {% else %}
+                    {# Search enabled — real input with inline submit #}
+                    <div class="lib-search-wrap" style="flex:1;">
+                        <i class="fas fa-search lib-search-wrap__icon"></i>
+                        <input type="text"
+                               name="search"
+                               id="libSearchInput"
+                               value="{{ search_query }}"
+                               placeholder="{{ _('pdfs.search_placeholder') }}"
+                               autocomplete="off"
+                               spellcheck="false"
+                               enterkeyhint="search"
+                               inputmode="search"
+                               aria-label="Search PDFs">
+                        <button type="submit"
+                                class="lib-search-wrap__go"
+                                id="libSearchGo"
+                                aria-label="{{ _('pdfs.search_btn') }}"
+                                title="{{ _('pdfs.search_btn') }}">
+                            <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                {% endif %}
+
+                {# ── Filter toggle (square, three states) ── #}
+                {% if premium_filters %}
+                    <button type="button"
+                            class="lib-filter-btn"
+                            id="libFilterToggle"
+                            aria-controls="libFilterPanel"
+                            aria-expanded="false"
+                            aria-label="{{ _('pdfs.filters_btn') }}"
+                            title="{{ _('pdfs.filters_btn') }}">
+                        <i class="fas fa-sliders-h"></i>
+                        {% if has_active_filters %}
+                            <span class="lib-filter-btn__dot" aria-hidden="true"></span>
+                        {% endif %}
+                    </button>
+                {% elif is_logged_in %}
+                    <button type="button"
+                            class="lib-filter-btn js-upgrade"
+                            data-feature="advanced_filters"
+                            data-required-tier="premium"
+                            aria-label="{{ _('pdfs.filters_locked_premium') }}"
+                            title="{{ _('pdfs.filters_locked_premium') }}">
+                        <i class="fas fa-lock"></i>
+                    </button>
+                {% else %}
+                    <a href="{{ url_for('auth.login', next=request.url) }}"
+                       class="lib-filter-btn"
+                       aria-label="{{ _('pdfs.filters_locked_login') }}"
+                       title="{{ _('pdfs.filters_locked_login') }}">
+                        <i class="fas fa-sliders-h"></i>
+                    </a>
+                {% endif %}
             </div>
-        {% endif %}
 
-        <select name="subject" class="lib-select" onchange="this.form.submit()"
-                {% if search_level < 1 %}disabled{% endif %}>
-            <option value="">{{ _('pdfs.all_subjects') }}</option>
-            {% for sub in subjects %}
-                <option value="{{ sub }}" {% if subject_filter == sub %}selected{% endif %}>{{ sub }}</option>
-            {% endfor %}
-        </select>
+            {# ── Filter panel (premium only) — starts hidden, opens on toggle ── #}
+            {% if premium_filters %}
+                <div class="lib-filter-panel" id="libFilterPanel" hidden>
 
-        <select name="class" class="lib-select" onchange="this.form.submit()"
-                {% if search_level < 2 %}disabled{% endif %}>
-            <option value="">{{ _('pdfs.all_classes') }}</option>
-            {% for cls in classes %}
-                <option value="{{ cls }}" {% if class_filter == cls %}selected{% endif %}>{{ cls }}</option>
-            {% endfor %}
-        </select>
+                    <div class="lib-filter-field">
+                        <label for="libFilterSubject">{{ _('pdfs.all_subjects') }}</label>
+                        <select name="subject" id="libFilterSubject">
+                            <option value="">{{ _('pdfs.all_subjects') }}</option>
+                            {% for sub in subjects %}
+                                <option value="{{ sub }}" {% if subject_filter == sub %}selected{% endif %}>{{ sub }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
-        <select name="curriculum" class="lib-select" onchange="this.form.submit()"
-                {% if search_level < 2 %}disabled{% endif %}>
-            <option value="">{{ _('pdfs.all_curricula') }}</option>
-            {% for cur in curricula %}
-                <option value="{{ cur }}" {% if curriculum_filter == cur %}selected{% endif %}>{{ cur }}</option>
-            {% endfor %}
-        </select>
+                    <div class="lib-filter-field">
+                        <label for="libFilterClass">{{ _('pdfs.all_classes') }}</label>
+                        <select name="class" id="libFilterClass">
+                            <option value="">{{ _('pdfs.all_classes') }}</option>
+                            {% for cls in classes %}
+                                <option value="{{ cls }}" {% if class_filter == cls %}selected{% endif %}>{{ cls }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
-        {% if search_level >= 1 and is_logged_in %}
-            <button type="submit" class="lib-btn lib-btn--primary">
-                <i class="fas fa-search"></i> {{ _('pdfs.search_btn') }}
-            </button>
-        {% endif %}
-    </form>
+                    <div class="lib-filter-actions">
+                        {% if has_active_filters %}
+                            <a href="{{ url_for('pdfs.list_pdfs',
+                                                search=search_query or None,
+                                                saved=1 if saved_filter else None,
+                                                sort=sort or None) }}"
+                               class="lib-btn lib-btn--ghost">
+                                <i class="fas fa-times"></i> {{ _('pdfs.reset_filters_btn') }}
+                            </a>
+                        {% endif %}
+                        <button type="submit" class="lib-btn lib-btn--primary">
+                            <i class="fas fa-check"></i> {{ _('pdfs.apply_filters_btn') }}
+                        </button>
+                    </div>
+                </div>
+            {% endif %}
+        </form>
     {% endif %}
 
     {# ─── Results ─── #}
@@ -236,11 +517,10 @@
             <div class="lib-results__right">
                 {% if is_logged_in %}
                     {% set _tab_args = {
-                        'search':     search_query or None,
-                        'subject':    subject_filter or None,
-                        'class':      class_filter or None,
-                        'curriculum': curriculum_filter or None,
-                        'sort':       sort or None,
+                        'search':  search_query or None,
+                        'subject': subject_filter or None,
+                        'class':   class_filter or None,
+                        'sort':    sort or None,
                     } %}
                     <div class="lib-saved-tabs" role="tablist" aria-label="Filter by saved">
                         <a href="{{ url_for('pdfs.list_pdfs', **_tab_args) }}"
@@ -270,7 +550,6 @@
                                     search=search_query or None,
                                     subject=subject_filter or None,
                                     class=class_filter or None,
-                                    curriculum=curriculum_filter or None,
                                     saved=1 if saved_filter else None,
                                     sort=sort or None,
                                     reseed='1') }}"
@@ -360,10 +639,10 @@
                         </div>
                     </div>
 
+                    {# Curriculum tag removed — subject + class only #}
                     <div class="pdf-card__tags">
                         {% if pdf.subject %}<span class="pdf-card__tag">{{ pdf.subject }}</span>{% endif %}
                         {% if pdf.class %}<span class="pdf-card__tag">{{ pdf.class }}</span>{% endif %}
-                        {% if pdf.curriculum %}<span class="pdf-card__tag">{{ pdf.curriculum }}</span>{% endif %}
                     </div>
 
                     {% if pdf.description %}
@@ -509,12 +788,11 @@
         {% if total_pages > 1 and not showing_shared %}
             <nav class="lib-pagination" aria-label="Pagination">
                 {% set base_args = {
-                    'search':     search_query or None,
-                    'subject':    subject_filter or None,
-                    'class':      class_filter or None,
-                    'curriculum': curriculum_filter or None,
-                    'saved':      1 if saved_filter else None,
-                    'sort':       sort or None,
+                    'search':  search_query or None,
+                    'subject': subject_filter or None,
+                    'class':   class_filter or None,
+                    'saved':   1 if saved_filter else None,
+                    'sort':    sort or None,
                 } %}
 
                 {% if page > 1 %}
@@ -618,5 +896,78 @@ window.NUUN_PDF = {
     }
 };
 </script>
+
+{# ═══════════════════════════════════════════════════════
+   SEARCH + FILTER HANDLERS
+   Isolated in this page so pdfs.js stays untouched.
+   ═══════════════════════════════════════════════════════ #}
+<script>
+(function () {
+    'use strict';
+
+    var form      = document.getElementById('libFiltersForm');
+    var searchBox = document.getElementById('libSearchInput');
+    var toggle    = document.getElementById('libFilterToggle');
+    var panel     = document.getElementById('libFilterPanel');
+
+    /* ─────────────────────────────────────────────
+       Search: explicit Enter → submit
+       Prevents mobile "Next" behaviour jumping into
+       the filter dropdowns when the user actually
+       wants to search.
+       ───────────────────────────────────────────── */
+    if (searchBox && form) {
+        searchBox.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.keyCode === 13) {
+                e.preventDefault();
+                e.stopPropagation();
+                form.submit();
+                return false;
+            }
+        });
+    }
+
+    /* ─────────────────────────────────────────────
+       Filter panel toggle
+       Panel starts hidden. Only opens on toggle click.
+       ───────────────────────────────────────────── */
+    if (toggle && panel) {
+        // Enforce the hidden state on load — belt-and-braces against
+        // any stylesheet that tries to force display on it.
+        panel.hidden = true;
+        toggle.classList.remove('is-open');
+        toggle.setAttribute('aria-expanded', 'false');
+
+        function setOpen(open) {
+            panel.hidden = !open;
+            toggle.classList.toggle('is-open', open);
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+
+        toggle.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(panel.hidden);
+        });
+
+        // Click outside closes the panel
+        document.addEventListener('click', function (e) {
+            if (panel.hidden) return;
+            if (panel.contains(e.target)) return;
+            if (toggle.contains(e.target)) return;
+            setOpen(false);
+        });
+
+        // Escape closes the panel
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !panel.hidden) {
+                setOpen(false);
+                toggle.focus();
+            }
+        });
+    }
+})();
+</script>
+
 <script src="{{ url_for('static', filename='js/pdfs.js') }}" defer></script>
 {% endblock %}

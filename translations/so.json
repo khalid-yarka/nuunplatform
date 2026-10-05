@@ -1402,5 +1402,10 @@
 "settings.notifications.push.types.telegram_broadcast": "Ogeysiiska tartamada Telegram",
 "settings.notifications.types.telegram_broadcast.desc": "Hel fariin Telegram marka tartan cusub oo dadweyne la abuuro.",
 "settings.notifications.push.types.telegram_broadcast": "Ogeysiiska tartamada Telegram",
-"settings.notifications.types.telegram_broadcast.desc": "Hel fariin Telegram marka tartan cusub oo dadweyne la abuuro."
+"settings.notifications.types.telegram_broadcast.desc": "Hel fariin Telegram marka tartan cusub oo dadweyne la abuuro.",
+  "pdfs.filters_btn":         "Shaandheynta",
+"pdfs.apply_filters_btn":   "Codso shaandheynta",
+"pdfs.reset_filters_btn":   "Nadiifi",
+"pdfs.filters_locked_premium": "Kor u qaado si aad u hesho shaandheynta",
+"pdfs.filters_locked_login":   "Gal si aad u isticmaasho shaandheynta"
 }

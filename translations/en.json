@@ -1402,5 +1402,10 @@
   "settings.notifications.push.types.telegram_broadcast": "Telegram Quiz Announcements",
   "settings.notifications.types.telegram_broadcast.desc": "Get a message on Telegram when a new public competition is created.",
 "settings.notifications.push.types.telegram_broadcast": "Telegram Quiz Announcements",
-"settings.notifications.types.telegram_broadcast.desc": "Get a message on Telegram when a new public competition is created."
+"settings.notifications.types.telegram_broadcast.desc": "Get a message on Telegram when a new public competition is created.",
+"pdfs.filters_btn":         "Filters",
+"pdfs.apply_filters_btn":   "Apply filters",
+"pdfs.reset_filters_btn":   "Reset",
+"pdfs.filters_locked_premium": "Upgrade to unlock filters",
+"pdfs.filters_locked_login":   "Log in to use filters"
 }
