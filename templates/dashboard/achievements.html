@@ -1,0 +1,780 @@
+{# ============================================================
+   templates/dashboard/achievements.html
+   ============================================================
+   User-facing achievements grid.
+
+   Route passes:
+     achievements   — list of dicts, each with at least
+                      id, name, description, icon, tier_required,
+                      unlocked_at (None when locked)
+     showcase       — list of badges the user has chosen to showcase
+                      (premium feature; empty when locked)
+     history_level  — 0 hidden, 1 basic (10 items), 2 full timeline
+     showcase_level — 0 locked, 1/2 unlocked
+
+   Page renders three sections:
+     1. Header summary card with unlock progress
+     2. Grid of all visible achievements
+     3. Showcase section (premium only) — the badges the user chose
+        to display on their public profile
+   ============================================================ #}
+{% extends "dashboard_base.html" %}
+
+{% block title %}{{ _('achievements.title') }} - NuunPlatform{% endblock %}
+{% block page_title %}{{ _('achievements.title') }}{% endblock %}
+
+{% block dashboard_css %}
+<style>
+    .ach-page { max-width: 100%; }
+
+    /* ── Breadcrumb ── */
+    .ach-breadcrumb {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 13px; color: var(--text-secondary);
+        margin-bottom: 16px;
+    }
+    .ach-breadcrumb a { color: var(--text-secondary); text-decoration: none; }
+    .ach-breadcrumb a:hover { color: var(--primary); }
+    .ach-breadcrumb .sep { color: var(--text-muted); }
+    .ach-breadcrumb .current { color: var(--text); font-weight: 600; }
+
+    /* ── Header summary ── */
+    .ach-summary {
+        position: relative;
+        background:
+            radial-gradient(900px 200px at 0% 0%, rgba(245, 158, 11, 0.08), transparent 60%),
+            radial-gradient(700px 180px at 100% 100%, rgba(255, 49, 56, 0.05), transparent 55%),
+            var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 26px 28px;
+        margin-bottom: 24px;
+        overflow: hidden;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+    }
+    .ach-summary::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #FCD34D, #F59E0B, #EF4444);
+    }
+    .ach-summary__top {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    .ach-summary__badge {
+        width: 68px; height: 68px;
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 32px;
+        background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+        box-shadow:
+            0 6px 20px rgba(245, 158, 11, 0.28),
+            inset 0 0 0 1px rgba(245, 158, 11, 0.28);
+        flex-shrink: 0;
+    }
+    [data-theme="dark"] .ach-summary__badge {
+        background: linear-gradient(135deg, #3A2E1A, #4A3620);
+        box-shadow:
+            0 6px 20px rgba(245, 158, 11, 0.28),
+            inset 0 0 0 1px rgba(245, 158, 11, 0.35);
+    }
+    .ach-summary__body { flex: 1; min-width: 220px; }
+    .ach-summary__title {
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: -0.4px;
+        color: var(--text);
+        margin: 0 0 6px;
+        line-height: 1.2;
+    }
+    .ach-summary__subtitle {
+        font-size: 13.5px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+        margin: 0;
+    }
+    .ach-summary__tier {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        flex-shrink: 0;
+    }
+    .ach-summary__tier.free {
+        background: #E5E7EB;
+        color: #4B5563;
+    }
+    .ach-summary__tier.premium {
+        background: linear-gradient(135deg, #FCD34D, #F59E0B);
+        color: #78350F;
+        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.28);
+    }
+    [data-theme="dark"] .ach-summary__tier.free {
+        background: #374151; color: #9CA3AF;
+    }
+
+    /* ── Progress bar ── */
+    .ach-progress {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .ach-progress__head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        font-size: 13px;
+    }
+    .ach-progress__label { color: var(--text-secondary); font-weight: 500; }
+    .ach-progress__value {
+        color: var(--text);
+        font-weight: 800;
+        font-size: 15px;
+        font-variant-numeric: tabular-nums;
+    }
+    .ach-progress__value .pct {
+        color: var(--primary);
+        margin-left: 4px;
+        font-size: 13px;
+    }
+    .ach-progress__track {
+        height: 10px;
+        background: var(--background);
+        border-radius: 8px;
+        overflow: hidden;
+        position: relative;
+    }
+    .ach-progress__fill {
+        height: 100%;
+        border-radius: 8px;
+        background: linear-gradient(90deg, #FCD34D, #F59E0B);
+        transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+        box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+    }
+    .ach-progress__stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+    }
+    .ach-progress__stat {
+        padding: 12px 14px;
+        background: var(--background);
+        border: 1px solid var(--border-light);
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+    .ach-progress__stat-label {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .ach-progress__stat-value {
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.4px;
+        line-height: 1.1;
+    }
+    .ach-progress__stat-value.gold { color: #B45309; }
+    .ach-progress__stat-value.green { color: #059669; }
+
+    /* ── Section header ── */
+    .ach-section {
+        margin-bottom: 28px;
+    }
+    .ach-section__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+        flex-wrap: wrap;
+    }
+    .ach-section__title {
+        font-size: 17px;
+        font-weight: 800;
+        letter-spacing: -0.2px;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin: 0;
+    }
+    .ach-section__title i { color: var(--primary); font-size: 15px; }
+    .ach-section__count {
+        font-size: 12px;
+        color: var(--text-muted);
+        font-weight: 600;
+    }
+
+    /* ── Achievements grid ── */
+    .ach-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 14px;
+    }
+
+    .ach-card {
+        position: relative;
+        padding: 18px 16px 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        transition: all 0.2s ease;
+        overflow: hidden;
+    }
+    .ach-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+    }
+
+    /* Locked state */
+    .ach-card.is-locked {
+        background: var(--background);
+        opacity: 0.78;
+    }
+    .ach-card.is-locked .ach-card__icon {
+        filter: grayscale(1);
+        opacity: 0.45;
+    }
+    .ach-card.is-locked .ach-card__name {
+        color: var(--text-secondary);
+    }
+
+    /* Unlocked state */
+    .ach-card.is-unlocked {
+        background: var(--surface);
+        border-color: rgba(16, 185, 129, 0.35);
+    }
+    .ach-card.is-unlocked::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #10B981, #059669);
+    }
+
+    /* Premium-only achievement */
+    .ach-card.is-premium-locked {
+        border-color: rgba(245, 158, 11, 0.32);
+    }
+    .ach-card.is-premium-locked::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #FCD34D, #F59E0B);
+    }
+
+    .ach-card__icon {
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 26px;
+        background: var(--background);
+        box-shadow: inset 0 0 0 1px var(--border-light);
+        line-height: 1;
+        flex-shrink: 0;
+    }
+    .ach-card.is-unlocked .ach-card__icon {
+        background: linear-gradient(135deg, #ECFDF5, #D1FAE5);
+        box-shadow:
+            inset 0 0 0 1px rgba(16, 185, 129, 0.35),
+            0 4px 12px rgba(16, 185, 129, 0.15);
+    }
+    [data-theme="dark"] .ach-card.is-unlocked .ach-card__icon {
+        background: linear-gradient(135deg, #1A3A2E, #0F2E22);
+    }
+
+    .ach-card__body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+    }
+    .ach-card__name {
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--text);
+        line-height: 1.3;
+        letter-spacing: -0.1px;
+        margin: 0;
+    }
+    .ach-card__desc {
+        font-size: 12.5px;
+        color: var(--text-secondary);
+        line-height: 1.45;
+        margin: 0;
+    }
+
+    .ach-card__meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--border-light);
+        font-size: 11.5px;
+        color: var(--text-muted);
+        flex-wrap: wrap;
+    }
+    .ach-card__status {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-weight: 700;
+        font-size: 11px;
+        letter-spacing: 0.3px;
+        padding: 3px 9px;
+        border-radius: 10px;
+    }
+    .ach-card__status.unlocked {
+        background: #ECFDF5;
+        color: #065F46;
+    }
+    .ach-card__status.locked {
+        background: var(--background);
+        color: var(--text-muted);
+    }
+    .ach-card__status.premium {
+        background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+        color: #78350F;
+    }
+    [data-theme="dark"] .ach-card__status.unlocked {
+        background: #1A3A2E; color: #34D399;
+    }
+    [data-theme="dark"] .ach-card__status.premium {
+        background: #3A2E1A; color: #FBBF24;
+    }
+    .ach-card__date {
+        font-variant-numeric: tabular-nums;
+        font-weight: 500;
+    }
+
+    /* Corner ribbon for premium achievements */
+    .ach-card__premium-ribbon {
+        position: absolute;
+        top: 12px;
+        right: -28px;
+        transform: rotate(38deg);
+        background: linear-gradient(135deg, #FCD34D, #F59E0B);
+        color: #78350F;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.7px;
+        padding: 3px 32px;
+        text-transform: uppercase;
+        box-shadow: 0 2px 6px rgba(245, 158, 11, 0.35);
+    }
+
+    /* ── Showcase section ── */
+    .ach-showcase {
+        padding: 22px 24px;
+        background:
+            radial-gradient(700px 180px at 0% 0%, rgba(245, 158, 11, 0.08), transparent 60%),
+            var(--surface);
+        border: 1px solid rgba(245, 158, 11, 0.28);
+        border-radius: 18px;
+        position: relative;
+        overflow: hidden;
+    }
+    .ach-showcase::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #FCD34D, #F59E0B);
+    }
+    .ach-showcase--locked {
+        background: var(--background);
+        border-style: dashed;
+        border-color: var(--border);
+    }
+    .ach-showcase--locked::before { display: none; }
+
+    .ach-showcase__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+    }
+    .ach-showcase__title {
+        font-size: 15px;
+        font-weight: 800;
+        color: var(--text);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        letter-spacing: -0.1px;
+    }
+    .ach-showcase__title i {
+        color: #B45309;
+    }
+    [data-theme="dark"] .ach-showcase__title i { color: #FCD34D; }
+
+    .ach-showcase__badges {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+    }
+    .ach-badge {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 16px 20px;
+        background: var(--surface);
+        border: 1px solid var(--border-light);
+        border-radius: 16px;
+        min-width: 110px;
+        transition: all 0.2s ease;
+    }
+    .ach-badge:hover {
+        transform: translateY(-2px);
+        border-color: rgba(245, 158, 11, 0.4);
+        box-shadow: 0 8px 20px rgba(245, 158, 11, 0.12);
+    }
+    .ach-badge__icon {
+        width: 56px; height: 56px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+        box-shadow:
+            inset 0 0 0 1px rgba(245, 158, 11, 0.30),
+            0 4px 14px rgba(245, 158, 11, 0.18);
+        line-height: 1;
+    }
+    [data-theme="dark"] .ach-badge__icon {
+        background: linear-gradient(135deg, #4A3620, #3A2E1A);
+    }
+    .ach-badge__name {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text);
+        text-align: center;
+        line-height: 1.3;
+        max-width: 110px;
+    }
+
+    .ach-showcase__empty {
+        text-align: center;
+        padding: 24px 20px;
+        color: var(--text-muted);
+        font-size: 13px;
+        font-style: italic;
+    }
+
+    .ach-showcase__lock {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 18px 20px;
+        background: var(--surface);
+        border-radius: 14px;
+        border: 1px solid var(--border-light);
+    }
+    .ach-showcase__lock-icon {
+        font-size: 30px;
+        flex-shrink: 0;
+        line-height: 1;
+    }
+    .ach-showcase__lock-body { flex: 1; min-width: 0; }
+    .ach-showcase__lock-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--text);
+        margin: 0 0 4px;
+    }
+    .ach-showcase__lock-desc {
+        font-size: 12.5px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+        margin: 0;
+    }
+
+    /* ── Empty state ── */
+    .ach-empty {
+        text-align: center;
+        padding: 60px 24px;
+        background: var(--surface);
+        border: 1px dashed var(--border);
+        border-radius: 20px;
+    }
+    .ach-empty__icon {
+        font-size: 60px;
+        opacity: 0.35;
+        display: block;
+        margin-bottom: 14px;
+        line-height: 1;
+    }
+    .ach-empty__title {
+        font-size: 18px;
+        font-weight: 800;
+        color: var(--text);
+        margin: 0 0 6px;
+    }
+    .ach-empty__desc {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin: 0 auto;
+        max-width: 400px;
+        line-height: 1.55;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+        .ach-summary { padding: 22px 20px; border-radius: 16px; }
+        .ach-summary__badge { width: 56px; height: 56px; font-size: 26px; border-radius: 16px; }
+        .ach-summary__title { font-size: 18px; }
+        .ach-grid { grid-template-columns: 1fr; }
+        .ach-showcase { padding: 18px 18px; }
+    }
+</style>
+{% endblock %}
+
+
+{% block dashboard_content %}
+{% set t = normalize_tier(tier if tier is defined else session.tier) %}
+
+{# ── Compute unlocked / total in Jinja ── #}
+{% set ns = namespace(unlocked=0, total=0, premium_only=0, locked_count=0) %}
+{% for a in achievements %}
+    {% set ns.total = ns.total + 1 %}
+    {% set is_unlocked = (a.unlocked_at is defined and a.unlocked_at) %}
+    {% if is_unlocked %}
+        {% set ns.unlocked = ns.unlocked + 1 %}
+    {% else %}
+        {% set ns.locked_count = ns.locked_count + 1 %}
+        {% set is_premium_req = (a.tier_required is defined and a.tier_required == 'premium') %}
+        {% if is_premium_req %}
+            {% set ns.premium_only = ns.premium_only + 1 %}
+        {% endif %}
+    {% endif %}
+{% endfor %}
+{% set pct = ((ns.unlocked / ns.total) * 100) | round(0, 'floor') if ns.total > 0 else 0 %}
+
+<div class="ach-page">
+
+    {# ── Breadcrumb ── #}
+    <div class="ach-breadcrumb">
+        <a href="{{ url_for('dashboard.home') }}">{{ _('nav.dashboard') }}</a>
+        <span class="sep">/</span>
+        <span class="current">{{ _('achievements.title') }}</span>
+    </div>
+
+    {# ── Summary header ── #}
+    <div class="ach-summary">
+        <div class="ach-summary__top">
+            <div class="ach-summary__badge" aria-hidden="true">🏆</div>
+            <div class="ach-summary__body">
+                <h1 class="ach-summary__title">{{ _('achievements.title') }}</h1>
+                <p class="ach-summary__subtitle">
+                    Unlock badges as you practice, compete, and progress on the platform.
+                    {% if t == 'premium' %}
+                        Every badge is visible on your public profile.
+                    {% endif %}
+                </p>
+            </div>
+            <span class="ach-summary__tier {{ t }}">
+                {% if t == 'premium' %}🔑 {{ _('tier.premium')|upper }}{% else %}🔓 {{ _('tier.free')|upper }}{% endif %}
+            </span>
+        </div>
+
+        {% if ns.total > 0 %}
+        <div class="ach-progress">
+            <div class="ach-progress__head">
+                <span class="ach-progress__label">
+                    {{ _('achievements.progress_label') if _('achievements.progress_label') != 'achievements.progress_label' else 'Unlocked' }}
+                </span>
+                <span class="ach-progress__value">
+                    {{ ns.unlocked }} / {{ ns.total }}
+                    <span class="pct">{{ pct }}%</span>
+                </span>
+            </div>
+            <div class="ach-progress__track">
+                <div class="ach-progress__fill" style="width: {{ pct }}%;"></div>
+            </div>
+
+            <div class="ach-progress__stats">
+                <div class="ach-progress__stat">
+                    <span class="ach-progress__stat-label">Unlocked</span>
+                    <span class="ach-progress__stat-value gold">{{ ns.unlocked }}</span>
+                </div>
+                <div class="ach-progress__stat">
+                    <span class="ach-progress__stat-label">Remaining</span>
+                    <span class="ach-progress__stat-value">{{ ns.locked_count }}</span>
+                </div>
+                <div class="ach-progress__stat">
+                    <span class="ach-progress__stat-label">Total</span>
+                    <span class="ach-progress__stat-value">{{ ns.total }}</span>
+                </div>
+                {% if ns.premium_only > 0 %}
+                <div class="ach-progress__stat">
+                    <span class="ach-progress__stat-label">Premium only</span>
+                    <span class="ach-progress__stat-value green">{{ ns.premium_only }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {# ── Achievements grid ── #}
+    {% if achievements %}
+    <section class="ach-section">
+        <div class="ach-section__head">
+            <h2 class="ach-section__title">
+                <i class="fas fa-medal"></i>
+                {{ _('achievements.all_badges') if _('achievements.all_badges') != 'achievements.all_badges' else 'All Badges' }}
+            </h2>
+            <span class="ach-section__count">{{ ns.total }} total</span>
+        </div>
+
+        <div class="ach-grid">
+            {% for a in achievements %}
+                {% set is_unlocked = (a.unlocked_at is defined and a.unlocked_at) %}
+                {% set is_premium_req = (a.tier_required is defined and a.tier_required == 'premium') %}
+                {% set blocked_by_tier = (is_premium_req and t != 'premium' and not is_unlocked) %}
+
+                <div class="ach-card
+                            {% if is_unlocked %}is-unlocked
+                            {% elif blocked_by_tier %}is-locked is-premium-locked
+                            {% else %}is-locked{% endif %}">
+
+                    {% if is_premium_req %}
+                        <span class="ach-card__premium-ribbon">PREMIUM</span>
+                    {% endif %}
+
+                    <div class="ach-card__icon" aria-hidden="true">
+                        {{ a.icon if a.icon else '🏆' }}
+                    </div>
+
+                    <div class="ach-card__body">
+                        <h3 class="ach-card__name">{{ a.name or 'Achievement' }}</h3>
+                        {% if a.description %}
+                            <p class="ach-card__desc">{{ a.description }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="ach-card__meta">
+                        {% if is_unlocked %}
+                            <span class="ach-card__status unlocked">
+                                <i class="fas fa-check"></i> Unlocked
+                            </span>
+                            {% if a.unlocked_at %}
+                                <span class="ach-card__date">
+                                    {{ a.unlocked_at | dt_date }}
+                                </span>
+                            {% endif %}
+                        {% elif blocked_by_tier %}
+                            <span class="ach-card__status premium">
+                                🔑 Premium
+                            </span>
+                        {% else %}
+                            <span class="ach-card__status locked">
+                                <i class="fas fa-lock"></i> Locked
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% else %}
+    <div class="ach-empty">
+        <span class="ach-empty__icon">🏆</span>
+        <h3 class="ach-empty__title">{{ _('achievements.empty_title') if _('achievements.empty_title') != 'achievements.empty_title' else 'No badges yet' }}</h3>
+        <p class="ach-empty__desc">
+            Achievement badges will appear here once you start practicing and competing.
+        </p>
+    </div>
+    {% endif %}
+
+    {# ── Showcase section ── #}
+    {% if showcase_level > 0 %}
+    <section class="ach-section">
+        <div class="ach-showcase">
+            <div class="ach-showcase__head">
+                <h2 class="ach-showcase__title">
+                    <i class="fas fa-star"></i>
+                    {{ _('achievements.showcase_title') if _('achievements.showcase_title') != 'achievements.showcase_title' else 'Showcase' }}
+                </h2>
+                <span class="ach-section__count">Visible on your profile</span>
+            </div>
+
+            {% if showcase %}
+                <div class="ach-showcase__badges">
+                    {% for b in showcase %}
+                        <div class="ach-badge">
+                            <span class="ach-badge__icon" aria-hidden="true">
+                                {{ b.icon if b.icon else '🏆' }}
+                            </span>
+                            <span class="ach-badge__name">{{ b.name or 'Badge' }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="ach-showcase__empty">
+                    You haven't chosen any badges to showcase yet.
+                </div>
+            {% endif %}
+        </div>
+    </section>
+    {% else %}
+    <section class="ach-section">
+        <div class="ach-showcase ach-showcase--locked">
+            <div class="ach-showcase__head">
+                <h2 class="ach-showcase__title">
+                    <i class="fas fa-star"></i> Showcase
+                </h2>
+            </div>
+            <div class="ach-showcase__lock">
+                <span class="ach-showcase__lock-icon" aria-hidden="true">🔒</span>
+                <div class="ach-showcase__lock-body">
+                    <h3 class="ach-showcase__lock-title">Badge showcase is a Premium feature</h3>
+                    <p class="ach-showcase__lock-desc">
+                        Upgrade to pick your favourite badges and display them on your public profile.
+                    </p>
+                </div>
+                <button type="button"
+                        class="btn btn-primary upgrade-btn js-upgrade"
+                        data-feature="badge_showcase"
+                        data-required-tier="premium">
+                    <i class="fas fa-rocket"></i> Upgrade
+                </button>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+</div>
+{% endblock %}

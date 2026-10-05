@@ -14,7 +14,7 @@ from logging.handlers import RotatingFileHandler
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    session, jsonify, g, flash,
+    session, jsonify, g, flash, Response, send_from_directory,
 )
 
 from config import Config
@@ -854,9 +854,22 @@ def telegram_webhook_legacy():
 @app.route('/favicon.ico')
 def favicon():
     return '', 204
+@app.route('/apple-touch-icon.png', methods=['GET'])
+@app.route('/apple-touch-icon-precomposed.png', methods=['GET'])
+@app.route('/apple-touch-icon-<int:size>.png', methods=['GET'])
+def apple_touch_icon_probe(size=None):
+    """
+    Silence iOS Safari's default-path probe.
+
+    The canonical apple-touch-icon is declared in base.html <head>.
+    Safari still probes these root paths on first paint for some
+    device and OS combinations. Returning 204 stops the 404 from
+    polluting the error dashboard. It does not change which icon
+    iOS actually uses — that comes from the <head> declarations.
+    """
+    return '', 204
 
 
-from flask import send_from_directory
 
 
 @app.route('/manifest.json')
