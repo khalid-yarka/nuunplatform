@@ -1,82 +1,80 @@
 {# ============================================================
    templates/dashboard/admin/content/pdf_edit.html
-   PDF editor with PDF.js inline preview (works on mobile),
-   full classification catalog, premium toggle, Get file.
+   Unified PDF edit room — works for pending, staged, live, flagged.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
 {% block admin_title_icon %}<i class="fas fa-file-pdf header-icon"></i>{% endblock %}
-{% block admin_title %}Edit PDF{% endblock %}
-{% block admin_subtitle %}{{ pdf.title or 'Untitled' }}{% endblock %}
+{% block admin_title %}
+    {% if pdf_state == 'pending' %}Process PDF
+    {% elif pdf_state == 'staged' %}Edit staged PDF
+    {% else %}Edit PDF{% endif %}
+{% endblock %}
+{% block admin_subtitle %}{{ pdf.title or pdf.filename or 'Untitled' }}{% endblock %}
 
 {% block admin_breadcrumb %}
     <span class="sep">/</span>
-    <a href="{{ url_for('admin_content.pdfs', tab='library') }}">PDFs</a>
+    <a href="{{ url_for('admin_content.pdfs') }}">PDFs</a>
     <span class="sep">/</span>
     <span class="current">{{ pdf.code or ('PDF #' ~ pdf.id) }}</span>
 {% endblock %}
 
 {% block admin_actions %}
-<div class="pdf-edit-actions">
-    <a href="{{ url_for('admin_content.pdfs', tab='library') }}" class="admin-btn secondary">
+    <a href="{{ url_for('admin_content.pdfs') }}" class="admin-btn secondary">
         <i class="fas fa-arrow-left"></i> Back
     </a>
-
     <div class="pdf-getfile" id="pdfGetFile">
-        <button type="button" class="admin-btn secondary" id="pdfGetFileBtn" aria-haspopup="true" aria-expanded="false">
+        <button type="button" class="admin-btn secondary" id="pdfGetFileBtn" aria-haspopup="true">
             <i class="fas fa-download"></i>
             <span>Get file</span>
             <i class="fas fa-chevron-down" style="font-size:9px;opacity:.7;"></i>
         </button>
         <div class="pdf-getfile__menu" id="pdfGetFileMenu" hidden>
-            <a href="{{ url_for('admin_content.pdf_library_preview', pdf_id=pdf.id) }}"
-               target="_blank" rel="noopener" class="pdf-getfile__item">
-                <i class="fas fa-eye"></i>
-                <div>
-                    <div class="pdf-getfile__title">Preview in new tab</div>
-                    <div class="pdf-getfile__desc">Opens the PDF viewer</div>
-                </div>
-            </a>
-            <a href="{{ url_for('admin_content.pdf_download', pdf_id=pdf.id) }}"
-               class="pdf-getfile__item">
-                <i class="fas fa-file-download"></i>
-                <div>
-                    <div class="pdf-getfile__title">Download PDF</div>
-                    <div class="pdf-getfile__desc">Save to device</div>
-                </div>
-            </a>
+            {% if pdf_state != 'pending' %}
+                <a href="{{ url_for('admin_content.pdf_library_preview', pdf_id=pdf.id) }}"
+                   target="_blank" rel="noopener" class="pdf-getfile__item">
+                    <i class="fas fa-eye"></i>
+                    <div>
+                        <div class="pdf-getfile__title">Preview in new tab</div>
+                        <div class="pdf-getfile__desc">Open the PDF viewer</div>
+                    </div>
+                </a>
+                <a href="{{ url_for('admin_content.pdf_download', pdf_id=pdf.id) }}"
+                   class="pdf-getfile__item">
+                    <i class="fas fa-file-download"></i>
+                    <div>
+                        <div class="pdf-getfile__title">Download PDF</div>
+                        <div class="pdf-getfile__desc">Save to device</div>
+                    </div>
+                </a>
+            {% endif %}
             {% if pdf.code %}
-            <button type="button" class="pdf-getfile__item" id="pdfCopyCodeItem" data-code="{{ pdf.code }}">
-                <i class="fas fa-hashtag"></i>
-                <div>
-                    <div class="pdf-getfile__title">Copy PDF code</div>
-                    <div class="pdf-getfile__desc">{{ pdf.code }}</div>
-                </div>
-            </button>
+                <button type="button" class="pdf-getfile__item" id="pdfCopyCodeItem"
+                        data-code="{{ pdf.code }}">
+                    <i class="fas fa-hashtag"></i>
+                    <div>
+                        <div class="pdf-getfile__title">Copy PDF code</div>
+                        <div class="pdf-getfile__desc">{{ pdf.code }}</div>
+                    </div>
+                </button>
             {% endif %}
         </div>
     </div>
-
-    {% if can_delete_pdfs %}
-    <button type="button" class="admin-btn danger" id="pdfDeleteBtn">
-        <i class="fas fa-trash"></i> Delete
-    </button>
+    {% if can_delete_pdfs and pdf_state != 'pending' %}
+        <button type="button" class="admin-btn danger" id="pdfDeleteBtn">
+            <i class="fas fa-trash"></i> Delete
+        </button>
     {% endif %}
-</div>
 {% endblock %}
 
 
 {% block admin_css %}
 <style>
 /* ═══════════════════════════════════════════════════════════
-   PDF EDIT PAGE
+   PDF EDIT ROOM
    ═══════════════════════════════════════════════════════════ */
+.pdf-edit-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
-.pdf-edit-actions {
-    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-}
-
-/* ─── Get file dropdown ─────────────────────────────── */
 .pdf-getfile { position: relative; }
 .pdf-getfile__menu {
     position: absolute; top: calc(100% + 6px); right: 0;
@@ -114,7 +112,42 @@
     font-size: 11.5px; color: var(--text-muted);
     margin-top: 2px; line-height: 1.3;
 }
-.pdf-getfile__item:hover .pdf-getfile__desc { color: inherit; opacity: 0.8; }
+
+/* ─── State banner ──────────────────────────────────── */
+.pdf-state-banner {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    margin-bottom: 18px;
+    border: 1.5px solid;
+    font-size: 13.5px;
+    line-height: 1.5;
+}
+.pdf-state-banner i.bi-icon { font-size: 22px; flex-shrink: 0; }
+.pdf-state-banner .bs-body { flex: 1; min-width: 0; }
+.pdf-state-banner .bs-title { font-weight: 800; font-size: 14px; margin-bottom: 2px; }
+.pdf-state-banner .bs-desc { font-weight: 500; opacity: 0.85; font-size: 12.5px; }
+
+.pdf-state-banner.b-pending {
+    background: linear-gradient(135deg, #FFFBEB, #FEF3C7);
+    border-color: #FCD34D;
+    color: #78350F;
+}
+.pdf-state-banner.b-staged {
+    background: linear-gradient(135deg, #EFF6FF, #DBEAFE);
+    border-color: #93C5FD;
+    color: #1E3A8A;
+}
+.pdf-state-banner.b-live {
+    background: linear-gradient(135deg, #ECFDF5, #D1FAE5);
+    border-color: #6EE7B7;
+    color: #064E3B;
+}
+.pdf-state-banner.b-flagged {
+    background: linear-gradient(135deg, #FEF2F2, #FEE2E2);
+    border-color: #FCA5A5;
+    color: #7F1D1D;
+}
 
 /* ─── Layout ────────────────────────────────────────── */
 .pdf-edit-grid {
@@ -124,37 +157,35 @@
 }
 @media (max-width: 1100px) { .pdf-edit-grid { grid-template-columns: 1fr; } }
 
-/* ─── Card primitive ────────────────────────────────── */
+/* ─── Cards ─────────────────────────────────────────── */
 .pdf-card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 14px; overflow: hidden;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
+.pdf-card + .pdf-card { margin-top: 16px; }
 .pdf-card__header {
     display: flex; align-items: center; gap: 10px;
-    padding: 14px 18px;
+    padding: 12px 18px;
     border-bottom: 1px solid var(--border);
     background: var(--surface);
 }
 .pdf-card__header h3 {
-    flex: 1; font-size: 14px; font-weight: 700;
+    flex: 1; font-size: 13.5px; font-weight: 700;
     color: var(--text); margin: 0;
     display: flex; align-items: center; gap: 8px;
 }
-.pdf-card__header h3 i { color: var(--primary); font-size: 15px; }
+.pdf-card__header h3 i { color: var(--primary); font-size: 14px; }
 .pdf-card__header .pdf-card__hint {
-    font-size: 11.5px; color: var(--text-muted); font-weight: 500;
+    font-size: 11px; color: var(--text-muted); font-weight: 600;
 }
-.pdf-card__body { padding: 18px; }
+.pdf-card__body { padding: 16px 18px; }
 
-/* ═══════════════════════════════════════════════════════
-   PREVIEW CARD — PDF.js canvas renderer
-   ═══════════════════════════════════════════════════════ */
+/* ─── Preview ───────────────────────────────────────── */
 .pdf-preview {
     position: relative;
-    display: flex;
-    flex-direction: column;
+    display: flex; flex-direction: column;
     min-height: 620px;
 }
 .pdf-preview__toolbar {
@@ -177,7 +208,7 @@
 }
 .pdf-preview__btn {
     display: inline-flex; align-items: center; justify-content: center;
-    gap: 6px; padding: 7px 12px;
+    gap: 6px; padding: 7px 11px;
     background: var(--surface); color: var(--text-2);
     border: 1px solid var(--border); border-radius: 8px;
     font-size: 12px; font-weight: 600; cursor: pointer;
@@ -188,9 +219,7 @@
     border-color: var(--primary); color: var(--primary);
     background: var(--primary-light);
 }
-.pdf-preview__btn i { font-size: 11px; }
 
-/* Scrollable canvas stage */
 .pdf-preview__stage {
     position: relative;
     flex: 1;
@@ -204,36 +233,15 @@
 [data-theme="dark"] .pdf-preview__stage { background: #14171e; }
 
 .pdf-canvas-list {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-    padding: 14px 10px 20px;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 12px; padding: 14px 10px 20px;
 }
 .pdf-canvas-list canvas {
-    display: block;
-    max-width: 100%;
-    height: auto;
-    border-radius: 4px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    display: block; max-width: 100%; height: auto;
+    border-radius: 4px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
     background: #fff;
 }
-.pdf-page-slot {
-    width: 100%;
-    max-width: 900px;
-    min-height: 60px;
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: rgba(255, 255, 255, 0.45);
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-}
 
-/* Overlay for loading / errors / empty */
 .pdf-preview__placeholder {
     position: absolute; inset: 0; z-index: 2;
     display: flex; flex-direction: column;
@@ -244,36 +252,17 @@
 }
 .pdf-preview__placeholder[hidden] { display: none; }
 .pdf-preview__placeholder.is-fading { opacity: 0; }
-.pdf-preview__placeholder .spin {
-    font-size: 34px; color: var(--primary); margin-bottom: 14px;
-}
-.pdf-preview__placeholder h4 {
-    font-size: 15px; font-weight: 700;
-    color: var(--text); margin: 0 0 6px;
-}
-.pdf-preview__placeholder p {
-    font-size: 13px; color: var(--text-muted);
-    margin: 0 0 16px; max-width: 340px; line-height: 1.5;
-}
-.pdf-preview__placeholder .err-icon {
-    font-size: 44px; color: #EF4444; margin-bottom: 12px;
-}
-.pdf-preview__placeholder .empty-icon {
-    font-size: 48px; color: var(--text-muted);
-    opacity: 0.5; margin-bottom: 12px;
-}
-.pdf-preview__placeholder .progress {
-    font-size: 12px; color: var(--text-muted);
-    margin-top: 8px; font-variant-numeric: tabular-nums;
-}
+.pdf-preview__placeholder .spin { font-size: 34px; color: var(--primary); margin-bottom: 14px; }
+.pdf-preview__placeholder h4 { font-size: 15px; font-weight: 700; color: var(--text); margin: 0 0 6px; }
+.pdf-preview__placeholder p { font-size: 13px; color: var(--text-muted); margin: 0 0 16px; max-width: 340px; line-height: 1.5; }
+.pdf-preview__placeholder .err-icon { font-size: 44px; color: #EF4444; margin-bottom: 12px; }
+.pdf-preview__placeholder .empty-icon { font-size: 48px; color: var(--text-muted); opacity: 0.5; margin-bottom: 12px; }
 
-/* ═══════════════════════════════════════════════════════
-   FORM
-   ═══════════════════════════════════════════════════════ */
-.pdf-form { display: flex; flex-direction: column; gap: 16px; }
+/* ─── Form fields ───────────────────────────────────── */
+.pdf-form { display: flex; flex-direction: column; gap: 14px; }
 .pdf-field { display: flex; flex-direction: column; gap: 6px; }
 .pdf-field label {
-    font-size: 12px; font-weight: 700;
+    font-size: 11.5px; font-weight: 700;
     color: var(--text-2); text-transform: uppercase;
     letter-spacing: 0.04em;
     display: flex; align-items: center; gap: 6px;
@@ -296,20 +285,14 @@
     background: var(--surface);
     box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.08);
 }
-.pdf-textarea {
-    resize: vertical; min-height: 90px; line-height: 1.5;
-}
+.pdf-textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 .pdf-input.is-mono {
     font-family: ui-monospace, Menlo, monospace;
     font-weight: 700; letter-spacing: 1px;
     text-transform: uppercase; font-size: 14px;
 }
-.pdf-input.is-error { border-color: #EF4444; }
-.pdf-input.is-ok { border-color: #10B981; }
 
-.pdf-field__hint {
-    font-size: 11.5px; color: var(--text-muted); line-height: 1.4;
-}
+.pdf-field__hint { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; }
 .pdf-field__hint.err { color: #DC2626; }
 .pdf-field__hint.ok { color: #059669; }
 
@@ -323,12 +306,10 @@
 .pdf-field__status.warn { background: #FFFBEB; color: #D97706; }
 .pdf-field__status.err { background: #FEF2F2; color: #DC2626; }
 
-.pdf-grid-2 {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
-}
+.pdf-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 720px) { .pdf-grid-2 { grid-template-columns: 1fr; } }
 
-/* ─── Premium toggle switch ─────────────────────────── */
+/* ─── Verification + Premium toggle rows ────────────── */
 .pdf-toggle-row {
     display: flex; align-items: center; justify-content: space-between;
     gap: 14px; padding: 14px 16px;
@@ -337,16 +318,19 @@
     border-radius: 10px; transition: all 0.15s;
 }
 .pdf-toggle-row:hover { border-color: var(--primary); }
+.pdf-toggle-row.is-verified {
+    background: linear-gradient(135deg, #ECFDF5, var(--background));
+    border-color: #6EE7B7;
+}
+.pdf-toggle-row.is-verified:hover { border-color: #10B981; }
 .pdf-toggle-row__text { flex: 1; min-width: 0; }
 .pdf-toggle-row__title {
     font-size: 13.5px; font-weight: 700; color: var(--text);
     display: flex; align-items: center; gap: 8px;
 }
 .pdf-toggle-row__title .gem { font-size: 15px; }
-.pdf-toggle-row__desc {
-    font-size: 11.5px; color: var(--text-muted);
-    margin-top: 2px; line-height: 1.4;
-}
+.pdf-toggle-row__desc { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
+
 .pdf-toggle {
     position: relative; display: inline-block;
     width: 48px; height: 26px;
@@ -366,58 +350,45 @@
     transition: transform 0.25s;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
-.pdf-toggle input:checked + .pdf-toggle__slider {
-    background: linear-gradient(135deg, #F59E0B, #D97706);
-}
-.pdf-toggle input:checked + .pdf-toggle__slider::before {
-    transform: translateX(22px);
-}
+.pdf-toggle input:checked + .pdf-toggle__slider { background: linear-gradient(135deg, #F59E0B, #D97706); }
+.pdf-toggle input:checked + .pdf-toggle__slider::before { transform: translateX(22px); }
+.pdf-toggle--verify input:checked + .pdf-toggle__slider { background: linear-gradient(135deg, #10B981, #059669); }
 
-/* ─── Statistics ─────────────────────────────────────── */
-.pdf-stats {
-    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
-}
-.pdf-stat {
+/* ─── Source & health panel ────────────────────────── */
+.pdf-health { display: flex; flex-direction: column; gap: 8px; }
+.pdf-health__row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; border-radius: 8px;
     background: var(--background);
-    border-radius: 10px; padding: 12px 14px;
+    font-size: 12.5px;
 }
-.pdf-stat__label {
-    font-size: 10.5px; font-weight: 700;
-    color: var(--text-muted); text-transform: uppercase;
-    letter-spacing: 0.05em;
+.pdf-health__row .ic {
+    width: 22px; height: 22px; border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    background: #ECFDF5; color: #059669;
+    flex-shrink: 0;
 }
-.pdf-stat__value {
-    font-size: 16px; font-weight: 800;
-    color: var(--text); margin-top: 3px;
-    display: flex; align-items: center; gap: 6px; line-height: 1.2;
-}
-.pdf-stat__value i { color: var(--primary); font-size: 14px; }
-.pdf-stat__value.small { font-size: 13px; font-weight: 700; }
+.pdf-health__row.missing .ic { background: #FEF2F2; color: #DC2626; }
+.pdf-health__row .label { flex: 1; color: var(--text-2); font-weight: 600; }
+.pdf-health__row .value { color: var(--text); font-weight: 700; font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+.pdf-health__row .value.small { font-size: 11px; }
 
-.pdf-badges {
-    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px;
+/* ─── Linked questions ─────────────────────────────── */
+.pdf-linked { display: flex; flex-direction: column; gap: 6px; }
+.pdf-linked__item {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 8px 10px; border-radius: 8px;
+    background: var(--background);
+    font-size: 12px; line-height: 1.45;
+    text-decoration: none; color: var(--text);
+    transition: background 0.15s;
 }
-.pdf-badge {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 4px 10px; border-radius: 20px;
-    font-size: 11px; font-weight: 700;
-}
-.pdf-badge--premium {
-    background: linear-gradient(135deg, #FEF3C7, #FDE68A);
-    color: #92400E;
-}
-.pdf-badge--curriculum { background: var(--primary-light); color: var(--primary); }
-.pdf-badge--class { background: #EFF6FF; color: #2563EB; }
-.pdf-badge--batches {
-    background: var(--surface-alt, #f8f9fb);
-    color: var(--text-2); border: 1px solid var(--border);
-}
-[data-theme="dark"] .pdf-badge--premium {
-    background: linear-gradient(135deg, #3A2E15, #4A3A1A); color: #FCD34D;
-}
-[data-theme="dark"] .pdf-badge--class { background: #1A2A4A; color: #93C5FD; }
+.pdf-linked__item:hover { background: var(--primary-light); color: var(--primary); text-decoration: none; }
+.pdf-linked__item .qn { flex: 1; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pdf-linked__item .pg { font-size: 10.5px; color: var(--text-muted); font-family: ui-monospace, Menlo, monospace; }
 
-/* ─── Sticky save bar ──────────────────────────────── */
+/* ─── Save bar ─────────────────────────────────────── */
 .pdf-savebar {
     position: sticky; bottom: 0; margin-top: 20px;
     padding: 14px 18px;
@@ -435,26 +406,38 @@
 .pdf-savebar__status.is-dirty { color: #D97706; font-weight: 600; }
 .pdf-savebar__status.is-clean { color: #059669; font-weight: 600; }
 
-/* ─── Fullscreen ────────────────────────────────────── */
-.pdf-preview.is-fullscreen {
-    position: fixed; inset: 0; z-index: 99999;
-    border-radius: 0; min-height: 100vh;
+.pdf-savebar__more { position: relative; }
+.pdf-savebar__menu {
+    position: absolute; bottom: calc(100% + 8px); right: 0;
+    min-width: 220px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+    padding: 6px; z-index: 300;
 }
-.pdf-preview.is-fullscreen .pdf-preview__stage {
-    max-height: calc(100vh - 46px);
+.pdf-savebar__menu[hidden] { display: none; }
+.pdf-savebar__item {
+    display: flex; gap: 10px; align-items: center;
+    width: 100%; padding: 8px 12px;
+    border-radius: 7px; background: transparent; border: none;
+    color: var(--text); text-decoration: none; cursor: pointer;
+    font-family: inherit; font-size: 13px; text-align: left;
+    transition: background 0.12s;
 }
+.pdf-savebar__item:hover { background: var(--primary-light); color: var(--primary); text-decoration: none; }
+.pdf-savebar__item.danger:hover { background: #FEF2F2; color: #DC2626; }
+.pdf-savebar__item i { width: 16px; text-align: center; font-size: 12px; }
 
-/* ─── Delete modal ──────────────────────────────────── */
+/* ─── Modals ───────────────────────────────────────── */
 .pdf-modal-backdrop {
     position: fixed; inset: 0;
     background: rgba(0, 0, 0, 0.5);
     z-index: 9998;
     display: flex; align-items: center; justify-content: center;
     padding: 20px;
-    animation: pdfFadeIn 0.15s ease-out;
 }
 .pdf-modal-backdrop[hidden] { display: none; }
-@keyframes pdfFadeIn { from { opacity: 0; } to { opacity: 1; } }
 .pdf-modal {
     background: var(--surface);
     border-radius: 16px; padding: 26px;
@@ -463,16 +446,17 @@
     text-align: center;
 }
 .pdf-modal__icon { font-size: 44px; margin-bottom: 12px; }
-.pdf-modal h3 {
-    font-size: 18px; font-weight: 800;
-    color: var(--text); margin: 0 0 6px;
+.pdf-modal h3 { font-size: 18px; font-weight: 800; color: var(--text); margin: 0 0 6px; }
+.pdf-modal p { font-size: 13.5px; color: var(--text-2); line-height: 1.55; margin: 0 0 20px; }
+.pdf-modal__actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ─── Fullscreen ───────────────────────────────────── */
+.pdf-preview.is-fullscreen {
+    position: fixed; inset: 0; z-index: 99999;
+    border-radius: 0; min-height: 100vh;
 }
-.pdf-modal p {
-    font-size: 13.5px; color: var(--text-2);
-    line-height: 1.55; margin: 0 0 20px;
-}
-.pdf-modal__actions {
-    display: flex; gap: 10px; justify-content: flex-end;
+.pdf-preview.is-fullscreen .pdf-preview__stage {
+    max-height: calc(100vh - 46px);
 }
 </style>
 {% endblock %}
@@ -486,15 +470,40 @@
       autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="is_premium" value="0" id="isPremiumFallback">
+    <input type="hidden" name="mark_verified" value="0" id="markVerifiedFallback">
+
+    {# ─── STATE BANNER ─── #}
+    <div class="pdf-state-banner b-{{ pdf_state }}">
+        <i class="fas bi-icon
+            {% if pdf_state == 'pending' %}fa-hourglass-half
+            {% elif pdf_state == 'staged' %}fa-layer-group
+            {% elif pdf_state == 'flagged' %}fa-flag
+            {% else %}fa-circle-check{% endif %}"></i>
+        <div class="bs-body">
+            <div class="bs-title">
+                {% if pdf_state == 'pending' %}Not yet staged
+                {% elif pdf_state == 'staged' %}Staged, awaiting publish
+                {% elif pdf_state == 'flagged' %}Flagged for review
+                {% else %}{% if pdf.is_verified %}Published and verified{% else %}Published — needs verification{% endif %}{% endif %}
+            </div>
+            <div class="bs-desc">
+                {% if pdf_state == 'pending' %}Fill in the metadata below and stage it.
+                {% elif pdf_state == 'staged' %}Publish when the metadata is ready.
+                {% elif pdf_state == 'flagged' %}Confirm this PDF to clear it from the review queue.
+                {% else %}{% if pdf.is_verified %}Reviewed and cleared. No further action needed.
+                {% else %}Tick "Verified" below to clear it from the review queue on save.{% endif %}{% endif %}
+            </div>
+        </div>
+    </div>
 
     <div class="pdf-edit-grid">
 
         {# ═══════════════════════════════════════════════════════
-           LEFT COLUMN — PREVIEW + DESCRIPTION
+           LEFT COLUMN
            ═══════════════════════════════════════════════════════ #}
         <div>
 
-            {# ─── Live preview card (PDF.js) ───────────────────── #}
+            {# ─── PDF.js preview ─── #}
             <div class="pdf-card pdf-preview" id="pdfPreview">
                 <div class="pdf-preview__toolbar">
                     <div class="pdf-preview__meta">
@@ -502,39 +511,30 @@
                         <span class="pdf-preview__meta-code" id="previewCode">{{ pdf.code or '—' }}</span>
                         <span id="previewStatus">
                             {% if preview_info.available %}
-                                {% if preview_info.source == 'local' %}
-                                    Local · {{ preview_info.size_mb }} MB
-                                {% elif preview_info.source == 'telegram' %}
-                                    Telegram · {{ preview_info.size_mb }} MB
+                                {% if preview_info.source == 'local' %}Local · {{ preview_info.size_mb }} MB
+                                {% elif preview_info.source == 'telegram' %}Telegram · {{ preview_info.size_mb }} MB
                                 {% endif %}
-                            {% else %}
-                                No file
-                            {% endif %}
+                            {% else %}No file{% endif %}
                         </span>
                     </div>
-
                     <button type="button" class="pdf-preview__btn" id="previewRefresh" title="Reload">
                         <i class="fas fa-rotate-right"></i>
                     </button>
                     <button type="button" class="pdf-preview__btn" id="previewFullscreen" title="Toggle fullscreen">
                         <i class="fas fa-expand"></i>
                     </button>
-                    <a href="{{ url_for('admin_content.pdf_library_preview', pdf_id=pdf.id) }}"
-                       target="_blank" rel="noopener"
-                       class="pdf-preview__btn" title="Open in new tab">
-                        <i class="fas fa-up-right-from-square"></i>
-                    </a>
-                    <a href="{{ url_for('admin_content.pdf_download', pdf_id=pdf.id) }}"
-                       class="pdf-preview__btn" title="Download">
-                        <i class="fas fa-download"></i>
-                    </a>
+                    {% if pdf_state != 'pending' %}
+                        <a href="{{ url_for('admin_content.pdf_library_preview', pdf_id=pdf.id) }}"
+                           target="_blank" rel="noopener"
+                           class="pdf-preview__btn" title="Open in new tab">
+                            <i class="fas fa-up-right-from-square"></i>
+                        </a>
+                    {% endif %}
                 </div>
 
                 <div class="pdf-preview__stage" id="pdfStage">
-                    {# PDF.js paints pages into this container. It stays
-                       empty until the fetch + render completes. #}
                     <div class="pdf-canvas-list" id="pdfCanvasList"
-                         data-src="{{ url_for('admin_content.pdf_library_preview', pdf_id=pdf.id) }}"></div>
+                         data-src="{% if pdf_state == 'pending' %}{{ url_for('admin_content.pdf_intake_preview', pending_id=pdf.id) }}{% else %}{{ url_for('admin_content.pdf_library_preview', pdf_id=pdf.id) }}{% endif %}"></div>
 
                     <div class="pdf-preview__placeholder" id="previewPlaceholder"
                          {% if not preview_info.available %}data-no-file="1"{% endif %}>
@@ -545,43 +545,66 @@
                         {% else %}
                             <i class="fas fa-file-circle-question empty-icon"></i>
                             <h4>No file stored</h4>
-                            <p>This PDF has no local file or Telegram reference. Upload one to enable preview.</p>
+                            <p>This PDF has no local file or Telegram reference.</p>
                         {% endif %}
                     </div>
                 </div>
             </div>
 
-            {# ─── Description card ─────────────────────────────── #}
-            <div class="pdf-card" style="margin-top: 20px;">
+            {# ─── Description ─── #}
+            <div class="pdf-card">
                 <div class="pdf-card__header">
                     <h3><i class="fas fa-align-left"></i> Description</h3>
                     <span class="pdf-card__hint">Optional · shown to students</span>
                 </div>
                 <div class="pdf-card__body">
-                    <textarea name="description"
-                              class="pdf-textarea"
-                              id="pdfDescription"
+                    <textarea name="description" class="pdf-textarea" id="pdfDescription"
                               placeholder="Short description of what this PDF contains…"
-                              maxlength="2000"
-                              rows="4">{{ pdf.description or '' }}</textarea>
+                              maxlength="2000" rows="4">{{ pdf.description or '' }}</textarea>
                     <div class="pdf-field__hint" style="margin-top:6px;">
                         <span id="descCount">0</span> / 2000 characters
                     </div>
                 </div>
             </div>
+
+            {# ─── Linked questions ─── #}
+            {% if linked_questions %}
+                <div class="pdf-card">
+                    <div class="pdf-card__header">
+                        <h3><i class="fas fa-link"></i> Linked questions</h3>
+                        <span class="pdf-card__hint">{{ linked_questions|length }} referencing this code</span>
+                    </div>
+                    <div class="pdf-card__body">
+                        <div class="pdf-linked">
+                            {% for q in linked_questions[:5] %}
+                                <a href="{{ url_for('admin_content.question_edit', question_id=q.id) }}"
+                                   class="pdf-linked__item">
+                                    <div class="qn">{{ q.question_text }}</div>
+                                    {% if q.pdf_page %}<span class="pg">p.{{ q.pdf_page }}</span>{% endif %}
+                                </a>
+                            {% endfor %}
+                        </div>
+                        {% if linked_questions|length > 5 %}
+                            <a href="{{ url_for('admin_content.questions', pdf_code=pdf.code) }}"
+                               class="admin-btn secondary sm" style="margin-top:10px;width:100%;justify-content:center;">
+                                See all {{ linked_questions|length }} questions
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+
         </div>
 
-
         {# ═══════════════════════════════════════════════════════
-           RIGHT COLUMN — FORM
+           RIGHT COLUMN
            ═══════════════════════════════════════════════════════ #}
         <div>
 
-            {# ─── Classification card ─────────────────────────── #}
+            {# ─── Classification ─── #}
             <div class="pdf-card">
                 <div class="pdf-card__header">
                     <h3><i class="fas fa-tags"></i> Classification</h3>
-                    <span class="pdf-card__hint">Full catalog</span>
                 </div>
                 <div class="pdf-card__body">
                     <div class="pdf-form">
@@ -603,54 +626,45 @@
 
                         <div class="pdf-grid-2">
                             <div class="pdf-field">
-                                <label for="pdfCurriculum">
-                                    <i class="fas fa-globe"></i> Curriculum
-                                </label>
+                                <label for="pdfCurriculum"><i class="fas fa-globe"></i> Curriculum</label>
                                 <select name="curriculum" id="pdfCurriculum" class="pdf-select">
                                     <option value="">— Not set —</option>
                                     {% for code, label in curricula %}
-                                        <option value="{{ code }}"
-                                                {% if pdf.curriculum == code %}selected{% endif %}>
+                                        <option value="{{ code }}" {% if pdf.curriculum == code %}selected{% endif %}>
                                             {{ label }} ({{ code }})
                                         </option>
                                     {% endfor %}
                                 </select>
                             </div>
                             <div class="pdf-field">
-                                <label for="pdfClass">
-                                    <i class="fas fa-graduation-cap"></i> Class
-                                </label>
+                                <label for="pdfClass"><i class="fas fa-graduation-cap"></i> Class</label>
                                 <select name="class" id="pdfClass" class="pdf-select">
                                     <option value="">— Not set —</option>
                                     {% for c in classes %}
-                                        <option value="{{ c }}"
-                                                {% if pdf.class == c %}selected{% endif %}>
-                                            {{ c }}
-                                        </option>
+                                        <option value="{{ c }}" {% if pdf.class == c %}selected{% endif %}>{{ c }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
                         </div>
 
                         <div class="pdf-field">
-                            <label for="pdfChapter">
-                                <i class="fas fa-bookmark"></i> Chapter
-                            </label>
-                            <input type="text"
-                                   name="chapter"
-                                   id="pdfChapter"
-                                   class="pdf-input"
+                            <label for="pdfChapter"><i class="fas fa-bookmark"></i> Chapter</label>
+                            <input type="text" name="chapter" id="pdfChapter" class="pdf-input"
                                    value="{{ pdf.chapter or '' }}"
                                    placeholder="e.g. Chapter 1: Introduction"
-                                   maxlength="120">
+                                   maxlength="120"
+                                   list="pdf-chapter-list">
+                            <datalist id="pdf-chapter-list">
+                                {% for c in chapters_in_subject %}<option value="{{ c }}">{% endfor %}
+                            </datalist>
                         </div>
 
                     </div>
                 </div>
             </div>
 
-            {# ─── Identifiers ─────────────────────────────────── #}
-            <div class="pdf-card" style="margin-top: 20px;">
+            {# ─── Identifiers ─── #}
+            <div class="pdf-card">
                 <div class="pdf-card__header">
                     <h3><i class="fas fa-hashtag"></i> Identifiers</h3>
                 </div>
@@ -660,46 +674,33 @@
                         <div class="pdf-field">
                             <label for="pdfCode">
                                 <i class="fas fa-barcode"></i> PDF code <span class="req">*</span>
-                                <span class="tip">Editable</span>
                             </label>
-                            <input type="text"
-                                   name="code"
-                                   id="pdfCode"
+                            <input type="text" name="code" id="pdfCode"
                                    class="pdf-input is-mono"
                                    value="{{ pdf.code or '' }}"
-                                   placeholder="XXXX-XXXX"
-                                   maxlength="9"
-                                   spellcheck="false"
-                                   required>
+                                   placeholder="XXXX-XXXX" maxlength="9"
+                                   spellcheck="false" required>
                             <div class="pdf-field__hint" id="codeStatus"></div>
                         </div>
 
                         <div class="pdf-field">
-                            <label for="pdfTitle">
-                                <i class="fas fa-heading"></i> Title <span class="req">*</span>
-                            </label>
-                            <input type="text"
-                                   name="title"
-                                   id="pdfTitle"
-                                   class="pdf-input"
+                            <label for="pdfTitle"><i class="fas fa-heading"></i> Title <span class="req">*</span></label>
+                            <input type="text" name="title" id="pdfTitle" class="pdf-input"
                                    value="{{ pdf.title or '' }}"
                                    placeholder="Document title"
-                                   maxlength="250"
-                                   required>
+                                   maxlength="250" required>
                         </div>
 
                         <div class="pdf-field">
-                            <label for="pdfTags">
-                                <i class="fas fa-tag"></i> Tags
-                                <span class="tip">Comma-separated</span>
-                            </label>
-                            <input type="text"
-                                   name="tags"
-                                   id="pdfTags"
-                                   class="pdf-input"
+                            <label for="pdfTags"><i class="fas fa-tag"></i> Tags <span class="tip">Comma-separated</span></label>
+                            <input type="text" name="tags" id="pdfTags" class="pdf-input"
                                    value="{{ pdf.tags or '' }}"
                                    placeholder="Q&A, past paper, revision, 2024"
-                                   maxlength="300">
+                                   maxlength="300"
+                                   list="pdf-tag-suggestions">
+                            <datalist id="pdf-tag-suggestions">
+                                {% for t in top_tags %}<option value="{{ t }}">{% endfor %}
+                            </datalist>
                             <div class="pdf-field__hint" id="tagsPreview"></div>
                         </div>
 
@@ -707,113 +708,184 @@
                 </div>
             </div>
 
-            {# ─── Options ─────────────────────────────────────── #}
-            <div class="pdf-card" style="margin-top: 20px;">
+            {# ─── Options (Premium + Verify) ─── #}
+            <div class="pdf-card">
                 <div class="pdf-card__header">
                     <h3><i class="fas fa-sliders-h"></i> Options</h3>
                 </div>
                 <div class="pdf-card__body">
-                    <label class="pdf-toggle-row" for="isPremium">
-                        <div class="pdf-toggle-row__text">
-                            <div class="pdf-toggle-row__title">
-                                <span class="gem">💎</span> Premium content
+                    <div class="pdf-form">
+
+                        <label class="pdf-toggle-row" for="isPremium">
+                            <div class="pdf-toggle-row__text">
+                                <div class="pdf-toggle-row__title">
+                                    <span class="gem">💎</span> Premium content
+                                </div>
+                                <div class="pdf-toggle-row__desc">
+                                    When on, only premium students can open this PDF.
+                                </div>
                             </div>
-                            <div class="pdf-toggle-row__desc">
-                                When on, only premium students can open this PDF.
-                            </div>
-                        </div>
-                        <span class="pdf-toggle">
-                            <input type="checkbox"
-                                   name="is_premium"
-                                   id="isPremium"
-                                   value="1"
-                                   {% if pdf.is_premium %}checked{% endif %}>
-                            <span class="pdf-toggle__slider"></span>
-                        </span>
-                    </label>
+                            <span class="pdf-toggle">
+                                <input type="checkbox" name="is_premium" id="isPremium" value="1"
+                                       {% if pdf.is_premium %}checked{% endif %}>
+                                <span class="pdf-toggle__slider"></span>
+                            </span>
+                        </label>
+
+                        {# ── Verification checkbox — only for published PDFs ── #}
+                        {% if pdf_state in ('live', 'flagged') %}
+                            <label class="pdf-toggle-row {% if pdf.is_verified %}is-verified{% endif %}"
+                                   for="markVerified">
+                                <div class="pdf-toggle-row__text">
+                                    <div class="pdf-toggle-row__title">
+                                        <span>{% if pdf.is_verified %}✅{% else %}☑️{% endif %}</span>
+                                        This PDF is verified
+                                    </div>
+                                    <div class="pdf-toggle-row__desc">
+                                        {% if pdf.is_verified %}
+                                            Already verified and cleared from the review queue.
+                                        {% else %}
+                                            Check to mark as reviewed on save.
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <span class="pdf-toggle pdf-toggle--verify">
+                                    <input type="checkbox" name="mark_verified" id="markVerified" value="1"
+                                           {% if pdf.is_verified %}checked disabled{% endif %}>
+                                    <span class="pdf-toggle__slider"></span>
+                                </span>
+                            </label>
+                        {% endif %}
+
+                    </div>
                 </div>
             </div>
 
-            {# ─── Record ─────────────────────────────────────── #}
-            <div class="pdf-card" style="margin-top: 20px;">
+            {# ─── Source & health ─── #}
+            <div class="pdf-card">
+                <div class="pdf-card__header">
+                    <h3><i class="fas fa-server"></i> Source &amp; health</h3>
+                </div>
+                <div class="pdf-card__body">
+                    <div class="pdf-health">
+                        <div class="pdf-health__row {% if not preview_info.has_local_file %}missing{% endif %}">
+                            <span class="ic"><i class="fas fa-{{ 'check' if preview_info.has_local_file else 'times' }}"></i></span>
+                            <span class="label">Local file</span>
+                            <span class="value">
+                                {% if preview_info.has_local_file %}
+                                    {% if preview_info.size_mb %}{{ preview_info.size_mb }} MB{% else %}present{% endif %}
+                                {% else %}—{% endif %}
+                            </span>
+                        </div>
+                        <div class="pdf-health__row {% if not preview_info.has_telegram %}missing{% endif %}">
+                            <span class="ic"><i class="fab fa-telegram-plane"></i></span>
+                            <span class="label">Telegram backup</span>
+                            <span class="value">{% if preview_info.has_telegram %}available{% else %}—{% endif %}</span>
+                        </div>
+                        <div class="pdf-health__row {% if preview_info.too_large %}missing{% endif %}">
+                            <span class="ic"><i class="fas fa-download"></i></span>
+                            <span class="label">Direct download</span>
+                            <span class="value small">
+                                {% if preview_info.too_large %}above cap
+                                {% elif preview_info.size_status == 'ok' %}within cap
+                                {% elif preview_info.size_status == 'unknown' %}unknown
+                                {% else %}—{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    {% if pdf_state != 'pending' %}
+                        <button type="button" class="admin-btn secondary sm"
+                                id="refetchSizeBtn"
+                                style="width:100%;justify-content:center;margin-top:10px;">
+                            <i class="fas fa-sync"></i> Refetch Telegram size
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# ─── Record ─── #}
+            <div class="pdf-card">
                 <div class="pdf-card__header">
                     <h3><i class="fas fa-chart-simple"></i> Record</h3>
                 </div>
                 <div class="pdf-card__body">
-                    <div class="pdf-stats">
-                        <div class="pdf-stat">
-                            <div class="pdf-stat__label">Views</div>
-                            <div class="pdf-stat__value">
-                                <i class="fas fa-eye"></i> {{ pdf.view_count or 0 }}
-                            </div>
+                    <div class="pdf-grid-2" style="gap:10px;">
+                        <div class="pdf-health__row">
+                            <span class="ic"><i class="fas fa-eye"></i></span>
+                            <span class="label">Views</span>
+                            <span class="value">{{ pdf.view_count or 0 }}</span>
                         </div>
-                        <div class="pdf-stat">
-                            <div class="pdf-stat__label">Uploaded</div>
-                            <div class="pdf-stat__value small">
-                                {{ (pdf.uploaded_at | dt_date) or '—' }}
-                            </div>
-                        </div>
-                        <div class="pdf-stat">
-                            <div class="pdf-stat__label">Source</div>
-                            <div class="pdf-stat__value small">
-                                {% if preview_info.source == 'local' %}
-                                    <i class="fas fa-hdd"></i> Local
-                                {% elif preview_info.source == 'telegram' %}
-                                    <i class="fab fa-telegram-plane"></i> Telegram
-                                {% else %}
-                                    <i class="fas fa-circle-question"></i> None
-                                {% endif %}
-                            </div>
-                        </div>
-                        <div class="pdf-stat">
-                            <div class="pdf-stat__label">Uploader</div>
-                            <div class="pdf-stat__value small">{{ pdf.uploaded_by or '—' }}</div>
+                        <div class="pdf-health__row">
+                            <span class="ic"><i class="fas fa-calendar"></i></span>
+                            <span class="label">Uploaded</span>
+                            <span class="value small">{{ (pdf.uploaded_at or pdf.created_at) | dt_date }}</span>
                         </div>
                     </div>
-
-                    <div class="pdf-badges">
-                        {% if pdf.is_premium %}
-                            <span class="pdf-badge pdf-badge--premium">💎 Premium</span>
-                        {% endif %}
-                        {% if pdf.curriculum %}
-                            <span class="pdf-badge pdf-badge--curriculum">🌍 {{ pdf.curriculum }}</span>
-                        {% endif %}
-                        {% if pdf.class %}
-                            <span class="pdf-badge pdf-badge--class">🎓 {{ pdf.class }}</span>
-                        {% endif %}
-                        {% for b in batches %}
-                            <a href="{{ url_for('admin_batches.detail', batch_id=b.id) }}"
-                               class="pdf-badge pdf-badge--batches"
-                               style="text-decoration:none;">📦 {{ b.name }}</a>
-                        {% endfor %}
-                    </div>
+                    {% if batches %}
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
+                            {% for b in batches %}
+                                <a href="{{ url_for('admin_batches.detail', batch_id=b.id) }}"
+                                   class="admin-chip" style="text-decoration:none;">
+                                    📦 {{ b.name }}
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
                 </div>
             </div>
 
         </div>
     </div>
 
-    {# ═══════════════════════════════════════════════════════
-       STICKY SAVE BAR
-       ═══════════════════════════════════════════════════════ #}
+    {# ─── STICKY SAVE BAR ─── #}
     <div class="pdf-savebar">
         <div class="pdf-savebar__status" id="saveStatus">
             <i class="fas fa-circle-check" style="color:#10B981;"></i>
             All changes saved
         </div>
-        <a href="{{ url_for('admin_content.pdfs', tab='library') }}" class="admin-btn secondary">
+
+        {% if pdf_state != 'pending' %}
+            <div class="pdf-savebar__more">
+                <button type="button" class="admin-btn secondary" id="pdfMoreBtn">
+                    <i class="fas fa-ellipsis-h"></i> More
+                </button>
+                <div class="pdf-savebar__menu" id="pdfMoreMenu" hidden>
+                    <button type="button" class="pdf-savebar__item" id="pdfActionRefetch">
+                        <i class="fas fa-sync"></i> Refetch size
+                    </button>
+                    <button type="button" class="pdf-savebar__item" id="pdfActionDuplicate">
+                        <i class="fas fa-copy"></i> Duplicate PDF
+                    </button>
+                    <a href="{{ url_for('admin_content.pdf_download', pdf_id=pdf.id) }}"
+                       class="pdf-savebar__item">
+                        <i class="fas fa-download"></i> Download file
+                    </a>
+                    <a href="{{ url_for('admin_content.pdf_library_preview', pdf_id=pdf.id) }}"
+                       target="_blank" rel="noopener"
+                       class="pdf-savebar__item">
+                        <i class="fas fa-eye"></i> Open preview
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+
+        <a href="{{ url_for('admin_content.pdfs') }}" class="admin-btn secondary">
             <i class="fas fa-times"></i> Cancel
         </a>
         <button type="submit" class="admin-btn primary" id="saveBtn">
-            <i class="fas fa-save"></i> Save changes
+            <i class="fas fa-save"></i>
+            {% if pdf_state == 'pending' %}Stage PDF
+            {% elif pdf_state == 'staged' %}Save &amp; Publish
+            {% elif pdf_state == 'flagged' %}Save &amp; Confirm
+            {% else %}Save changes{% endif %}
         </button>
     </div>
 </form>
 
 
-{# ═══════════════════════════════════════════════════════
-   DELETE CONFIRMATION MODAL
-   ═══════════════════════════════════════════════════════ #}
+{# ═══════════════════════════════════════════════════════════
+   DELETE MODAL
+   ═══════════════════════════════════════════════════════════ #}
 <div class="pdf-modal-backdrop" id="deleteModal" hidden>
     <div class="pdf-modal">
         <div class="pdf-modal__icon">⚠️</div>
@@ -825,9 +897,7 @@
         </p>
         <div class="pdf-modal__actions">
             <button type="button" class="admin-btn secondary" id="deleteCancel">Cancel</button>
-            <form method="POST"
-                  action="{{ url_for('admin_content.pdf_delete', pdf_id=pdf.id) }}"
-                  style="display:inline;">
+            <form method="POST" action="{{ url_for('admin_content.pdf_delete', pdf_id=pdf.id) }}" style="display:inline;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="admin-btn danger">
                     <i class="fas fa-trash"></i> Delete permanently
@@ -841,10 +911,6 @@
 
 
 {% block admin_js %}
-{# PDF.js — renders PDFs to canvas so they work on mobile browsers
-   (Chrome Android / Safari iOS), which have no inline PDF viewer.
-   Loaded from cdnjs (allowed by the strict CSP on other pages, and
-   this page has no CSP at all). #}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 (function () {
@@ -859,24 +925,20 @@
 
     var CSRF = {{ csrf_token|tojson }};
     var PDF_ID = {{ pdf.id|tojson }};
+    var PDF_STATE = {{ pdf_state|tojson }};
 
-    // ─────────────────────────────────────────────────────
-    // Get file dropdown
-    // ─────────────────────────────────────────────────────
+    // ─── Get file dropdown ─────────────────────────────
     var getFileBtn = document.getElementById('pdfGetFileBtn');
     var getFileMenu = document.getElementById('pdfGetFileMenu');
     var getFileWrap = document.getElementById('pdfGetFile');
     if (getFileBtn && getFileMenu) {
         getFileBtn.addEventListener('click', function (e) {
             e.stopPropagation();
-            var open = !getFileMenu.hidden;
-            getFileMenu.hidden = open;
-            getFileBtn.setAttribute('aria-expanded', String(!open));
+            getFileMenu.hidden = !getFileMenu.hidden;
         });
         document.addEventListener('click', function (e) {
             if (getFileWrap && !getFileWrap.contains(e.target)) {
                 getFileMenu.hidden = true;
-                getFileBtn.setAttribute('aria-expanded', 'false');
             }
         });
     }
@@ -887,17 +949,31 @@
             var code = copyItem.getAttribute('data-code') || '';
             if (!code) return;
             navigator.clipboard.writeText(code).then(function () {
-                if (typeof window.showToast === 'function') {
-                    window.showToast('Code copied: ' + code, 'success');
-                }
+                copyItem.querySelector('.pdf-getfile__title').textContent = 'Code copied!';
+                setTimeout(function () {
+                    copyItem.querySelector('.pdf-getfile__title').textContent = 'Copy PDF code';
+                }, 1500);
                 if (getFileMenu) getFileMenu.hidden = true;
-            }).catch(function () { window.prompt('Copy this code:', code); });
+            }).catch(function () { window.prompt('Copy:', code); });
         });
     }
 
-    // ─────────────────────────────────────────────────────
-    // Delete modal
-    // ─────────────────────────────────────────────────────
+    // ─── More menu ─────────────────────────────────────
+    var moreBtn = document.getElementById('pdfMoreBtn');
+    var moreMenu = document.getElementById('pdfMoreMenu');
+    if (moreBtn && moreMenu) {
+        moreBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            moreMenu.hidden = !moreMenu.hidden;
+        });
+        document.addEventListener('click', function (e) {
+            if (!moreMenu.contains(e.target) && e.target !== moreBtn) {
+                moreMenu.hidden = true;
+            }
+        });
+    }
+
+    // ─── Delete modal ─────────────────────────────────
     var deleteBtn = document.getElementById('pdfDeleteBtn');
     var deleteModal = document.getElementById('deleteModal');
     var deleteCancel = document.getElementById('deleteCancel');
@@ -907,214 +983,73 @@
     if (deleteCancel && deleteModal) {
         deleteCancel.addEventListener('click', function () { deleteModal.hidden = true; });
     }
-    if (deleteModal) {
-        deleteModal.addEventListener('click', function (e) {
-            if (e.target === deleteModal) deleteModal.hidden = true;
+
+    // ─── Refetch size ─────────────────────────────────
+    var refetchUrls = [
+        document.getElementById('refetchSizeBtn'),
+        document.getElementById('pdfActionRefetch'),
+    ];
+    refetchUrls.forEach(function (btn) {
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+            if (PDF_STATE === 'pending') return;
+            btn.disabled = true;
+            var original = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refetching…';
+            fetch('{{ url_for("admin_content.pdf_refetch_size", pdf_id=pdf.id) }}', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+                body: '{}',
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                alert(d.message || (d.success ? 'Refreshed.' : 'Could not refetch.'));
+                if (d.success) window.location.reload();
+            })
+            .catch(function () { alert('Network error.'); })
+            .finally(function () {
+                btn.disabled = false;
+                btn.innerHTML = original;
+            });
         });
+    });
+
+    // ─── Premium fallback ─────────────────────────────
+    var premium = document.getElementById('isPremium');
+    var premiumFallback = document.getElementById('isPremiumFallback');
+    function syncPremium() {
+        if (!premium || !premiumFallback) return;
+        premiumFallback.disabled = !!premium.checked;
     }
+    if (premium) { premium.addEventListener('change', syncPremium); syncPremium(); }
 
-    // ─────────────────────────────────────────────────────
-    // PDF.js preview renderer
-    // ─────────────────────────────────────────────────────
-    var list = document.getElementById('pdfCanvasList');
-    var placeholder = document.getElementById('previewPlaceholder');
-    var refreshBtn = document.getElementById('previewRefresh');
-    var fullscreenBtn = document.getElementById('previewFullscreen');
-    var previewCard = document.getElementById('pdfPreview');
-
-    if (placeholder && placeholder.dataset.noFile === '1') {
-        // No file stored — nothing to render. Leave the empty state.
-        return;
+    // ─── Verified fallback ────────────────────────────
+    var verified = document.getElementById('markVerified');
+    var verifiedFallback = document.getElementById('markVerifiedFallback');
+    function syncVerified() {
+        if (!verified || !verifiedFallback) return;
+        // If checkbox is disabled (already verified), keep fallback enabled so
+        // the server still receives mark_verified=0. Otherwise disable fallback
+        // when the user has ticked the box.
+        verifiedFallback.disabled = !!verified.checked && !verified.disabled;
     }
+    if (verified) { verified.addEventListener('change', syncVerified); syncVerified(); }
 
-    if (!list) return;
-
-    var pdfUrl = list.getAttribute('data-src');
-    var currentDoc = null;
-    var renderTask = null;
-    var RENDER_CAP = 40;               // cap pages for mobile memory
-    var A4_RATIO = 1.414;              // default page aspect (h/w)
-
-    // PDF.js needs a worker. Point it at the matching CDN build.
-    if (window.pdfjsLib) {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
-
-    function dismissPlaceholder() {
-        if (!placeholder) return;
-        placeholder.classList.add('is-fading');
-        setTimeout(function () { placeholder.hidden = true; }, 260);
-    }
-
-    function showError(msg) {
-        if (!placeholder) return;
-        placeholder.hidden = false;
-        placeholder.classList.remove('is-fading');
-        placeholder.innerHTML =
-            '<i class="fas fa-triangle-exclamation err-icon"></i>' +
-            '<h4>Could not load preview</h4>' +
-            '<p>' + escapeHtml(msg || 'The file may be unavailable.') + '</p>' +
-            '<a href="' + pdfUrl + '" target="_blank" rel="noopener" ' +
-            'class="pdf-preview__btn" style="margin-top:10px;display:inline-flex;">' +
-            '<i class="fas fa-up-right-from-square"></i> Open in a new tab</a>';
-    }
-
-    function updateProgress(done, total) {
-        if (!placeholder) return;
-        var el = placeholder.querySelector('.progress');
-        if (!el) {
-            var p = document.createElement('div');
-            p.className = 'progress';
-            placeholder.appendChild(p);
-            el = p;
-        }
-        el.textContent = done + ' / ' + total;
-    }
-
-    // Creates a placeholder block with the right visual height so the
-    // scroll container reserves space before the canvas is painted.
-    function reserveSlot(pageNum, pageW, pageH) {
-        var slot = document.createElement('div');
-        slot.className = 'pdf-page-slot';
-        slot.dataset.page = String(pageNum);
-        slot.textContent = 'Page ' + pageNum;
-        // Height is set later once we know the container width.
-        return slot;
-    }
-
-    function renderPage(page, containerWidth) {
-        var viewport = page.getViewport({ scale: 1 });
-        var scale = Math.min(2, containerWidth / viewport.width);
-        var scaled = page.getViewport({ scale: scale });
-
-        var canvas = document.createElement('canvas');
-        canvas.width = Math.floor(scaled.width);
-        canvas.height = Math.floor(scaled.height);
-        canvas.style.width = '100%';
-        canvas.style.height = 'auto';
-
-        var ctx = canvas.getContext('2d');
-        return page.render({ canvasContext: ctx, viewport: scaled }).promise
-            .then(function () { return canvas; });
-    }
-
-    function buildAll(pdf) {
-        var containerWidth = list.clientWidth - 20 || 600;
-        var tasks = [];
-        var total = Math.min(pdf.numPages, RENDER_CAP);
-
-        // Reserve slots so the layout doesn't jump as pages stream in.
-        var slots = [];
-        for (var i = 0; i < total; i++) {
-            var s = reserveSlot(i + 1, containerWidth, 0);
-            list.appendChild(s);
-            slots.push(s);
-        }
-
-        // If more than RENDER_CAP pages, add a small footer note.
-        if (pdf.numPages > RENDER_CAP) {
-            var note = document.createElement('div');
-            note.className = 'pdf-page-slot';
-            note.style.background = 'rgba(255,255,255,0.12)';
-            note.textContent = '+' + (pdf.numPages - RENDER_CAP) +
-                ' more pages — open the file to view all';
-            list.appendChild(note);
-        }
-
-        // Render sequentially — lower peak memory on phones.
-        var chain = Promise.resolve();
-        for (var n = 1; n <= total; n++) {
-            (function (pageNum) {
-                chain = chain.then(function () {
-                    return pdf.getPage(pageNum).then(function (page) {
-                        return renderPage(page, containerWidth).then(function (canvas) {
-                            var slot = slots[pageNum - 1];
-                            slot.replaceWith(canvas);
-                            updateProgress(pageNum, total);
-                            if (pageNum === 1) dismissPlaceholder();
-                        });
-                    });
-                });
-            })(n);
-        }
-        return chain;
-    }
-
-    function loadPreview() {
-        if (!window.pdfjsLib) {
-            showError('PDF renderer failed to load.');
-            return;
-        }
-
-        list.innerHTML = '';
-
-        // Cancel any in-flight render before starting a new one.
-        if (currentDoc && currentDoc.destroy) {
-            try { currentDoc.destroy(); } catch (e) {}
-        }
-        currentDoc = null;
-
-        var task = window.pdfjsLib.getDocument({
-            url: pdfUrl,
-            withCredentials: true,
-        });
-
-        task.promise.then(function (pdf) {
-            currentDoc = pdf;
-            return buildAll(pdf);
-        }).catch(function (err) {
-            console.error('[PDF.js]', err);
-            showError((err && err.message) || 'Unknown error');
-        });
-    }
-
-    // ─── Toolbar buttons ────────────────────────────────────
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', function () {
-            if (placeholder) {
-                placeholder.hidden = false;
-                placeholder.classList.remove('is-fading');
-                placeholder.innerHTML =
-                    '<i class="fas fa-circle-notch fa-spin spin"></i>' +
-                    '<h4>Reloading…</h4>' +
-                    '<p>Decoding the PDF for inline display.</p>';
-            }
-            loadPreview();
-        });
-    }
-
-    if (fullscreenBtn && previewCard) {
-        fullscreenBtn.addEventListener('click', function () {
-            var on = previewCard.classList.toggle('is-fullscreen');
-            fullscreenBtn.innerHTML = on
-                ? '<i class="fas fa-compress"></i>'
-                : '<i class="fas fa-expand"></i>';
-            document.body.style.overflow = on ? 'hidden' : '';
-        });
-    }
-
-    // ─── Boot ───────────────────────────────────────────────
-    loadPreview();
-
-    // ─────────────────────────────────────────────────────
-    // Description count
-    // ─────────────────────────────────────────────────────
+    // ─── Description count ────────────────────────────
     var desc = document.getElementById('pdfDescription');
     var descCount = document.getElementById('descCount');
     if (desc && descCount) {
-        var updateDesc = function () { descCount.textContent = String(desc.value.length); };
-        updateDesc();
-        desc.addEventListener('input', updateDesc);
+        var upd = function () { descCount.textContent = String(desc.value.length); };
+        upd();
+        desc.addEventListener('input', upd);
     }
 
-    // ─────────────────────────────────────────────────────
-    // Tags preview
-    // ─────────────────────────────────────────────────────
+    // ─── Tag preview ──────────────────────────────────
     var tagsInput = document.getElementById('pdfTags');
     var tagsPreview = document.getElementById('tagsPreview');
     if (tagsInput && tagsPreview) {
-        var updateTags = function () {
+        var updTags = function () {
             var raw = tagsInput.value.trim();
             if (!raw) { tagsPreview.textContent = ''; return; }
             var arr = raw.split(',').map(function (t) { return t.trim(); }).filter(Boolean);
@@ -1124,18 +1059,16 @@
                 }).join('') +
                 (arr.length > 6 ? ' +' + (arr.length - 6) + ' more' : '');
         };
-        updateTags();
-        tagsInput.addEventListener('input', updateTags);
+        updTags();
+        tagsInput.addEventListener('input', updTags);
     }
 
-    // ─────────────────────────────────────────────────────
-    // Code availability check
-    // ─────────────────────────────────────────────────────
+    // ─── Code check ───────────────────────────────────
     var codeInput = document.getElementById('pdfCode');
     var codeStatus = document.getElementById('codeStatus');
-    var codeCheckTimer = null;
+    var codeTimer = null;
 
-    function formatCode(v) {
+    function fmtCode(v) {
         v = (v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
         if (v.length > 4) v = v.slice(0, 4) + '-' + v.slice(4, 8);
         return v.slice(0, 9);
@@ -1145,18 +1078,15 @@
         codeStatus.className = 'pdf-field__hint ' + (cls || '');
         codeStatus.innerHTML = html;
     }
-    function checkCodeAvailability() {
+    function checkCode() {
         if (!codeInput) return;
         var v = codeInput.value.trim();
-        if (!v) {
-            codeInput.classList.remove('is-error', 'is-ok');
-            setCodeStatus('', ''); checkDirty(); return;
-        }
+        if (!v) { codeInput.classList.remove('is-error','is-ok'); setCodeStatus('', ''); return; }
         if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(v)) {
             codeInput.classList.add('is-error');
             codeInput.classList.remove('is-ok');
             setCodeStatus('err', '<i class="fas fa-circle-xmark"></i> Format must be XXXX-XXXX.');
-            checkDirty(); return;
+            return;
         }
         codeInput.classList.remove('is-error');
         setCodeStatus('', '<span class="pdf-field__status checking"><i class="fas fa-circle-notch fa-spin"></i> Checking…</span>');
@@ -1167,70 +1097,45 @@
             body: JSON.stringify({ code: v, exclude_id: PDF_ID }),
         })
         .then(function (r) { return r.json(); })
-        .then(function (data) {
-            if (!data || !data.valid) {
+        .then(function (d) {
+            if (!d || !d.valid) {
                 codeInput.classList.add('is-error');
                 codeInput.classList.remove('is-ok');
                 setCodeStatus('err', '<i class="fas fa-circle-xmark"></i> Invalid code.');
-            } else if (data.available) {
+            } else if (d.available) {
                 codeInput.classList.add('is-ok');
                 codeInput.classList.remove('is-error');
                 setCodeStatus('ok', '<span class="pdf-field__status ok"><i class="fas fa-circle-check"></i> Available</span>');
-            } else if (data.reason === 'taken_in_main') {
-                codeInput.classList.add('is-error');
-                codeInput.classList.remove('is-ok');
-                setCodeStatus('err', '<span class="pdf-field__status err"><i class="fas fa-circle-xmark"></i> Already used in library</span>');
-            } else if (data.reason === 'taken_in_staging') {
-                codeInput.classList.add('is-error');
-                codeInput.classList.remove('is-ok');
-                setCodeStatus('err', '<span class="pdf-field__status err"><i class="fas fa-circle-xmark"></i> Reserved in staging</span>');
             } else {
                 codeInput.classList.add('is-error');
                 codeInput.classList.remove('is-ok');
-                setCodeStatus('err', '<span class="pdf-field__status err"><i class="fas fa-circle-xmark"></i> Unavailable</span>');
+                setCodeStatus('err', '<span class="pdf-field__status err"><i class="fas fa-circle-xmark"></i> Already used</span>');
             }
-            checkDirty();
         })
         .catch(function () {
             setCodeStatus('warn', '<span class="pdf-field__status warn"><i class="fas fa-triangle-exclamation"></i> Could not verify</span>');
-            checkDirty();
         });
     }
     if (codeInput) {
         codeInput.addEventListener('input', function () {
             var pos = codeInput.selectionStart;
             var before = codeInput.value;
-            codeInput.value = formatCode(codeInput.value);
+            codeInput.value = fmtCode(codeInput.value);
             if (before !== codeInput.value) {
-                codeInput.selectionStart = codeInput.selectionEnd =
-                    Math.min(pos, codeInput.value.length);
+                codeInput.selectionStart = codeInput.selectionEnd = Math.min(pos, codeInput.value.length);
             }
-            clearTimeout(codeCheckTimer);
-            codeCheckTimer = setTimeout(checkCodeAvailability, 350);
-            checkDirty();
+            clearTimeout(codeTimer);
+            codeTimer = setTimeout(checkCode, 350);
         });
-        if (codeInput.value.trim()) checkCodeAvailability();
+        if (codeInput.value.trim()) checkCode();
     }
 
-    // ─────────────────────────────────────────────────────
-    // Premium hidden fallback
-    // ─────────────────────────────────────────────────────
-    var premium = document.getElementById('isPremium');
-    var fallback = document.getElementById('isPremiumFallback');
-    function syncPremiumFallback() {
-        if (!premium || !fallback) return;
-        fallback.disabled = !!premium.checked;
-    }
-    if (premium) { premium.addEventListener('change', syncPremiumFallback); syncPremiumFallback(); }
-
-    // ─────────────────────────────────────────────────────
-    // Dirty-state tracking
-    // ─────────────────────────────────────────────────────
+    // ─── Dirty state ──────────────────────────────────
     var form = document.getElementById('pdfEditForm');
     var saveBar = document.getElementById('saveStatus');
-    var ORIGINAL_STATE = null;
+    var ORIGINAL = null;
 
-    function captureInitialState() {
+    function snapshot() {
         if (!form) return;
         var s = {};
         Array.from(form.elements).forEach(function (el) {
@@ -1241,20 +1146,11 @@
                 s[el.name] = (s[el.name] || []).concat([el.value]);
             }
         });
-        ORIGINAL_STATE = JSON.stringify(s);
+        return JSON.stringify(s);
     }
     function isDirty() {
-        if (!form || !ORIGINAL_STATE) return false;
-        var s = {};
-        Array.from(form.elements).forEach(function (el) {
-            if (!el.name || el.disabled) return;
-            if (el.type === 'checkbox' || el.type === 'radio') {
-                s[el.name] = (s[el.name] || []).concat([el.checked ? '1' : '0']);
-            } else if (el.type !== 'submit' && el.type !== 'button' && el.type !== 'hidden') {
-                s[el.name] = (s[el.name] || []).concat([el.value]);
-            }
-        });
-        return JSON.stringify(s) !== ORIGINAL_STATE;
+        if (!form || !ORIGINAL) return false;
+        return snapshot() !== ORIGINAL;
     }
     function checkDirty() {
         if (!saveBar) return;
@@ -1266,14 +1162,14 @@
             : '<i class="fas fa-circle-check" style="color:#10B981;"></i> All changes saved';
     }
     if (form) {
-        captureInitialState();
+        ORIGINAL = snapshot();
         form.addEventListener('input', checkDirty);
         form.addEventListener('change', checkDirty);
+        form.addEventListener('submit', function () { window.onbeforeunload = null; });
     }
     window.addEventListener('beforeunload', function (e) {
         if (isDirty()) { e.preventDefault(); e.returnValue = ''; return ''; }
     });
-    if (form) form.addEventListener('submit', function () { window.onbeforeunload = null; });
     document.addEventListener('keydown', function (e) {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
             e.preventDefault();
@@ -1281,6 +1177,118 @@
         }
     });
     setTimeout(checkDirty, 100);
+
+    // ─── PDF.js preview ───────────────────────────────
+    var list = document.getElementById('pdfCanvasList');
+    var placeholder = document.getElementById('previewPlaceholder');
+    var refreshBtn = document.getElementById('previewRefresh');
+    var fullscreenBtn = document.getElementById('previewFullscreen');
+    var previewCard = document.getElementById('pdfPreview');
+
+    if (placeholder && placeholder.dataset.noFile === '1') return;
+    if (!list) return;
+
+    var pdfUrl = list.getAttribute('data-src');
+    var currentDoc = null;
+    var RENDER_CAP = 40;
+
+    if (window.pdfjsLib) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    function dismissPlaceholder() {
+        if (!placeholder) return;
+        placeholder.classList.add('is-fading');
+        setTimeout(function () { placeholder.hidden = true; }, 260);
+    }
+    function showError(msg) {
+        if (!placeholder) return;
+        placeholder.hidden = false;
+        placeholder.classList.remove('is-fading');
+        placeholder.innerHTML =
+            '<i class="fas fa-triangle-exclamation err-icon"></i>' +
+            '<h4>Could not load preview</h4>' +
+            '<p>' + escapeHtml(msg || 'The file may be unavailable.') + '</p>' +
+            '<a href="' + pdfUrl + '" target="_blank" rel="noopener" class="pdf-preview__btn" style="margin-top:10px;">' +
+            '<i class="fas fa-up-right-from-square"></i> Open in a new tab</a>';
+    }
+
+    function renderPage(page, containerWidth) {
+        var viewport = page.getViewport({ scale: 1 });
+        var scale = Math.min(2, containerWidth / viewport.width);
+        var scaled = page.getViewport({ scale: scale });
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.floor(scaled.width);
+        canvas.height = Math.floor(scaled.height);
+        canvas.style.width = '100%';
+        canvas.style.height = 'auto';
+        return page.render({ canvasContext: canvas.getContext('2d'), viewport: scaled }).promise
+            .then(function () { return canvas; });
+    }
+
+    function buildAll(pdf) {
+        var containerWidth = list.clientWidth - 20 || 600;
+        var total = Math.min(pdf.numPages, RENDER_CAP);
+        var slots = [];
+        for (var i = 0; i < total; i++) {
+            var s = document.createElement('div');
+            s.className = 'pdf-page-slot';
+            s.textContent = 'Page ' + (i + 1);
+            s.style.cssText = 'width:100%;max-width:900px;min-height:60px;background:rgba(255,255,255,0.06);border-radius:4px;color:rgba(255,255,255,0.45);font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;';
+            list.appendChild(s);
+            slots.push(s);
+        }
+        var chain = Promise.resolve();
+        for (var n = 1; n <= total; n++) {
+            (function (pn) {
+                chain = chain.then(function () {
+                    return pdf.getPage(pn).then(function (page) {
+                        return renderPage(page, containerWidth).then(function (canvas) {
+                            slots[pn - 1].replaceWith(canvas);
+                            if (pn === 1) dismissPlaceholder();
+                        });
+                    });
+                });
+            })(n);
+        }
+        return chain;
+    }
+
+    function loadPreview() {
+        if (!window.pdfjsLib) { showError('PDF renderer failed to load.'); return; }
+        list.innerHTML = '';
+        if (currentDoc && currentDoc.destroy) {
+            try { currentDoc.destroy(); } catch (e) {}
+        }
+        currentDoc = null;
+
+        window.pdfjsLib.getDocument({ url: pdfUrl, withCredentials: true }).promise
+            .then(function (pdf) { currentDoc = pdf; return buildAll(pdf); })
+            .catch(function (err) { showError((err && err.message) || 'Unknown error'); });
+    }
+
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function () {
+            if (placeholder) {
+                placeholder.hidden = false;
+                placeholder.classList.remove('is-fading');
+                placeholder.innerHTML =
+                    '<i class="fas fa-circle-notch fa-spin spin"></i>' +
+                    '<h4>Reloading…</h4><p>Decoding the PDF for inline display.</p>';
+            }
+            loadPreview();
+        });
+    }
+    if (fullscreenBtn && previewCard) {
+        fullscreenBtn.addEventListener('click', function () {
+            var on = previewCard.classList.toggle('is-fullscreen');
+            fullscreenBtn.innerHTML = on ? '<i class="fas fa-compress"></i>' : '<i class="fas fa-expand"></i>';
+            document.body.style.overflow = on ? 'hidden' : '';
+        });
+    }
+
+    loadPreview();
 })();
 </script>
 {% endblock %}

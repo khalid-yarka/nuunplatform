@@ -1,595 +1,13 @@
 {# ============================================================
    templates/dashboard/admin/content/pdfs.html
-   Unified PDF workspace — Library / Intake / Staging / Unverified.
+   PDF Management Dashboard — KPIs, action queue, analytics, list.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
-
-{% macro pager(page, total_pages, tab, extra={}) %}
-    {% if total_pages > 1 %}
-        <nav class="pdf-pager" aria-label="Pagination">
-            {% if page > 1 %}
-                <a href="{{ url_for('admin_content.pdfs', tab=tab, page=page-1, **extra) }}"
-                   class="pdf-pager__btn" aria-label="Previous page">
-                    <i class="fas fa-chevron-left"></i>
-                </a>
-            {% else %}
-                <span class="pdf-pager__btn is-disabled" aria-disabled="true">
-                    <i class="fas fa-chevron-left"></i>
-                </span>
-            {% endif %}
-            <span class="pdf-pager__info">
-                Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong>
-            </span>
-            {% if page < total_pages %}
-                <a href="{{ url_for('admin_content.pdfs', tab=tab, page=page+1, **extra) }}"
-                   class="pdf-pager__btn" aria-label="Next page">
-                    <i class="fas fa-chevron-right"></i>
-                </a>
-            {% else %}
-                <span class="pdf-pager__btn is-disabled" aria-disabled="true">
-                    <i class="fas fa-chevron-right"></i>
-                </span>
-            {% endif %}
-        </nav>
-    {% endif %}
-{% endmacro %}
-
-
-{# ═══════════════════════════════════════════════════════════
-   STYLES — in <head>, so no flash of unstyled content
-   ═══════════════════════════════════════════════════════════ #}
-{% block admin_css %}
-<style>
-.lib-wrap {
-    --lib-radius: 12px;
-    --lib-radius-sm: 8px;
-    --lib-border: var(--border);
-    --lib-surface: var(--surface);
-    --lib-surface-alt: var(--surface-alt, #f8f9fb);
-    --lib-bg: var(--background);
-    --lib-text: var(--text);
-    --lib-text-2: var(--text-secondary);
-    --lib-text-muted: var(--text-muted);
-    --lib-primary: var(--primary);
-    --lib-primary-light: var(--primary-light);
-    --lib-danger: #DC2626;
-    --lib-danger-light: #FEE2E2;
-    --lib-gold: #F59E0B;
-    --lib-card-pad: 16px;
-    --lib-card-gap: 16px;
-}
-
-.lib-filter {
-    background: var(--lib-surface);
-    border: 1px solid var(--lib-border);
-    border-radius: var(--lib-radius);
-    padding: 12px;
-    margin-bottom: 12px;
-    position: sticky;
-    top: 8px;
-    z-index: 20;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-}
-.lib-filter__row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    flex-wrap: wrap;
-}
-.lib-search { position: relative; flex: 1; min-width: 200px; }
-.lib-search__icon {
-    position: absolute;
-    left: 12px; top: 50%; transform: translateY(-50%);
-    color: var(--lib-text-muted); font-size: 13px; pointer-events: none;
-}
-.lib-search input {
-    width: 100%;
-    padding: 10px 60px 10px 36px;
-    font-size: 14px;
-    border: 1px solid var(--lib-border);
-    border-radius: var(--lib-radius-sm);
-    background: var(--lib-bg);
-    color: var(--lib-text);
-    font-family: inherit;
-    transition: all 0.15s;
-}
-.lib-search input:focus {
-    outline: none;
-    border-color: var(--lib-primary);
-    background: var(--lib-surface);
-    box-shadow: 0 0 0 3px rgba(255, 49, 56, 0.10);
-}
-.lib-search__clear {
-    position: absolute; right: 40px; top: 50%;
-    transform: translateY(-50%);
-    color: var(--lib-text-muted); font-size: 14px;
-    text-decoration: none;
-}
-.lib-search__clear:hover { color: var(--lib-danger); }
-.lib-search__kbd {
-    position: absolute; right: 10px; top: 50%;
-    transform: translateY(-50%);
-    font-size: 11px; padding: 2px 6px;
-    border-radius: 5px;
-    background: var(--lib-surface-alt);
-    border: 1px solid var(--lib-border);
-    color: var(--lib-text-muted);
-    font-family: ui-monospace, Menlo, monospace;
-    pointer-events: none;
-}
-.lib-search__go { padding: 10px 16px; flex-shrink: 0; }
-
-.lib-select {
-    padding: 10px 12px; font-size: 13px;
-    border: 1px solid var(--lib-border);
-    border-radius: var(--lib-radius-sm);
-    background: var(--lib-bg);
-    color: var(--lib-text);
-    font-family: inherit; cursor: pointer;
-    transition: all 0.15s;
-    max-width: 160px; min-width: 110px;
-}
-.lib-select:focus {
-    outline: none;
-    border-color: var(--lib-primary);
-    background: var(--lib-surface);
-}
-
-.lib-btn {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 10px 14px; font-size: 13px; font-weight: 600;
-    border-radius: var(--lib-radius-sm);
-    border: 1px solid transparent;
-    cursor: pointer; text-decoration: none;
-    font-family: inherit; white-space: nowrap;
-    transition: all 0.15s;
-}
-.lib-btn--primary {
-    background: var(--lib-primary); color: #fff;
-    border-color: var(--lib-primary);
-}
-.lib-btn--primary:hover { filter: brightness(0.93); transform: translateY(-1px); }
-.lib-btn--ghost {
-    background: transparent;
-    color: var(--lib-text-2);
-    border-color: var(--lib-border);
-}
-.lib-btn--ghost:hover {
-    background: var(--lib-surface-alt);
-    color: var(--lib-text);
-    border-color: var(--lib-text-muted);
-}
-.lib-btn--danger {
-    background: var(--lib-danger); color: #fff;
-    border-color: var(--lib-danger);
-}
-.lib-btn--danger:hover { filter: brightness(0.93); transform: translateY(-1px); }
-.lib-btn--sm { padding: 6px 10px; font-size: 12px; }
-.lib-btn__chev { font-size: 9px; margin-left: 2px; transition: transform 0.2s; }
-.lib-btn.open .lib-btn__chev { transform: rotate(180deg); }
-
-.lib-advanced {
-    margin-top: 12px; padding-top: 12px;
-    border-top: 1px solid var(--lib-border);
-    animation: libPanelIn 0.2s ease-out;
-}
-@keyframes libPanelIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-.lib-advanced__grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 14px;
-}
-.lib-advanced__field { display: flex; flex-direction: column; gap: 6px; }
-.lib-advanced__field label {
-    font-size: 11px; font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--lib-text-muted);
-}
-.lib-advanced__field .lib-select { max-width: 100%; width: 100%; }
-
-.lib-density {
-    display: inline-flex;
-    background: var(--lib-bg);
-    border: 1px solid var(--lib-border);
-    border-radius: var(--lib-radius-sm);
-    padding: 3px; gap: 2px;
-}
-.lib-density__btn {
-    flex: 1;
-    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-    padding: 7px 10px; font-size: 12px; font-weight: 600;
-    border: none; background: transparent;
-    color: var(--lib-text-2); cursor: pointer;
-    border-radius: 6px; font-family: inherit;
-    transition: all 0.15s;
-}
-.lib-density__btn.active {
-    background: var(--lib-surface);
-    color: var(--lib-primary);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-}
-.lib-density__btn i { font-size: 11px; }
-
-.lib-saved { display: flex; gap: 6px; }
-.lib-saved .lib-select { flex: 1; }
-
-.lib-advanced__actions {
-    display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px;
-}
-
-.lib-chips {
-    display: flex; flex-wrap: wrap; gap: 8px;
-    align-items: center; margin-bottom: 12px;
-}
-.lib-chip {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 6px 12px;
-    background: var(--lib-primary-light);
-    color: var(--lib-primary);
-    border-radius: 20px; font-size: 12px; font-weight: 600;
-    text-decoration: none; transition: all 0.15s;
-    max-width: 260px;
-}
-.lib-chip span {
-    overflow: hidden; text-overflow: ellipsis;
-    white-space: nowrap; max-width: 180px;
-}
-.lib-chip:hover { background: var(--lib-primary); color: #fff; }
-.lib-chip i { font-size: 11px; opacity: 0.75; }
-.lib-chip:hover i { opacity: 1; }
-.lib-chips__reset {
-    margin-left: auto;
-    color: var(--lib-text-muted);
-    font-size: 12px; font-weight: 600;
-    text-decoration: none;
-    padding: 6px 12px; border-radius: 20px;
-}
-.lib-chips__reset:hover { color: var(--lib-primary); background: var(--lib-primary-light); }
-
-.lib-toolbar {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 14px;
-    background: var(--lib-surface);
-    border: 1px solid var(--lib-border);
-    border-radius: var(--lib-radius);
-    margin-bottom: 14px; flex-wrap: wrap;
-}
-.lib-toolbar__left, .lib-toolbar__right {
-    display: flex; align-items: center; gap: 10px;
-}
-.lib-toolbar__left { flex: 1; min-width: 0; }
-.lib-toolbar__count { font-size: 13px; color: var(--lib-text-2); }
-.lib-toolbar__count strong { color: var(--lib-text); }
-
-.lib-check {
-    position: relative;
-    display: inline-flex; align-items: center; justify-content: center;
-    cursor: pointer; user-select: none; padding: 4px;
-}
-.lib-check input { position: absolute; opacity: 0; pointer-events: none; }
-.lib-check > span {
-    width: 18px; height: 18px;
-    border-radius: 5px;
-    border: 1.5px solid var(--lib-border);
-    background: var(--lib-surface);
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s; flex-shrink: 0;
-}
-.lib-check input:checked + span {
-    background: var(--lib-primary); border-color: var(--lib-primary);
-}
-.lib-check input:checked + span::after {
-    content: ''; width: 5px; height: 9px;
-    border: solid #fff; border-width: 0 2px 2px 0;
-    transform: rotate(45deg) translate(-1px, -2px);
-}
-.lib-check input:indeterminate + span {
-    background: var(--lib-primary); border-color: var(--lib-primary);
-}
-.lib-check input:indeterminate + span::after {
-    content: ''; width: 8px; height: 2px;
-    background: #fff; border-radius: 1px;
-}
-
-.lib-bulk {
-    display: flex; align-items: center; gap: 6px;
-    padding: 4px 10px;
-    background: var(--lib-primary-light);
-    border-radius: 20px;
-    animation: libPanelIn 0.15s ease-out;
-}
-.lib-bulk__count {
-    font-size: 12px; font-weight: 600;
-    color: var(--lib-primary); margin-right: 4px;
-}
-.lib-bulk__count strong { font-size: 13px; }
-
-.lib-view {
-    display: inline-flex;
-    background: var(--lib-bg);
-    border: 1px solid var(--lib-border);
-    border-radius: var(--lib-radius-sm);
-    padding: 3px; gap: 2px;
-}
-.lib-view__btn {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 32px; height: 28px;
-    border: none; background: transparent;
-    color: var(--lib-text-muted); cursor: pointer;
-    border-radius: 5px; font-size: 12px;
-    transition: all 0.15s; font-family: inherit;
-}
-.lib-view__btn.active {
-    background: var(--lib-surface);
-    color: var(--lib-primary);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-}
-.lib-view__btn:hover:not(.active) { color: var(--lib-text); }
-
-.lib-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: var(--lib-card-gap);
-    margin-bottom: 20px;
-}
-.lib-grid[data-density="compact"] {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 10px;
-}
-
-.lib-card {
-    position: relative;
-    background: var(--lib-surface);
-    border: 1px solid var(--lib-border);
-    border-radius: var(--lib-radius);
-    padding: var(--lib-card-pad);
-    display: flex; flex-direction: column; gap: 12px;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    overflow: hidden;
-}
-.lib-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-    border-color: var(--lib-primary);
-}
-.lib-card.is-selected {
-    border-color: var(--lib-primary);
-    background: linear-gradient(180deg, var(--lib-primary-light) 0%, var(--lib-surface) 40%);
-    box-shadow: 0 0 0 2px rgba(255, 49, 56, 0.2);
-}
-.lib-grid[data-density="compact"] .lib-card { padding: 12px; gap: 8px; }
-.lib-grid[data-density="compact"] .lib-card__desc { display: none; }
-.lib-grid[data-density="compact"] .lib-card__meta { font-size: 11px; }
-
-.lib-card__check {
-    position: absolute; top: 8px; left: 8px; z-index: 3;
-    padding: 4px;
-    background: var(--lib-surface);
-    border-radius: 6px;
-    opacity: 0;
-    transition: opacity 0.15s;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-}
-.lib-card:hover .lib-card__check,
-.lib-card.is-selected .lib-card__check { opacity: 1; }
-
-@media (hover: none), (pointer: coarse) {
-    .lib-card__check { opacity: 1 !important; }
-}
-
-.lib-card__head {
-    display: flex; gap: 12px; align-items: flex-start;
-    margin-left: 12px;
-}
-.lib-card__icon {
-    width: 40px; height: 40px;
-    border-radius: 10px;
-    background: linear-gradient(135deg, #FEF2F2, #FEE2E2);
-    color: #E74C3C;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px; flex-shrink: 0;
-}
-[data-theme="dark"] .lib-card__icon {
-    background: linear-gradient(135deg, #3A1A1A, #4A1F1F);
-    color: #F87171;
-}
-.lib-card__title-wrap { flex: 1; min-width: 0; }
-.lib-card__title {
-    display: block; font-size: 14px; font-weight: 700;
-    color: var(--lib-text); line-height: 1.35;
-    margin-bottom: 3px; text-decoration: none;
-    overflow: hidden; text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-}
-.lib-card__title:hover { color: var(--lib-primary); }
-.lib-card__code {
-    font-size: 11px;
-    font-family: ui-monospace, Menlo, monospace;
-    color: var(--lib-text-muted);
-    letter-spacing: 0.5px; font-weight: 600;
-}
-.lib-card__premium {
-    font-size: 16px; flex-shrink: 0;
-    filter: drop-shadow(0 2px 4px rgba(245, 158, 11, 0.4));
-}
-
-.lib-card__desc {
-    font-size: 12.5px; color: var(--lib-text-2);
-    line-height: 1.5; margin: 0;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-}
-
-.lib-card__tags { display: flex; flex-wrap: wrap; gap: 5px; }
-.lib-tag {
-    display: inline-flex; align-items: center; gap: 4px;
-    font-size: 10.5px; font-weight: 600;
-    padding: 3px 9px; border-radius: 12px;
-    background: var(--lib-bg);
-    color: var(--lib-text-2);
-    text-transform: capitalize;
-    max-width: 140px; overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap;
-}
-.lib-tag i { font-size: 9px; opacity: 0.7; }
-.lib-tag--subject { background: var(--lib-primary-light); color: var(--lib-primary); }
-.lib-tag--soft {
-    background: transparent;
-    border: 1px solid var(--lib-border);
-    color: var(--lib-text-muted);
-}
-.lib-tag--missing { background: var(--lib-danger-light); color: var(--lib-danger); }
-[data-theme="dark"] .lib-tag--missing {
-    background: rgba(220, 38, 38, 0.15);
-    color: #FCA5A5;
-}
-
-.lib-card__meta {
-    display: flex; gap: 12px;
-    font-size: 12px; color: var(--lib-text-muted);
-    margin-top: auto;
-}
-.lib-card__meta span { display: inline-flex; align-items: center; gap: 4px; }
-.lib-card__meta i { font-size: 11px; }
-
-.lib-card__actions {
-    display: flex; gap: 6px;
-    padding-top: 12px;
-    border-top: 1px solid var(--lib-border);
-    flex-wrap: wrap;
-}
-.lib-card__btn {
-    flex: 1 1 auto; min-width: 44px;
-    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-    padding: 7px 10px;
-    font-size: 12px; font-weight: 600;
-    border-radius: 7px; text-decoration: none;
-    border: 1px solid var(--lib-border);
-    background: var(--lib-bg);
-    color: var(--lib-text-2);
-    cursor: pointer; font-family: inherit;
-    transition: all 0.15s; white-space: nowrap;
-}
-.lib-card__btn:hover {
-    background: var(--lib-surface);
-    border-color: var(--lib-primary);
-    color: var(--lib-primary);
-}
-.lib-card__btn--danger:hover {
-    background: var(--lib-danger-light);
-    border-color: var(--lib-danger);
-    color: var(--lib-danger);
-}
-.lib-card__ribbon {
-    position: absolute; top: 0; right: 0;
-    width: 40px; height: 40px;
-    background: linear-gradient(135deg, transparent 50%, rgba(245, 158, 11, 0.15) 50%);
-    pointer-events: none;
-}
-
-.lib-grid[data-view="list"] {
-    display: flex; flex-direction: column; gap: 8px;
-}
-.lib-grid[data-view="list"] .lib-card {
-    flex-direction: row; align-items: center;
-    padding: 12px 16px; gap: 16px;
-    transform: none;
-}
-.lib-grid[data-view="list"] .lib-card:hover { transform: none; }
-.lib-grid[data-view="list"] .lib-card__check {
-    position: static; opacity: 1;
-    box-shadow: none; background: transparent; padding: 0;
-}
-.lib-grid[data-view="list"] .lib-card__head {
-    flex: 0 0 280px; margin-left: 0; min-width: 0;
-}
-.lib-grid[data-view="list"] .lib-card__desc {
-    flex: 1; -webkit-line-clamp: 1; margin: 0;
-}
-.lib-grid[data-view="list"] .lib-card__tags {
-    flex: 0 0 auto; max-width: 200px; overflow: hidden;
-}
-.lib-grid[data-view="list"] .lib-card__meta { flex: 0 0 auto; margin-top: 0; }
-.lib-grid[data-view="list"] .lib-card__actions {
-    flex: 0 0 auto; padding-top: 0;
-    border-top: none; margin-left: auto;
-}
-.lib-grid[data-view="list"] .lib-card__actions .lib-card__btn {
-    flex: 0 0 auto; min-width: 36px;
-}
-.lib-grid[data-view="list"] .lib-card__ribbon { display: none; }
-
-@media (max-width: 900px) {
-    .lib-grid[data-view="list"] .lib-card {
-        flex-direction: column; align-items: stretch;
-    }
-    .lib-grid[data-view="list"] .lib-card__head { flex: 1 1 auto; }
-    .lib-grid[data-view="list"] .lib-card__tags { max-width: none; }
-}
-
-.lib-empty, .lib-noresults {
-    padding: 60px 24px; text-align: center;
-    background: var(--lib-surface);
-    border: 1px solid var(--lib-border);
-    border-radius: var(--lib-radius);
-}
-.lib-empty__icon, .lib-noresults i {
-    font-size: 56px;
-    color: var(--lib-text-muted);
-    opacity: 0.35; margin-bottom: 14px;
-    display: inline-block;
-}
-.lib-empty h3, .lib-noresults h3 {
-    font-size: 17px; font-weight: 700;
-    color: var(--lib-text); margin: 0 0 6px;
-}
-.lib-empty p, .lib-noresults p {
-    color: var(--lib-text-2); font-size: 13.5px;
-    margin: 0 0 18px; line-height: 1.5;
-}
-
-@media (max-width: 640px) {
-    .lib-filter { padding: 10px; }
-    .lib-search { min-width: 100%; flex: 1 1 100%; }
-    .lib-search__go { padding: 10px 12px; margin-left: auto; }
-    .lib-search__go span { display: none; }
-    .lib-select { flex: 1; max-width: none; min-width: 0; }
-    .lib-toolbar { flex-direction: column; align-items: stretch; }
-    .lib-toolbar__right { justify-content: space-between; }
-    .lib-bulk { flex-wrap: wrap; }
-    .lib-chips { gap: 6px; }
-    .lib-chip { max-width: none; }
-    .lib-chip span { max-width: 100px; }
-    .lib-advanced__grid { grid-template-columns: 1fr; }
-}
-@media (max-width: 480px) {
-    .hide-sm { display: none; }
-    .lib-card__head { margin-left: 0; }
-}
-</style>
-{% endblock %}
-
 
 {% block admin_title_icon %}<i class="fas fa-file-pdf header-icon"></i>{% endblock %}
 {% block admin_title %}PDF Library{% endblock %}
 {% block admin_subtitle %}
-    {% if tab == 'library' %}
-        {{ lib_total }} document{{ '' if lib_total == 1 else 's' }} in the library
-    {% elif tab == 'intake' %}
-        {{ pending_count }} file{{ '' if pending_count == 1 else 's' }} waiting for review
-    {% elif tab == 'staging' %}
-        {{ staging_count }} pending staged PDF{{ '' if staging_count == 1 else 's' }}
-    {% elif tab == 'unverified' %}
-        {{ unverified_count }} record{{ '' if unverified_count == 1 else 's' }} awaiting review
-    {% endif %}
+    Manage Telegram intake, staging, published files, and the review queue.
 {% endblock %}
 
 {% block admin_breadcrumb %}
@@ -598,594 +16,1154 @@
 {% endblock %}
 
 {% block admin_actions %}
-    {% if tab == 'staging' and can_publish and staging_count > 0 %}
-        <form method="POST"
-              action="{{ url_for('admin_content.pdf_staging_publish_all') }}"
-              onsubmit="return confirm('Publish ALL {{ staging_count }} pending staged PDFs?');"
-              style="display:inline;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="admin-btn primary">
-                <i class="fas fa-cloud-upload-alt"></i> Publish all ({{ staging_count }})
-            </button>
-        </form>
-    {% endif %}
-    {% if tab == 'intake' and can_publish %}
-        <a href="{{ url_for('admin_content.pdfs_bulk_workspace') }}" class="admin-btn primary">
-            <i class="fas fa-sliders-h"></i> Bulk workspace
-        </a>
-    {% endif %}
+    <a href="{{ url_for('admin_content.pdfs_bulk_workspace') }}" class="admin-btn secondary">
+        <i class="fas fa-sliders-h"></i> Bulk workspace
+    </a>
+    <a href="{{ url_for('admin_content.pdfs_broken') }}" class="admin-btn secondary">
+        <i class="fas fa-link-slash"></i> Broken links
+    </a>
+{% endblock %}
+
+
+{% block admin_css %}
+<style>
+/* ═══════════════════════════════════════════════════════════
+   PDF DASHBOARD — scope: .pd-
+   ═══════════════════════════════════════════════════════════ */
+[hidden] { display: none !important; }
+
+.pd-wrap {
+    --pd-radius: 14px;
+    --pd-radius-sm: 9px;
+    --pd-border: var(--border);
+    --pd-surface: var(--surface);
+    --pd-surface-alt: var(--surface-alt, #f8f9fb);
+    --pd-bg: var(--background);
+    --pd-text: var(--text);
+    --pd-text-2: var(--text-secondary);
+    --pd-muted: var(--text-muted);
+    --pd-primary: var(--primary);
+    --pd-primary-light: var(--primary-light);
+    --pd-green: #10B981;
+    --pd-amber: #F59E0B;
+    --pd-red: #EF4444;
+    --pd-blue: #3B82F6;
+    --pd-purple: #8B5CF6;
+    --pd-gold: #EAB308;
+    font-size: 14px;
+    color: var(--pd-text);
+}
+
+/* ─── KPI tiles ───────────────────────────────────────────── */
+.pd-kpis {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+@media (max-width: 1200px) { .pd-kpis { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 720px)  { .pd-kpis { grid-template-columns: repeat(2, 1fr); } }
+
+.pd-kpi {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+    background: var(--pd-surface);
+    border: 1.5px solid var(--pd-border);
+    border-radius: var(--pd-radius);
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.18s ease;
+    overflow: hidden;
+}
+.pd-kpi::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--pd-accent, var(--pd-primary));
+}
+.pd-kpi:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(0,0,0,0.07);
+    border-color: var(--pd-accent, var(--pd-primary));
+}
+.pd-kpi.is-active {
+    background: linear-gradient(180deg,
+        color-mix(in srgb, var(--pd-accent, var(--pd-primary)) 8%, var(--pd-surface)),
+        var(--pd-surface) 40%);
+    border-color: var(--pd-accent, var(--pd-primary));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--pd-accent, var(--pd-primary)) 18%, transparent);
+}
+.pd-kpi__head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px;
+}
+.pd-kpi__icon {
+    width: 32px; height: 32px;
+    border-radius: 9px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    background: color-mix(in srgb, var(--pd-accent, var(--pd-primary)) 12%, transparent);
+    color: var(--pd-accent, var(--pd-primary));
+}
+.pd-kpi__trend {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--pd-muted);
+    display: inline-flex; align-items: center; gap: 3px;
+}
+.pd-kpi__trend.up   { color: var(--pd-green); }
+.pd-kpi__trend.down { color: var(--pd-red); }
+.pd-kpi__value {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--pd-text);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    margin-top: 2px;
+}
+.pd-kpi__label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--pd-muted);
+}
+.pd-kpi__sub {
+    font-size: 11px;
+    color: var(--pd-text-2);
+    font-weight: 500;
+}
+
+.pd-kpi--live    { --pd-accent: var(--pd-green); }
+.pd-kpi--pending { --pd-accent: var(--pd-amber); }
+.pd-kpi--staged  { --pd-accent: var(--pd-blue); }
+.pd-kpi--flagged { --pd-accent: var(--pd-red); }
+.pd-kpi--premium { --pd-accent: var(--pd-gold); }
+.pd-kpi--broken  { --pd-accent: var(--pd-purple); }
+
+/* ─── Action queue ────────────────────────────────────────── */
+.pd-actions {
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--pd-amber) 5%, var(--pd-surface)),
+        var(--pd-surface) 60%);
+    border: 1.5px solid color-mix(in srgb, var(--pd-amber) 30%, var(--pd-border));
+    border-radius: var(--pd-radius);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+}
+.pd-actions__title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--pd-amber);
+    margin-bottom: 12px;
+}
+.pd-actions__title i { font-size: 14px; }
+.pd-actions__list {
+    display: flex; flex-direction: column;
+    gap: 8px;
+}
+.pd-act {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+    background: var(--pd-surface);
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius-sm);
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.15s ease;
+}
+.pd-act:hover {
+    border-color: var(--pd-amber);
+    transform: translateX(2px);
+    text-decoration: none;
+    color: inherit;
+}
+.pd-act__icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--pd-amber) 12%, transparent);
+    color: var(--pd-amber);
+}
+.pd-act__body { flex: 1; min-width: 0; }
+.pd-act__headline {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--pd-text);
+    line-height: 1.3;
+}
+.pd-act__hint {
+    font-size: 11.5px;
+    color: var(--pd-muted);
+    margin-top: 2px;
+}
+.pd-act__go {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--pd-amber);
+    white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 4px;
+}
+.pd-act__go i { font-size: 10px; transition: transform 0.15s; }
+.pd-act:hover .pd-act__go i { transform: translateX(3px); }
+
+/* ─── Analytics grid ──────────────────────────────────────── */
+.pd-analytics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+@media (max-width: 900px) { .pd-analytics { grid-template-columns: 1fr; } }
+
+.pd-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.pd-card {
+    background: var(--pd-surface);
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius);
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+.pd-card__head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--pd-border);
+    background: var(--pd-surface);
+}
+.pd-card__title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--pd-text);
+    display: flex; align-items: center; gap: 8px;
+}
+.pd-card__title i { color: var(--pd-primary); font-size: 13px; }
+.pd-card__sub {
+    font-size: 11px;
+    color: var(--pd-muted);
+    font-weight: 600;
+}
+.pd-card__body { padding: 14px 16px; }
+
+/* ─── Chart bars ─────────────────────────────────────────── */
+.pd-bar-row {
+    display: grid;
+    grid-template-columns: 110px 1fr 48px;
+    gap: 10px;
+    align-items: center;
+    font-size: 12px;
+    padding: 5px 0;
+}
+.pd-bar-row + .pd-bar-row { border-top: 1px dashed var(--pd-border); padding-top: 7px; margin-top: 2px; }
+.pd-bar-label {
+    color: var(--pd-text-2);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pd-bar-track {
+    height: 8px;
+    background: var(--pd-surface-alt);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.pd-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+}
+.pd-bar-fill.c-primary { background: linear-gradient(90deg, var(--pd-primary), color-mix(in srgb, var(--pd-primary) 60%, white)); }
+.pd-bar-fill.c-green   { background: linear-gradient(90deg, #10B981, #6EE7B7); }
+.pd-bar-fill.c-amber   { background: linear-gradient(90deg, #F59E0B, #FCD34D); }
+.pd-bar-fill.c-blue    { background: linear-gradient(90deg, #3B82F6, #93C5FD); }
+.pd-bar-fill.c-purple  { background: linear-gradient(90deg, #8B5CF6, #C4B5FD); }
+.pd-bar-fill.c-gold    { background: linear-gradient(90deg, #EAB308, #FDE68A); }
+.pd-bar-count {
+    text-align: right;
+    font-weight: 800;
+    color: var(--pd-text);
+    font-variant-numeric: tabular-nums;
+    font-size: 12.5px;
+}
+
+.pd-empty-mini {
+    text-align: center;
+    padding: 24px 12px;
+    font-size: 12.5px;
+    color: var(--pd-muted);
+}
+
+/* ─── Sparkline (uploads) ────────────────────────────────── */
+.pd-spark {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 60px;
+    padding: 4px 0;
+    margin-bottom: 8px;
+}
+.pd-spark-bar {
+    flex: 1;
+    min-height: 3px;
+    background: linear-gradient(180deg,
+        var(--pd-primary),
+        color-mix(in srgb, var(--pd-primary) 40%, transparent));
+    border-radius: 3px 3px 0 0;
+    transition: height 0.3s ease, opacity 0.15s;
+    position: relative;
+}
+.pd-spark-bar:hover { opacity: 0.75; }
+.pd-spark-bar.is-empty { background: var(--pd-surface-alt); height: 3px !important; }
+.pd-spark-axis {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--pd-muted);
+    font-weight: 600;
+    padding: 0 2px;
+}
+
+/* ─── Small lists (top viewed / recently edited) ─────────── */
+.pd-mini-list { display: flex; flex-direction: column; gap: 4px; }
+.pd-mini-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.15s;
+}
+.pd-mini-item:hover {
+    background: var(--pd-surface-alt);
+    text-decoration: none;
+    color: inherit;
+}
+.pd-mini-item__rank {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    font-weight: 800;
+    background: var(--pd-surface-alt);
+    color: var(--pd-muted);
+    flex-shrink: 0;
+}
+.pd-mini-item__rank.gold { background: linear-gradient(135deg, #FCD34D, #F59E0B); color: #78350F; }
+.pd-mini-item__rank.silver { background: linear-gradient(135deg, #E5E7EB, #9CA3AF); color: #374151; }
+.pd-mini-item__rank.bronze { background: linear-gradient(135deg, #FBBF24, #B45309); color: #ffffff; }
+.pd-mini-item__body { flex: 1; min-width: 0; }
+.pd-mini-item__title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--pd-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pd-mini-item__meta {
+    font-size: 10.5px;
+    color: var(--pd-muted);
+    margin-top: 1px;
+    font-family: ui-monospace, Menlo, monospace;
+}
+.pd-mini-item__value {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--pd-primary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* ─── Storage donut (simple) ─────────────────────────────── */
+.pd-storage {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+.pd-storage-item {
+    padding: 10px 12px;
+    background: var(--pd-surface-alt);
+    border-radius: 9px;
+}
+.pd-storage-item__label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    color: var(--pd-muted);
+}
+.pd-storage-item__value {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--pd-text);
+    margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+}
+.pd-storage-item__sub {
+    font-size: 10.5px;
+    color: var(--pd-muted);
+    margin-top: 1px;
+}
+
+/* ─── List section ───────────────────────────────────────── */
+.pd-list-header {
+    display: flex; align-items: center; gap: 12px;
+    margin: 12px 0 12px;
+    padding: 0 4px;
+}
+.pd-list-header h2 {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--pd-text);
+    margin: 0;
+    display: flex; align-items: center; gap: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+.pd-list-header h2 i { color: var(--pd-primary); font-size: 14px; }
+.pd-list-header .count {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--pd-muted);
+    background: var(--pd-surface-alt);
+    padding: 3px 10px;
+    border-radius: 12px;
+}
+
+/* ─── Toolbar ─────────────────────────────────────────────── */
+.pd-toolbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px;
+    background: var(--pd-surface);
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius);
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+    position: sticky; top: 8px; z-index: 20;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+}
+.pd-search {
+    position: relative; flex: 1; min-width: 200px;
+}
+.pd-search i {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--pd-muted); font-size: 13px; pointer-events: none;
+}
+.pd-search input {
+    width: 100%;
+    padding: 10px 12px 10px 36px;
+    font-size: 14px;
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius-sm);
+    background: var(--pd-bg);
+    color: var(--pd-text);
+    font-family: inherit;
+    transition: all 0.15s;
+}
+.pd-search input:focus {
+    outline: none;
+    border-color: var(--pd-primary);
+    background: var(--pd-surface);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--pd-primary) 10%, transparent);
+}
+.pd-select {
+    padding: 10px 12px;
+    font-size: 13px;
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius-sm);
+    background: var(--pd-bg);
+    color: var(--pd-text);
+    cursor: pointer;
+    font-family: inherit;
+    min-width: 130px;
+}
+.pd-select:focus { outline: none; border-color: var(--pd-primary); }
+
+.pd-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 14px; font-size: 13px; font-weight: 600;
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius-sm);
+    background: var(--pd-bg);
+    color: var(--pd-text-2);
+    cursor: pointer; font-family: inherit;
+    text-decoration: none; white-space: nowrap;
+    transition: all 0.15s;
+}
+.pd-btn:hover { border-color: var(--pd-primary); color: var(--pd-primary); text-decoration: none; }
+.pd-btn--primary {
+    background: var(--pd-primary); color: #fff; border-color: var(--pd-primary);
+}
+.pd-btn--primary:hover { filter: brightness(0.93); color: #fff; }
+
+/* ─── Status badge ───────────────────────────────────────── */
+.pd-status {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px;
+    font-size: 10.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    border-radius: 12px;
+    white-space: nowrap;
+}
+.pd-status i { font-size: 8px; }
+.pd-status--live    { background: #ECFDF5; color: #059669; }
+.pd-status--pending { background: #FFFBEB; color: #B45309; }
+.pd-status--staged  { background: #EFF6FF; color: #2563EB; }
+.pd-status--flagged { background: #FEF2F2; color: #DC2626; }
+.pd-status--archived{ background: #F3F4F6; color: #6B7280; }
+
+/* ─── Row list ────────────────────────────────────────────── */
+.pd-list {
+    background: var(--pd-surface);
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius);
+    overflow: hidden;
+}
+.pd-row {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    gap: 14px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--pd-border);
+    align-items: center;
+    transition: background 0.15s ease;
+    text-decoration: none;
+    color: inherit;
+}
+.pd-row:last-child { border-bottom: none; }
+.pd-row:hover { background: var(--pd-surface-alt); text-decoration: none; color: inherit; }
+.pd-row__icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    background: linear-gradient(135deg, #FEF2F2, #FEE2E2);
+    color: #E74C3C;
+}
+[data-theme="dark"] .pd-row__icon {
+    background: linear-gradient(135deg, #3A1A1A, #4A1F1F);
+    color: #F87171;
+}
+.pd-row__body { min-width: 0; }
+.pd-row__top {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 4px;
+}
+.pd-row__title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--pd-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1; min-width: 0;
+}
+.pd-row__meta {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    font-size: 11.5px;
+    color: var(--pd-muted);
+    align-items: center;
+}
+.pd-row__meta .tag {
+    background: var(--pd-surface-alt);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+}
+.pd-row__meta .tag code {
+    font-family: ui-monospace, Menlo, monospace;
+    color: var(--pd-primary);
+    letter-spacing: 0.3px;
+}
+.pd-row__meta .gem { color: var(--pd-gold); }
+.pd-row__actions {
+    display: flex; gap: 6px; align-items: center;
+    opacity: 0.85;
+}
+.pd-icon-btn {
+    width: 34px; height: 34px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--pd-border);
+    border-radius: 8px;
+    background: var(--pd-surface);
+    color: var(--pd-muted);
+    text-decoration: none; font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.pd-icon-btn:hover {
+    border-color: var(--pd-primary);
+    color: var(--pd-primary);
+    background: var(--pd-primary-light);
+    text-decoration: none;
+}
+.pd-icon-btn--danger:hover {
+    border-color: var(--pd-red);
+    color: var(--pd-red);
+    background: #FEF2F2;
+}
+
+.pd-empty {
+    text-align: center;
+    padding: 60px 24px;
+}
+.pd-empty i {
+    font-size: 48px; opacity: 0.35;
+    color: var(--pd-muted);
+    margin-bottom: 12px;
+    display: inline-block;
+}
+.pd-empty h3 {
+    font-size: 16px; font-weight: 700;
+    color: var(--pd-text); margin: 0 0 6px;
+}
+.pd-empty p {
+    font-size: 13px; color: var(--pd-text-2);
+    margin: 0 0 18px;
+}
+
+/* ─── Dark mode ──────────────────────────────────────────── */
+[data-theme="dark"] .pd-status--live    { background: #064E3B; color: #6EE7B7; }
+[data-theme="dark"] .pd-status--pending { background: #78350F; color: #FCD34D; }
+[data-theme="dark"] .pd-status--staged  { background: #1E3A8A; color: #93C5FD; }
+[data-theme="dark"] .pd-status--flagged { background: #7F1D1D; color: #FCA5A5; }
+[data-theme="dark"] .pd-status--archived{ background: #374151; color: #9CA3AF; }
+[data-theme="dark"] .pd-icon-btn--danger:hover { background: #3A1A1A; }
+</style>
 {% endblock %}
 
 
 {% block admin_content %}
 
-<nav class="pdf-tabs" role="tablist">
-    <a href="{{ url_for('admin_content.pdfs', tab='library') }}"
-       class="pdf-tab {% if tab == 'library' %}active{% endif %}" role="tab">
-        <i class="fas fa-book"></i><span>Library</span>
-        {% if lib_total > 0 %}<span class="pdf-tab-count">{{ lib_total }}</span>{% endif %}
-    </a>
-    {% if can_intake %}
-        <a href="{{ url_for('admin_content.pdfs', tab='intake') }}"
-           class="pdf-tab {% if tab == 'intake' %}active{% endif %}" role="tab">
-            <i class="fas fa-inbox"></i><span>Intake</span>
-            {% if pending_count > 0 %}<span class="pdf-tab-count pending">{{ pending_count }}</span>{% endif %}
-        </a>
-    {% endif %}
-    {% if can_intake or can_publish %}
-        <a href="{{ url_for('admin_content.pdfs', tab='staging') }}"
-           class="pdf-tab {% if tab == 'staging' %}active{% endif %}" role="tab">
-            <i class="fas fa-layer-group"></i><span>Staging</span>
-            {% if staging_count > 0 %}<span class="pdf-tab-count">{{ staging_count }}</span>{% endif %}
-        </a>
-    {% endif %}
-    {% if can_intake %}
-        <a href="{{ url_for('admin_content.pdfs', tab='unverified') }}"
-           class="pdf-tab {% if tab == 'unverified' %}active{% endif %}" role="tab">
-            <i class="fas fa-clipboard-check"></i><span>Unverified</span>
-            {% if unverified_count > 0 %}<span class="pdf-tab-count unverified">{{ unverified_count }}</span>{% endif %}
-        </a>
-    {% endif %}
-</nav>
+<div class="pd-wrap">
 
-
-{% if tab == 'library' %}
-
-<div class="lib-wrap" id="libWrap">
-
-    <form method="GET" class="lib-filter" id="libFilterForm" autocomplete="off">
-        <input type="hidden" name="tab" value="library">
-        <input type="hidden" name="quick" id="libQuickFilter" value="">
-        <input type="hidden" name="sort" id="libSortInput" value="{{ request.args.get('sort', 'shuffle') }}">
-
-        <div class="lib-filter__row">
-            <div class="lib-search" role="search">
-                <i class="fas fa-search lib-search__icon"></i>
-                <input type="text" name="search" id="libSearchInput"
-                       value="{{ search }}"
-                       placeholder="Search title, code, subject, chapter, tags…"
-                       autocomplete="off" spellcheck="false"
-                       enterkeyhint="search" inputmode="search"
-                       aria-label="Search PDFs">
-                {% if search %}
-                    <a href="{{ url_for('admin_content.pdfs', tab='library',
-                                        subject=subject_filter or None,
-                                        curriculum=curriculum_filter or None,
-                                        class=class_filter or None) }}"
-                       class="lib-search__clear" title="Clear search">
-                        <i class="fas fa-times-circle"></i>
-                    </a>
+    {# ═════════════════ KPI TILES ═════════════════ #}
+    <div class="pd-kpis">
+        <a href="{{ url_for('admin_content.pdfs', status='live') }}"
+           class="pd-kpi pd-kpi--live {% if status_filter == 'live' %}is-active{% endif %}">
+            <div class="pd-kpi__head">
+                <span class="pd-kpi__icon"><i class="fas fa-circle-check"></i></span>
+                {% if kpis.live_trend %}
+                    <span class="pd-kpi__trend {{ 'up' if kpis.live_trend > 0 else 'down' }}">
+                        <i class="fas fa-arrow-{{ 'up' if kpis.live_trend > 0 else 'down' }}"></i>
+                        {{ kpis.live_trend|abs }}
+                    </span>
                 {% endif %}
-                <kbd class="lib-search__kbd">/</kbd>
             </div>
-
-            <button type="submit" class="lib-btn lib-btn--primary lib-search__go" id="libSearchGo">
-                <i class="fas fa-search"></i><span>Search</span>
-            </button>
-
-            <select name="subject" class="lib-select" data-autofilter aria-label="Subject">
-                <option value="">All subjects</option>
-                {% for s in subjects %}
-                    <option value="{{ s.code if s is mapping else s }}"
-                            {% if subject_filter == (s.code if s is mapping else s) %}selected{% endif %}>
-                        {{ s.name if s is mapping else s }}
-                    </option>
-                {% endfor %}
-            </select>
-
-            <select name="curriculum" class="lib-select" data-autofilter aria-label="Curriculum">
-                <option value="">All curricula</option>
-                {% for c in curricula %}
-                    <option value="{{ c }}" {% if curriculum_filter == c %}selected{% endif %}>{{ c }}</option>
-                {% endfor %}
-            </select>
-
-            <select name="class" class="lib-select" data-autofilter aria-label="Class">
-                <option value="">All classes</option>
-                {% for c in classes %}
-                    <option value="{{ c }}" {% if class_filter == c %}selected{% endif %}>{{ c }}</option>
-                {% endfor %}
-            </select>
-
-            <button type="button" class="lib-btn lib-btn--ghost" id="libToggleAdvanced" title="Advanced filters">
-                <i class="fas fa-sliders-h"></i>
-                <span class="hide-sm">Filters</span>
-                <i class="fas fa-chevron-down lib-btn__chev"></i>
-            </button>
-        </div>
-
-        <div class="lib-advanced" id="libAdvanced" hidden>
-            <div class="lib-advanced__grid">
-                <div class="lib-advanced__field">
-                    <label>Sort by</label>
-                    <select id="libSortSelect" class="lib-select">
-                        <option value="shuffle">🔀 Shuffle (default)</option>
-                        <option value="newest">Newest first</option>
-                        <option value="oldest">Oldest first</option>
-                        <option value="popular">Most viewed</option>
-                        <option value="title_asc">Title A → Z</option>
-                        <option value="title_desc">Title Z → A</option>
-                    </select>
-                </div>
-                <div class="lib-advanced__field">
-                    <label>Quick filter</label>
-                    <select id="libQuickSelect" class="lib-select">
-                        <option value="">— None —</option>
-                        <option value="premium">💎 Premium only</option>
-                        <option value="free">Free only</option>
-                        <option value="with_url">With local file</option>
-                        <option value="no_url">Telegram-only</option>
-                        <option value="no_subject">Missing subject</option>
-                        <option value="no_chapter">Missing chapter</option>
-                    </select>
-                </div>
-                <div class="lib-advanced__field">
-                    <label>Density</label>
-                    <div class="lib-density" role="group">
-                        <button type="button" class="lib-density__btn active" data-density="comfortable">
-                            <i class="fas fa-th-large"></i> Comfortable
-                        </button>
-                        <button type="button" class="lib-density__btn" data-density="compact">
-                            <i class="fas fa-bars"></i> Compact
-                        </button>
-                    </div>
-                </div>
-                <div class="lib-advanced__field">
-                    <label>Saved views</label>
-                    <div class="lib-saved">
-                        <select id="libSavedSelect" class="lib-select">
-                            <option value="">— Load a saved view —</option>
-                        </select>
-                        <button type="button" class="lib-btn lib-btn--ghost lib-btn--sm"
-                                id="libSaveView" title="Save current filters">
-                            <i class="fas fa-bookmark"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="lib-advanced__actions">
-                <button type="button" class="lib-btn lib-btn--ghost lib-btn--sm" id="libClearAll">
-                    <i class="fas fa-times"></i> Clear all filters
-                </button>
-                <button type="submit" class="lib-btn lib-btn--primary lib-btn--sm">
-                    <i class="fas fa-filter"></i> Apply
-                </button>
-            </div>
-        </div>
-    </form>
-
-    {% set has_filters = search or subject_filter or curriculum_filter or class_filter %}
-    {% if has_filters %}
-        <div class="lib-chips" id="libChips">
-            {% if search %}
-                <a class="lib-chip" href="{{ url_for('admin_content.pdfs', tab='library',
-                    subject=subject_filter or None, curriculum=curriculum_filter or None,
-                    class=class_filter or None, sort=sort or None) }}">
-                    <i class="fas fa-search"></i><span>{{ search }}</span><i class="fas fa-times"></i>
-                </a>
-            {% endif %}
-            {% if subject_filter %}
-                <a class="lib-chip" href="{{ url_for('admin_content.pdfs', tab='library',
-                    search=search or None, curriculum=curriculum_filter or None,
-                    class=class_filter or None, sort=sort or None) }}">
-                    <i class="fas fa-book"></i><span>{{ subject_filter }}</span><i class="fas fa-times"></i>
-                </a>
-            {% endif %}
-            {% if curriculum_filter %}
-                <a class="lib-chip" href="{{ url_for('admin_content.pdfs', tab='library',
-                    search=search or None, subject=subject_filter or None,
-                    class=class_filter or None, sort=sort or None) }}">
-                    <i class="fas fa-globe"></i><span>{{ curriculum_filter }}</span><i class="fas fa-times"></i>
-                </a>
-            {% endif %}
-            {% if class_filter %}
-                <a class="lib-chip" href="{{ url_for('admin_content.pdfs', tab='library',
-                    search=search or None, subject=subject_filter or None,
-                    curriculum=curriculum_filter or None, sort=sort or None) }}">
-                    <i class="fas fa-graduation-cap"></i><span>{{ class_filter }}</span><i class="fas fa-times"></i>
-                </a>
-            {% endif %}
-            <a href="{{ url_for('admin_content.pdfs', tab='library') }}" class="lib-chips__reset">
-                Reset all
-            </a>
-        </div>
-    {% endif %}
-
-    <div class="lib-toolbar">
-        <div class="lib-toolbar__left">
-            <label class="lib-check">
-                <input type="checkbox" id="libSelectAll">
-                <span></span>
-            </label>
-            <span class="lib-toolbar__count">
-                {% if lib_total == 0 %}
-                    No results
-                {% else %}
-                    Showing
-                    <strong>{{ ((lib_page - 1) * 100) + 1 }}–{{ [lib_page * 100, lib_total]|min }}</strong>
-                    of <strong>{{ lib_total }}</strong>
-                {% endif %}
+            <span class="pd-kpi__value">{{ kpis.live }}</span>
+            <span class="pd-kpi__label">Live</span>
+            <span class="pd-kpi__sub">
+                {% if kpis.live_trend %}this week{% else %}published &amp; visible{% endif %}
             </span>
-        </div>
+        </a>
 
-        <div class="lib-toolbar__right">
-            <div class="lib-bulk" id="libBulk" hidden>
-                <span class="lib-bulk__count"><strong id="libSelectedCount">0</strong> selected</span>
-                <button type="button" class="lib-btn lib-btn--ghost lib-btn--sm" id="libBulkPremiumOn">
-                    <i class="fas fa-gem"></i> <span class="hide-sm">Premium on</span>
-                </button>
-                <button type="button" class="lib-btn lib-btn--ghost lib-btn--sm" id="libBulkPremiumOff">
-                    <i class="fas fa-gem"></i> <span class="hide-sm">Premium off</span>
-                </button>
-                <button type="button" class="lib-btn lib-btn--ghost lib-btn--sm" id="libBulkExport">
-                    <i class="fas fa-file-csv"></i> <span class="hide-sm">Export</span>
-                </button>
-                {% if can_delete %}
-                    <button type="button" class="lib-btn lib-btn--danger lib-btn--sm" id="libBulkDelete">
-                        <i class="fas fa-trash"></i> <span class="hide-sm">Delete</span>
-                    </button>
-                {% endif %}
-                <button type="button" class="lib-btn lib-btn--ghost lib-btn--sm" id="libBulkClear">
-                    <i class="fas fa-times"></i>
-                </button>
+        <a href="{{ url_for('admin_content.pdfs', status='pending') }}"
+           class="pd-kpi pd-kpi--pending {% if status_filter == 'pending' %}is-active{% endif %}">
+            <div class="pd-kpi__head">
+                <span class="pd-kpi__icon"><i class="fas fa-inbox"></i></span>
             </div>
+            <span class="pd-kpi__value">{{ kpis.pending }}</span>
+            <span class="pd-kpi__label">Pending</span>
+            <span class="pd-kpi__sub">{{ 'needs attention' if kpis.pending > 0 else 'intake clear' }}</span>
+        </a>
 
-            <a href="{{ url_for('admin_content.pdfs',
-                                tab='library',
-                                search=search or None,
-                                subject=subject_filter or None,
-                                curriculum=curriculum_filter or None,
-                                class=class_filter or None,
-                                sort=sort or None,
-                                reseed='1') }}"
-               class="lib-btn lib-btn--ghost lib-btn--sm"
-               title="Shuffle again"
-               aria-label="Shuffle again">
-                <i class="fas fa-shuffle"></i>
-                <span class="hide-sm">Shuffle</span>
-            </a>
-
-            <div class="lib-view" role="group" aria-label="View mode">
-                <button type="button" class="lib-view__btn active" data-view="grid" title="Grid view">
-                    <i class="fas fa-th-large"></i>
-                </button>
-                <button type="button" class="lib-view__btn" data-view="list" title="List view">
-                    <i class="fas fa-list"></i>
-                </button>
+        <a href="{{ url_for('admin_content.pdfs', status='staged') }}"
+           class="pd-kpi pd-kpi--staged {% if status_filter == 'staged' %}is-active{% endif %}">
+            <div class="pd-kpi__head">
+                <span class="pd-kpi__icon"><i class="fas fa-layer-group"></i></span>
             </div>
-        </div>
+            <span class="pd-kpi__value">{{ kpis.staged }}</span>
+            <span class="pd-kpi__label">Staged</span>
+            <span class="pd-kpi__sub">{{ 'ready to publish' if kpis.staged > 0 else 'nothing staged' }}</span>
+        </a>
+
+        <a href="{{ url_for('admin_content.pdfs', status='flagged') }}"
+           class="pd-kpi pd-kpi--flagged {% if status_filter == 'flagged' %}is-active{% endif %}">
+            <div class="pd-kpi__head">
+                <span class="pd-kpi__icon"><i class="fas fa-flag"></i></span>
+            </div>
+            <span class="pd-kpi__value">{{ kpis.flagged }}</span>
+            <span class="pd-kpi__label">Flagged</span>
+            <span class="pd-kpi__sub">{{ 'review queue' if kpis.flagged > 0 else 'all reviewed' }}</span>
+        </a>
+
+        <a href="{{ url_for('admin_content.pdfs', premium='1') }}"
+           class="pd-kpi pd-kpi--premium {% if premium_filter %}is-active{% endif %}">
+            <div class="pd-kpi__head">
+                <span class="pd-kpi__icon"><i class="fas fa-gem"></i></span>
+            </div>
+            <span class="pd-kpi__value">{{ kpis.premium }}</span>
+            <span class="pd-kpi__label">Premium</span>
+            <span class="pd-kpi__sub">{{ kpis.premium_pct }}% of library</span>
+        </a>
+
+        <a href="{{ url_for('admin_content.pdfs_broken') }}"
+           class="pd-kpi pd-kpi--broken">
+            <div class="pd-kpi__head">
+                <span class="pd-kpi__icon"><i class="fas fa-link-slash"></i></span>
+            </div>
+            <span class="pd-kpi__value">{{ kpis.broken }}</span>
+            <span class="pd-kpi__label">Broken</span>
+            <span class="pd-kpi__sub">{{ 'missing files' if kpis.broken > 0 else 'all healthy' }}</span>
+        </a>
     </div>
 
-    {% if pdfs %}
-        <div class="lib-grid" id="libGrid" data-view="grid">
-            {% for p in pdfs %}
-                <div class="lib-card"
-                     data-id="{{ p.id }}"
-                     data-code="{{ p.code }}"
-                     data-title="{{ p.title }}"
-                     data-subject="{{ p.subject or '' }}"
-                     data-class="{{ p.class or '' }}"
-                     data-curriculum="{{ p.curriculum or '' }}"
-                     data-chapter="{{ p.chapter or '' }}"
-                     data-tags="{{ p.tags or '' }}"
-                     data-views="{{ p.view_count or 0 }}"
-                     data-premium="{{ '1' if p.is_premium else '0' }}"
-                     data-has-url="{{ '1' if p.file_url else '0' }}">
-
-                    <label class="lib-card__check lib-check">
-                        <input type="checkbox" class="lib-row-check" value="{{ p.id }}">
-                        <span></span>
-                    </label>
-
-                    <div class="lib-card__head">
-                        <div class="lib-card__icon"><i class="fas fa-file-pdf"></i></div>
-                        <div class="lib-card__title-wrap">
-                            <a href="{{ url_for('admin_content.pdf_edit', pdf_id=p.id) }}"
-                               class="lib-card__title" title="{{ p.title }}">{{ p.title }}</a>
-                            <div class="lib-card__code">{{ p.code }}</div>
+    {# ═════════════════ ACTION QUEUE ═════════════════ #}
+    {% if actions %}
+        <div class="pd-actions">
+            <div class="pd-actions__title">
+                <i class="fas fa-bolt"></i> Action queue
+            </div>
+            <div class="pd-actions__list">
+                {% for a in actions %}
+                    <a href="{{ a.url }}" class="pd-act">
+                        <span class="pd-act__icon"><i class="{{ a.icon }}"></i></span>
+                        <div class="pd-act__body">
+                            <div class="pd-act__headline">{{ a.headline }}</div>
+                            {% if a.hint %}<div class="pd-act__hint">{{ a.hint }}</div>{% endif %}
                         </div>
-                        {% if p.is_premium %}<span class="lib-card__premium" title="Premium">💎</span>{% endif %}
-                    </div>
-
-                    {% if p.description %}<p class="lib-card__desc">{{ p.description }}</p>{% endif %}
-
-                    <div class="lib-card__tags">
-                        {% if p.subject %}
-                            <span class="lib-tag lib-tag--subject"><i class="fas fa-book"></i> {{ p.subject }}</span>
-                        {% else %}
-                            <span class="lib-tag lib-tag--missing">No subject</span>
-                        {% endif %}
-                        {% if p.curriculum %}<span class="lib-tag">{{ p.curriculum }}</span>{% endif %}
-                        {% if p.class %}<span class="lib-tag">{{ p.class }}</span>{% endif %}
-                        {% if p.chapter %}<span class="lib-tag">{{ p.chapter }}</span>{% endif %}
-                        {% if p.tags %}
-                            {% for t in p.tags.split(',')[:3] %}
-                                <span class="lib-tag lib-tag--soft">{{ t.strip() }}</span>
-                            {% endfor %}
-                        {% endif %}
-                    </div>
-
-                    <div class="lib-card__meta">
-                        <span title="Views"><i class="fas fa-eye"></i> {{ p.view_count or 0 }}</span>
-                        <span title="Uploaded"><i class="fas fa-clock"></i> {{ p.uploaded_at | dt_date }}</span>
-                        {% if p.file_url %}
-                            <span title="Local file"><i class="fas fa-hdd"></i> Local</span>
-                        {% elif p.file_id %}
-                            <span title="Telegram"><i class="fab fa-telegram-plane"></i> TG</span>
-                        {% endif %}
-                    </div>
-
-                    <div class="lib-card__actions">
-                        {% if can_edit %}
-                            <a href="{{ url_for('admin_content.pdf_edit', pdf_id=p.id) }}"
-                               class="lib-card__btn" title="Edit">
-                                <i class="fas fa-pen"></i> <span class="hide-sm">Edit</span>
-                            </a>
-                        {% endif %}
-                        <a href="{{ url_for('admin_content.pdfs', tab='library', search=p.code) }}"
-                           class="lib-card__btn" title="Find by code">
-                            <i class="fas fa-search"></i> <span class="hide-sm">Find</span>
-                        </a>
-                        {% if can_delete %}
-                            <button type="button"
-                                    class="lib-card__btn lib-card__btn--danger lib-row-delete"
-                                    data-id="{{ p.id }}"
-                                    data-title="{{ p.title }}"
-                                    title="Delete">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        {% endif %}
-                    </div>
-                </div>
-            {% endfor %}
-        </div>
-
-        <div class="lib-noresults" id="libNoResults" hidden>
-            <i class="fas fa-filter"></i>
-            <h3>No matches for the current quick filter</h3>
-            <p>Adjust or remove the quick filter to see more results.</p>
-            <button type="button" class="lib-btn lib-btn--primary" id="libNoResultsClear">
-                Clear quick filter
-            </button>
-        </div>
-
-        {{ pager(lib_page, lib_total_pages, 'library', {
-            'search': search or None,
-            'subject': subject_filter or None,
-            'curriculum': curriculum_filter or None,
-            'class': class_filter or None,
-            'sort': sort or None,
-        }) }}
-    {% else %}
-        <div class="lib-empty">
-            <div class="lib-empty__icon"><i class="fas fa-file-pdf"></i></div>
-            <h3>Library is empty</h3>
-            <p>{% if has_filters %}No PDFs match the current filters.{% else %}Publish PDFs from the Staging tab.{% endif %}</p>
-            {% if has_filters %}
-                <a href="{{ url_for('admin_content.pdfs', tab='library') }}" class="lib-btn lib-btn--primary">
-                    <i class="fas fa-times"></i> Clear filters
-                </a>
-            {% endif %}
+                        <span class="pd-act__go">
+                            {{ a.cta }} <i class="fas fa-arrow-right"></i>
+                        </span>
+                    </a>
+                {% endfor %}
+            </div>
         </div>
     {% endif %}
-</div>
 
-{% endif %}{# tab == library #}
+    {# ═════════════════ ANALYTICS ═════════════════ #}
+    <div class="pd-analytics">
 
+        {# ─── LEFT COLUMN ─── #}
+        <div class="pd-col">
 
-{# ══════════════════════════════════════════════════════════
-   INTAKE / STAGING / UNVERIFIED tabs — unchanged
-   ══════════════════════════════════════════════════════════ #}
-{% if tab == 'intake' and can_intake %}
-    <form method="GET" class="admin-toolbar pdf-filter-bar" style="margin-bottom:12px;">
-        <input type="hidden" name="tab" value="intake">
-        <div class="admin-search">
-            <i class="fas fa-search"></i>
-            <input type="text" name="q" value="{{ q }}" placeholder="Search filenames…" autocomplete="off">
+            {# By subject #}
+            <div class="pd-card">
+                <div class="pd-card__head">
+                    <div class="pd-card__title">
+                        <i class="fas fa-book"></i> Top subjects
+                    </div>
+                    <span class="pd-card__sub">{{ subject_split|length }} subjects</span>
+                </div>
+                <div class="pd-card__body">
+                    {% if subject_split %}
+                        {% set max_subj = subject_split[0].count or 1 %}
+                        {% for s in subject_split %}
+                            <div class="pd-bar-row">
+                                <span class="pd-bar-label" title="{{ s.name }}">
+                                    {{ s.name or '—' }}
+                                </span>
+                                <span class="pd-bar-track">
+                                    <span class="pd-bar-fill c-primary"
+                                          style="width: {{ ((s.count / max_subj) * 100)|round(1) }}%;"></span>
+                                </span>
+                                <span class="pd-bar-count">{{ s.count }}</span>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="pd-empty-mini">No data yet.</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# By curriculum #}
+            <div class="pd-card">
+                <div class="pd-card__head">
+                    <div class="pd-card__title">
+                        <i class="fas fa-globe"></i> Curriculum split
+                    </div>
+                </div>
+                <div class="pd-card__body">
+                    {% if curriculum_split %}
+                        {% set max_cur = curriculum_split|map(attribute='count')|max or 1 %}
+                        {% for c in curriculum_split %}
+                            {% set color = 'c-blue' if c.code == 'SO' else 'c-green' if c.code == 'PL' else 'c-purple' if c.code == 'SL' else 'c-primary' %}
+                            <div class="pd-bar-row">
+                                <span class="pd-bar-label">
+                                    {% if c.code == '' %}Unscoped
+                                    {% elif c.code == 'SO' %}🇸🇴 Somalia
+                                    {% elif c.code == 'PL' %}🇸🇱 Puntland
+                                    {% elif c.code == 'SL' %}🇮🇷 Somaliland
+                                    {% else %}{{ c.code }}{% endif %}
+                                </span>
+                                <span class="pd-bar-track">
+                                    <span class="pd-bar-fill {{ color }}"
+                                          style="width: {{ ((c.count / max_cur) * 100)|round(1) }}%;"></span>
+                                </span>
+                                <span class="pd-bar-count">{{ c.count }}</span>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="pd-empty-mini">No data yet.</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# By class #}
+            <div class="pd-card">
+                <div class="pd-card__head">
+                    <div class="pd-card__title">
+                        <i class="fas fa-graduation-cap"></i> Class distribution
+                    </div>
+                </div>
+                <div class="pd-card__body">
+                    {% if class_split %}
+                        {% set max_cls = class_split|map(attribute='count')|max or 1 %}
+                        {% for c in class_split %}
+                            <div class="pd-bar-row">
+                                <span class="pd-bar-label">
+                                    {% if c.code == 'F4' %}Form 4
+                                    {% elif c.code == 'F3' %}Form 3
+                                    {% elif c.code == 'G8' %}Grade 8
+                                    {% elif c.code == 'G7' %}Grade 7
+                                    {% elif c.code == '' %}Unset
+                                    {% else %}{{ c.code }}{% endif %}
+                                </span>
+                                <span class="pd-bar-track">
+                                    <span class="pd-bar-fill c-amber"
+                                          style="width: {{ ((c.count / max_cls) * 100)|round(1) }}%;"></span>
+                                </span>
+                                <span class="pd-bar-count">{{ c.count }}</span>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="pd-empty-mini">No data yet.</div>
+                    {% endif %}
+                </div>
+            </div>
+
         </div>
-        {% if q %}
-            <a href="{{ url_for('admin_content.pdfs', tab='intake') }}" class="admin-btn secondary">
+
+        {# ─── RIGHT COLUMN ─── #}
+        <div class="pd-col">
+
+            {# Uploads trend #}
+            <div class="pd-card">
+                <div class="pd-card__head">
+                    <div class="pd-card__title">
+                        <i class="fas fa-chart-line"></i> Uploads · last 30 days
+                    </div>
+                    <span class="pd-card__sub">{{ kpis.uploads_30d }} total</span>
+                </div>
+                <div class="pd-card__body">
+                    {% if uploads_by_day %}
+                        {% set max_up = uploads_by_day|map(attribute='count')|max or 1 %}
+                        <div class="pd-spark">
+                            {% for d in uploads_by_day %}
+                                <div class="pd-spark-bar {{ 'is-empty' if d.count == 0 else '' }}"
+                                     style="height: {{ ((d.count / max_up) * 100)|round(1) if d.count > 0 else 0 }}%;"
+                                     title="{{ d.date }}: {{ d.count }}"></div>
+                            {% endfor %}
+                        </div>
+                        <div class="pd-spark-axis">
+                            <span>{{ uploads_by_day[0].date }}</span>
+                            <span>{{ uploads_by_day[-1].date }}</span>
+                        </div>
+                    {% else %}
+                        <div class="pd-empty-mini">No uploads in the last 30 days.</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Top viewed #}
+            <div class="pd-card">
+                <div class="pd-card__head">
+                    <div class="pd-card__title">
+                        <i class="fas fa-trophy"></i> Most viewed
+                    </div>
+                </div>
+                <div class="pd-card__body">
+                    {% if top_viewed %}
+                        <div class="pd-mini-list">
+                            {% for p in top_viewed %}
+                                <a href="{{ url_for('admin_content.pdf_edit', pdf_id=p.id) }}"
+                                   class="pd-mini-item">
+                                    <span class="pd-mini-item__rank {{ 'gold' if loop.index == 1 else 'silver' if loop.index == 2 else 'bronze' if loop.index == 3 else '' }}">
+                                        {{ loop.index }}
+                                    </span>
+                                    <div class="pd-mini-item__body">
+                                        <div class="pd-mini-item__title" title="{{ p.title }}">
+                                            {{ p.title }}
+                                        </div>
+                                        <div class="pd-mini-item__meta">{{ p.code }}</div>
+                                    </div>
+                                    <span class="pd-mini-item__value">
+                                        <i class="fas fa-eye" style="font-size:10px;opacity:0.7;"></i>
+                                        {{ p.view_count }}
+                                    </span>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="pd-empty-mini">No views recorded yet.</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Storage health #}
+            <div class="pd-card">
+                <div class="pd-card__head">
+                    <div class="pd-card__title">
+                        <i class="fas fa-server"></i> Storage health
+                    </div>
+                </div>
+                <div class="pd-card__body">
+                    <div class="pd-storage">
+                        <div class="pd-storage-item">
+                            <div class="pd-storage-item__label">Local file</div>
+                            <div class="pd-storage-item__value">{{ storage.local }}</div>
+                            <div class="pd-storage-item__sub">on disk</div>
+                        </div>
+                        <div class="pd-storage-item">
+                            <div class="pd-storage-item__label">Telegram</div>
+                            <div class="pd-storage-item__value">{{ storage.telegram }}</div>
+                            <div class="pd-storage-item__sub">file_id stored</div>
+                        </div>
+                        <div class="pd-storage-item">
+                            <div class="pd-storage-item__label">Both</div>
+                            <div class="pd-storage-item__value">{{ storage.both }}</div>
+                            <div class="pd-storage-item__sub">safe copies</div>
+                        </div>
+                        <div class="pd-storage-item">
+                            <div class="pd-storage-item__label">Orphan</div>
+                            <div class="pd-storage-item__value" style="color: {{ 'var(--pd-red)' if storage.orphan else 'var(--pd-text)' }};">
+                                {{ storage.orphan }}
+                            </div>
+                            <div class="pd-storage-item__sub">no file source</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    {# ═════════════════ THE LIST ═════════════════ #}
+    <div class="pd-list-header">
+        <h2>
+            <i class="fas fa-list"></i>
+            {% if status_filter == 'pending' %}Pending intake
+            {% elif status_filter == 'staged' %}Staged PDFs
+            {% elif status_filter == 'flagged' %}Flagged for review
+            {% elif status_filter == 'live' %}Live library
+            {% else %}Library{% endif %}
+        </h2>
+        <span class="count">{{ total }} item{{ '' if total == 1 else 's' }}</span>
+    </div>
+
+    <form method="GET" class="pd-toolbar" id="pdFilterForm">
+        <input type="hidden" name="status" value="{{ status_filter }}">
+        <input type="hidden" name="premium" value="{{ premium_filter or '' }}">
+
+        <div class="pd-search">
+            <i class="fas fa-search"></i>
+            <input type="text" name="search" id="pdSearchInput"
+                   value="{{ search }}"
+                   placeholder="Search title, code, subject, chapter, tags…"
+                   autocomplete="off" spellcheck="false">
+        </div>
+
+        <select name="status_quick" class="pd-select" id="pdStatusQuick">
+            <option value="live"    {% if status_filter == 'live' %}selected{% endif %}>🟢 Live</option>
+            <option value="flagged" {% if status_filter == 'flagged' %}selected{% endif %}>🔴 Flagged</option>
+            <option value="staged"  {% if status_filter == 'staged' %}selected{% endif %}>🔵 Staged</option>
+            <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>🟡 Pending</option>
+            <option value="all"     {% if status_filter == 'all' %}selected{% endif %}>All library</option>
+        </select>
+
+        <select name="sort" class="pd-select" data-autofilter>
+            <option value="newest"   {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
+            <option value="oldest"   {% if sort == 'oldest' %}selected{% endif %}>Oldest first</option>
+            <option value="title_asc"  {% if sort == 'title_asc' %}selected{% endif %}>Title A→Z</option>
+            <option value="title_desc" {% if sort == 'title_desc' %}selected{% endif %}>Title Z→A</option>
+            <option value="popular"  {% if sort == 'popular' %}selected{% endif %}>Most viewed</option>
+        </select>
+
+        <select name="subject" class="pd-select" data-autofilter>
+            <option value="">All subjects</option>
+            {% for s in subjects %}
+                <option value="{{ s.code }}" {% if subject_filter == s.code %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+        </select>
+
+        <select name="curriculum" class="pd-select" data-autofilter>
+            <option value="">All curricula</option>
+            {% for c in curricula %}
+                <option value="{{ c }}" {% if curriculum_filter == c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+        </select>
+
+        <select name="class" class="pd-select" data-autofilter>
+            <option value="">All classes</option>
+            {% for c in classes %}
+                <option value="{{ c }}" {% if class_filter == c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+        </select>
+
+        <button type="submit" class="pd-btn pd-btn--primary">
+            <i class="fas fa-search"></i> Search
+        </button>
+
+        {% if search or subject_filter or curriculum_filter or class_filter or premium_filter %}
+            <a href="{{ url_for('admin_content.pdfs', status=status_filter) }}" class="pd-btn">
                 <i class="fas fa-times"></i> Clear
             </a>
         {% endif %}
-        <a href="{{ url_for('admin_content.pdfs_bulk_workspace') }}" class="admin-btn secondary">
-            <i class="fas fa-sliders-h"></i> Bulk workspace
-        </a>
     </form>
 
-    {% if pending_list %}
-        {% if can_publish %}
-            <form method="POST" action="{{ url_for('admin_content.pdf_intake_publish_direct') }}" id="intakeBulkForm">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <div class="pdf-bulk-toolbar-compact">
-                    <label class="pdf-staging-check">
-                        <input type="checkbox" id="intakeSelectAll"><span>Select this page</span>
-                    </label>
-                    <span class="pdf-staging-count"><strong id="intakeCount">0</strong> selected</span>
-                    <div class="pdf-staging-spacer"></div>
-                    <button type="submit" class="admin-btn primary" id="intakeSuperPublishBtn" disabled>
-                        <i class="fas fa-sliders-h"></i> Open in workspace
-                    </button>
-                </div>
-        {% endif %}
-        <div class="pdf-intake-list">
-            {% for p in pending_list %}
-                <div class="pdf-intake-row">
-                    {% if can_publish %}
-                        <label class="pdf-intake-checkbox">
-                            <input type="checkbox" name="pending_ids" value="{{ p.id }}" class="pdf-intake-checkbox-input">
-                        </label>
-                    {% endif %}
-                    <div class="pdf-intake-icon"><i class="fas fa-file-pdf"></i></div>
-                    <div class="pdf-intake-body">
-                        <div class="pdf-intake-title">{{ p.filename or 'unknown.pdf' }}</div>
-                        <div class="pdf-intake-meta">
-                            {% if p.uploaded_by %}<span class="pdf-meta-chip">TG #{{ p.uploaded_by }}</span>{% endif %}
-                            <span>{{ p.uploaded_at | dt }}</span>
+    {# ─── ROWS ─── #}
+    {% if pdfs %}
+        <div class="pd-list">
+            {% for p in pdfs %}
+                {# Compute state #}
+                {% set state = 'live' %}
+                {% if p.is_flagged %}
+                    {% set state = 'flagged' %}
+                {% elif p.is_staged %}
+                    {% set state = 'staged' %}
+                {% elif p.is_pending %}
+                    {% set state = 'pending' %}
+                {% endif %}
+
+                <a href="{% if state == 'pending' %}{{ url_for('admin_content.pdf_intake_process', pending_id=p.id) }}{% else %}{{ url_for('admin_content.pdf_edit', pdf_id=p.id) }}{% endif %}"
+                   class="pd-row">
+
+                    <span class="pd-row__icon"><i class="fas fa-file-pdf"></i></span>
+
+                    <div class="pd-row__body">
+                        <div class="pd-row__top">
+                            <span class="pd-status pd-status--{{ state }}">
+                                <i class="fas fa-circle"></i>
+                                {% if state == 'live' %}Live
+                                {% elif state == 'pending' %}Pending
+                                {% elif state == 'staged' %}Staged
+                                {% elif state == 'flagged' %}Flagged
+                                {% endif %}
+                            </span>
+                            <span class="pd-row__title" title="{{ p.title or p.filename }}">
+                                {{ p.title or p.filename or 'Untitled' }}
+                            </span>
+                            {% if p.is_premium %}<span class="gem">💎</span>{% endif %}
+                        </div>
+                        <div class="pd-row__meta">
+                            {% if p.code %}<span class="tag"><code>{{ p.code }}</code></span>{% endif %}
+                            {% if p.subject %}<span class="tag">{{ p.subject }}</span>{% endif %}
+                            {% if p.curriculum %}<span class="tag">{{ p.curriculum }}</span>{% endif %}
+                            {% if p.class %}<span class="tag">{{ p.class }}</span>{% endif %}
+                            {% if p.view_count is defined and p.view_count %}
+                                <span class="tag"><i class="fas fa-eye" style="font-size:9px;opacity:0.6;"></i> {{ p.view_count }}</span>
+                            {% endif %}
+                            {% if p.uploaded_at or p.created_at %}
+                                <span>{{ (p.uploaded_at or p.created_at) | dt_date }}</span>
+                            {% endif %}
                         </div>
                     </div>
-                    <div class="pdf-intake-actions">
-                        <a href="{{ url_for('admin_content.pdf_intake_process', pending_id=p.id) }}"
-                           class="admin-btn primary sm"><i class="fas fa-arrow-right"></i> Process</a>
+
+                    <div class="pd-row__actions" onclick="event.preventDefault();event.stopPropagation();">
+                        {% if state == 'pending' %}
+                            <a href="{{ url_for('admin_content.pdf_intake_process', pending_id=p.id) }}"
+                               class="pd-icon-btn" title="Process">
+                                <i class="fas fa-arrow-right"></i>
+                            </a>
+                        {% else %}
+                            <a href="{{ url_for('admin_content.pdf_edit', pdf_id=p.id) }}"
+                               class="pd-icon-btn" title="Edit">
+                                <i class="fas fa-pen"></i>
+                            </a>
+                            <a href="{{ url_for('admin_content.pdf_library_preview', pdf_id=p.id) }}"
+                               target="_blank" rel="noopener"
+                               class="pd-icon-btn" title="Preview">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                        {% endif %}
                     </div>
-                </div>
+
+                </a>
             {% endfor %}
         </div>
-        {% if can_publish %}</form>{% endif %}
-        {{ pager(intake_page, intake_total_pages, 'intake', {'q': q or None}) }}
-    {% else %}
-        <div class="admin-empty">
-            <span class="empty-icon">🎉</span>
-            <h3>Inbox is empty</h3>
-            <p>New Telegram uploads will appear here.</p>
-        </div>
-    {% endif %}
-{% endif %}
 
-{% if tab == 'staging' and (can_intake or can_publish) %}
-    <div class="pdf-staging-toolbar">
-        <a href="{{ url_for('admin_content.pdfs', tab='staging',
-                            show_published=('0' if show_published else '1')) }}"
-           class="pdf-staging-toggle">
-            {% if show_published %}
-                <i class="fas fa-eye-slash"></i><span>Hide published</span>
-            {% else %}
-                <i class="fas fa-eye"></i><span>Show published{% if staging_published_count > 0 %} ({{ staging_published_count }}){% endif %}</span>
-            {% endif %}
-        </a>
-        <span class="pdf-staging-count">
-            {% if show_published %}
-                {{ staging_filtered_count }} total · {{ staging_count }} pending
-            {% else %}
-                {{ staging_count }} pending
-            {% endif %}
-        </span>
-        <div class="pdf-staging-spacer"></div>
-    </div>
-    {% if staging_list %}
-        {% if can_publish and not show_published %}
-            <form method="POST" action="{{ url_for('admin_content.pdf_staging_publish') }}" id="stagingForm">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <div class="pdf-bulk-toolbar-compact">
-                    <label class="pdf-staging-check">
-                        <input type="checkbox" id="stagingSelectAll"><span>Select this page</span>
-                    </label>
-                    <span class="pdf-staging-count"><strong id="stagingCount">0</strong> selected</span>
-                    <div class="pdf-staging-spacer"></div>
-                    <button type="submit" class="admin-btn primary" id="stagingPublishBtn" disabled>
-                        <i class="fas fa-cloud-upload-alt"></i> Publish selected
-                    </button>
-                </div>
+        {# ─── PAGINATION ─── #}
+        {% if total_pages > 1 %}
+            {% set base = {
+                'status': status_filter,
+                'search': search,
+                'subject': subject_filter,
+                'curriculum': curriculum_filter,
+                'class': class_filter,
+                'sort': sort,
+            } | urlencode %}
+            <div class="pd-toolbar" style="justify-content:center;margin-top:16px;">
+                <a href="?page={{ page - 1 }}&{{ base }}"
+                   class="pd-btn {% if page == 1 %}disabled{% endif %}"
+                   style="{{ 'opacity:0.4;pointer-events:none;' if page == 1 else '' }}">
+                    <i class="fas fa-chevron-left"></i> Prev
+                </a>
+                <span style="font-size:13px;color:var(--pd-muted);padding:0 12px;">
+                    Page <strong style="color:var(--pd-text);">{{ page }}</strong> of {{ total_pages }}
+                </span>
+                <a href="?page={{ page + 1 }}&{{ base }}"
+                   class="pd-btn {% if page == total_pages %}disabled{% endif %}"
+                   style="{{ 'opacity:0.4;pointer-events:none;' if page == total_pages else '' }}">
+                    Next <i class="fas fa-chevron-right"></i>
+                </a>
+            </div>
         {% endif %}
-        <div class="pdf-staging-list">
-            {% for p in staging_list %}
-                <div class="pdf-staging-row {% if p.published %}is-published{% endif %}">
-                    {% if can_publish and not p.published and not show_published %}
-                        <label class="pdf-staging-check">
-                            <input type="checkbox" name="staging_ids" value="{{ p.id }}" class="pdf-staging-checkbox">
-                        </label>
-                    {% endif %}
-                    <div class="pdf-staging-code">{{ p.code }}</div>
-                    <div class="pdf-staging-body">
-                        <div class="pdf-staging-title">{{ p.title }}
-                            {% if p.published %}<span class="pdf-chip published">✓ Published</span>{% endif %}
-                        </div>
-                        <div class="pdf-staging-meta">
-                            {% if p.subject %}<span>{{ p.subject }}</span>{% endif %}
-                            {% if p.class %}<span>{{ p.class }}</span>{% endif %}
-                        </div>
-                    </div>
-                </div>
-            {% endfor %}
-        </div>
-        {% if can_publish and not show_published %}</form>{% endif %}
-        {{ pager(staging_page, staging_total_pages, 'staging',
-                  {'show_published': ('1' if show_published else None)}) }}
-    {% else %}
-        <div class="admin-empty"><span class="empty-icon">✅</span><h3>Nothing pending</h3></div>
-    {% endif %}
-{% endif %}
 
-{% if tab == 'unverified' and can_intake %}
-    <div class="pdf-staging-toolbar">
-        <a href="{{ url_for('admin_content.pdfs', tab='unverified',
-                            show_confirmed=('0' if show_confirmed else '1')) }}"
-           class="pdf-staging-toggle">
-            {% if show_confirmed %}
-                <i class="fas fa-eye-slash"></i><span>Show unconfirmed only</span>
-            {% else %}
-                <i class="fas fa-eye"></i><span>Show verified records</span>
-            {% endif %}
-        </a>
-        <span class="pdf-staging-count">
-            {% if show_confirmed %}{{ unverified_filtered_count }} total
-            {% else %}{{ unverified_count }} pending review{% endif %}
-        </span>
-        <div class="pdf-staging-spacer"></div>
-    </div>
-    {% if unverified_list %}
-        <form method="POST" id="unverifiedForm">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <div class="pdf-bulk-toolbar-compact">
-                <label class="pdf-staging-check">
-                    <input type="checkbox" id="unverifiedSelectAll"><span>Select this page</span>
-                </label>
-                <span class="pdf-staging-count"><strong id="unverifiedCount">0</strong> selected</span>
-                <div class="pdf-staging-spacer"></div>
-                <button type="submit" class="admin-btn secondary" id="unverifiedConfirmBtn"
-                        formaction="{{ url_for('admin_content.pdf_unverified_confirm') }}" disabled>
-                    <i class="fas fa-check"></i> Mark as reviewed
-                </button>
-                {% if can_publish %}
-                    <button type="submit" class="admin-btn danger" id="unverifiedDeleteBtn"
-                            formaction="{{ url_for('admin_content.pdf_unverified_delete') }}"
-                            disabled onclick="return confirm('Remove from queue?');">
-                        <i class="fas fa-times"></i> Remove from queue
-                    </button>
+    {% else %}
+        <div class="pd-list">
+            <div class="pd-empty">
+                <i class="fas fa-inbox"></i>
+                <h3>
+                    {% if search or subject_filter or curriculum_filter or class_filter %}
+                        No matches
+                    {% elif status_filter == 'pending' %}
+                        Intake queue is empty
+                    {% elif status_filter == 'staged' %}
+                        Nothing staged
+                    {% elif status_filter == 'flagged' %}
+                        No flagged PDFs
+                    {% else %}
+                        Library is empty
+                    {% endif %}
+                </h3>
+                <p>
+                    {% if search or subject_filter or curriculum_filter or class_filter %}
+                        Try adjusting the filters.
+                    {% else %}
+                        Uploads from the Telegram bot will appear here.
+                    {% endif %}
+                </p>
+                {% if search or subject_filter or curriculum_filter or class_filter %}
+                    <a href="{{ url_for('admin_content.pdfs', status=status_filter) }}"
+                       class="pd-btn pd-btn--primary">
+                        <i class="fas fa-times"></i> Clear filters
+                    </a>
                 {% endif %}
             </div>
-            <div class="pdf-unverified-list">
-                {% for u in unverified_list %}
-                    <div class="pdf-unverified-row {% if u.confirmed %}confirmed{% endif %}">
-                        <label class="pdf-staging-check">
-                            <input type="checkbox" name="unverified_ids"
-                                   value="{{ u.tracking_id }}" class="pdf-unverified-checkbox">
-                        </label>
-                        <div class="pdf-staging-code">{{ u.code }}</div>
-                        <div class="pdf-staging-body">
-                            <div class="pdf-staging-title">{{ u.title }}</div>
-                        </div>
-                    </div>
-                {% endfor %}
-            </div>
-        </form>
-        {{ pager(unverified_page, unverified_total_pages, 'unverified',
-                  {'show_confirmed': ('1' if show_confirmed else None)}) }}
-    {% else %}
-        <div class="admin-empty"><span class="empty-icon">✅</span><h3>Nothing to review</h3></div>
+        </div>
     {% endif %}
-{% endif %}
+
+</div>
 
 {% endblock %}
 
@@ -1194,395 +1172,26 @@
 <script>
 (function () {
     'use strict';
-
-    var wrap = document.getElementById('libWrap');
-    if (!wrap) return;
-
-    var form         = document.getElementById('libFilterForm');
-    var searchInput  = document.getElementById('libSearchInput');
-    var sortSelect   = document.getElementById('libSortSelect');
-    var sortInput    = document.getElementById('libSortInput');
-    var quickSelect  = document.getElementById('libQuickSelect');
-    var quickInput   = document.getElementById('libQuickFilter');
-    var toggleBtn    = document.getElementById('libToggleAdvanced');
-    var advPanel     = document.getElementById('libAdvanced');
-    var clearAllBtn  = document.getElementById('libClearAll');
-    var grid         = document.getElementById('libGrid');
-    var selectAllBox = document.getElementById('libSelectAll');
-    var bulk         = document.getElementById('libBulk');
-    var bulkCount    = document.getElementById('libSelectedCount');
-    var bulkClear    = document.getElementById('libBulkClear');
-    var bulkPremiumOn  = document.getElementById('libBulkPremiumOn');
-    var bulkPremiumOff = document.getElementById('libBulkPremiumOff');
-    var bulkExport   = document.getElementById('libBulkExport');
-    var bulkDelete   = document.getElementById('libBulkDelete');
-    var noResults    = document.getElementById('libNoResults');
-    var noResultsClear = document.getElementById('libNoResultsClear');
-
-    document.querySelectorAll('[data-autofilter]').forEach(function (el) {
-        el.addEventListener('change', function () {
-            if (form) form.submit();
-        });
-    });
-
-    if (searchInput && form) {
-        searchInput.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter' || e.keyCode === 13) {
-                e.preventDefault();
-                e.stopPropagation();
-                form.submit();
-                return false;
-            }
-        });
-        var goBtn = document.getElementById('libSearchGo');
-        if (goBtn) goBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            form.submit();
-        });
-        searchInput.addEventListener('input', function () {
-            var q = (searchInput.value || '').toLowerCase().trim();
-            if (!grid) return;
-            if (!q) {
-                grid.querySelectorAll('.lib-card').forEach(function (c) { c.style.display = ''; });
-                if (noResults) noResults.hidden = true;
-                return;
-            }
-            var visible = 0;
-            grid.querySelectorAll('.lib-card').forEach(function (c) {
-                var hay = [c.dataset.title, c.dataset.code, c.dataset.subject,
-                           c.dataset.chapter, c.dataset.tags].join(' ').toLowerCase();
-                var show = hay.indexOf(q) !== -1;
-                c.style.display = show ? '' : 'none';
-                if (show) visible++;
-            });
-            if (noResults) noResults.hidden = visible > 0;
-        });
-    }
-
-    if (toggleBtn && advPanel) {
-        toggleBtn.addEventListener('click', function () {
-            var open = !advPanel.hidden;
-            advPanel.hidden = open;
-            toggleBtn.classList.toggle('open', !open);
-        });
-    }
-
-    if (sortSelect && sortInput) {
-        Array.from(sortSelect.options).forEach(function (o) {
-            if (o.value === sortInput.value) o.selected = true;
-        });
-        sortSelect.addEventListener('change', function () {
-            sortInput.value = sortSelect.value;
-            form.submit();
-        });
-    }
-
-    function applyQuickFilter(mode) {
-        if (!grid) return;
-        var visible = 0;
-        grid.querySelectorAll('.lib-card').forEach(function (card) {
-            var show = true;
-            var isPremium = card.dataset.premium === '1';
-            var hasUrl = card.dataset.hasUrl === '1';
-            var subject = (card.dataset.subject || '').trim();
-            var chapter = (card.dataset.chapter || '').trim();
-            if (mode === 'premium' && !isPremium) show = false;
-            if (mode === 'free' && isPremium) show = false;
-            if (mode === 'with_url' && !hasUrl) show = false;
-            if (mode === 'no_url' && hasUrl) show = false;
-            if (mode === 'no_subject' && subject) show = false;
-            if (mode === 'no_chapter' && chapter) show = false;
-            card.style.display = show ? '' : 'none';
-            if (show) visible++;
-        });
-        if (noResults) noResults.hidden = visible > 0;
-    }
-
-    if (quickSelect) {
-        var u0 = new URL(window.location.href);
-        var iq = u0.searchParams.get('quick') || '';
-        if (iq) {
-            Array.from(quickSelect.options).forEach(function (o) {
-                if (o.value === iq) o.selected = true;
-            });
-            applyQuickFilter(iq);
-        }
-        quickSelect.addEventListener('change', function () {
-            var mode = quickSelect.value;
-            if (quickInput) quickInput.value = mode;
-            applyQuickFilter(mode);
-            var u = new URL(window.location.href);
-            if (mode) u.searchParams.set('quick', mode); else u.searchParams.delete('quick');
-            history.replaceState({}, '', u.toString());
-        });
-    }
-    if (noResultsClear) noResultsClear.addEventListener('click', function () {
-        if (quickSelect) quickSelect.value = '';
-        if (quickInput) quickInput.value = '';
-        applyQuickFilter('');
-        var u = new URL(window.location.href);
-        u.searchParams.delete('quick');
-        history.replaceState({}, '', u.toString());
-    });
-
-    var STORAGE_VIEW = 'nuun.admin.pdfs.view';
-    var STORAGE_DENSITY = 'nuun.admin.pdfs.density';
-    function setView(mode) {
-        if (!grid) return;
-        grid.dataset.view = mode;
-        document.querySelectorAll('.lib-view__btn').forEach(function (b) {
-            b.classList.toggle('active', b.dataset.view === mode);
-        });
-        try { localStorage.setItem(STORAGE_VIEW, mode); } catch (e) {}
-    }
-    function setDensity(mode) {
-        if (!grid) return;
-        grid.dataset.density = mode;
-        document.querySelectorAll('.lib-density__btn').forEach(function (b) {
-            b.classList.toggle('active', b.dataset.density === mode);
-        });
-        try { localStorage.setItem(STORAGE_DENSITY, mode); } catch (e) {}
-    }
-    document.querySelectorAll('.lib-view__btn').forEach(function (b) {
-        b.addEventListener('click', function () { setView(b.dataset.view); });
-    });
-    document.querySelectorAll('.lib-density__btn').forEach(function (b) {
-        b.addEventListener('click', function () { setDensity(b.dataset.density); });
-    });
-    try {
-        var sv = localStorage.getItem(STORAGE_VIEW);
-        if (sv === 'grid' || sv === 'list') setView(sv);
-        var sd = localStorage.getItem(STORAGE_DENSITY);
-        if (sd === 'compact' || sd === 'comfortable') setDensity(sd);
-    } catch (e) {}
-
-    function getChecked() {
-        return Array.from(document.querySelectorAll('.lib-row-check:checked'));
-    }
-    function updateSelection() {
-        var checked = getChecked();
-        var total = document.querySelectorAll('.lib-row-check').length;
-        if (selectAllBox) {
-            selectAllBox.checked = checked.length > 0 && checked.length === total;
-            selectAllBox.indeterminate = checked.length > 0 && checked.length < total;
-        }
-        if (bulk) bulk.hidden = checked.length === 0;
-        if (bulkCount) bulkCount.textContent = checked.length;
-        document.querySelectorAll('.lib-card').forEach(function (c) {
-            var cb = c.querySelector('.lib-row-check');
-            c.classList.toggle('is-selected', cb && cb.checked);
-        });
-    }
-
-    if (selectAllBox) {
-        selectAllBox.addEventListener('change', function () {
-            var want = selectAllBox.checked;
-            document.querySelectorAll('.lib-row-check').forEach(function (cb) {
-                cb.checked = want;
-            });
-            updateSelection();
-        });
-    }
-    document.addEventListener('change', function (e) {
-        if (e.target && e.target.classList && e.target.classList.contains('lib-row-check')) {
-            updateSelection();
-        }
-    });
-    if (bulkClear) bulkClear.addEventListener('click', function () {
-        document.querySelectorAll('.lib-row-check').forEach(function (cb) { cb.checked = false; });
-        updateSelection();
-    });
-
-    var BULK_URL = '{{ url_for("admin_content.pdfs_bulk_action") }}';
-    var CSRF = '{{ csrf_token }}';
-
-    function getSelectedIds() {
-        return getChecked().map(function (cb) { return cb.value; });
-    }
-
-    function runBulkAction(action, confirmMsg) {
-        var ids = getSelectedIds();
-        if (!ids.length) return;
-        if (confirmMsg && !confirm(confirmMsg)) return;
-
-        var buttons = [bulkPremiumOn, bulkPremiumOff, bulkDelete].filter(Boolean);
-        buttons.forEach(function (b) { b.disabled = true; });
-
-        fetch(BULK_URL, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': CSRF,
-            },
-            body: JSON.stringify({ action: action, ids: ids }),
-        })
-        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
-        .then(function (res) {
-            if (!res.ok || res.data.error) {
-                alert(res.data.error || 'Action failed.');
-                return;
-            }
-            window.location.reload();
-        })
-        .catch(function (e) {
-            alert('Network error: ' + e);
-        })
-        .finally(function () {
-            buttons.forEach(function (b) { b.disabled = false; });
-        });
-    }
-
-    if (bulkPremiumOn) bulkPremiumOn.addEventListener('click', function () {
-        runBulkAction('premium_on', 'Mark ' + getSelectedIds().length + ' PDF(s) as premium?');
-    });
-    if (bulkPremiumOff) bulkPremiumOff.addEventListener('click', function () {
-        runBulkAction('premium_off', 'Mark ' + getSelectedIds().length + ' PDF(s) as free?');
-    });
-    if (bulkDelete) bulkDelete.addEventListener('click', function () {
-        var n = getSelectedIds().length;
-        if (!confirm('Permanently delete ' + n + ' PDF(s)? This cannot be undone.')) return;
-        runBulkAction('delete');
-    });
-
-    if (bulkExport) bulkExport.addEventListener('click', function () {
-        var cards = getChecked().map(function (cb) {
-            return cb.closest('.lib-card');
-        }).filter(Boolean);
-        if (!cards.length) return;
-        function esc(s) {
-            s = String(s == null ? '' : s);
-            if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
-            return s;
-        }
-        var headers = ['id','code','title','subject','class','curriculum','chapter','tags','views','premium'];
-        var rows = [headers.join(',')];
-        cards.forEach(function (c) {
-            rows.push([
-                esc(c.dataset.id), esc(c.dataset.code), esc(c.dataset.title),
-                esc(c.dataset.subject), esc(c.dataset.class), esc(c.dataset.curriculum),
-                esc(c.dataset.chapter), esc(c.dataset.tags), esc(c.dataset.views),
-                esc(c.dataset.premium),
-            ].join(','));
-        });
-        var csv = '\ufeff' + rows.join('\r\n');
-        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = 'pdfs_export_' + new Date().toISOString().slice(0,10) + '.csv';
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
-    });
-
-    document.addEventListener('click', function (e) {
-        var btn = e.target.closest && e.target.closest('.lib-row-delete');
-        if (!btn) return;
-        var id = btn.dataset.id;
-        var title = btn.dataset.title || ('#' + id);
-        if (!confirm('Delete "' + title + '"? This cannot be undone.')) return;
-
-        fetch(BULK_URL, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': CSRF,
-            },
-            body: JSON.stringify({ action: 'delete', ids: [id] }),
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (res) {
-            if (res.success) window.location.reload();
-            else alert(res.error || 'Delete failed.');
-        })
-        .catch(function (e) { alert('Network error: ' + e); });
-    });
-
-    if (clearAllBtn) clearAllBtn.addEventListener('click', function () {
-        if (searchInput) searchInput.value = '';
-        document.querySelectorAll('.lib-select[data-autofilter]').forEach(function (s) { s.value = ''; });
-        if (sortSelect) sortSelect.value = 'shuffle';
-        if (sortInput) sortInput.value = 'shuffle';
-        if (quickSelect) quickSelect.value = '';
-        if (quickInput) quickInput.value = '';
-        applyQuickFilter('');
-        form.submit();
-    });
-
-    var SAVED_KEY = 'nuun.admin.pdfs.saved_views';
-    var savedSelect = document.getElementById('libSavedSelect');
-    var saveBtn = document.getElementById('libSaveView');
-    function loadSavedViews() {
-        try { return JSON.parse(localStorage.getItem(SAVED_KEY) || '{}') || {}; }
-        catch (e) { return {}; }
-    }
-    function persistSavedViews(v) {
-        try { localStorage.setItem(SAVED_KEY, JSON.stringify(v)); } catch (e) {}
-    }
-    function renderSavedViews() {
-        if (!savedSelect) return;
-        var views = loadSavedViews();
-        var current = savedSelect.value;
-        savedSelect.innerHTML = '<option value="">— Load a saved view —</option>';
-        Object.keys(views).forEach(function (name) {
-            var o = document.createElement('option');
-            o.value = name; o.textContent = name;
-            savedSelect.appendChild(o);
-        });
-        if (current && views[current]) savedSelect.value = current;
-    }
-    function currentQuery() {
-        var u = new URL(window.location.href);
-        var out = {};
-        ['search','subject','curriculum','class','sort','quick'].forEach(function (k) {
-            var v = u.searchParams.get(k);
-            if (v) out[k] = v;
-        });
-        return out;
-    }
-    function applySavedView(q) {
-        var u = new URL(window.location.href);
-        ['search','subject','curriculum','class','sort','quick'].forEach(function (k) {
-            u.searchParams.delete(k);
-        });
-        Object.keys(q).forEach(function (k) { u.searchParams.set(k, q[k]); });
-        window.location.href = u.toString();
-    }
-    if (saveBtn) saveBtn.addEventListener('click', function () {
-        var name = prompt('Save current filters as:');
-        if (!name) return;
-        name = name.trim(); if (!name) return;
-        var views = loadSavedViews();
-        views[name] = currentQuery();
-        persistSavedViews(views);
-        renderSavedViews();
-        if (savedSelect) savedSelect.value = name;
-    });
-    if (savedSelect) savedSelect.addEventListener('change', function () {
-        var name = savedSelect.value; if (!name) return;
-        var views = loadSavedViews();
-        if (views[name]) applySavedView(views[name]);
-    });
-    renderSavedViews();
-
+    // Search shortcut
     document.addEventListener('keydown', function (e) {
         var tag = (document.activeElement || {}).tagName || '';
-        var inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
-        if (e.key === '/' && !inField) {
+        if (e.key === '/' && tag !== 'INPUT' && tag !== 'TEXTAREA') {
             e.preventDefault();
-            if (searchInput) searchInput.focus();
-        } else if (e.key === 'Escape') {
-            if (document.activeElement === searchInput && searchInput.value) {
-                searchInput.value = ''; form.submit();
-            }
-        } else if ((e.key === 'g' || e.key === 'G') && !inField) {
-            var first = document.querySelector('.lib-card');
-            if (first) first.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            var s = document.getElementById('pdSearchInput');
+            if (s) s.focus();
         }
     });
-
-    updateSelection();
+    // Quick status change submits the form
+    var qs = document.getElementById('pdStatusQuick');
+    if (qs) {
+        qs.addEventListener('change', function () {
+            var form = document.getElementById('pdFilterForm');
+            if (form) {
+                form.querySelector('input[name="status"]').value = qs.value;
+                form.submit();
+            }
+        });
+    }
 })();
 </script>
 {% endblock %}
