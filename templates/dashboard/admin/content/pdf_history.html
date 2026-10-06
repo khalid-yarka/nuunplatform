@@ -1,0 +1,309 @@
+{# ============================================================
+   templates/dashboard/admin/content/pdf_history.html
+   Full event log for a single PDF.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-clock-rotate-left header-icon"></i>{% endblock %}
+{% block admin_title %}PDF History{% endblock %}
+{% block admin_subtitle %}
+    <code style="font-family:monospace;color:var(--primary);">{{ pdf.code }}</code>
+    · {{ pdf.title }}
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_content.pdfs') }}">PDFs</a>
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_content.pdf_edit', pdf_id=pdf.id) }}">{{ pdf.code }}</a>
+    <span class="sep">/</span>
+    <span class="current">History</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_content.pdf_edit', pdf_id=pdf.id) }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Back to edit
+    </a>
+    <a href="{{ url_for('admin_content.pdfs_activity', pdf_code=pdf.code) }}"
+       class="admin-btn secondary">
+        <i class="fas fa-stream"></i> Global feed
+    </a>
+{% endblock %}
+
+
+{% block admin_css %}
+<style>
+.pdh-wrap { --pdh-radius: 12px; --pdh-border: var(--border); font-size: 13.5px; }
+
+.pdh-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+}
+.pdh-sum {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--pdh-border);
+    border-radius: var(--pdh-radius);
+}
+.pdh-sum__icon {
+    width: 34px; height: 34px; border-radius: 9px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--primary-light); color: var(--primary);
+    font-size: 14px; flex-shrink: 0;
+}
+.pdh-sum__value { font-size: 20px; font-weight: 800; color: var(--text); line-height: 1; }
+.pdh-sum__label {
+    font-size: 10.5px; color: var(--text-muted);
+    text-transform: uppercase; font-weight: 700;
+    letter-spacing: 0.4px; margin-top: 3px;
+}
+
+.pdh-filters {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--pdh-border);
+    border-radius: var(--pdh-radius);
+    margin-bottom: 16px;
+}
+.pdh-filters select,
+.pdh-filters input {
+    padding: 8px 10px; font-size: 13px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--background); color: var(--text);
+    font-family: inherit;
+}
+.pdh-filters button {
+    padding: 8px 14px; font-size: 13px; font-weight: 600;
+    border-radius: 8px; cursor: pointer; font-family: inherit;
+    background: var(--primary); color: #fff; border: none;
+}
+.pdh-filters a.pdh-clear {
+    padding: 8px 12px; font-size: 13px; font-weight: 600;
+    color: var(--text-muted); text-decoration: none;
+    align-self: center;
+}
+
+.pdh-timeline {
+    background: var(--surface);
+    border: 1px solid var(--pdh-border);
+    border-radius: var(--pdh-radius);
+    overflow: hidden;
+}
+.pdh-day {
+    padding: 14px 20px 8px;
+    font-size: 11.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    background: var(--background);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 2;
+}
+.pdh-event {
+    display: grid;
+    grid-template-columns: 34px 44px 1fr auto;
+    gap: 12px;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+}
+.pdh-event:last-child { border-bottom: none; }
+.pdh-event__time {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    font-family: ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+}
+.pdh-event__icon {
+    width: 32px; height: 32px;
+    border-radius: 9px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px;
+}
+.pdh-event__icon.student { background: #EFF6FF; color: #2563EB; }
+.pdh-event__icon.admin   { background: #FEF3C7; color: #B45309; }
+.pdh-event__icon.system  { background: #F3F4F6; color: #6B7280; }
+[data-theme="dark"] .pdh-event__icon.student { background: #1E3A8A; color: #93C5FD; }
+[data-theme="dark"] .pdh-event__icon.admin   { background: #78350F; color: #FCD34D; }
+[data-theme="dark"] .pdh-event__icon.system  { background: #374151; color: #9CA3AF; }
+.pdh-event__body { min-width: 0; }
+.pdh-event__actor { font-weight: 700; color: var(--text); }
+.pdh-event__action { color: var(--text-secondary); margin-left: 4px; }
+.pdh-event__meta {
+    font-size: 11px; color: var(--text-muted); margin-top: 2px;
+    font-family: ui-monospace, Menlo, monospace;
+}
+
+.pdh-empty {
+    padding: 60px 24px;
+    text-align: center;
+    background: var(--surface);
+    border: 1px solid var(--pdh-border);
+    border-radius: var(--pdh-radius);
+}
+.pdh-empty i { font-size: 44px; opacity: 0.4; margin-bottom: 12px; display: inline-block; }
+.pdh-empty h3 { font-size: 16px; font-weight: 700; margin: 0 0 6px; color: var(--text); }
+.pdh-empty p { font-size: 13px; color: var(--text-muted); margin: 0; }
+
+.pdh-pager {
+    display: flex; justify-content: center; gap: 6px;
+    margin-top: 16px;
+}
+.pdh-pager a, .pdh-pager span {
+    padding: 8px 14px; font-size: 13px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); color: var(--text-secondary);
+    text-decoration: none;
+}
+.pdh-pager a:hover { border-color: var(--primary); color: var(--primary); }
+.pdh-pager .active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.pdh-pager .disabled { opacity: 0.4; pointer-events: none; }
+</style>
+{% endblock %}
+
+
+{% block admin_content %}
+
+<div class="pdh-wrap">
+
+    {# ── Summary ── #}
+    <div class="pdh-summary">
+        <div class="pdh-sum">
+            <span class="pdh-sum__icon"><i class="fas fa-eye"></i></span>
+            <div>
+                <div class="pdh-sum__value">{{ summary.get('view', 0) }}</div>
+                <div class="pdh-sum__label">Views</div>
+            </div>
+        </div>
+        <div class="pdh-sum">
+            <span class="pdh-sum__icon"><i class="fas fa-download"></i></span>
+            <div>
+                <div class="pdh-sum__value">{{ summary.get('download', 0) }}</div>
+                <div class="pdh-sum__label">Downloads</div>
+            </div>
+        </div>
+        <div class="pdh-sum">
+            <span class="pdh-sum__icon"><i class="fas fa-paper-plane"></i></span>
+            <div>
+                <div class="pdh-sum__value">{{ summary.get('telegram_fetch', 0) }}</div>
+                <div class="pdh-sum__label">TG fetches</div>
+            </div>
+        </div>
+        <div class="pdh-sum">
+            <span class="pdh-sum__icon"><i class="fas fa-pen"></i></span>
+            <div>
+                <div class="pdh-sum__value">{{ summary.get('edit', 0) }}</div>
+                <div class="pdh-sum__label">Edits</div>
+            </div>
+        </div>
+        <div class="pdh-sum">
+            <span class="pdh-sum__icon"><i class="fas fa-flag"></i></span>
+            <div>
+                <div class="pdh-sum__value">{{ summary.get('report', 0) }}</div>
+                <div class="pdh-sum__label">Reports</div>
+            </div>
+        </div>
+    </div>
+
+    {# ── Filters ── #}
+    <form method="GET" class="pdh-filters">
+        <select name="type">
+            <option value="">All event types</option>
+            <optgroup label="Student">
+                <option value="view"           {% if type_filter == 'view' %}selected{% endif %}>View</option>
+                <option value="download"       {% if type_filter == 'download' %}selected{% endif %}>Download</option>
+                <option value="telegram_fetch" {% if type_filter == 'telegram_fetch' %}selected{% endif %}>Telegram fetch</option>
+                <option value="save"           {% if type_filter == 'save' %}selected{% endif %}>Save</option>
+                <option value="report"         {% if type_filter == 'report' %}selected{% endif %}>Report</option>
+            </optgroup>
+            <optgroup label="Admin">
+                <option value="edit"        {% if type_filter == 'edit' %}selected{% endif %}>Edit</option>
+                <option value="verify"      {% if type_filter == 'verify' %}selected{% endif %}>Verify</option>
+                <option value="publish"     {% if type_filter == 'publish' %}selected{% endif %}>Publish</option>
+                <option value="delete"      {% if type_filter == 'delete' %}selected{% endif %}>Delete</option>
+            </optgroup>
+        </select>
+
+        <select name="role">
+            <option value="">All actors</option>
+            <option value="student"     {% if role_filter == 'student' %}selected{% endif %}>Students</option>
+            <option value="admin"       {% if role_filter == 'admin' %}selected{% endif %}>Admins</option>
+            <option value="super_admin" {% if role_filter == 'super_admin' %}selected{% endif %}>Super admins</option>
+            <option value="system"      {% if role_filter == 'system' %}selected{% endif %}>System</option>
+        </select>
+
+        <input type="date" name="since" value="{{ since or '' }}" placeholder="From">
+        <input type="date" name="until" value="{{ until or '' }}" placeholder="To">
+
+        <button type="submit"><i class="fas fa-filter"></i> Apply</button>
+
+        {% if type_filter or role_filter or since or until %}
+            <a href="{{ url_for('admin_content.pdf_history', pdf_id=pdf.id) }}" class="pdh-clear">
+                Clear
+            </a>
+        {% endif %}
+    </form>
+
+    {# ── Timeline ── #}
+    {% if day_groups %}
+        <div class="pdh-timeline">
+            {% for group in day_groups %}
+                <div class="pdh-day">{{ group.day }}</div>
+                {% for e in group.events %}
+                    <div class="pdh-event">
+                        <div class="pdh-event__time">
+                            {% if e.created_at and e.created_at|length >= 16 %}
+                                {{ e.created_at[11:16] }}
+                            {% else %}—{% endif %}
+                        </div>
+                        <div class="pdh-event__icon {{ e.event_category }}">
+                            <i class="fas {{ e.icon }}"></i>
+                        </div>
+                        <div class="pdh-event__body">
+                            <div>
+                                <span class="pdh-event__actor">{{ e.actor_name or 'System' }}</span>
+                                <span class="pdh-event__action">{{ e.label }}</span>
+                            </div>
+                            <div class="pdh-event__meta">
+                                {% if e.actor_public_id %}#{{ e.actor_public_id }} · {% endif %}
+                                {{ e.source or 'web' }}
+                                {% if e.ip_address %} · {{ e.ip_address }}{% endif %}
+                            </div>
+                        </div>
+                        <div></div>
+                    </div>
+                {% endfor %}
+            {% endfor %}
+        </div>
+
+        {# Pagination #}
+        {% if total_pages > 1 %}
+            <div class="pdh-pager">
+                <a href="?page={{ page - 1 }}{% if type_filter %}&type={{ type_filter }}{% endif %}{% if role_filter %}&role={{ role_filter }}{% endif %}"
+                   class="{% if page == 1 %}disabled{% endif %}">
+                    <i class="fas fa-chevron-left"></i>
+                </a>
+                <span class="active">{{ page }}</span>
+                <span style="border:none;background:transparent;">of {{ total_pages }}</span>
+                <a href="?page={{ page + 1 }}{% if type_filter %}&type={{ type_filter }}{% endif %}{% if role_filter %}&role={{ role_filter }}{% endif %}"
+                   class="{% if page == total_pages %}disabled{% endif %}">
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="pdh-empty">
+            <i class="fas fa-clock-rotate-left"></i>
+            <h3>No events recorded yet</h3>
+            <p>Interactions with this PDF will appear here as they happen.</p>
+        </div>
+    {% endif %}
+
+</div>
+
+{% endblock %}

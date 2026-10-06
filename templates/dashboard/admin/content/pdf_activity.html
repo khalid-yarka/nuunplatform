@@ -1,0 +1,319 @@
+{# ============================================================
+   templates/dashboard/admin/content/pdf_activity.html
+   Global PDF activity feed — every interaction across all PDFs.
+   ============================================================ #}
+{% extends "dashboard/admin/_base.html" %}
+
+{% block admin_title_icon %}<i class="fas fa-stream header-icon"></i>{% endblock %}
+{% block admin_title %}PDF Activity{% endblock %}
+{% block admin_subtitle %}
+    Every interaction across every PDF — student views, downloads,
+    admin edits, publishes, deletes, verifications.
+{% endblock %}
+
+{% block admin_breadcrumb %}
+    <span class="sep">/</span>
+    <a href="{{ url_for('admin_content.pdfs') }}">PDFs</a>
+    <span class="sep">/</span>
+    <span class="current">Activity</span>
+{% endblock %}
+
+{% block admin_actions %}
+    <a href="{{ url_for('admin_content.pdfs') }}" class="admin-btn secondary">
+        <i class="fas fa-arrow-left"></i> Dashboard
+    </a>
+    <a href="{{ url_for('admin_content.pdfs_activity_export') }}?{{ request.query_string.decode() }}"
+       class="admin-btn primary">
+        <i class="fas fa-file-csv"></i> Export CSV
+    </a>
+{% endblock %}
+
+
+{% block admin_css %}
+<style>
+.pda-wrap { --pda-radius: 12px; font-size: 13.5px; }
+
+.pda-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 18px;
+}
+.pda-sum {
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--pda-radius);
+}
+.pda-sum__value { font-size: 22px; font-weight: 800; color: var(--text); line-height: 1; }
+.pda-sum__label {
+    font-size: 10.5px; color: var(--text-muted);
+    text-transform: uppercase; font-weight: 700;
+    letter-spacing: 0.4px; margin-top: 4px;
+}
+
+.pda-filters {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--pda-radius);
+    margin-bottom: 16px;
+    align-items: center;
+}
+.pda-filters input,
+.pda-filters select {
+    padding: 8px 10px; font-size: 13px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--background); color: var(--text);
+    font-family: inherit;
+}
+.pda-filters input[type="text"] { min-width: 180px; }
+.pda-filters button {
+    padding: 8px 14px; font-size: 13px; font-weight: 600;
+    border-radius: 8px; cursor: pointer; font-family: inherit;
+    background: var(--primary); color: #fff; border: none;
+}
+.pda-clear {
+    padding: 8px 12px; font-size: 13px; font-weight: 600;
+    color: var(--text-muted); text-decoration: none;
+}
+
+.pda-list {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--pda-radius);
+    overflow: hidden;
+}
+.pda-row {
+    display: grid;
+    grid-template-columns: 90px 34px minmax(0, 1fr) 180px;
+    gap: 14px;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+}
+.pda-row:last-child { border-bottom: none; }
+.pda-row__time {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.pda-row__icon {
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px;
+}
+.pda-row__icon.student { background: #EFF6FF; color: #2563EB; }
+.pda-row__icon.admin   { background: #FEF3C7; color: #B45309; }
+.pda-row__icon.system  { background: #F3F4F6; color: #6B7280; }
+[data-theme="dark"] .pda-row__icon.student { background: #1E3A8A; color: #93C5FD; }
+[data-theme="dark"] .pda-row__icon.admin   { background: #78350F; color: #FCD34D; }
+[data-theme="dark"] .pda-row__icon.system  { background: #374151; color: #9CA3AF; }
+
+.pda-row__body { min-width: 0; }
+.pda-row__line {
+    font-size: 13px; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pda-row__line strong { font-weight: 700; }
+.pda-row__line .action { color: var(--text-secondary); margin: 0 4px; }
+.pda-row__meta {
+    font-size: 11px; color: var(--text-muted); margin-top: 2px;
+    font-family: ui-monospace, Menlo, monospace;
+}
+.pda-row__pdf {
+    text-align: right;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pda-row__pdf a {
+    color: var(--primary); font-weight: 700; text-decoration: none;
+    font-family: ui-monospace, Menlo, monospace;
+}
+.pda-row__pdf a:hover { text-decoration: underline; }
+.pda-row__pdf .title {
+    display: block; font-size: 11px; color: var(--text-muted);
+    font-family: inherit; font-weight: 500;
+    overflow: hidden; text-overflow: ellipsis;
+    margin-top: 1px;
+}
+
+.pda-empty {
+    padding: 60px 24px; text-align: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--pda-radius);
+}
+.pda-empty i { font-size: 44px; opacity: 0.4; margin-bottom: 12px; display: inline-block; }
+.pda-empty h3 { font-size: 16px; font-weight: 700; margin: 0 0 6px; color: var(--text); }
+.pda-empty p { font-size: 13px; color: var(--text-muted); margin: 0; }
+
+.pda-pager {
+    display: flex; justify-content: center; gap: 6px;
+    margin-top: 16px;
+}
+.pda-pager a, .pda-pager span {
+    padding: 8px 14px; font-size: 13px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); color: var(--text-secondary);
+    text-decoration: none;
+}
+.pda-pager a:hover { border-color: var(--primary); color: var(--primary); }
+.pda-pager .active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.pda-pager .disabled { opacity: 0.4; pointer-events: none; }
+</style>
+{% endblock %}
+
+
+{% block admin_content %}
+
+<div class="pda-wrap">
+
+    <div class="pda-summary">
+        <div class="pda-sum">
+            <div class="pda-sum__value">{{ today.views }}</div>
+            <div class="pda-sum__label">Views today</div>
+        </div>
+        <div class="pda-sum">
+            <div class="pda-sum__value">{{ today.downloads }}</div>
+            <div class="pda-sum__label">Downloads today</div>
+        </div>
+        <div class="pda-sum">
+            <div class="pda-sum__value">{{ today.telegram_fetches }}</div>
+            <div class="pda-sum__label">TG fetches today</div>
+        </div>
+        <div class="pda-sum">
+            <div class="pda-sum__value">{{ today.saves }}</div>
+            <div class="pda-sum__label">Saves today</div>
+        </div>
+        <div class="pda-sum">
+            <div class="pda-sum__value">{{ today.reports }}</div>
+            <div class="pda-sum__label">Reports today</div>
+        </div>
+        <div class="pda-sum">
+            <div class="pda-sum__value">{{ today.total_today }}</div>
+            <div class="pda-sum__label">Total events today</div>
+        </div>
+    </div>
+
+    <form method="GET" class="pda-filters">
+        <input type="text" name="pdf_code" value="{{ pdf_code_filter or '' }}"
+               placeholder="Filter by PDF code…" autocomplete="off">
+
+        <select name="type">
+            <option value="">All event types</option>
+            <optgroup label="Student events">
+                <option value="view"             {% if type_filter == 'view' %}selected{% endif %}>Views</option>
+                <option value="download"         {% if type_filter == 'download' %}selected{% endif %}>Downloads</option>
+                <option value="telegram_fetch"   {% if type_filter == 'telegram_fetch' %}selected{% endif %}>Telegram fetches</option>
+                <option value="save"             {% if type_filter == 'save' %}selected{% endif %}>Saves</option>
+                <option value="report"           {% if type_filter == 'report' %}selected{% endif %}>Reports</option>
+                <option value="quota_exhausted"  {% if type_filter == 'quota_exhausted' %}selected{% endif %}>Quota hits</option>
+            </optgroup>
+            <optgroup label="Admin events">
+                <option value="create"       {% if type_filter == 'create' %}selected{% endif %}>Creates</option>
+                <option value="publish"      {% if type_filter == 'publish' %}selected{% endif %}>Publishes</option>
+                <option value="edit"         {% if type_filter == 'edit' %}selected{% endif %}>Edits</option>
+                <option value="verify"       {% if type_filter == 'verify' %}selected{% endif %}>Verifications</option>
+                <option value="delete"       {% if type_filter == 'delete' %}selected{% endif %}>Deletes</option>
+                <option value="code_change"  {% if type_filter == 'code_change' %}selected{% endif %}>Code changes</option>
+            </optgroup>
+        </select>
+
+        <select name="role">
+            <option value="">All actors</option>
+            <option value="student"     {% if role_filter == 'student' %}selected{% endif %}>Students</option>
+            <option value="admin"       {% if role_filter == 'admin' %}selected{% endif %}>Admins</option>
+            <option value="super_admin" {% if role_filter == 'super_admin' %}selected{% endif %}>Super admins</option>
+            <option value="system"      {% if role_filter == 'system' %}selected{% endif %}>System</option>
+        </select>
+
+        <input type="date" name="since" value="{{ since or '' }}">
+        <input type="date" name="until" value="{{ until or '' }}">
+
+        <button type="submit"><i class="fas fa-filter"></i> Filter</button>
+
+        {% if type_filter or role_filter or pdf_code_filter or since or until %}
+            <a href="{{ url_for('admin_content.pdfs_activity') }}" class="pda-clear">Clear</a>
+        {% endif %}
+    </form>
+
+    {% if events %}
+        <div class="pda-list">
+            {% for e in events %}
+                <div class="pda-row">
+                    <div class="pda-row__time">
+                        {% if e.created_at and e.created_at|length >= 16 %}
+                            {{ e.created_at[5:10] }} {{ e.created_at[11:16] }}
+                        {% else %}—{% endif %}
+                    </div>
+                    <div class="pda-row__icon {{ e.event_category }}">
+                        <i class="fas {{ e.icon }}"></i>
+                    </div>
+                    <div class="pda-row__body">
+                        <div class="pda-row__line">
+                            <strong>{{ e.actor_name or 'System' }}</strong>
+                            <span class="action">{{ e.label }}</span>
+                            {% if e.pdf_code %}
+                                <code style="font-family:monospace;color:var(--primary);">{{ e.pdf_code }}</code>
+                            {% endif %}
+                        </div>
+                        <div class="pda-row__meta">
+                            {% if e.actor_public_id %}#{{ e.actor_public_id }} · {% endif %}
+                            {{ e.source or 'web' }}
+                            {% if e.ip_address %} · {{ e.ip_address }}{% endif %}
+                        </div>
+                    </div>
+                    <div class="pda-row__pdf">
+                        {% if e.pdf_id %}
+                            <a href="{{ url_for('admin_content.pdf_edit', pdf_id=e.pdf_id) }}">
+                                {{ e.pdf_code or 'PDF #' ~ e.pdf_id }}
+                            </a>
+                            {% if e.pdf_title %}<span class="title">{{ e.pdf_title }}</span>{% endif %}
+                        {% else %}
+                            <span style="color:var(--text-muted);font-size:11px;">deleted</span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        {% if total_pages > 1 %}
+            {% set qs = {
+                'type': type_filter or None,
+                'role': role_filter or None,
+                'pdf_code': pdf_code_filter or None,
+                'since': since or None,
+                'until': until or None,
+            } %}
+            <div class="pda-pager">
+                <a href="?page={{ page - 1 }}{% for k, v in qs.items() if v %}&{{ k }}={{ v }}{% endfor %}"
+                   class="{% if page == 1 %}disabled{% endif %}">
+                    <i class="fas fa-chevron-left"></i>
+                </a>
+                <span class="active">{{ page }}</span>
+                <span style="border:none;background:transparent;">of {{ total_pages }}</span>
+                <a href="?page={{ page + 1 }}{% for k, v in qs.items() if v %}&{{ k }}={{ v }}{% endfor %}"
+                   class="{% if page == total_pages %}disabled{% endif %}">
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+            </div>
+        {% endif %}
+
+    {% else %}
+        <div class="pda-empty">
+            <i class="fas fa-stream"></i>
+            <h3>No activity matches the filters</h3>
+            <p>Adjust the filters, or wait for student interactions to arrive.</p>
+        </div>
+    {% endif %}
+
+</div>
+
+{% endblock %}

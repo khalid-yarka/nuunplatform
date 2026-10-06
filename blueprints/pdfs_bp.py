@@ -25,6 +25,7 @@ from services.tier_service import (
     get_saved_content_limit, get_resource_downloads_remaining,
     get_resource_download_limit, consume_resource_download,
 )
+from services.pdf_history import log_student_event as _log_pdf_event
 from bot.utils import get_bot
 from bot.db import get_bot_pdf_by_code, get_bot_pdfs_by_codes
 from config import Config
@@ -94,6 +95,42 @@ def _log_guest_attempt(action, pdf=None, pdf_code=None):
             ip_address=request.headers.get('X-Forwarded-For',
                                             request.remote_addr or '').split(',')[0].strip(),
             user_agent=request.headers.get('User-Agent', '')[:200],
+        )
+    except Exception:
+        pass
+
+
+def _student_actor_from_session():
+    """Build the actor dict that log_student_event expects."""
+    uid = session.get('user_id')
+    if not uid:
+        return None
+    full_name = (session.get('user_name') or '').strip()
+    parts = full_name.split() if full_name else []
+    first = parts[0] if parts else ''
+    last = ' '.join(parts[1:]) if len(parts) > 1 else ''
+    return {
+        'id': uid,
+        'public_id': session.get('public_id'),
+        'first_name': first,
+        'last_name': last,
+    }
+
+
+def _log_student_pdf_event(pdf, event_type, *, source='web', metadata=None):
+    """
+    Fire-and-forget student PDF event. Never raises into the request
+    path. Callers should invoke this AFTER the successful action and
+    after add_history_entry(), so events reflect what actually happened.
+    """
+    try:
+        _log_pdf_event(
+            pdf_row=pdf,
+            event_type=event_type,
+            user=_student_actor_from_session(),
+            source=source,
+            request=request,
+            metadata=metadata,
         )
     except Exception:
         pass
@@ -381,7 +418,7 @@ def list_pdfs():
             # both View and Get PDF lock. The user can still Share
             # and read the metadata card.
             free_quota_ok = downloads_unlimited or (remaining_downloads or 0) > 0
-        
+
             if is_premium_pdf:
                 p['_download_state'] = 'locked_premium'
                 p['_view_state']     = 'locked_premium'
@@ -530,7 +567,9 @@ def view_pdf(pdf_id):
         metadata={'title': pdf['title'], 'subject': pdf.get('subject'),
                   'code': pdf['code']},
     )
+    _log_student_pdf_event(pdf, 'view', source='web')
     return render_template('dashboard/pdf_view.html', pdf=pdf, user_tier=user_tier)
+
 
 # ============================================================
 # DOWNLOAD (legacy route — redirects to Telegram)
@@ -562,6 +601,7 @@ def download_pdf(pdf_id):
         metadata={'title': pdf['title'], 'subject': pdf.get('subject'),
                   'code': pdf['code']},
     )
+    _log_student_pdf_event(pdf, 'download', source='web')
 
     if user_tier == 'premium' and pdf.get('file_url'):
         file_path = pdf['file_url']
@@ -596,6 +636,7 @@ def telegram_download(code):
     # their Telegram access is unlimited by design.
     if user_tier != 'premium':
         if not consume_resource_download(user_id):
+            _log_student_pdf_event(pdf, 'quota_exhausted', source='telegram')
             flash('Daily PDF limit reached. Resets tomorrow.', 'warning')
             return redirect(url_for('pdfs.list_pdfs'))
 
@@ -608,6 +649,7 @@ def telegram_download(code):
         metadata={'title': pdf['title'], 'subject': pdf.get('subject'),
                   'code': pdf['code']},
     )
+    _log_student_pdf_event(pdf, 'telegram_fetch', source='telegram')
     return _telegram_redirect(code)
 
 
@@ -620,6 +662,8 @@ def _telegram_redirect(code):
     else:
         payload = code
     return redirect(f"https://t.me/{bot_username}?start={payload}")
+
+
 # ============================================================
 # DIRECT DOWNLOAD (streams from Telegram as attachment)
 # ============================================================
@@ -679,6 +723,7 @@ def direct_download(code):
                       'subject': main_pdf.get('subject'),
                       'code': code},
         )
+        _log_student_pdf_event(main_pdf, 'download', source='direct')
 
         headers = {
             'Content-Disposition': f"attachment; filename=\"{encoded}\"",
@@ -724,6 +769,7 @@ def stream_pdf(code):
         return jsonify({'error': 'PDF not available in Telegram storage.'}), 404
 
     increment_pdf_view_by_code(code)
+    _log_student_pdf_event(main_pdf, 'view', source='stream')
 
     try:
         bot = get_bot()
@@ -789,6 +835,7 @@ def save_pdf(pdf_id):
             entry_id=pdf_id,
             metadata={'title': pdf['title'], 'code': pdf['code'], 'type': 'pdf'},
         )
+        _log_student_pdf_event(pdf, 'save', source='web')
     return jsonify({'success': True, 'saved': True})
 
 
@@ -803,6 +850,9 @@ def unsave_pdf(pdf_id):
         user_id=user_id, entry_type='save', action='unsaved',
         entry_id=pdf_id, metadata={'type': 'pdf'},
     )
+    pdf = get_pdf_by_id(pdf_id)
+    if pdf:
+        _log_student_pdf_event(pdf, 'unsave', source='web')
     return jsonify({'success': True, 'saved': False})
 
 
@@ -840,6 +890,10 @@ def report_pdf(pdf_id):
         user_id=user_id, entry_type='report', action='reported',
         entry_id=pdf_id,
         metadata={'title': pdf['title'], 'code': pdf['code'], 'reason': reason},
+    )
+    _log_student_pdf_event(
+        pdf, 'report', source='web',
+        metadata={'reason': reason, 'comment': comment[:200]},
     )
 
     try:

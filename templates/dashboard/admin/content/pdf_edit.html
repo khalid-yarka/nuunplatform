@@ -458,6 +458,9 @@
 .pdf-preview.is-fullscreen .pdf-preview__stage {
     max-height: calc(100vh - 46px);
 }
+
+.pdf-linked__item { cursor: default; }
+.pdf-linked__item:hover { background: var(--background); color: var(--text); }
 </style>
 {% endblock %}
 
@@ -593,6 +596,49 @@
                     </div>
                 </div>
             {% endif %}
+
+            {# ─── Recent activity (inline history) ─── #}
+            <div class="pdf-card">
+                <div class="pdf-card__header">
+                    <h3><i class="fas fa-clock-rotate-left"></i> Recent activity</h3>
+                    {% if activity_summary.total %}
+                        <span class="pdf-card__hint">{{ activity_summary.total }} event{{ '' if activity_summary.total == 1 else 's' }}</span>
+                    {% endif %}
+                </div>
+                <div class="pdf-card__body">
+                    {% if recent_events %}
+                        <div class="pdf-linked" style="gap:4px;">
+                            {% for e in recent_events %}
+                                <div class="pdf-linked__item" style="cursor:default;">
+                                    <i class="fas {{ e.icon }}"
+                                       style="width:16px;font-size:11px;flex-shrink:0;
+                                              color:{% if e.event_category == 'student' %}#2563EB{% elif e.event_category == 'admin' %}#B45309{% else %}#9CA3AF{% endif %};"></i>
+                                    <div class="qn" style="-webkit-line-clamp:1;">
+                                        <strong style="font-weight:700;">{{ e.actor_name or 'System' }}</strong>
+                                        {{ e.label }}
+                                    </div>
+                                    <span class="pg">
+                                        {% if e.created_at and e.created_at|length >= 16 %}
+                                            {{ e.created_at[5:10] }} {{ e.created_at[11:16] }}
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        {% if activity_summary.total > 10 %}
+                            <a href="{{ url_for('admin_content.pdf_history', pdf_id=pdf.id) }}"
+                               class="admin-btn secondary sm"
+                               style="margin-top:10px;width:100%;justify-content:center;">
+                                See all {{ activity_summary.total }} events
+                            </a>
+                        {% endif %}
+                    {% else %}
+                        <div class="pd-empty-mini" style="text-align:center;padding:24px 12px;color:var(--text-muted);font-size:12.5px;">
+                            No activity yet. Views, downloads, and edits will appear here.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
 
         </div>
 

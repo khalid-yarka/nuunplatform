@@ -1013,3 +1013,37 @@ CREATE TABLE IF NOT EXISTS live_quiz_chat_messages (
 
 CREATE INDEX IF NOT EXISTS idx_chat_quiz_id
     ON live_quiz_chat_messages(quiz_id, id);
+
+
+
+-- ─────────────────────────────────────────────────────────────
+-- PDF EVENT LOG
+-- One row per interaction with a PDF: student views, downloads,
+-- Telegram fetches, admin edits, publishes, deletes, verifications.
+-- Denormalised columns (pdf_code, pdf_title, actor_name) snapshot
+-- the state at event time so history survives deletion.
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS pdf_events (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    pdf_id            INTEGER,
+    pdf_code          TEXT,
+    pdf_title         TEXT,
+    event_type        TEXT NOT NULL,
+    event_category    TEXT NOT NULL,
+    actor_id          INTEGER,
+    actor_public_id   TEXT,
+    actor_name        TEXT,
+    actor_role        TEXT,
+    source            TEXT,
+    ip_address        TEXT,
+    user_agent        TEXT,
+    metadata          TEXT,
+    created_at        TEXT DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_pdf_events_pdf     ON pdf_events(pdf_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pdf_events_code    ON pdf_events(pdf_code, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pdf_events_actor   ON pdf_events(actor_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pdf_events_type    ON pdf_events(event_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pdf_events_created ON pdf_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pdf_events_cat     ON pdf_events(event_category, created_at DESC);
