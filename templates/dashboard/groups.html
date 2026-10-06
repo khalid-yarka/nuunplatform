@@ -9,42 +9,399 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/groups.css') }}" />
 <style>
     /* ============================================
-       GROUP CARD LOCKING
+       PAGE WRAPPER
        ============================================ */
-    .group-card { position: relative; transition: all 0.25s ease; cursor: pointer; }
-    .group-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
-    .group-card .lock-badge {
-        position: absolute; top: 12px; right: 12px;
-        font-size: 18px; color: var(--text-muted);
-        opacity: 0.7; transition: opacity 0.2s ease;
-        z-index: 2; pointer-events: none;
+    .groups-page {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 0 4px;
     }
-    .group-card.locked .lock-badge { color: #F59E0B; opacity: 1; }
-    .group-card .join-btn-area {
-        margin-top: 12px; display: flex;
-        align-items: center; gap: 8px; flex-wrap: wrap;
-    }
-    .group-card .join-btn-area .btn-join { pointer-events: none; }
-    .group-card .join-btn-area .btn-join.locked { opacity: 0.7; }
-    .group-card .join-btn-area .lock-hint {
-        font-size: 12px; color: var(--text-muted); margin-left: 4px;
-    }
-
-    .featured-grid .featured-card {
-        cursor: pointer; position: relative; transition: all 0.25s ease;
-    }
-    .featured-card:hover {
-        transform: translateY(-4px); border-color: var(--primary);
-        box-shadow: var(--shadow-md);
-    }
-    .featured-card .lock-badge {
-        position: absolute; top: 8px; right: 8px;
-        font-size: 16px; opacity: 0.7; pointer-events: none;
-    }
-    .featured-card.locked .lock-badge { color: #F59E0B; opacity: 1; }
 
     /* ============================================
-       JOIN MODAL — READ-THEN-ACCEPT LAYOUT
+       HERO
+       ============================================ */
+    .groups-hero {
+        padding: 8px 4px 22px;
+        margin-bottom: 8px;
+    }
+    .groups-hero .hero-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 26px;
+        font-weight: 800;
+        color: var(--text);
+        margin: 0 0 6px;
+        line-height: 1.2;
+    }
+    .groups-hero .hero-title i {
+        color: var(--primary);
+        font-size: 24px;
+    }
+    .groups-hero .hero-sub {
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin: 0;
+        line-height: 1.55;
+    }
+    .groups-hero .hero-sub strong {
+        color: var(--primary);
+        font-weight: 700;
+    }
+    .groups-hero .hero-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+    }
+    .groups-hero .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 12px;
+        border-radius: 100px;
+        background: var(--primary-light, rgba(16,185,129,0.1));
+        color: var(--primary);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+    }
+
+    /* ============================================
+       SECTION HEAD
+       ============================================ */
+    .section-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text);
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        margin: 0 0 12px 4px;
+    }
+    .section-head .star { font-size: 16px; }
+
+    /* ============================================
+       FEATURED RAIL
+       ============================================ */
+    .groups-featured {
+        margin-bottom: 28px;
+    }
+    .featured-rail {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+    }
+
+    .featured-card {
+        position: relative;
+        padding: 16px 16px 14px;
+        border-radius: var(--radius);
+        background: linear-gradient(160deg,
+                    var(--surface) 0%,
+                    var(--surface) 65%,
+                    rgba(245, 158, 11, 0.06) 100%);
+        border: 1px solid var(--border);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease,
+                    border-color 0.2s ease;
+        overflow: hidden;
+    }
+    .featured-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #F59E0B, #FBBF24);
+    }
+    .featured-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.07);
+        border-color: rgba(245, 158, 11, 0.4);
+    }
+    .featured-card.locked {
+        opacity: 0.82;
+        filter: saturate(0.7);
+    }
+    .featured-card.locked:hover {
+        border-color: rgba(245, 158, 11, 0.5);
+        filter: saturate(1);
+        opacity: 1;
+    }
+
+    .featured-card .fc-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .featured-card .fc-icon {
+        font-size: 34px;
+        line-height: 1;
+        flex-shrink: 0;
+    }
+    .featured-card .platform-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 9px;
+        font-size: 10px;
+        font-weight: 700;
+        border-radius: 100px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        white-space: nowrap;
+    }
+    .platform-chip.platform-whatsapp {
+        background: #E7F9EE;
+        color: #067D48;
+    }
+    .platform-chip.platform-telegram {
+        background: #E7F0FF;
+        color: #1E40AF;
+    }
+    .featured-card .fc-name {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.35;
+        margin-bottom: 3px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .featured-card .fc-cat {
+        font-size: 12px;
+        color: var(--text-muted);
+        font-weight: 600;
+    }
+    .featured-card .fc-lock {
+        margin-top: 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        border-radius: 100px;
+        background: rgba(245, 158, 11, 0.12);
+        color: #B45309;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    /* ============================================
+       MAIN GRID
+       ============================================ */
+    .groups-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 14px;
+    }
+
+    .group-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        padding: 18px 18px 16px;
+        border-radius: var(--radius);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease,
+                    border-color 0.2s ease;
+        overflow: hidden;
+    }
+    .group-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 22px rgba(0,0,0,0.07);
+        border-color: var(--primary);
+    }
+
+    .group-card .card-accent {
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+    }
+    .group-card .card-accent.platform-whatsapp {
+        background: linear-gradient(90deg, #25D366, #4ADE80);
+    }
+    .group-card .card-accent.platform-telegram {
+        background: linear-gradient(90deg, #0088CC, #38BDF8);
+    }
+
+    .group-card.locked {
+        opacity: 0.78;
+        filter: saturate(0.72);
+    }
+    .group-card.locked:hover {
+        opacity: 1;
+        filter: saturate(1);
+        border-color: #F59E0B;
+    }
+
+    .group-card .card-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    .group-card .card-icon {
+        font-size: 32px;
+        line-height: 1;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+    .group-card .card-titles {
+        min-width: 0;
+        flex: 1;
+    }
+    .group-card .card-name {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.35;
+        word-break: break-word;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .group-card .card-name .mini-star {
+        font-size: 13px;
+        flex-shrink: 0;
+    }
+    .group-card .card-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 6px;
+    }
+    .group-card .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        font-size: 10px;
+        font-weight: 700;
+        border-radius: 100px;
+        background: var(--background);
+        color: var(--text-secondary);
+        border: 1px solid var(--border);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        white-space: nowrap;
+    }
+    .group-card .tag.platform-tag.platform-whatsapp {
+        background: #E7F9EE;
+        color: #067D48;
+        border-color: #C7EBD6;
+    }
+    .group-card .tag.platform-tag.platform-telegram {
+        background: #E7F0FF;
+        color: #1E40AF;
+        border-color: #C7D7F5;
+    }
+    .group-card .tag.location-tag {
+        background: #FEF3C7;
+        color: #B45309;
+        border-color: #FDE68A;
+    }
+    .group-card .tag.stream-tag {
+        background: #EDE9FE;
+        color: #5B21B6;
+        border-color: #DDD6FE;
+    }
+
+    .group-card .card-desc {
+        font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 1.55;
+        margin: 0 0 14px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .group-card .card-foot {
+        margin-top: auto;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+    }
+
+    .group-card .cta {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        padding: 10px 16px;
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        font-weight: 700;
+        border: none;
+        cursor: pointer;
+        transition: background 0.15s ease, transform 0.1s ease;
+        letter-spacing: 0.2px;
+    }
+    .group-card .cta.join {
+        background: var(--primary);
+        color: #ffffff;
+    }
+    .group-card .cta.join:hover {
+        filter: brightness(1.06);
+    }
+    .group-card .cta.join:active {
+        transform: scale(0.98);
+    }
+    .group-card .cta.locked {
+        background: rgba(245, 158, 11, 0.12);
+        color: #B45309;
+        cursor: pointer;
+    }
+    .group-card .cta.locked .lock-reason {
+        font-weight: 600;
+        opacity: 0.85;
+        font-size: 12px;
+    }
+    .group-card.locked .card-foot {
+        border-top-color: rgba(245, 158, 11, 0.2);
+    }
+
+    /* ============================================
+       EMPTY STATE
+       ============================================ */
+    .groups-empty {
+        text-align: center;
+        padding: 60px 20px;
+        background: var(--surface);
+        border: 1px dashed var(--border);
+        border-radius: var(--radius);
+    }
+    .groups-empty .empty-icon {
+        font-size: 56px;
+        display: block;
+        margin-bottom: 12px;
+        opacity: 0.6;
+    }
+    .groups-empty h3 {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text);
+        margin: 0 0 6px;
+    }
+    .groups-empty p {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin: 0;
+    }
+
+    /* ============================================
+       JOIN MODAL
        ============================================ */
     .join-modal .modal-content {
         max-width: 520px;
@@ -91,9 +448,7 @@
         scroll-behavior: smooth;
     }
     .join-modal .jm-scroll::-webkit-scrollbar { width: 6px; }
-    .join-modal .jm-scroll::-webkit-scrollbar-track {
-        background: transparent;
-    }
+    .join-modal .jm-scroll::-webkit-scrollbar-track { background: transparent; }
     .join-modal .jm-scroll::-webkit-scrollbar-thumb {
         background: var(--border);
         border-radius: 10px;
@@ -157,9 +512,7 @@
 
     .join-modal .jm-scroll-hint {
         position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
+        left: 0; right: 0; bottom: 0;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -182,7 +535,13 @@
         50% { transform: translateY(3px); }
     }
 
-    @media (max-width: 480px) {
+    @media (max-width: 640px) {
+        .groups-hero .hero-title { font-size: 22px; }
+        .groups-hero .hero-title i { font-size: 20px; }
+        .featured-rail {
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        }
+        .groups-grid { grid-template-columns: 1fr; }
         .join-modal .modal-content { max-height: 92vh; }
         .join-modal .jm-header { padding: 16px 16px 12px; }
         .join-modal .jm-title { font-size: 16px; }
@@ -193,81 +552,77 @@
 {% endblock %}
 
 {% block dashboard_content %}
-<div class="groups-container">
+<div class="groups-page">
 
-    <!-- Header -->
-    <div class="groups-header">
-        <div class="title-section">
-            <h2><i class="fas fa-users" style="color: var(--primary);"></i> {{ _('groups.title') }}</h2>
-            <p>
-                {{ _('groups.subtitle_before') }}
-                <span class="highlight">{{ total_groups }}</span> {{ _('groups.subtitle_after') }}
-            </p>
+    <section class="groups-hero">
+        <h1 class="hero-title">
+            <i class="fas fa-users"></i>
+            {{ _('groups.title') }}
+        </h1>
+        <p class="hero-sub">
+            {{ _('groups.subtitle_before') }}
+            <strong>{{ total_groups }}</strong>
+            {{ _('groups.subtitle_after') }}
+        </p>
+        <div class="hero-chips">
+            {% if featured_groups %}
+                <span class="chip">
+                    ⭐ {{ featured_groups|length }} {{ _('groups.featured_badge') }}
+                </span>
+            {% endif %}
         </div>
-    </div>
+    </section>
 
-    <!-- Curriculum Tabs -->
-    <div class="curriculum-tabs">
-        {% for cur in curricula %}
-            <button class="curriculum-tab {% if loop.first %}active{% endif %}" data-curriculum="{{ cur.code }}">
-                {{ cur.icon }} {{ cur.name }}
-                <span class="badge">{{ cur.count }}</span>
-            </button>
-        {% endfor %}
-    </div>
-
-    <!-- Featured Groups -->
     {% if featured_groups %}
-    <div class="featured-section">
-        <div class="section-title">
-            ⭐ {{ _('groups.featured_title') }}
-            <span class="badge">{{ _('groups.featured_badge') }}</span>
-        </div>
-        <div class="featured-grid" id="featuredGrid">
+    <section class="groups-featured">
+        <h2 class="section-head">
+            <span class="star">⭐</span>
+            {{ _('groups.featured_title') }}
+        </h2>
+        <div class="featured-rail">
             {% for group in featured_groups %}
                 <div class="featured-card {% if group.locked %}locked{% endif %}"
                      data-group-id="{{ group.id }}"
                      data-locked="{{ group.locked|lower }}"
                      data-required-tier="{{ group.required_tier }}"
                      data-lock-reason="{{ group.join_block_reason or '' }}"
-                     data-invite-link="{{ group.invite_link }}">
-                    <span class="featured-icon">{{ group.icon or '📚' }}</span>
-                    <div class="featured-name">{{ group.name }}</div>
-                    <div class="featured-meta">
-                        <span>{{ group.platform|capitalize }}</span>
-                        {% if group.category %}
-                            <span>· {{ group.category }}</span>
-                        {% endif %}
+                     data-invite-link="{{ group.invite_link }}"
+                     data-group-name="{{ group.name }}"
+                     data-group-description="{{ group.description or '' }}"
+                     data-group-platform="{{ group.platform }}"
+                     data-group-category="{{ group.category or 'General' }}"
+                     data-group-location="{{ group.location or '' }}"
+                     data-group-stream="{{ group.stream or '' }}"
+                     data-group-icon="{{ group.icon or '📚' }}">
+
+                    <div class="fc-top">
+                        <span class="fc-icon">{{ group.icon or '📚' }}</span>
+                        <span class="platform-chip platform-{{ group.platform }}">
+                            <i class="fab fa-{% if group.platform == 'whatsapp' %}whatsapp{% else %}telegram-plane{% endif %}"></i>
+                            {{ group.platform|capitalize }}
+                        </span>
                     </div>
-                    <span class="lock-badge">{% if group.locked %}🔒{% endif %}</span>
+
+                    <div class="fc-name">{{ group.name }}</div>
+
+                    {% if group.category %}
+                        <div class="fc-cat">📂 {{ group.category }}</div>
+                    {% endif %}
+
                     {% if group.locked %}
-                        <div class="upgrade-hint">{{ _('groups.click_to_upgrade') }}</div>
+                        <div class="fc-lock">
+                            <i class="fas fa-lock"></i>
+                            {{ _('groups.click_to_upgrade') }}
+                        </div>
                     {% endif %}
                 </div>
             {% endfor %}
         </div>
-    </div>
+    </section>
     {% endif %}
 
-    <!-- Filter Bar -->
-    <div class="filter-bar">
-        <select id="platformFilter">
-            <option value="">{{ _('groups.all_platforms') }}</option>
-            <option value="whatsapp">💬 WhatsApp</option>
-            <option value="telegram">✈️ Telegram</option>
-        </select>
-        <select id="categoryFilter">
-            <option value="">{{ _('groups.all_categories') }}</option>
-            {% for cat in categories %}
-                <option value="{{ cat.category }}">{{ cat.category }} ({{ cat.count }})</option>
-            {% endfor %}
-        </select>
-        <button class="btn-clear" id="clearFilters" style="display: none;">{{ _('groups.clear_filters') }}</button>
-        <div class="active-filters" id="activeFilters"></div>
-    </div>
-
-    <!-- Groups Grid -->
-    <div class="groups-grid" id="groupsGrid">
+    {% if groups %}
+    <div class="groups-grid">
         {% for group in groups %}
             <div class="group-card {% if group.locked %}locked{% endif %}"
                  data-group-id="{{ group.id }}"
@@ -278,86 +633,83 @@
                  data-group-name="{{ group.name }}"
                  data-group-description="{{ group.description or '' }}"
                  data-group-platform="{{ group.platform }}"
-                 data-group-category="{{ group.category or 'General' }}">
+                 data-group-category="{{ group.category or 'General' }}"
+                 data-group-location="{{ group.location or '' }}"
+                 data-group-stream="{{ group.stream or '' }}"
+                 data-group-icon="{{ group.icon or '📚' }}">
 
-                <span class="lock-badge">{% if group.locked %}🔒{% endif %}</span>
+                <div class="card-accent platform-{{ group.platform }}"></div>
 
-                <div class="card-top">
-                    <span class="icon">{{ group.icon or '📚' }}</span>
-                    <div class="info">
-                        <div class="name">
+                <div class="card-header">
+                    <span class="card-icon">{{ group.icon or '📚' }}</span>
+                    <div class="card-titles">
+                        <div class="card-name">
                             {{ group.name }}
                             {% if group.is_featured %}
-                                <span class="featured-tag">⭐</span>
-                            {% endif %}
-                            {% if group.locked %}
-                                <span class="locked-tag">🔒</span>
+                                <span class="mini-star" title="Featured">⭐</span>
                             {% endif %}
                         </div>
-                        <div class="meta">
-                            <span><span class="platform-icon {{ group.platform }}"><i class="fab fa-{% if group.platform == 'whatsapp' %}whatsapp{% else %}telegram-plane{% endif %}"></i></span> {{ group.platform|capitalize }}</span>
-                            {% if group.category %}
-                                <span>📂 {{ group.category }}</span>
+                        <div class="card-tags">
+                            <span class="tag platform-tag platform-{{ group.platform }}">
+                                <i class="fab fa-{% if group.platform == 'whatsapp' %}whatsapp{% else %}telegram-plane{% endif %}"></i>
+                                {{ group.platform|capitalize }}
+                            </span>
+                            {% if group.location %}
+                                <span class="tag location-tag">🎓 {{ group.location }}</span>
                             {% endif %}
-                            {% if group.curriculum %}
-                                <span>🎓 {{ group.curriculum }}</span>
+                            {% if group.location == 'PL' and group.stream %}
+                                <span class="tag stream-tag">{{ group.stream|capitalize }}</span>
+                            {% endif %}
+                            {% if group.category %}
+                                <span class="tag">{{ group.category }}</span>
                             {% endif %}
                         </div>
                     </div>
                 </div>
 
                 {% if group.description %}
-                    <div class="card-description">{{ group.description }}</div>
+                    <p class="card-desc">{{ group.description }}</p>
                 {% endif %}
 
-                <div class="join-btn-area">
+                <div class="card-foot">
                     {% if group.locked %}
-                        <span class="btn-join locked" style="background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);">
-                            <span class="lock-icon">🔒</span> {{ _('groups.unavailable') }}
-                            <span class="lock-hint">
-                                {% if group.join_block_reason == 'curriculum' %}
-                                    ({{ _('groups.lock_curriculum') }})
-                                {% else %}
-                                    ({{ _('groups.lock_tier') }})
+                        <button type="button" class="cta locked" data-locked-cta>
+                            <i class="fas fa-lock"></i>
+                            {{ _('groups.unavailable') }}
+                            <span class="lock-reason">
+                                {% if group.join_block_reason == 'location' %}
+                                    · {{ _('groups.lock_curriculum') }}
+                                {% elif group.join_block_reason == 'stream' %}
+                                    · {{ _('groups.lock_stream') }}
+                                {% elif group.join_block_reason == 'tier' %}
+                                    · {{ _('groups.lock_tier') }}
+                                {% elif group.join_block_reason == 'verified' %}
+                                    · {{ _('groups.lock_verified') }}
                                 {% endif %}
                             </span>
-                        </span>
+                        </button>
                     {% else %}
-                        <span class="btn-join" style="background: var(--primary); color: white; padding: 6px 16px; border-radius: var(--radius-sm); font-weight: 600; display: inline-block;">
-                            <i class="fas fa-arrow-right"></i> {{ _('groups.join') }}
-                        </span>
+                        <button type="button" class="cta join" data-join-cta>
+                            <i class="fas fa-arrow-right"></i>
+                            {{ _('groups.join') }}
+                        </button>
                     {% endif %}
                 </div>
             </div>
-        {% else %}
-            <div class="groups-empty">
-                <span class="empty-icon">👥</span>
-                <h3>{{ _('groups.empty_title') }}</h3>
-                <p>{{ _('groups.empty_desc') }}</p>
-            </div>
         {% endfor %}
     </div>
-
-    <!-- Pagination -->
-    {% if total_pages > 1 %}
-        <div class="pagination" style="margin-top: 24px;">
-            <a href="?page=1&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == 1 %}disabled{% endif %}">{{ _('common.first') }}</a>
-            <a href="?page={{ page - 1 }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == 1 %}disabled{% endif %}">{{ _('common.previous') }}</a>
-            {% for p in range(1, total_pages + 1) %}
-                {% if p == page %}
-                    <span class="page-link active">{{ p }}</span>
-                {% elif p <= page + 2 and p >= page - 2 %}
-                    <a href="?page={{ p }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link">{{ p }}</a>
-                {% endif %}
-            {% endfor %}
-            <a href="?page={{ page + 1 }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == total_pages %}disabled{% endif %}">{{ _('common.next') }}</a>
-            <a href="?page={{ total_pages }}&platform={{ platform_filter }}&category={{ category_filter }}" class="page-link {% if page == total_pages %}disabled{% endif %}">{{ _('common.last') }}</a>
+    {% else %}
+        <div class="groups-empty">
+            <span class="empty-icon">👥</span>
+            <h3>{{ _('groups.empty_title') }}</h3>
+            <p>{{ _('groups.empty_desc') }}</p>
         </div>
     {% endif %}
+
 </div>
 
 <!-- ============================================
-     JOIN CONFIRMATION MODAL — READ-THEN-ACCEPT
+     JOIN CONFIRMATION MODAL
      ============================================ -->
 <div class="modal-overlay join-modal" id="joinModal">
     <div class="modal-content">
@@ -409,188 +761,134 @@
 </div>
 
 <script>
-const I18N = {
-    curriculum_lock_msg: "{{ _('groups.upgrade_curriculum_msg') }}",
-    tier_lock_msg:       "{{ _('groups.upgrade_tier_msg') }}",
-    category_general:    "{{ _('groups.modal_default_category') }}"
-};
+(function () {
+    'use strict';
 
-document.addEventListener('DOMContentLoaded', function() {
-    const tabs = document.querySelectorAll('.curriculum-tab');
-    const groups = document.querySelectorAll('.group-card');
+    const I18N = {
+        location_lock_msg: "{{ _('groups.upgrade_curriculum_msg') }}",
+        stream_lock_msg:   "{{ _('groups.upgrade_stream_msg') }}",
+        tier_lock_msg:     "{{ _('groups.upgrade_tier_msg') }}",
+        verified_lock_msg: "{{ _('groups.upgrade_verified_msg') }}",
+        category_general:  "{{ _('groups.modal_default_category') }}",
+        no_description:    "{{ _('groups.modal_no_description') }}"
+    };
 
-    tabs.forEach(tab => {
-        tab.addEventListener('click', function() {
-            tabs.forEach(t => t.classList.remove('active'));
-            this.classList.add('active');
-        });
-    });
+    document.addEventListener('DOMContentLoaded', function () {
 
-    const platformFilter = document.getElementById('platformFilter');
-    const categoryFilter = document.getElementById('categoryFilter');
-    const clearFiltersBtn = document.getElementById('clearFilters');
-    const activeFilters = document.getElementById('activeFilters');
+        const joinModal       = document.getElementById('joinModal');
+        const joinModalScroll = document.getElementById('joinModalScroll');
+        const joinModalHint   = document.getElementById('joinModalScrollHint');
 
-    function applyFilters() {
-        const platform = platformFilter.value;
-        const category = categoryFilter.value;
+        function openJoinModal(card) {
+            const name = card.dataset.groupName || 'Group';
+            const description = card.dataset.groupDescription || '';
+            const platform = card.dataset.groupPlatform || 'whatsapp';
+            const category = card.dataset.groupCategory || I18N.category_general;
+            const icon = card.dataset.groupIcon || '📚';
+            const inviteLink = card.dataset.inviteLink;
 
-        groups.forEach(card => {
-            let show = true;
-            const cardPlatform = card.dataset.groupPlatform || '';
-            const cardCategory = card.dataset.groupCategory || '';
-            if (platform && cardPlatform.toLowerCase() !== platform) show = false;
-            if (category && cardCategory !== category) show = false;
-            card.style.display = show ? '' : 'none';
-        });
+            if (!inviteLink) return;
 
-        clearFiltersBtn.style.display = (platform || category) ? 'inline-block' : 'none';
+            document.getElementById('joinModalTitle').textContent = name;
+            document.getElementById('joinModalDescription').textContent =
+                description || I18N.no_description;
+            document.getElementById('joinModalPlatform').textContent =
+                platform.charAt(0).toUpperCase() + platform.slice(1);
+            document.getElementById('joinModalCategory').textContent = category;
+            document.getElementById('joinModalIcon').textContent = icon;
+            document.getElementById('joinModalProceedBtn').href = inviteLink;
 
-        activeFilters.innerHTML = '';
-        if (platform) {
-            const tag = document.createElement('span');
-            tag.className = 'filter-tag';
-            tag.innerHTML = `{{ _('groups.filter_platform') }}: ${platform} <span class="remove" data-filter="platform">&times;</span>`;
-            activeFilters.appendChild(tag);
-        }
-        if (category) {
-            const tag = document.createElement('span');
-            tag.className = 'filter-tag';
-            tag.innerHTML = `{{ _('groups.filter_category') }}: ${category} <span class="remove" data-filter="category">&times;</span>`;
-            activeFilters.appendChild(tag);
+            joinModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+
+            if (joinModalScroll) joinModalScroll.scrollTop = 0;
+            if (joinModalHint) joinModalHint.classList.remove('hidden');
         }
 
-        document.querySelectorAll('.filter-tag .remove').forEach(el => {
-            el.addEventListener('click', function(e) {
-                e.stopPropagation();
-                const filter = this.dataset.filter;
-                if (filter === 'platform') platformFilter.value = '';
-                else if (filter === 'category') categoryFilter.value = '';
-                applyFilters();
+        function closeJoinModal() {
+            joinModal.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        window.closeJoinModal = closeJoinModal;
+
+        if (joinModalScroll && joinModalHint) {
+            joinModalScroll.addEventListener('scroll', function () {
+                var scrolled = joinModalScroll.scrollTop > 20;
+                joinModalHint.classList.toggle('hidden', scrolled);
+            }, { passive: true });
+        }
+
+        joinModal.addEventListener('click', function (e) {
+            if (e.target === this) closeJoinModal();
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && joinModal.classList.contains('active')) {
+                closeJoinModal();
+            }
+        });
+
+        // ─── Card click ───────────────────────────────────
+        function handleGroupClick(card) {
+            const locked       = card.dataset.locked === 'true';
+            const requiredTier = card.dataset.requiredTier || 'free';
+            const lockReason   = card.dataset.lockReason || '';
+
+            if (locked) {
+                let feature = 'group_join';
+                let message = '';
+                let slideTarget = (requiredTier === 'pro' || !requiredTier)
+                    ? 'premium'
+                    : requiredTier;
+
+                if (lockReason === 'location') {
+                    feature = 'curriculum_access';
+                    message = I18N.location_lock_msg;
+                    slideTarget = 'premium';
+                } else if (lockReason === 'stream') {
+                    feature = 'stream_access';
+                    message = I18N.stream_lock_msg;
+                    slideTarget = 'premium';
+                } else if (lockReason === 'verified') {
+                    feature = 'account_verification';
+                    message = I18N.verified_lock_msg;
+                } else {
+                    message = I18N.tier_lock_msg.replace('{tier}',
+                        slideTarget.charAt(0).toUpperCase() + slideTarget.slice(1));
+                }
+
+                if (typeof openUpgradeSheet === 'function') {
+                    openUpgradeSheet({
+                        feature: feature,
+                        requiredTier: slideTarget,
+                        message: message
+                    });
+                } else {
+                    alert(message);
+                }
+                return;
+            }
+
+            openJoinModal(card);
+        }
+
+        document.querySelectorAll('.group-card, .featured-card').forEach(function (card) {
+            card.addEventListener('click', function (e) {
+                if (e.target.closest('a, button, .cta')) return;
+                handleGroupClick(this);
             });
         });
-    }
 
-    platformFilter.addEventListener('change', applyFilters);
-    categoryFilter.addEventListener('change', applyFilters);
-    clearFiltersBtn.addEventListener('click', function() {
-        platformFilter.value = '';
-        categoryFilter.value = '';
-        applyFilters();
-    });
-
-    // ============================================
-    // MODAL OPEN / CLOSE
-    // ============================================
-    const joinModal        = document.getElementById('joinModal');
-    const joinModalScroll  = document.getElementById('joinModalScroll');
-    const joinModalHint    = document.getElementById('joinModalScrollHint');
-
-    function openJoinModal(card) {
-        const name = card.dataset.groupName || 'Group';
-        const description = card.dataset.groupDescription || '';
-        const platform = card.dataset.groupPlatform || 'WhatsApp';
-        const category = card.dataset.groupCategory || I18N.category_general;
-        const icon = card.querySelector('.icon')?.textContent || '📚';
-        const inviteLink = card.dataset.inviteLink;
-
-        if (!inviteLink) return;
-
-        document.getElementById('joinModalTitle').textContent = name;
-        document.getElementById('joinModalDescription').textContent =
-            description || "{{ _('groups.modal_no_description') }}";
-        document.getElementById('joinModalPlatform').textContent =
-            platform.charAt(0).toUpperCase() + platform.slice(1);
-        document.getElementById('joinModalCategory').textContent = category;
-        document.getElementById('joinModalIcon').textContent = icon;
-        document.getElementById('joinModalProceedBtn').href = inviteLink;
-
-        joinModal.classList.add('active');
-        document.body.style.overflow = 'hidden';
-
-        if (joinModalScroll) joinModalScroll.scrollTop = 0;
-        if (joinModalHint) joinModalHint.classList.remove('hidden');
-    }
-
-    function closeJoinModal() {
-        joinModal.classList.remove('active');
-        document.body.style.overflow = '';
-    }
-
-    window.closeJoinModal = closeJoinModal;
-
-    if (joinModalScroll && joinModalHint) {
-        joinModalScroll.addEventListener('scroll', function() {
-            var scrolled = joinModalScroll.scrollTop > 20;
-            joinModalHint.classList.toggle('hidden', scrolled);
-        }, { passive: true });
-    }
-
-    joinModal.addEventListener('click', function(e) {
-        if (e.target === this) closeJoinModal();
-    });
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && joinModal.classList.contains('active')) {
-            closeJoinModal();
-        }
-    });
-
-    // ============================================
-    // GROUP CLICK HANDLING
-    // ============================================
-    function handleGroupClick(card) {
-        const locked = card.dataset.locked === 'true';
-        const requiredTier = card.dataset.requiredTier || 'free';
-        const lockReason = card.dataset.lockReason || '';
-
-        if (locked) {
-            let feature = 'group_join';
-            let message = '';
-            // Two-tier model: coerce anything unexpected to 'premium'.
-            let slideTarget = (requiredTier === 'pro' || !requiredTier)
-                ? 'premium'
-                : requiredTier;
-
-            if (lockReason === 'curriculum') {
-                feature = 'curriculum_access';
-                message = I18N.curriculum_lock_msg;
-                slideTarget = 'premium';
-            } else {
-                message = I18N.tier_lock_msg.replace('{tier}',
-                    slideTarget.charAt(0).toUpperCase() + slideTarget.slice(1));
-            }
-
-            if (typeof openUpgradeSheet === 'function') {
-                openUpgradeSheet({
-                    feature: feature,
-                    requiredTier: slideTarget,
-                    message: message
-                });
-            } else {
-                alert(message);
-            }
-            return;
-        }
-
-        openJoinModal(card);
-    }
-
-    document.querySelectorAll('.group-card, .featured-card').forEach(card => {
-        card.addEventListener('click', function(e) {
-            if (e.target.closest('a, button, .btn-join')) return;
-            handleGroupClick(this);
+        document.querySelectorAll('.group-card .cta').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const card = this.closest('.group-card, .featured-card');
+                if (card) handleGroupClick(card);
+            });
         });
-    });
 
-    document.querySelectorAll('.group-card .btn-join, .featured-card .btn-join').forEach(btn => {
-        btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            const card = this.closest('.group-card, .featured-card');
-            if (card) handleGroupClick(card);
-        });
     });
-
-    applyFilters();
-});
+})();
 </script>
 {% endblock %}

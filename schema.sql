@@ -147,7 +147,8 @@ CREATE TABLE IF NOT EXISTS groups (
     invite_link TEXT NOT NULL,
     description TEXT DEFAULT '',
     category TEXT DEFAULT '',
-    curriculum TEXT DEFAULT '',
+    location TEXT DEFAULT '',
+    stream TEXT DEFAULT '',
     subjects TEXT DEFAULT '',
     tier_required TEXT NOT NULL DEFAULT 'free'
         CHECK (tier_required IN ('free', 'premium')),
@@ -164,11 +165,12 @@ CREATE TABLE IF NOT EXISTS groups (
     updated_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_groups_platform ON groups(platform);
-CREATE INDEX IF NOT EXISTS idx_groups_category ON groups(category);
-CREATE INDEX IF NOT EXISTS idx_groups_active ON groups(is_active);
-CREATE INDEX IF NOT EXISTS idx_groups_featured ON groups(is_featured);
+CREATE INDEX IF NOT EXISTS idx_groups_platform   ON groups(platform);
+CREATE INDEX IF NOT EXISTS idx_groups_category   ON groups(category);
+CREATE INDEX IF NOT EXISTS idx_groups_active     ON groups(is_active);
+CREATE INDEX IF NOT EXISTS idx_groups_featured   ON groups(is_featured);
 CREATE INDEX IF NOT EXISTS idx_groups_click_count ON groups(click_count DESC);
+CREATE INDEX IF NOT EXISTS idx_groups_location   ON groups(location);
 
 -- ============================================
 -- MAIN PDFs — Published library

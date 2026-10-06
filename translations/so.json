@@ -1407,5 +1407,9 @@
 "pdfs.apply_filters_btn":   "Codso shaandheynta",
 "pdfs.reset_filters_btn":   "Nadiifi",
 "pdfs.filters_locked_premium": "Kor u qaado si aad u hesho shaandheynta",
-"pdfs.filters_locked_login":   "Gal si aad u isticmaasho shaandheynta"
+"pdfs.filters_locked_login":   "Gal si aad u isticmaasho shaandheynta",
+  "lock_stream": "Qaybta",
+"lock_verified": "La xaqiijiyay",
+"upgrade_stream_msg": "Kooxdan waxay u gaar tahay qayb gaar ah oo Puntland ah. Kor u qaad si aad u hesho galka manhajka oo dhan.",
+"upgrade_verified_msg": "Kooxdan waxaa furan oo keliya akoonnada la xaqiijiyay. La xiriir taageerada si aad u xaqiijiso akoonkaaga."
 }

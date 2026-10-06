@@ -3,6 +3,14 @@
 # Community domain — groups, reports, achievements, leaderboard.
 #
 # Tier model: free / premium only. No pro.
+#
+# NOTE ON NAMING
+#   `groups.location`  — holds '' / 'SO' / 'PL' / 'SL'
+#   `groups.stream`    — holds '' / 'general' / 'science' / 'arts'
+#                        (only meaningful when location == 'PL')
+#   The admin UI labels the location field "Curriculum" because
+#   that's the word students recognise. Under the hood, the field
+#   stores location codes and the form sends them as `location`.
 # ============================================================
 
 from flask import (
@@ -27,6 +35,9 @@ from services.group_service import (
     delete_group,
     toggle_active,
     toggle_featured,
+    VALID_LOCATIONS,
+    VALID_STREAMS,
+    STREAM_REQUIRED_LOCATION,
 )
 from services.interaction_service import (
     get_pending_reports,
@@ -58,17 +69,85 @@ def _csrf_ok():
     return bool(token) and token == session.get('csrf_token')
 
 
-CURRICULUM_OPTIONS = [
-    {'code': '',   'label': 'Any curriculum',  'flag': '🌍'},
-    {'code': 'PL', 'label': 'Puntland',        'flag': '🇸🇱'},
-    {'code': 'SO', 'label': 'Somalia',         'flag': '🇸🇴'},
-    {'code': 'SL', 'label': 'Somaliland',      'flag': '🇮🇷'},
+# Labels shown to admins. The section is labelled "Curriculum"
+# in the UI, but the values are location codes.
+LOCATION_OPTIONS = [
+    {'code': '',   'label': 'All curricula', 'flag': '🌍'},
+    {'code': 'SO', 'label': 'Somalia',       'flag': '🇸🇴'},
+    {'code': 'PL', 'label': 'Puntland',      'flag': '🇸🇱'},
+    {'code': 'SL', 'label': 'Somaliland',    'flag': '🇮🇷'},
+]
+
+STREAM_OPTIONS = [
+    {'code': '',        'label': 'Any stream', 'icon': '•'},
+    {'code': 'general', 'label': 'General',    'icon': '📘'},
+    {'code': 'science', 'label': 'Science',    'icon': '🔬'},
+    {'code': 'arts',    'label': 'Arts',       'icon': '🎨'},
 ]
 
 TIER_OPTIONS = [
     {'code': 'free',    'label': 'Free',    'icon': '🔓'},
     {'code': 'premium', 'label': 'Premium', 'icon': '🔑'},
 ]
+
+_VALID_PLATFORMS = ('whatsapp', 'telegram')
+_VALID_TIERS     = ('free', 'premium')
+
+
+def _form_bool(name):
+    """Checkbox present → 1, absent → 0."""
+    return 1 if request.form.get(name) else 0
+
+
+def _extract_group_form():
+    """
+    Read the group_edit.html form into a dict suitable for
+    create_group / update_group. Returns (data, errors).
+    """
+    location = (request.form.get('location') or '').strip().upper()
+    stream   = (request.form.get('stream') or '').strip().lower()
+
+    # Stream only meaningful for PL groups. Force-clear otherwise.
+    if location != STREAM_REQUIRED_LOCATION:
+        stream = ''
+
+    data = {
+        'name':             (request.form.get('name') or '').strip(),
+        'category':         (request.form.get('category') or '').strip(),
+        'icon':             (request.form.get('icon') or '📚').strip()[:8],
+        'description':      (request.form.get('description') or '').strip(),
+        'platform':         (request.form.get('platform') or 'whatsapp').strip(),
+        'invite_link':      (request.form.get('invite_link') or '').strip(),
+        'location':         location,
+        'stream':           stream,
+        'tier_required':    (request.form.get('tier_required') or 'free').strip(),
+        'requires_verified': _form_bool('requires_verified'),
+        'is_visible':       _form_bool('is_visible'),
+        'is_active':        _form_bool('is_active'),
+        'is_featured':      _form_bool('is_featured'),
+        'subjects':         (request.form.get('subjects') or '').strip(),
+    }
+
+    try:
+        data['display_order'] = int(request.form.get('display_order') or 0)
+    except (TypeError, ValueError):
+        data['display_order'] = 0
+
+    errors = []
+    if not data['name']:
+        errors.append('Group name is required.')
+    if not data['invite_link']:
+        errors.append('Invite link is required.')
+    if data['platform'] not in _VALID_PLATFORMS:
+        errors.append('Invalid platform.')
+    if location not in VALID_LOCATIONS:
+        errors.append('Invalid curriculum.')
+    if stream not in VALID_STREAMS:
+        errors.append('Invalid stream.')
+    if data['tier_required'] not in _VALID_TIERS:
+        errors.append('Invalid tier.')
+
+    return data, errors
 
 
 # ============================================================
@@ -114,27 +193,81 @@ def groups():
 
 
 # ============================================================
-# GROUPS — CREATE (full page)
+# GROUPS — CREATE (GET form + POST handler)
 # ============================================================
 
-@admin_community_bp.route('/groups/new', methods=['GET'],
+@admin_community_bp.route('/groups/new', methods=['GET', 'POST'],
                           endpoint='group_new')
 @admin_can('groups.create')
 def group_new():
+    if request.method == 'POST':
+        if not validate_csrf():
+            abort(403)
+
+        data, errors = _extract_group_form()
+        if errors:
+            for e in errors:
+                flash(e, 'error')
+            return render_template(
+                'dashboard/admin/community/group_edit.html',
+                group=data,
+                is_new=True,
+                location_options=LOCATION_OPTIONS,
+                stream_options=STREAM_OPTIONS,
+                tier_options=TIER_OPTIONS,
+                categories=get_group_categories_with_count(),
+            )
+
+        data['created_by'] = session.get('user_id')
+        success, group_id = create_group(session.get('user_id'), data)
+
+        if not success:
+            flash('Failed to create group. Please check the fields and retry.',
+                  'error')
+            return render_template(
+                'dashboard/admin/community/group_edit.html',
+                group=data,
+                is_new=True,
+                location_options=LOCATION_OPTIONS,
+                stream_options=STREAM_OPTIONS,
+                tier_options=TIER_OPTIONS,
+                categories=get_group_categories_with_count(),
+            )
+
+        write_audit(
+            action='group.create',
+            target_type='group',
+            target_id=group_id,
+            before=None,
+            after={
+                'name':     data['name'],
+                'platform': data['platform'],
+                'location': data['location'],
+                'stream':   data['stream'],
+            },
+            severity='info',
+        )
+        flash('Group created.', 'success')
+        return redirect(url_for('admin_community.groups'))
+
+    # GET
     return render_template(
         'dashboard/admin/community/group_edit.html',
         group=None,
-        curricula=CURRICULUM_OPTIONS,
+        is_new=True,
+        location_options=LOCATION_OPTIONS,
+        stream_options=STREAM_OPTIONS,
         tier_options=TIER_OPTIONS,
         categories=get_group_categories_with_count(),
     )
 
 
 # ============================================================
-# GROUPS — EDIT (full page)
+# GROUPS — EDIT (GET form + POST handler)
 # ============================================================
 
-@admin_community_bp.route('/groups/<int:group_id>/edit', methods=['GET'],
+@admin_community_bp.route('/groups/<int:group_id>/edit',
+                          methods=['GET', 'POST'],
                           endpoint='group_edit')
 @admin_can('groups.edit')
 def group_edit(group_id):
@@ -142,10 +275,69 @@ def group_edit(group_id):
     if not group:
         abort(404)
 
+    if request.method == 'POST':
+        if not validate_csrf():
+            abort(403)
+
+        data, errors = _extract_group_form()
+        if errors:
+            for e in errors:
+                flash(e, 'error')
+            merged = dict(group)
+            merged.update(data)
+            return render_template(
+                'dashboard/admin/community/group_edit.html',
+                group=merged,
+                is_new=False,
+                location_options=LOCATION_OPTIONS,
+                stream_options=STREAM_OPTIONS,
+                tier_options=TIER_OPTIONS,
+                categories=get_group_categories_with_count(),
+            )
+
+        if not update_group(session.get('user_id'), group_id, data):
+            flash('Failed to update group. Please retry.', 'error')
+            return redirect(url_for('admin_community.group_edit',
+                                    group_id=group_id))
+
+        write_audit(
+            action='group.update',
+            target_type='group',
+            target_id=group_id,
+            before={
+                'name':              group.get('name'),
+                'platform':          group.get('platform'),
+                'location':          group.get('location'),
+                'stream':            group.get('stream'),
+                'tier_required':     group.get('tier_required'),
+                'requires_verified': group.get('requires_verified'),
+                'is_active':         group.get('is_active'),
+                'is_featured':       group.get('is_featured'),
+                'is_visible':        group.get('is_visible'),
+            },
+            after={
+                'name':              data['name'],
+                'platform':          data['platform'],
+                'location':          data['location'],
+                'stream':            data['stream'],
+                'tier_required':     data['tier_required'],
+                'requires_verified': data['requires_verified'],
+                'is_active':         data['is_active'],
+                'is_featured':       data['is_featured'],
+                'is_visible':        data['is_visible'],
+            },
+            severity='info',
+        )
+        flash('Group updated.', 'success')
+        return redirect(url_for('admin_community.groups'))
+
+    # GET
     return render_template(
         'dashboard/admin/community/group_edit.html',
         group=group,
-        curricula=CURRICULUM_OPTIONS,
+        is_new=False,
+        location_options=LOCATION_OPTIONS,
+        stream_options=STREAM_OPTIONS,
         tier_options=TIER_OPTIONS,
         categories=get_group_categories_with_count(),
     )
@@ -216,6 +408,120 @@ def groups_audit():
         group_id=group_id,
         admin_id=admin_id,
     )
+
+
+# ============================================================
+# GROUPS — FORM-POST (used by admin/groups.html)
+# ============================================================
+
+@admin_community_bp.route('/groups/bulk', methods=['POST'],
+                          endpoint='group_bulk')
+@admin_can('groups.bulk')
+def group_bulk():
+    if not validate_csrf():
+        abort(403)
+
+    action = (request.form.get('action') or '').strip()
+    raw_ids = request.form.getlist('group_ids')
+
+    if not action or not raw_ids:
+        flash('No action or groups selected.', 'error')
+        return redirect(url_for('admin_community.groups'))
+
+    clean_ids = []
+    for raw in raw_ids:
+        try:
+            clean_ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+
+    if not clean_ids:
+        flash('No valid groups selected.', 'error')
+        return redirect(url_for('admin_community.groups'))
+
+    if action not in ('activate', 'deactivate', 'feature',
+                      'unfeature', 'delete'):
+        flash('Invalid bulk action.', 'error')
+        return redirect(url_for('admin_community.groups'))
+
+    if action == 'delete' and not admin_can('groups.delete'):
+        flash('Delete permission required.', 'error')
+        return redirect(url_for('admin_community.groups'))
+
+    admin_id = session.get('user_id')
+    succeeded = 0
+    failed = 0
+
+    for gid in clean_ids:
+        try:
+            if action == 'activate':
+                ok = update_group(admin_id, gid, {'is_active': 1})
+            elif action == 'deactivate':
+                ok = update_group(admin_id, gid, {'is_active': 0})
+            elif action == 'feature':
+                ok = update_group(admin_id, gid, {'is_featured': 1})
+            elif action == 'unfeature':
+                ok = update_group(admin_id, gid, {'is_featured': 0})
+            elif action == 'delete':
+                ok = delete_group(admin_id, gid)
+            else:
+                ok = False
+
+            if ok:
+                succeeded += 1
+            else:
+                failed += 1
+        except Exception as e:
+            logger.warning(f"bulk {action} failed for group {gid}: {e}")
+            failed += 1
+
+    write_audit(
+        action=f'group.bulk_{action}',
+        target_type='group',
+        before=None,
+        after={
+            'action':    action,
+            'succeeded': succeeded,
+            'failed':    failed,
+            'ids':       clean_ids,
+        },
+        severity='warning',
+    )
+
+    msg = f'{succeeded} group{"s" if succeeded != 1 else ""} updated.'
+    if failed:
+        msg += f' {failed} failed.'
+    flash(msg, 'success' if succeeded else 'error')
+
+    return redirect(url_for('admin_community.groups'))
+
+
+@admin_community_bp.route('/groups/<int:group_id>/delete', methods=['POST'],
+                          endpoint='group_delete')
+@admin_can('groups.delete')
+def group_delete(group_id):
+    if not validate_csrf():
+        abort(403)
+
+    before = get_group_by_id(group_id)
+    if not before:
+        abort(404)
+
+    if delete_group(session.get('user_id'), group_id):
+        write_audit(
+            action='group.delete',
+            target_type='group',
+            target_id=group_id,
+            before={'name': before.get('name'),
+                    'platform': before.get('platform')},
+            after=None,
+            severity='warning',
+        )
+        flash('Group deleted.', 'success')
+    else:
+        flash('Failed to delete group.', 'error')
+
+    return redirect(url_for('admin_community.groups'))
 
 
 # ============================================================
@@ -413,6 +719,8 @@ def group_api_bulk():
                 ok = update_group(session.get('user_id'), gid, {'is_active': 0})
             elif action == 'feature':
                 ok = update_group(session.get('user_id'), gid, {'is_featured': 1})
+            elif action == 'unfeature':
+                ok = update_group(session.get('user_id'), gid, {'is_featured': 0})
             elif action == 'delete':
                 ok = delete_group(session.get('user_id'), gid)
             else:

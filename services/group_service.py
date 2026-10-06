@@ -2,12 +2,36 @@
 # Group listing, access rules, and admin operations.
 # Two-tier model (free / premium). No pro bypass.
 #
-# Access rules (all must pass):
-#   1. Group must be is_visible = 1 (or admin viewing)
-#   2. Curriculum: empty group curriculum = everyone; otherwise
-#      the user's curriculum must match
-#   3. Tier: tier_required = 'free' → everyone; 'premium' → premium only
-#   4. Verified: if requires_verified = 1, only verified users can join
+# ─── ACCESS MODEL ─────────────────────────────────────────────
+# Every group is gated by four independent checks. All must pass
+# for a user to join:
+#
+#   1. LOCATION — groups.location ('' / 'SO' / 'PL' / 'SL')
+#        · empty       → open to everyone
+#        · 'SO' / 'SL' → only students whose location matches
+#        · 'PL'        → only students whose location is 'PL'
+#      Premium does NOT bypass this gate.
+#
+#   2. STREAM — groups.stream ('' / 'general' / 'science' / 'arts')
+#        · Only consulted when group.location == 'PL'
+#        · empty       → any PL student may join
+#        · set         → student's curriculum (stream) must match
+#      Ignored entirely for non-PL groups.
+#
+#   3. TIER — groups.tier_required ('free' / 'premium')
+#        · 'free'      → everyone
+#        · 'premium'   → premium students only
+#
+#   4. VERIFIED — groups.requires_verified
+#        · 0           → everyone
+#        · 1           → only verified accounts
+#
+# Column naming note:
+#   groups.location  used to be called groups.curriculum. It has
+#   always held location codes (SO/PL/SL), not stream values.
+#   students.curriculum holds the stream values. Despite the
+#   shared word, the two columns mean different things.
+# ──────────────────────────────────────────────────────────────
 
 import logging
 from typing import Optional, Dict, List, Any
@@ -33,10 +57,22 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
+# CONSTANTS
+# ============================================================
+
+VALID_LOCATIONS = ('', 'SO', 'PL', 'SL')
+VALID_STREAMS   = ('', 'general', 'science', 'arts')
+
+# Only this location uses the stream gate.
+STREAM_REQUIRED_LOCATION = 'PL'
+
+
+# ============================================================
 # HELPERS
 # ============================================================
 
 def get_curriculum_label(curriculum):
+    """Human label for a location code. Kept for backward compat."""
     labels = {
         'PL': '🇸🇱 Puntland',
         'SO': '🇸🇴 Somalia',
@@ -45,44 +81,71 @@ def get_curriculum_label(curriculum):
     return labels.get(curriculum, curriculum or 'All')
 
 
-def _evaluate_access(group: Dict, user: Dict) -> Dict:
-    """
-    Return a dict describing whether `user` can join `group` and why not.
-    `user` is a students row dict, or None for anonymous visitors.
-    """
-    if user is None:
-        return {
-            'can_join': False,
-            'locked': True,
-            'join_block_reason': 'login',
-            'curriculum_match': False,
-            'tier_match': False,
-            'verified_match': False,
-        }
+def _norm(value):
+    """Normalise a string: strip whitespace, uppercase. None → ''."""
+    return (value or '').strip().upper()
 
-    user_curriculum = user.get('curriculum')
-    user_tier = normalize_tier(user.get('tier') or 'free')
-    user_verified = bool(user.get('is_verified'))
 
-    group_curriculum = (group.get('curriculum') or '').strip()
+def _evaluate_access(group: Dict, user: Optional[Dict]) -> Dict:
+    """
+    Decide whether `user` may join `group`.
+
+    Returns a dict merged onto the group row before rendering:
+      can_join, locked, join_block_reason,
+      location_match, stream_match, tier_match, verified_match,
+      required_tier
+    """
     required_tier = normalize_tier(group.get('tier_required') or 'free')
     requires_verified = bool(group.get('requires_verified', 0))
 
-    # Curriculum: empty = matches everyone
-    curriculum_match = (not group_curriculum) or (group_curriculum == user_curriculum)
+    group_location = _norm(group.get('location'))
+    group_stream   = (group.get('stream') or '').strip().lower()
 
-    # Tier: free groups are open to all; premium groups require premium
+    # ─── Anonymous visitor ────────────────────────────────
+    if user is None:
+        return {
+            'can_join':          False,
+            'locked':            True,
+            'join_block_reason': 'login',
+            'location_match':    False,
+            'stream_match':      False,
+            'tier_match':        False,
+            'verified_match':    False,
+            'required_tier':     required_tier,
+        }
+
+    user_location = _norm(user.get('location'))
+    user_stream   = (user.get('curriculum') or '').strip().lower()
+    user_tier     = normalize_tier(user.get('tier') or 'free')
+    user_verified = bool(user.get('is_verified'))
+
+    # ─── 1. LOCATION gate ─────────────────────────────────
+    #   Empty group location = "All curricula" → open to everyone.
+    #   Otherwise, the student's location must match exactly.
+    location_match = (not group_location) or (group_location == user_location)
+
+    # ─── 2. STREAM gate (PL only) ─────────────────────────
+    #   Only consulted when the group is scoped to Puntland.
+    #   Empty stream = any PL student may join.
+    if group_location == STREAM_REQUIRED_LOCATION and group_stream:
+        stream_match = (group_stream == user_stream)
+    else:
+        stream_match = True
+
+    # ─── 3. TIER gate ─────────────────────────────────────
     tier_match = (required_tier == 'free') or (user_tier == 'premium')
 
-    # Verified gate
+    # ─── 4. VERIFIED gate ─────────────────────────────────
     verified_match = (not requires_verified) or user_verified
 
-    can_join = curriculum_match and tier_match and verified_match
+    can_join = location_match and stream_match and tier_match and verified_match
 
     if can_join:
         block = None
-    elif not curriculum_match:
-        block = 'curriculum'
+    elif not location_match:
+        block = 'location'
+    elif not stream_match:
+        block = 'stream'
     elif not tier_match:
         block = 'tier'
     elif not verified_match:
@@ -91,13 +154,14 @@ def _evaluate_access(group: Dict, user: Dict) -> Dict:
         block = None
 
     return {
-        'can_join': can_join,
-        'locked': not can_join,
+        'can_join':          can_join,
+        'locked':            not can_join,
         'join_block_reason': block,
-        'curriculum_match': curriculum_match,
-        'tier_match': tier_match,
-        'verified_match': verified_match,
-        'required_tier': required_tier,
+        'location_match':    location_match,
+        'stream_match':      stream_match,
+        'tier_match':        tier_match,
+        'verified_match':    verified_match,
+        'required_tier':     required_tier,
     }
 
 
@@ -107,7 +171,7 @@ def _evaluate_access(group: Dict, user: Dict) -> Dict:
 
 def get_user_groups(user_id: Optional[int] = None):
     """
-    Return every visible group with join eligibility attached.
+    Return every active, visible group with join eligibility attached.
     """
     user = None
     if user_id:
@@ -117,7 +181,7 @@ def get_user_groups(user_id: Optional[int] = None):
     result = []
 
     for group in all_groups:
-        # Visibility: hidden groups never appear in the public list
+        # Visibility filter — hidden groups never appear.
         if not group.get('is_visible', 1):
             continue
 
@@ -134,6 +198,7 @@ def get_featured_for_user(user_id: Optional[int] = None):
     """
     if not user_id:
         return []
+
     user = get_student_by_id(user_id)
     if not user:
         return []
@@ -144,6 +209,7 @@ def get_featured_for_user(user_id: Optional[int] = None):
     for group in featured:
         if not group.get('is_visible', 1):
             continue
+
         access = _evaluate_access(group, user)
         group.update(access)
         result.append(group)
@@ -186,7 +252,10 @@ def update_group(admin_id: int, group_id: int, data: Dict) -> bool:
 
         success = update_group_advanced(group_id, data)
         if success:
-            log_group_audit(group_id, admin_id, 'edit', str(changes) if changes else None)
+            log_group_audit(
+                group_id, admin_id, 'edit',
+                str(changes) if changes else None,
+            )
 
         return success
     except Exception as e:
@@ -211,8 +280,10 @@ def toggle_active(admin_id: int, group_id: int) -> bool:
         new_status = 0 if group['is_active'] else 1
         success = toggle_group_active(group_id)
         if success:
-            log_group_audit(group_id, admin_id,
-                            'activate' if new_status else 'deactivate', None)
+            log_group_audit(
+                group_id, admin_id,
+                'activate' if new_status else 'deactivate', None,
+            )
         return success
     except Exception as e:
         logger.error(f"Toggle active error: {e}")
@@ -227,8 +298,10 @@ def toggle_featured(admin_id: int, group_id: int) -> bool:
         new_status = 0 if group['is_featured'] else 1
         success = toggle_group_featured(group_id)
         if success:
-            log_group_audit(group_id, admin_id,
-                            'feature' if new_status else 'unfeature', None)
+            log_group_audit(
+                group_id, admin_id,
+                'feature' if new_status else 'unfeature', None,
+            )
         return success
     except Exception as e:
         logger.error(f"Toggle featured error: {e}")

@@ -1,6 +1,6 @@
 {# ============================================================
    templates/dashboard/admin/community/groups.html
-   Admin group list — 2-tier badges, new access columns.
+   Admin group list — Curriculum (= location) + Stream columns.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -123,6 +123,7 @@
                     <th>Platform</th>
                     <th>Category</th>
                     <th>Curriculum</th>
+                    <th>Stream</th>
                     <th>Tier</th>
                     <th>Status</th>
                     <th>Clicks</th>
@@ -164,10 +165,19 @@
                     </td>
                     <td>{{ grp.category or '—' }}</td>
                     <td>
-                        {% if not grp.curriculum %}
+                        {% if not grp.location %}
                             <span class="admin-chip green" style="font-size:11px;">All</span>
                         {% else %}
-                            <span class="admin-chip" style="font-size:11px;">{{ grp.curriculum }}</span>
+                            <span class="admin-chip" style="font-size:11px;">{{ grp.location }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if grp.location == 'PL' and grp.stream %}
+                            <span class="admin-chip" style="font-size:11px;">
+                                {{ grp.stream|capitalize }}
+                            </span>
+                        {% else %}
+                            <span style="color:var(--text-muted);">—</span>
                         {% endif %}
                     </td>
                     <td>
