@@ -2,8 +2,8 @@
   "id": "/",
   "name": "NuunPlatform",
   "short_name": "Nuun",
-  "description": "Free Somali secondary school quizzes, live competitions, and study materials.",
-  "start_url": "/dashboard?source=pwa",
+  "description": "Free Somali secondary school practice, live competitions, PDFs, and study groups.",
+  "start_url": "/home?source=pwa",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
@@ -13,35 +13,95 @@
   "lang": "so",
   "dir": "ltr",
   "categories": ["education", "productivity"],
+  "prefer_related_applications": false,
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
   "icons": [
-    { "src": "/static/images/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/static/images/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/static/images/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/static/images/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/images/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/images/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/static/images/screenshot-dashboard.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Dashboard — your progress at a glance"
+    },
+    {
+      "src": "/static/images/screenshot-practice.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Practice — test your knowledge"
+    },
+    {
+      "src": "/static/images/screenshot-competition.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Competition — real-time challenges"
+    }
   ],
   "shortcuts": [
     {
-      "name": "Take a Quiz",
-      "short_name": "Quiz",
+      "name": "Practice",
+      "short_name": "Practice",
+      "description": "Start a practice session",
       "url": "/quiz/",
-      "icons": [{ "src": "/static/images/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        { "src": "/static/images/icon-192.png", "sizes": "192x192" }
+      ]
     },
     {
-      "name": "Live Quiz",
-      "short_name": "Live",
+      "name": "Competition",
+      "short_name": "Compete",
+      "description": "Join a live competition",
       "url": "/live-quiz/lobby",
-      "icons": [{ "src": "/static/images/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        { "src": "/static/images/icon-192.png", "sizes": "192x192" }
+      ]
     },
     {
-      "name": "My History",
-      "short_name": "History",
-      "url": "/history",
-      "icons": [{ "src": "/static/images/icon-192.png", "sizes": "192x192" }]
+      "name": "Focus",
+      "short_name": "Focus",
+      "description": "Personalized study suggestions",
+      "url": "/focus",
+      "icons": [
+        { "src": "/static/images/icon-192.png", "sizes": "192x192" }
+      ]
     },
     {
-      "name": "User Guide",
-      "short_name": "Guide",
-      "url": "/docs/",
-      "icons": [{ "src": "/static/images/icon-192.png", "sizes": "192x192" }]
+      "name": "PDF Library",
+      "short_name": "PDFs",
+      "description": "Browse study materials",
+      "url": "/pdfs/",
+      "icons": [
+        { "src": "/static/images/icon-192.png", "sizes": "192x192" }
+      ]
     }
   ]
 }
