@@ -5,13 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}NuunPlatform{% endblock %}</title>
 
-    <!-- ============================================ -->
-    <!-- ANTI-FLASH: apply theme before first paint  -->
-    <!-- ============================================ -->
     <script>
         (function() {
             try {
-                // Priority 1: Server-rendered setting (most authoritative)
                 var serverTheme = "{{ settings.get('appearance.theme', '') if settings is defined else '' }}";
                 var theme = serverTheme || localStorage.getItem('preferred-theme') || 'system';
 
@@ -23,7 +19,6 @@
                 }
                 document.documentElement.setAttribute('data-theme', resolved);
 
-                // Apply accent colour too (prevents colour flash)
                 var serverAccent = "{{ settings.get('appearance.accent', '') if settings is defined else '' }}";
                 var accent = serverAccent || localStorage.getItem('preferred-accent') || 'red';
 
@@ -41,19 +36,16 @@
                 root.style.setProperty('--primary-hover', a.hover);
                 root.style.setProperty('--primary-light', isDark ? a.light_dark : a.light);
 
-                // Apply font size (prevents size flash)
                 var serverFont = "{{ settings.get('appearance.font_size', '') if settings is defined else '' }}";
                 var fontSize = serverFont || localStorage.getItem('preferred-font-size') || 'medium';
                 var sizes = { small: '14px', medium: '16px', large: '18px' };
                 root.style.setProperty('--base-font-size', sizes[fontSize] || '16px');
 
-                // Compact mode
                 var serverCompact = "{{ settings.get('appearance.compact_mode', '') if settings is defined else '' }}";
                 var compact = serverCompact === 'True' || serverCompact === 'true' || serverCompact === '1'
                               || localStorage.getItem('preferred-compact') === '1';
                 if (compact) root.classList.add('compact-mode');
 
-                // Reduced motion
                 var serverMotion = "{{ settings.get('appearance.reduced_motion', '') if settings is defined else '' }}";
                 var reduced = serverMotion === 'True' || serverMotion === 'true' || serverMotion === '1'
                               || localStorage.getItem('preferred-reduced-motion') === '1';
@@ -62,17 +54,15 @@
         })();
     </script>
 
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 
-    <!-- ============================================ -->
-    <!-- MAIN CSS – loads first                       -->
-    <!-- ============================================ -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=3" />
+    {# ── PWA install capability layer — must load early ── #}
+    <script src="{{ url_for('static', filename='js/install-manager.js') }}?v=1"></script>
 
-    <!-- ============================================ -->
-    <!-- SERVER-SIDE ACCENT COLOURS – OVERRIDES       -->
-    <!-- ============================================ -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=3" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/prompt-cards.css') }}?v=4" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/install-button.css') }}?v=1" />
+
     {% if accent_colours %}
     <style id="accent-style">
         :root {
@@ -89,44 +79,28 @@
     <meta name="apple-mobile-web-app-title" content="Nuun">
     <link rel="apple-touch-icon" href="/static/images/icon-192.png">
     <script>
-    /* ============================================================
-       Service Worker registration with self-healing update flow.
-       Ensures stale clients receive the newest HTML / CSS / JS
-       on their next visit, without requiring an app reinstall.
-       ============================================================ */
     (function () {
         if (!('serviceWorker' in navigator)) return;
-    
+
         var RELOAD_GUARD_KEY = 'sw-reload-at';
-        var RELOAD_MIN_GAP_MS = 10 * 1000;   // 10s — stops infinite loops
-    
+        var RELOAD_MIN_GAP_MS = 10 * 1000;
+
         function guardedReload() {
             try {
                 var last = parseInt(sessionStorage.getItem(RELOAD_GUARD_KEY) || '0', 10);
                 var now = Date.now();
-                if (last && (now - last) < RELOAD_MIN_GAP_MS) {
-                    // We already reloaded very recently — stop.
-                    return;
-                }
+                if (last && (now - last) < RELOAD_MIN_GAP_MS) return;
                 sessionStorage.setItem(RELOAD_GUARD_KEY, String(now));
-            } catch (e) { /* sessionStorage disabled — allow the reload */ }
+            } catch (e) {}
             window.location.reload();
         }
-    
+
         window.addEventListener('load', function () {
             navigator.serviceWorker
                 .register('/sw.js', { updateViaCache: 'none' })
                 .then(function (reg) {
-                    // 1. Ask the browser to check for a new SW right now.
                     reg.update().catch(function () {});
-    
-                    // 2. If a newer worker is already waiting, activate it.
-                    if (reg.waiting) {
-                        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-                    }
-    
-                    // 3. Watch for a newly-installed worker arriving while
-                    //    the page is open, and activate it immediately.
+                    if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
                     reg.addEventListener('updatefound', function () {
                         var installing = reg.installing;
                         if (!installing) return;
@@ -137,18 +111,10 @@
                             }
                         });
                     });
-    
-                    // 4. Re-check every 30 minutes while the tab is open.
-                    setInterval(function () {
-                        reg.update().catch(function () {});
-                    }, 30 * 60 * 1000);
+                    setInterval(function () { reg.update().catch(function () {}); }, 30 * 60 * 1000);
                 })
-                .catch(function (err) {
-                    console.warn('SW registration failed:', err);
-                });
-    
-            // 5. When the SW changes controller (new version took over),
-            //    reload once so the user sees the new UI immediately.
+                .catch(function (err) { console.warn('SW registration failed:', err); });
+
             var reloading = false;
             navigator.serviceWorker.addEventListener('controllerchange', function () {
                 if (reloading) return;
@@ -158,21 +124,13 @@
         });
     })();
     </script>
-    <!-- Page specific CSS -->
-    {% block extra_css %}{% endblock %}
 
-    <!-- Additional head content -->
+    {% block extra_css %}{% endblock %}
     {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <!-- ============================================ -->
-    <!-- TOAST NOTIFICATIONS -->
-    <!-- ============================================ -->
     <div id="toast-container"></div>
 
-    <!-- ============================================ -->
-    <!-- FLASH MESSAGES -->
-    <!-- ============================================ -->
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             <div class="flash-container" id="flashContainer">
@@ -187,18 +145,12 @@
         {% endif %}
     {% endwith %}
 
-    <!-- Main Content -->
     {% block content %}{% endblock %}
 
-    <!-- Main JavaScript -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 
-    <!-- Page specific JS -->
     {% block extra_js %}{% endblock %}
 
-    <!-- ============================================ -->
-    <!-- FLOATING THEME TOGGLE (Login/Register only)  -->
-    <!-- ============================================ -->
     <div class="floating-theme-toggle" id="floatingThemeToggle" style="display: none; position: fixed; bottom: 24px; right: 24px; z-index: 10000;">
         <button class="fab-theme" id="fabThemeBtn" style="width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 4px 20px rgba(0,0,0,0.15); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--text); transition: transform 0.2s ease, box-shadow 0.2s ease;">
             <i class="fas fa-moon" id="fabThemeIcon"></i>
@@ -292,5 +244,7 @@
             });
         })();
     </script>
+
+    {% include 'partials/_install_ios_modal.html' %}
 </body>
 </html>

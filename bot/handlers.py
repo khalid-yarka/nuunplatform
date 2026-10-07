@@ -596,7 +596,7 @@ def _deliver_pdf(bot, chat_id, user_id, code, bot_pdf, public_id=None):
             caption=caption,
             parse_mode='Markdown',
             reply_markup=markup,
-            protect_content=_protect(user_id),
+            protect_content=False #_protect(user_id),
         )
         logger.info("force_join: delivered code=%r to user=%s", code, user_id)
 

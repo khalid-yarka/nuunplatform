@@ -1,0 +1,390 @@
+/* ============================================================
+   static/css/install-button.css
+   Isolated styles for the PWA install button + iOS modal.
+   ============================================================ */
+
+/* ═══════════════════════════════════════════════════════════
+   1. INSTALL BUTTON
+   ═══════════════════════════════════════════════════════════ */
+
+.nuun-install-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    overflow: hidden;
+    transition: transform 0.16s ease, box-shadow 0.2s ease,
+                border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+    text-decoration: none;
+    box-sizing: border-box;
+}
+.nuun-install-btn:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+.nuun-install-btn:active { transform: translateY(1px); }
+
+.nuun-install-btn__glow {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+}
+.nuun-install-btn[data-install-mode] .nuun-install-btn__glow {
+    animation: niaGlow 2.4s ease-out 3;
+}
+@keyframes niaGlow {
+    0%   { opacity: 0.55; box-shadow: 0 0 0 0 currentColor; }
+    70%  { opacity: 0.15; box-shadow: 0 0 0 12px transparent; }
+    100% { opacity: 0;    box-shadow: 0 0 0 0 transparent; }
+}
+
+.nuun-install-btn__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* ─── Variant: icon (navbar, floating corner) ─── */
+.nuun-install-btn--icon {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+.nuun-install-btn--icon:hover {
+    background: var(--primary-light);
+    color: var(--primary);
+    border-color: var(--primary);
+    transform: translateY(-1px);
+}
+.nuun-install-btn--icon .nuun-install-btn__glow { color: var(--primary); }
+
+/* ─── Variant: hero (landing page) ─── */
+.nuun-install-btn--hero {
+    display: inline-flex;
+    padding: 12px 22px;
+    border-radius: 999px;
+    font-size: 14.5px;
+    letter-spacing: 0.01em;
+    color: var(--text);
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    margin-top: 14px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+}
+.nuun-install-btn--hero:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    box-shadow: 0 6px 20px rgba(255, 49, 56, 0.14);
+    transform: translateY(-2px);
+}
+.nuun-install-btn--hero .nuun-install-btn__icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: var(--primary-light);
+    color: var(--primary);
+    font-size: 11px;
+}
+.nuun-install-btn--hero:hover .nuun-install-btn__icon {
+    background: var(--primary);
+    color: #fff;
+}
+.nuun-install-btn--hero .nuun-install-btn__glow { color: var(--primary); }
+
+/* ─── Floating corner wrapper — sits ABOVE the theme toggle ─── */
+/* Theme toggle is 48x48 at bottom:24 right:24.                     */
+/* FAB is 48x48 at bottom:88 right:24. Gap = 16px. No collision.    */
+.nuun-install-fab-wrap {
+    position: fixed;
+    bottom: 88px;
+    right: 24px;
+    z-index: 9999;
+    line-height: 0;
+}
+.nuun-install-fab-wrap--auth {
+    bottom: 88px;
+    right: 24px;
+}
+.nuun-install-fab-wrap .nuun-install-btn--icon,
+.nuun-install-fab-wrap--auth .nuun-install-btn--icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    font-size: 19px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+.nuun-install-fab-wrap .nuun-install-btn--icon:hover,
+.nuun-install-fab-wrap--auth .nuun-install-btn--icon:hover {
+    background: var(--primary-light);
+    color: var(--primary);
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.20);
+}
+
+@media (max-width: 480px) {
+    .nuun-install-fab-wrap,
+    .nuun-install-fab-wrap--auth {
+        bottom: 76px;
+        right: 16px;
+    }
+    .nuun-install-fab-wrap .nuun-install-btn--icon,
+    .nuun-install-fab-wrap--auth .nuun-install-btn--icon {
+        width: 44px;
+        height: 44px;
+        font-size: 17px;
+    }
+}
+
+/* Icon-only button inside the navbar */
+@media (max-width: 768px) {
+    .navbar-right .nuun-install-btn--icon {
+        width: 34px;
+        height: 34px;
+        font-size: 14px;
+    }
+}
+@media (max-width: 380px) {
+    .navbar-right .nuun-install-btn--icon { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .nuun-install-btn[data-install-mode] .nuun-install-btn__glow { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   2. iOS ADD-TO-HOME-SCREEN MODAL
+   ═══════════════════════════════════════════════════════════ */
+
+.nios-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 9500;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.nios-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.48);
+    opacity: 0;
+    transition: opacity 0.24s ease;
+}
+.nios-modal.is-visible .nios-backdrop { opacity: 1; }
+
+.nios-sheet {
+    position: relative;
+    background: var(--surface);
+    color: var(--text);
+    width: 100%;
+    max-width: 440px;
+    max-height: 88vh;
+    border-radius: 22px 22px 0 0;
+    padding: 26px 22px 22px;
+    box-shadow: 0 -18px 48px rgba(0, 0, 0, 0.24);
+    transform: translateY(100%);
+    transition: transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1);
+    overflow-y: auto;
+}
+.nios-modal.is-visible .nios-sheet { transform: translateY(0); }
+
+@media (min-width: 640px) {
+    .nios-modal { align-items: center; padding: 24px; }
+    .nios-sheet {
+        border-radius: 20px;
+        max-height: 82vh;
+        transform: scale(0.94);
+        opacity: 0;
+        transition: transform 0.24s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.2s ease;
+    }
+    .nios-modal.is-visible .nios-sheet { transform: scale(1); opacity: 1; }
+}
+
+.nios-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    transition: background 0.15s, color 0.15s;
+}
+.nios-close:hover { background: var(--background); color: var(--text); }
+
+.nios-head {
+    text-align: center;
+    padding: 0 24px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+}
+
+.nios-app-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 12px;
+    border-radius: 13px;
+    overflow: hidden;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+    background: var(--primary);
+}
+.nios-app-icon img {
+    width: 100%; height: 100%;
+    display: block; object-fit: cover;
+}
+
+.nios-title {
+    margin: 0 0 6px;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+}
+.nios-subtitle {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.nios-steps {
+    list-style: none;
+    margin: 0 0 18px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.nios-step {
+    display: flex;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+}
+
+.nios-num {
+    flex-shrink: 0;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 13px;
+    box-shadow: 0 2px 8px rgba(255, 49, 56, 0.28);
+}
+
+.nios-step-body { flex: 1; min-width: 0; }
+.nios-step-title {
+    font-size: 13.5px;
+    color: var(--text);
+    line-height: 1.5;
+    font-weight: 600;
+}
+
+.nios-step-visual {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.nios-share-visual { justify-content: flex-start; }
+.nios-share-btn {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    background: var(--primary);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 3px 10px rgba(255, 49, 56, 0.30);
+}
+.nios-share-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.nios-menu-visual { justify-content: flex-start; }
+.nios-menu-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text);
+}
+.nios-menu-row i { color: var(--primary); font-size: 16px; }
+
+.nios-got-it {
+    width: 100%;
+    padding: 13px 18px;
+    border-radius: var(--radius-sm);
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    font-family: inherit;
+    font-size: 14.5px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 4px 14px rgba(255, 49, 56, 0.28);
+    transition: filter 0.15s, transform 0.12s, box-shadow 0.2s;
+}
+.nios-got-it:hover {
+    filter: brightness(0.95);
+    box-shadow: 0 6px 20px rgba(255, 49, 56, 0.36);
+}
+.nios-got-it:active { transform: translateY(1px); }
+
+[data-theme="dark"] .nios-sheet { box-shadow: 0 -18px 48px rgba(0, 0, 0, 0.6); }
+
+@media (prefers-reduced-motion: reduce) {
+    .nios-sheet, .nios-backdrop { transition: none; }
+}

@@ -1,0 +1,34 @@
+{# ============================================================
+   templates/partials/_install_button.html
+   PWA install button. Two visual variants.
+
+   Usage:
+     {% set variant = 'icon' %}{% include 'partials/_install_button.html' %}
+     {% set variant = 'hero' %}{% include 'partials/_install_button.html' %}
+
+   The button starts display:none via inline style. install-manager.js
+   flips it to display:inline-flex once the browser confirms install
+   capability. If the CSS file fails to load, the button will still
+   never render as a stray square.
+   ============================================================ #}
+{% set _variant = variant | default('icon') %}
+
+<button type="button"
+        class="nuun-install-btn nuun-install-btn--{{ _variant }}"
+        data-install-button
+        style="display:none"
+        aria-label="{{ _('install.button_aria') or 'Install NuunPlatform' }}"
+        title="{{ _('install.button_label') or 'Install App' }}">
+
+    <span class="nuun-install-btn__glow" aria-hidden="true"></span>
+
+    <span class="nuun-install-btn__icon" aria-hidden="true">
+        <i class="fas fa-download"></i>
+    </span>
+
+    {% if _variant == 'hero' %}
+        <span class="nuun-install-btn__label">
+            {{ _('install.button_label') or 'Install App' }}
+        </span>
+    {% endif %}
+</button>

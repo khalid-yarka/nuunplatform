@@ -2,35 +2,27 @@
    static/js/install-manager.js
    Global PWA install capability layer.
 
-   Loaded on every page (base.html, start.html, auth/_base.html).
-   Captures `beforeinstallprompt` immediately, exposes a small
-   state + action API on `window.NuunInstall`, and syncs every
-   [data-install-button] element on the page.
-
-   Public API:
-     NuunInstall.getState()              → 'installable' | 'ios' | 'installed' | 'unsupported'
-     NuunInstall.isInstalled()           → boolean
-     NuunInstall.canInstall()            → boolean (Chrome/Edge/desktop)
-     NuunInstall.needsIOSInstructions()  → boolean
-     NuunInstall.isSupported()           → boolean (installable OR ios)
-     NuunInstall.trigger()               → Promise<{outcome}> 
-     NuunInstall.showIOSHelp()           → opens the instructions modal
-     NuunInstall.on(event, handler)      → subscribe to state events
-
-   Events fired on `document`:
-     nuun-install-available         beforeinstallprompt captured
-     nuun-install-state-change      state changed (detail: {state, canInstall})
-     nuun-install-prompted          native dialog opened
-     nuun-install-accepted          user chose "Install" in native dialog
-     nuun-install-dismissed         user closed the native dialog
-     nuun-install-installed         appinstalled fired
-     nuun-install-ios-help-shown    iOS modal opened
+   Public API on window.NuunInstall:
+     getState()              → 'installable' | 'ios' | 'installed' | 'unsupported'
+     isInstalled()           → boolean
+     canInstall()            → boolean
+     needsIOSInstructions()  → boolean
+     isSupported()           → boolean
+     trigger()               → Promise
+     showIOSHelp()           → opens the instructions modal
+     on(event, handler)      → subscribe
    ============================================================ */
 
 (function () {
     'use strict';
 
-    // ─── Internal state ───
+    var DEBUG = false;   // set to true to see console logs
+    function log() {
+        if (!DEBUG) return;
+        try { console.log.apply(console, ['[NuunInstall]'].concat([].slice.call(arguments))); }
+        catch (e) {}
+    }
+
     var deferred = null;
     var installed = false;
 
@@ -49,7 +41,6 @@
     function isIOS() {
         var ua = window.navigator.userAgent || '';
         if (/iPad|iPhone|iPod/.test(ua) && !window.MSStream) return true;
-        // iPadOS 13+ reports as Macintosh — detect via touch support
         if (/Macintosh/.test(ua) && 'ontouchend' in document) return true;
         return false;
     }
@@ -57,7 +48,6 @@
     function isIOSBrowser() {
         if (!isIOS()) return false;
         var ua = window.navigator.userAgent || '';
-        // Exclude other browsers on iOS — they don't support Add to Home Screen
         if (/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua)) return false;
         return /Safari/.test(ua);
     }
@@ -78,7 +68,7 @@
         return /Safari/.test(ua) && !/Chrome|CriOS|Firefox|FxiOS|Edg|OPR/.test(ua);
     }
 
-    // ─── Public state query ───
+    // ─── Public state ───
 
     function getState() {
         if (isStandalone() || installed) return 'installed';
@@ -107,9 +97,12 @@
     }
 
     function broadcastState() {
+        var state = getState();
+        var supported = isSupported();
+        log('state', state, 'supported', supported);
         fireCustom('nuun-install-state-change', {
-            state: getState(),
-            canInstall: isSupported()
+            state: state,
+            canInstall: supported
         });
     }
 
@@ -117,6 +110,7 @@
 
     function trigger() {
         var state = getState();
+        log('trigger called — state:', state);
 
         if (state === 'installable' && deferred) {
             try {
@@ -149,9 +143,12 @@
 
     function showIOSHelp() {
         var modal = document.getElementById('nuunInstallIOSModal');
-        if (!modal) return;
+        if (!modal) {
+            log('iOS modal not found in DOM');
+            return;
+        }
 
-        modal.hidden = false;
+        modal.style.display = 'flex';
         void modal.offsetWidth;
         modal.classList.add('is-visible');
         document.body.style.overflow = 'hidden';
@@ -160,7 +157,7 @@
         function close() {
             modal.classList.remove('is-visible');
             setTimeout(function () {
-                modal.hidden = true;
+                modal.style.display = 'none';
                 document.body.style.overflow = '';
             }, 220);
             document.removeEventListener('keydown', onKey);
@@ -178,16 +175,21 @@
     // ─── Button sync ───
 
     function syncAllButtons() {
+        var state = getState();
         var supported = isSupported();
         var isIOSMode = needsIOSInstructions();
         var buttons = document.querySelectorAll('[data-install-button]');
 
+        log('syncAllButtons — found', buttons.length, 'buttons — supported:', supported, 'state:', state);
+
         buttons.forEach(function (btn) {
             if (supported) {
-                btn.hidden = false;
+                btn.style.display = (btn.classList.contains('nuun-install-btn--hero'))
+                    ? 'inline-flex'
+                    : 'inline-flex';
                 btn.setAttribute('data-install-mode', isIOSMode ? 'ios' : 'native');
             } else {
-                btn.hidden = true;
+                btn.style.display = 'none';
                 btn.removeAttribute('data-install-mode');
             }
         });
@@ -198,6 +200,7 @@
     window.addEventListener('beforeinstallprompt', function (e) {
         e.preventDefault();
         deferred = e;
+        log('beforeinstallprompt captured');
         fireCustom('nuun-install-available');
         broadcastState();
     });
@@ -205,6 +208,7 @@
     window.addEventListener('appinstalled', function () {
         installed = true;
         deferred = null;
+        log('appinstalled fired');
         fireCustom('nuun-install-installed');
         broadcastState();
     });
@@ -220,19 +224,29 @@
         var btn = e.target.closest('[data-install-button]');
         if (!btn) return;
         e.preventDefault();
+        log('button clicked');
         trigger();
     });
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', syncAllButtons);
-    } else {
+    function ready() {
+        document.documentElement.setAttribute('data-install-manager-ready', '1');
         syncAllButtons();
+
+        // Belt-and-braces: re-sync a few times after load to catch
+        // late-arriving beforeinstallprompt events.
+        setTimeout(syncAllButtons, 500);
+        setTimeout(syncAllButtons, 1500);
+        setTimeout(syncAllButtons, 3500);
+
+        // Final broadcast so all components know the manager is alive.
+        broadcastState();
     }
 
-    setTimeout(broadcastState, 0);
-    setTimeout(syncAllButtons, 0);
-
-    // ─── Export ───
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', ready);
+    } else {
+        ready();
+    }
 
     window.NuunInstall = {
         getState: getState,
@@ -242,6 +256,7 @@
         isSupported: isSupported,
         trigger: trigger,
         showIOSHelp: showIOSHelp,
+        _debug: function (on) { DEBUG = !!on; },
         on: function (name, handler) {
             document.addEventListener(name, handler);
             return function off() { document.removeEventListener(name, handler); };

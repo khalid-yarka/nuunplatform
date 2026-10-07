@@ -1409,5 +1409,10 @@
   "groups.lock_stream": "Qaybta",
   "groups.lock_verified": "La xaqiijiyay",
   "groups.upgrade_stream_msg": "Kooxdan waxay u gaar tahay qayb gaar ah oo Puntland ah. Kor u qaad si aad u hesho galka manhajka oo dhan.",
-  "groups.upgrade_verified_msg": "Kooxdan waxaa furan oo keliya akoonnada la xaqiijiyay. La xiriir taageerada si aad u xaqiijiso akoonkaaga."
+  "groups.upgrade_verified_msg": "Kooxdan waxaa furan oo keliya akoonnada la xaqiijiyay. La xiriir taageerada si aad u xaqiijiso akoonkaaga.",
+"install.button_label": "Rakib App-ka",
+"install.button_aria": "Rakib NuunPlatform sidii app",
+"install.ios_title": "Ku dar NuunPlatform Bogga Hore",
+"install.ios_subtitle": "Rakib app-ka si aad u hesho khibrad degdeg ah oo buuxda — iyada oo aan browser-ku muuqan, oo offline u shaqeyso.",
+"install.ios_got_it": "Waan fahmay"
 }

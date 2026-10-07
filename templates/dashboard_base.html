@@ -425,7 +425,8 @@
 {{ super() }}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=3" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/upgrade.css') }}?v=3" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/prompt-cards.css') }}?v=3" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/prompt-cards.css') }}?v=4" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/install-button.css') }}?v=2" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/discount-chip.css') }}?v=3" />
 {% block dashboard_css %}{% endblock %}
 {% endblock %}
@@ -705,6 +706,10 @@
                 </button>
                 {% endif %}
 
+                {# ── PWA install (icon variant) — single instance ── #}
+                {% set variant = 'icon' %}
+                {% include 'partials/_install_button.html' %}
+
                 <button class="theme-toggle" id="themeToggle" aria-label="{{ _('navbar.toggle_theme') }}">
                     <i class="fas fa-sun" id="themeIcon"></i>
                 </button>
@@ -972,7 +977,7 @@
 
 {% if session.user_id %}
     {% include 'partials/_prompt_cards.html' %}
-    <script src="{{ url_for('static', filename='js/prompt-cards.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/prompt-cards.js') }}?v=5" defer></script>
 {% endif %}
 
 {% endblock %}

@@ -1411,5 +1411,10 @@
   "groups.lock_stream": "Stream",
   "groups.lock_verified": "Verified",
   "groups.upgrade_stream_msg": "This group is restricted to a specific stream in Puntland. Upgrade to unlock curriculum-wide access.",
-  "groups.upgrade_verified_msg": "This group is open only to verified accounts. Contact support to verify your account."
+  "groups.upgrade_verified_msg": "This group is open only to verified accounts. Contact support to verify your account.",
+"install.button_label": "Install App",
+"install.button_aria": "Install NuunPlatform as an app",
+"install.ios_title": "Add NuunPlatform to Home Screen",
+"install.ios_subtitle": "Install the app for faster, full-screen access — no browser bar, works offline.",
+"install.ios_got_it": "Got it"
 }

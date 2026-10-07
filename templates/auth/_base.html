@@ -5,12 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}Account - NuunPlatform{% endblock %}</title>
 
-    <!-- ANTI-FLASH: apply theme before first paint -->
     <script>
         (function() {
             try {
                 var saved = localStorage.getItem('preferred-theme');
-                // 'system' or absent → resolve from OS; otherwise use saved value
                 var resolved;
                 if (!saved || saved === 'system') {
                     resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -37,13 +35,36 @@
                 var fontSize = localStorage.getItem('preferred-font-size') || 'medium';
                 var sizes = { small: '14px', medium: '16px', large: '18px' };
                 root.style.setProperty('--base-font-size', sizes[fontSize] || '16px');
-            } catch (e) { /* silent */ }
+            } catch (e) {}
         })();
     </script>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+    {# ── PWA install capability layer (loaded early, before any UI) ── #}
+    <script src="{{ url_for('static', filename='js/install-manager.js') }}?v=2"></script>
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/register.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/prompt-cards.css') }}?v=4" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/install-button.css') }}?v=2" />
+
+    {# ── PWA installability — required for beforeinstallprompt to fire ── #}
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#FF3138">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Nuun">
+    <link rel="apple-touch-icon" href="/static/images/icon-192.png">
+    <script>
+    (function () {
+        if (!('serviceWorker' in navigator)) return;
+        window.addEventListener('load', function () {
+            navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+                .catch(function (err) { console.warn('SW registration failed:', err); });
+        });
+    })();
+    </script>
 
     {% block extra_css %}{% endblock %}
 </head>
@@ -60,9 +81,12 @@
         </div>
     </div>
 
-    <!-- ============================================ -->
-    <!-- FLOATING THEME TOGGLE (simple on/off)        -->
-    <!-- ============================================ -->
+    {# ── PWA install (icon variant) — floating bottom-right stack ── #}
+    <div class="nuun-install-fab-wrap nuun-install-fab-wrap--auth">
+        {% set variant = 'icon' %}
+        {% include 'partials/_install_button.html' %}
+    </div>
+
     <button type="button"
             class="auth-theme-toggle"
             id="authThemeToggle"
@@ -122,16 +146,13 @@
             function currentResolved() {
                 var saved = localStorage.getItem('preferred-theme');
                 if (!saved || saved === 'system') {
-                    return window.matchMedia('(prefers-color-scheme: dark)').matches
-                        ? 'dark' : 'light';
+                    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
                 }
                 return saved;
             }
 
             function syncIcon() {
-                icon.className = currentResolved() === 'dark'
-                    ? 'fas fa-sun'
-                    : 'fas fa-moon';
+                icon.className = currentResolved() === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
             }
 
             function applyAccentTint(resolved) {
@@ -149,7 +170,7 @@
                     root.style.setProperty('--primary', a.hex);
                     root.style.setProperty('--primary-hover', a.hover);
                     root.style.setProperty('--primary-light', resolved === 'dark' ? a.light_dark : a.light);
-                } catch (e) { /* silent */ }
+                } catch (e) {}
             }
 
             syncIcon();
@@ -162,8 +183,6 @@
                 syncIcon();
             });
 
-            // If OS theme changes and the user hasn't pinned a preference,
-            // keep the icon in sync.
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
                 var saved = localStorage.getItem('preferred-theme');
                 if (!saved || saved === 'system') {
@@ -177,5 +196,6 @@
     </script>
 
     {% block extra_js %}{% endblock %}
+    {% include 'partials/_install_ios_modal.html' %}
 </body>
 </html>

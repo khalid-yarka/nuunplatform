@@ -12,7 +12,6 @@
     <meta property="og:type" content="website" />
     <meta property="og:image" content="{{ url_for('static', filename='images/icon-512.png', _external=True) }}" />
 
-    <!-- ANTI-FLASH: apply theme before first paint -->
     <script>
         (function () {
             try {
@@ -28,23 +27,22 @@
                 var fontSize = localStorage.getItem('preferred-font-size') || 'medium';
                 var sizes = { small: '14px', medium: '16px', large: '18px' };
                 document.documentElement.style.setProperty('--base-font-size', sizes[fontSize] || '16px');
-            } catch (e) { /* silent */ }
+            } catch (e) {}
         })();
     </script>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="{{ url_for('static', filename='js/install-manager.js') }}?v=1"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/start.css') }}?v=2" />
-
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/prompt-cards.css') }}?v=4" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/install-button.css') }}?v=2" />
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#FF3138">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/icon-192.png') }}">
 </head>
 <body class="start-page">
 
-    <!-- ============================================ -->
-    <!-- HEADER -->
-    <!-- ============================================ -->
     <header class="start-header">
         <a href="{{ url_for('index') }}" class="start-brand">
             <img src="{{ url_for('static', filename='images/logo.png') }}" alt="NuunPlatform" />
@@ -56,9 +54,6 @@
         </nav>
     </header>
 
-    <!-- ============================================ -->
-    <!-- HERO -->
-    <!-- ============================================ -->
     <section class="start-hero">
         <div class="start-hero__inner">
             <img class="start-hero__logo"
@@ -82,6 +77,10 @@
                 <i class="fas fa-arrow-right" aria-hidden="true"></i>
             </a>
 
+            {# ── PWA install (hero variant) — hidden until install is available ── #}
+            {% set variant = 'hero' %}
+            {% include 'partials/_install_button.html' %}
+
             <p class="start-hero__secondary">
                 {{ _('start.hero.already_have') }}
                 <a href="{{ url_for('auth.login') }}">{{ _('start.hero.login_link') }}</a>
@@ -89,30 +88,24 @@
         </div>
     </section>
 
-    <!-- ============================================ -->
-    <!-- FEATURES -->
-    <!-- ============================================ -->
     <section class="start-features">
         <h2 class="start-features__title">{{ _('start.features.title') }}</h2>
         <p class="start-features__sub">{{ _('start.features.subtitle') }}</p>
 
         <div class="start-features__grid">
-            <a href="{{ url_for('auth.register') }}"
-               class="start-feature start-feature--red">
+            <a href="{{ url_for('auth.register') }}" class="start-feature start-feature--red">
                 <span class="start-feature__icon"><i class="fas fa-file-pdf" aria-hidden="true"></i></span>
                 <h3 class="start-feature__title">{{ _('start.feature.pdfs.title') }}</h3>
                 <p class="start-feature__sub">{{ _('start.feature.pdfs.desc') }}</p>
             </a>
 
-            <a href="{{ url_for('auth.register') }}"
-               class="start-feature start-feature--yellow">
+            <a href="{{ url_for('auth.register') }}" class="start-feature start-feature--yellow">
                 <span class="start-feature__icon"><i class="fas fa-pencil-alt" aria-hidden="true"></i></span>
                 <h3 class="start-feature__title">{{ _('start.feature.practice.title') }}</h3>
                 <p class="start-feature__sub">{{ _('start.feature.practice.desc') }}</p>
             </a>
 
-            <a href="{{ url_for('auth.register') }}"
-               class="start-feature start-feature--purple">
+            <a href="{{ url_for('auth.register') }}" class="start-feature start-feature--purple">
                 <span class="start-feature__icon"><i class="fas fa-users" aria-hidden="true"></i></span>
                 <h3 class="start-feature__title">{{ _('start.feature.groups.title') }}</h3>
                 <p class="start-feature__sub">{{ _('start.feature.groups.desc') }}</p>
@@ -120,9 +113,6 @@
         </div>
     </section>
 
-    <!-- ============================================ -->
-    <!-- BOTTOM STRIP -->
-    <!-- ============================================ -->
     <section class="start-strip">
         <div class="start-strip__inner">
             <span class="start-strip__icon" aria-hidden="true">🎓</span>
@@ -133,9 +123,6 @@
         </div>
     </section>
 
-    <!-- ============================================ -->
-    <!-- FOOTER -->
-    <!-- ============================================ -->
     <footer class="start-footer">
         <div class="start-footer__links">
             <a href="{{ url_for('auth.help') }}">{{ _('start.footer.help') }}</a>
@@ -147,15 +134,18 @@
         </div>
     </footer>
 
-    <!-- ============================================ -->
-    <!-- FLOATING THEME TOGGLE (simple on/off)        -->
-    <!-- ============================================ -->
     <button type="button"
             class="start-theme-toggle"
             id="startThemeToggle"
             aria-label="{{ _('navbar.toggle_theme') }}">
         <i class="fas fa-moon" id="startThemeIcon" aria-hidden="true"></i>
     </button>
+
+    {# ── PWA install (icon variant) — floating bottom-right ── #}
+    <div class="nuun-install-fab-wrap" id="startInstallFab">
+        {% set variant = 'icon' %}
+        {% include 'partials/_install_button.html' %}
+    </div>
 
     <script>
         (function () {
@@ -166,8 +156,7 @@
             function currentResolved() {
                 var saved = localStorage.getItem('preferred-theme') || 'light';
                 if (saved === 'system') {
-                    return window.matchMedia('(prefers-color-scheme: dark)').matches
-                        ? 'dark' : 'light';
+                    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
                 }
                 return saved;
             }
@@ -189,5 +178,6 @@
         })();
     </script>
 
+    {% include 'partials/_install_ios_modal.html' %}
 </body>
 </html>

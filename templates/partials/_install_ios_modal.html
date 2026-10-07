@@ -1,0 +1,84 @@
+{# ============================================================
+   templates/partials/_install_ios_modal.html
+   iOS Add-to-Home-Screen instructions.
+   Opened by window.NuunInstall.showIOSHelp().
+
+   Starts hidden via inline style so it can never accidentally
+   render on non-iOS pages, even if CSS fails to load.
+   ============================================================ #}
+
+<div class="nios-modal" id="nuunInstallIOSModal"
+     style="display:none"
+     role="dialog" aria-modal="true"
+     aria-labelledby="niosTitle">
+
+    <div class="nios-backdrop" data-ios-close></div>
+
+    <div class="nios-sheet" role="document">
+        <button type="button" class="nios-close" data-ios-close
+                aria-label="{{ _('common.close') or 'Close' }}">
+            <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+
+        <div class="nios-head">
+            <div class="nios-app-icon" aria-hidden="true">
+                <img src="{{ url_for('static', filename='images/icon-192.png') }}"
+                     alt="" width="56" height="56" />
+            </div>
+            <h2 class="nios-title" id="niosTitle">
+                {{ _('install.ios_title') or 'Add NuunPlatform to Home Screen' }}
+            </h2>
+            <p class="nios-subtitle">
+                {{ _('install.ios_subtitle') or 'Install the app for faster, full-screen access — no browser bar, works offline.' }}
+            </p>
+        </div>
+
+        <ol class="nios-steps">
+
+            <li class="nios-step">
+                <span class="nios-num" aria-hidden="true">1</span>
+                <div class="nios-step-body">
+                    <div class="nios-step-title">
+                        {{ _('settings.notifications.push.ios.step1') or 'Tap the Share button at the bottom of Safari.' }}
+                    </div>
+                    <div class="nios-step-visual nios-share-visual" aria-hidden="true">
+                        <span class="nios-share-btn">
+                            <i class="fas fa-arrow-up-from-bracket"></i>
+                        </span>
+                        <span class="nios-share-label">Share</span>
+                    </div>
+                </div>
+            </li>
+
+            <li class="nios-step">
+                <span class="nios-num" aria-hidden="true">2</span>
+                <div class="nios-step-body">
+                    <div class="nios-step-title">
+                        {{ _('settings.notifications.push.ios.step2') or 'Scroll down and tap "Add to Home Screen".' }}
+                    </div>
+                    <div class="nios-step-visual nios-menu-visual" aria-hidden="true">
+                        <span class="nios-menu-row">
+                            <i class="fas fa-plus-square"></i>
+                            <span>Add to Home Screen</span>
+                        </span>
+                    </div>
+                </div>
+            </li>
+
+            <li class="nios-step">
+                <span class="nios-num" aria-hidden="true">3</span>
+                <div class="nios-step-body">
+                    <div class="nios-step-title">
+                        {{ _('settings.notifications.push.ios.step3') or 'Tap "Add" at the top right.' }}
+                    </div>
+                </div>
+            </li>
+
+        </ol>
+
+        <button type="button" class="nios-got-it" data-ios-close>
+            <i class="fas fa-check" aria-hidden="true"></i>
+            {{ _('install.ios_got_it') or 'Got it' }}
+        </button>
+    </div>
+</div>
