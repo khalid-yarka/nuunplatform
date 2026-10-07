@@ -1,6 +1,8 @@
 {# ============================================================
    templates/dashboard/admin/content/pdfs.html
-   PDF Management Dashboard — KPIs, actions, analytics, activity, list.
+   PDF Management Dashboard — advanced layout with KPIs,
+   action queue, health score, analytics, trending, contributors,
+   recent edits, and the main list.
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -54,12 +56,12 @@
     color: var(--pd-text);
 }
 
-/* KPI TILES */
+/* ═══ KPI tiles ═══ */
 .pd-kpis {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
     gap: 12px;
-    margin-bottom: 20px;
+    margin-bottom: 18px;
 }
 @media (max-width: 1200px) { .pd-kpis { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 720px)  { .pd-kpis { grid-template-columns: repeat(2, 1fr); } }
@@ -68,8 +70,8 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 14px 16px;
+    gap: 4px;
+    padding: 14px 16px 12px;
     background: var(--pd-surface);
     border: 1.5px solid var(--pd-border);
     border-radius: var(--pd-radius);
@@ -102,10 +104,10 @@
     gap: 8px;
 }
 .pd-kpi__icon {
-    width: 32px; height: 32px;
-    border-radius: 9px;
+    width: 30px; height: 30px;
+    border-radius: 8px;
     display: inline-flex; align-items: center; justify-content: center;
-    font-size: 14px;
+    font-size: 13px;
     background: color-mix(in srgb, var(--pd-accent, var(--pd-primary)) 12%, transparent);
     color: var(--pd-accent, var(--pd-primary));
 }
@@ -124,10 +126,10 @@
     line-height: 1;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
-    margin-top: 2px;
+    margin-top: 4px;
 }
 .pd-kpi__label {
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.4px;
@@ -137,6 +139,7 @@
     font-size: 11px;
     color: var(--pd-text-2);
     font-weight: 500;
+    margin-top: 1px;
 }
 .pd-kpi--live    { --pd-accent: var(--pd-green); }
 .pd-kpi--pending { --pd-accent: var(--pd-amber); }
@@ -145,7 +148,100 @@
 .pd-kpi--premium { --pd-accent: var(--pd-gold); }
 .pd-kpi--broken  { --pd-accent: var(--pd-purple); }
 
-/* ACTION QUEUE */
+/* ═══ Overview strip (health + coverage + today) ═══ */
+.pd-overview {
+    display: grid;
+    grid-template-columns: 220px 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 18px;
+}
+@media (max-width: 1100px) { .pd-overview { grid-template-columns: 1fr; } }
+
+.pd-overview-card {
+    background: var(--pd-surface);
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+/* Health score donut */
+.pd-health {
+    position: relative;
+    width: 76px;
+    height: 76px;
+    flex-shrink: 0;
+}
+.pd-health svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+.pd-health circle {
+    fill: none;
+    stroke-width: 7;
+}
+.pd-health .pd-health__track { stroke: var(--pd-surface-alt); }
+.pd-health .pd-health__ring  {
+    stroke: var(--pd-green);
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.6s ease;
+}
+.pd-health.warn  .pd-health__ring { stroke: var(--pd-amber); }
+.pd-health.danger .pd-health__ring { stroke: var(--pd-red); }
+.pd-health__value {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    color: var(--pd-text);
+    line-height: 1;
+}
+.pd-health__value strong { font-size: 22px; }
+.pd-health__value span { font-size: 9px; color: var(--pd-muted); text-transform: uppercase; letter-spacing: 0.4px; margin-top: 2px; }
+.pd-health__body { flex: 1; min-width: 0; }
+.pd-health__title { font-size: 12px; font-weight: 800; color: var(--pd-text); text-transform: uppercase; letter-spacing: 0.4px; }
+.pd-health__sub { font-size: 11.5px; color: var(--pd-muted); margin-top: 3px; line-height: 1.4; }
+.pd-health__issues { font-size: 11px; color: var(--pd-text-2); margin-top: 5px; }
+.pd-health__issues div { display: flex; justify-content: space-between; padding: 1px 0; }
+.pd-health__issues .v { color: var(--pd-red); font-weight: 700; }
+
+/* Coverage card */
+.pd-cov__title { font-size: 12px; font-weight: 800; color: var(--pd-text); text-transform: uppercase; letter-spacing: 0.4px; }
+.pd-cov__value {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--pd-text);
+    line-height: 1;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+}
+.pd-cov__sub { font-size: 11px; color: var(--pd-muted); margin-top: 3px; }
+.pd-cov__bar { height: 6px; background: var(--pd-surface-alt); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+.pd-cov__fill { height: 100%; background: linear-gradient(90deg, var(--pd-primary), color-mix(in srgb, var(--pd-primary) 60%, white)); border-radius: 3px; }
+
+/* Today panel compact */
+.pd-today-tiles {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: 8px;
+}
+.pd-today-tile {
+    padding: 8px 6px;
+    background: var(--pd-surface-alt);
+    border-radius: 8px;
+    text-align: center;
+}
+.pd-today-tile strong { display: block; font-size: 16px; font-weight: 800; color: var(--pd-text); line-height: 1; font-variant-numeric: tabular-nums; }
+.pd-today-tile span { font-size: 9.5px; color: var(--pd-muted); text-transform: uppercase; letter-spacing: 0.3px; margin-top: 3px; display: block; }
+
+/* ═══ Action queue ═══ */
 .pd-actions {
     background: linear-gradient(135deg,
         color-mix(in srgb, var(--pd-amber) 5%, var(--pd-surface)),
@@ -162,6 +258,7 @@
     color: var(--pd-amber);
     margin-bottom: 12px;
 }
+.pd-actions__title i { font-size: 14px; }
 .pd-actions__list { display: flex; flex-direction: column; gap: 8px; }
 .pd-act {
     display: flex; align-items: center; gap: 12px;
@@ -169,15 +266,13 @@
     background: var(--pd-surface);
     border: 1px solid var(--pd-border);
     border-radius: var(--pd-radius-sm);
-    text-decoration: none;
-    color: inherit;
+    text-decoration: none; color: inherit;
     transition: all 0.15s ease;
 }
 .pd-act:hover {
     border-color: var(--pd-amber);
     transform: translateX(2px);
-    text-decoration: none;
-    color: inherit;
+    text-decoration: none; color: inherit;
 }
 .pd-act__icon {
     width: 32px; height: 32px;
@@ -188,20 +283,13 @@
     color: var(--pd-amber);
 }
 .pd-act__body { flex: 1; min-width: 0; }
-.pd-act__headline {
-    font-size: 13.5px; font-weight: 700;
-    color: var(--pd-text); line-height: 1.3;
-}
+.pd-act__headline { font-size: 13.5px; font-weight: 700; color: var(--pd-text); line-height: 1.3; }
 .pd-act__hint { font-size: 11.5px; color: var(--pd-muted); margin-top: 2px; }
-.pd-act__go {
-    font-size: 12px; font-weight: 700;
-    color: var(--pd-amber); white-space: nowrap;
-    display: inline-flex; align-items: center; gap: 4px;
-}
+.pd-act__go { font-size: 12px; font-weight: 700; color: var(--pd-amber); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
 .pd-act__go i { font-size: 10px; transition: transform 0.15s; }
 .pd-act:hover .pd-act__go i { transform: translateX(3px); }
 
-/* ANALYTICS */
+/* ═══ Analytics grid ═══ */
 .pd-analytics {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -220,8 +308,7 @@
 }
 .pd-card__head {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 10px;
-    padding: 12px 16px;
+    gap: 10px; padding: 12px 16px;
     border-bottom: 1px solid var(--pd-border);
 }
 .pd-card__title {
@@ -232,47 +319,7 @@
 .pd-card__sub { font-size: 11px; color: var(--pd-muted); font-weight: 600; }
 .pd-card__body { padding: 14px 16px; }
 
-/* Activity panel (Today) */
-.pd-today {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-}
-.pd-today-item {
-    padding: 10px 12px;
-    background: var(--pd-surface-alt);
-    border-radius: 9px;
-    text-align: center;
-}
-.pd-today-item__value {
-    font-size: 22px;
-    font-weight: 800;
-    color: var(--pd-text);
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-}
-.pd-today-item__label {
-    font-size: 10.5px;
-    text-transform: uppercase;
-    font-weight: 700;
-    letter-spacing: 0.4px;
-    color: var(--pd-muted);
-    margin-top: 4px;
-}
-.pd-today-more {
-    margin-top: 10px;
-    display: block;
-    text-align: center;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--pd-primary);
-    text-decoration: none;
-    padding: 6px;
-    border-radius: 8px;
-}
-.pd-today-more:hover { background: var(--pd-primary-light); }
-
-/* Chart bars */
+/* Bar chart */
 .pd-bar-row {
     display: grid;
     grid-template-columns: 110px 1fr 48px;
@@ -281,54 +328,30 @@
     font-size: 12px;
     padding: 5px 0;
 }
-.pd-bar-row + .pd-bar-row {
-    border-top: 1px dashed var(--pd-border);
-    padding-top: 7px; margin-top: 2px;
-}
-.pd-bar-label {
-    color: var(--pd-text-2); font-weight: 600;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.pd-bar-track {
-    height: 8px; background: var(--pd-surface-alt);
-    border-radius: 4px; overflow: hidden;
-}
-.pd-bar-fill {
-    height: 100%; border-radius: 4px;
-    transition: width 0.4s ease;
-}
+.pd-bar-row + .pd-bar-row { border-top: 1px dashed var(--pd-border); padding-top: 7px; margin-top: 2px; }
+.pd-bar-label { color: var(--pd-text-2); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pd-bar-track { height: 8px; background: var(--pd-surface-alt); border-radius: 4px; overflow: hidden; }
+.pd-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
 .pd-bar-fill.c-primary { background: linear-gradient(90deg, var(--pd-primary), color-mix(in srgb, var(--pd-primary) 60%, white)); }
 .pd-bar-fill.c-amber   { background: linear-gradient(90deg, #F59E0B, #FCD34D); }
+.pd-bar-fill.c-blue    { background: linear-gradient(90deg, #3B82F6, #93C5FD); }
+.pd-bar-fill.c-green   { background: linear-gradient(90deg, #10B981, #6EE7B7); }
 .pd-bar-fill.c-gold    { background: linear-gradient(90deg, #EAB308, #FDE68A); }
-.pd-bar-count {
-    text-align: right; font-weight: 800; color: var(--pd-text);
-    font-variant-numeric: tabular-nums; font-size: 12.5px;
-}
-.pd-empty-mini {
-    text-align: center; padding: 24px 12px;
-    font-size: 12.5px; color: var(--pd-muted);
-}
+.pd-bar-fill.c-muted   { background: var(--pd-surface-alt); }
+.pd-bar-count { text-align: right; font-weight: 800; color: var(--pd-text); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.pd-empty-mini { text-align: center; padding: 24px 12px; font-size: 12.5px; color: var(--pd-muted); }
 
 /* Sparkline */
-.pd-spark {
-    display: flex; align-items: flex-end; gap: 2px;
-    height: 60px; padding: 4px 0; margin-bottom: 8px;
-}
+.pd-spark { display: flex; align-items: flex-end; gap: 2px; height: 60px; padding: 4px 0; margin-bottom: 8px; }
 .pd-spark-bar {
     flex: 1; min-height: 3px;
-    background: linear-gradient(180deg,
-        var(--pd-primary),
-        color-mix(in srgb, var(--pd-primary) 40%, transparent));
+    background: linear-gradient(180deg, var(--pd-primary), color-mix(in srgb, var(--pd-primary) 40%, transparent));
     border-radius: 3px 3px 0 0;
     transition: height 0.3s ease, opacity 0.15s;
 }
 .pd-spark-bar:hover { opacity: 0.75; }
 .pd-spark-bar.is-empty { background: var(--pd-surface-alt); height: 3px !important; }
-.pd-spark-axis {
-    display: flex; justify-content: space-between;
-    font-size: 10px; color: var(--pd-muted); font-weight: 600;
-    padding: 0 2px;
-}
+.pd-spark-axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--pd-muted); font-weight: 600; padding: 0 2px; }
 
 /* Mini lists */
 .pd-mini-list { display: flex; flex-direction: column; gap: 4px; }
@@ -354,36 +377,74 @@
     font-size: 12.5px; font-weight: 600; color: var(--pd-text);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.pd-mini-item__meta {
-    font-size: 10.5px; color: var(--pd-muted); margin-top: 1px;
-    font-family: ui-monospace, Menlo, monospace;
-}
-.pd-mini-item__value {
-    font-size: 12px; font-weight: 800; color: var(--pd-primary);
-    font-variant-numeric: tabular-nums; white-space: nowrap;
-}
+.pd-mini-item__meta { font-size: 10.5px; color: var(--pd-muted); margin-top: 1px; font-family: ui-monospace, Menlo, monospace; }
+.pd-mini-item__value { font-size: 12px; font-weight: 800; color: var(--pd-primary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* Storage grid */
 .pd-storage { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.pd-storage-item {
-    padding: 10px 12px;
-    background: var(--pd-surface-alt); border-radius: 9px;
-}
-.pd-storage-item__label {
-    font-size: 10.5px; text-transform: uppercase;
-    font-weight: 800; letter-spacing: 0.4px; color: var(--pd-muted);
-}
-.pd-storage-item__value {
-    font-size: 18px; font-weight: 800; color: var(--pd-text);
-    margin-top: 2px; font-variant-numeric: tabular-nums;
-}
+.pd-storage-item { padding: 10px 12px; background: var(--pd-surface-alt); border-radius: 9px; }
+.pd-storage-item__label { font-size: 10.5px; text-transform: uppercase; font-weight: 800; letter-spacing: 0.4px; color: var(--pd-muted); }
+.pd-storage-item__value { font-size: 18px; font-weight: 800; color: var(--pd-text); margin-top: 2px; font-variant-numeric: tabular-nums; }
 .pd-storage-item__sub { font-size: 10.5px; color: var(--pd-muted); margin-top: 1px; }
 
-/* List header */
+/* Recent edits timeline */
+.pd-edits { display: flex; flex-direction: column; gap: 2px; }
+.pd-edit {
+    display: flex; gap: 10px; padding: 8px 4px;
+    border-radius: 6px;
+    text-decoration: none; color: inherit;
+    transition: background 0.15s;
+    align-items: flex-start;
+}
+.pd-edit:hover { background: var(--pd-surface-alt); text-decoration: none; color: inherit; }
+.pd-edit__icon {
+    width: 26px; height: 26px; border-radius: 7px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; flex-shrink: 0;
+    background: #FEF3C7; color: #B45309;
+}
+[data-theme="dark"] .pd-edit__icon { background: #78350F; color: #FCD34D; }
+.pd-edit__body { flex: 1; min-width: 0; }
+.pd-edit__line {
+    font-size: 12px; color: var(--pd-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pd-edit__line strong { font-weight: 700; }
+.pd-edit__line .action { color: var(--pd-muted); margin: 0 4px; }
+.pd-edit__line code {
+    font-family: ui-monospace, Menlo, monospace;
+    color: var(--pd-primary); font-size: 11px;
+}
+.pd-edit__time { font-size: 10.5px; color: var(--pd-muted); margin-top: 2px; font-family: ui-monospace, Menlo, monospace; }
+
+/* Contributor list */
+.pd-contrib { display: flex; flex-direction: column; gap: 6px; }
+.pd-contrib-row {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12.5px;
+}
+.pd-contrib-row__name {
+    flex: 1; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-weight: 600; color: var(--pd-text);
+}
+.pd-contrib-row__bar {
+    flex: 0 0 80px;
+    height: 6px;
+    background: var(--pd-surface-alt);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.pd-contrib-row__fill {
+    height: 100%; background: linear-gradient(90deg, var(--pd-primary), color-mix(in srgb, var(--pd-primary) 60%, white));
+    border-radius: 3px;
+}
+.pd-contrib-row__value { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 28px; text-align: right; }
+
+/* List section */
 .pd-list-header {
     display: flex; align-items: center; gap: 12px;
-    margin: 12px 0;
-    padding: 0 4px;
+    margin: 12px 0; padding: 0 4px;
 }
 .pd-list-header h2 {
     font-size: 15px; font-weight: 800; color: var(--pd-text);
@@ -498,10 +559,7 @@
     color: #F87171;
 }
 .pd-row__body { min-width: 0; }
-.pd-row__top {
-    display: flex; align-items: center; gap: 8px;
-    margin-bottom: 4px;
-}
+.pd-row__top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .pd-row__title {
     font-size: 14px; font-weight: 700; color: var(--pd-text);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -541,10 +599,7 @@
 }
 
 .pd-empty { text-align: center; padding: 60px 24px; }
-.pd-empty i {
-    font-size: 48px; opacity: 0.35; color: var(--pd-muted);
-    margin-bottom: 12px; display: inline-block;
-}
+.pd-empty i { font-size: 48px; opacity: 0.35; color: var(--pd-muted); margin-bottom: 12px; display: inline-block; }
 .pd-empty h3 { font-size: 16px; font-weight: 700; color: var(--pd-text); margin: 0 0 6px; }
 .pd-empty p { font-size: 13px; color: var(--pd-text-2); margin: 0 0 18px; }
 </style>
@@ -552,6 +607,12 @@
 
 
 {% block admin_content %}
+
+{% set score = health_score or 0 %}
+{% set score_class = '' %}
+{% if score < 50 %}{% set score_class = 'danger' %}
+{% elif score < 80 %}{% set score_class = 'warn' %}{% endif %}
+{% set ring_offset = 226 - (226 * score / 100) %}
 
 <div class="pd-wrap">
 
@@ -613,11 +674,94 @@
         </a>
     </div>
 
+    {# ─── OVERVIEW STRIP ─── #}
+    <div class="pd-overview">
+
+        {# Health score donut #}
+        <div class="pd-overview-card">
+            <div class="pd-health {{ score_class }}">
+                <svg viewBox="0 0 80 80">
+                    <circle class="pd-health__track" cx="40" cy="40" r="36"></circle>
+                    <circle class="pd-health__ring" cx="40" cy="40" r="36"
+                            stroke-dasharray="226"
+                            stroke-dashoffset="{{ ring_offset }}"></circle>
+                </svg>
+                <div class="pd-health__value">
+                    <strong>{{ score }}</strong>
+                    <span>health</span>
+                </div>
+            </div>
+            <div class="pd-health__body">
+                <div class="pd-health__title">Library health</div>
+                {% if health_breakdown %}
+                    <div class="pd-health__issues">
+                        {% for reason, delta in health_breakdown.items() %}
+                            <div>
+                                <span>{{ reason }}</span>
+                                <span class="v">{{ delta }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="pd-health__sub">✅ No issues detected. Every PDF is clean and verifiable.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Coverage card #}
+        <div class="pd-overview-card" style="display:block;">
+            <div class="pd-cov__title">Question coverage</div>
+            <div class="pd-cov__value">{{ coverage.coverage_pct }}%</div>
+            <div class="pd-cov__sub">
+                {{ coverage.questions_linked|default(0) }} of
+                {{ coverage.questions_total|default(0) }} active questions
+                have a linked PDF source
+            </div>
+            <div class="pd-cov__bar">
+                <div class="pd-cov__fill" style="width: {{ coverage.coverage_pct|default(0) }}%;"></div>
+            </div>
+            <div class="pd-cov__sub" style="margin-top:6px;">
+                <strong style="color:var(--pd-text);">{{ coverage.pdfs_with_links|default(0) }}</strong> PDFs are referenced by questions
+            </div>
+        </div>
+
+        {# Today's activity compact #}
+        <div class="pd-overview-card" style="display:block;">
+            <div class="pd-cov__title">
+                <i class="fas fa-bolt" style="color:var(--pd-primary);margin-right:4px;"></i>
+                Today's activity
+            </div>
+            <div class="pd-today-tiles">
+                <div class="pd-today-tile">
+                    <strong>{{ today_activity.views|default(0) }}</strong>
+                    <span>Views</span>
+                </div>
+                <div class="pd-today-tile">
+                    <strong>{{ today_activity.downloads|default(0) }}</strong>
+                    <span>Down</span>
+                </div>
+                <div class="pd-today-tile">
+                    <strong>{{ today_activity.telegram_fetches|default(0) }}</strong>
+                    <span>TG</span>
+                </div>
+                <div class="pd-today-tile">
+                    <strong>{{ today_activity.reports|default(0) }}</strong>
+                    <span>Reports</span>
+                </div>
+            </div>
+            <a href="{{ url_for('admin_content.pdfs_activity') }}"
+               class="pd-today-more"
+               style="display:block;text-align:center;font-size:11.5px;font-weight:700;color:var(--pd-primary);text-decoration:none;margin-top:10px;padding:5px;border-radius:6px;">
+                Full activity feed →
+            </a>
+        </div>
+    </div>
+
     {# ─── ACTION QUEUE ─── #}
     {% if actions %}
         <div class="pd-actions">
             <div class="pd-actions__title">
-                <i class="fas fa-bolt"></i> Action queue
+                <i class="fas fa-bolt"></i> Action queue — {{ actions|length }} item{{ '' if actions|length == 1 else 's' }}
             </div>
             <div class="pd-actions__list">
                 {% for a in actions %}
@@ -627,9 +771,7 @@
                             <div class="pd-act__headline">{{ a.headline }}</div>
                             {% if a.hint %}<div class="pd-act__hint">{{ a.hint }}</div>{% endif %}
                         </div>
-                        <span class="pd-act__go">
-                            {{ a.cta }} <i class="fas fa-arrow-right"></i>
-                        </span>
+                        <span class="pd-act__go">{{ a.cta }} <i class="fas fa-arrow-right"></i></span>
                     </a>
                 {% endfor %}
             </div>
@@ -639,7 +781,7 @@
     {# ─── ANALYTICS ─── #}
     <div class="pd-analytics">
 
-        {# LEFT COLUMN #}
+        {# ═══ LEFT COLUMN ═══ #}
         <div class="pd-col">
 
             {# Top subjects #}
@@ -662,38 +804,60 @@
                             </div>
                         {% endfor %}
                     {% else %}
-                        <div class="pd-empty-mini">No data yet.</div>
+                        <div class="pd-empty-mini">No PDFs classified by subject yet.</div>
                     {% endif %}
                 </div>
             </div>
 
-            {# Class distribution #}
+            {# Class distribution — capped at 6 + Other #}
             <div class="pd-card">
                 <div class="pd-card__head">
                     <div class="pd-card__title"><i class="fas fa-graduation-cap"></i> Class distribution</div>
+                    <span class="pd-card__sub">
+                        {{ class_split_total }} total
+                    </span>
                 </div>
                 <div class="pd-card__body">
                     {% if class_split %}
-                        {% set max_cls = class_split|map(attribute='count')|max or 1 %}
+                        {% set first_cls = class_split[0] %}
+                        {% set max_cls = (first_cls.count if first_cls.count is defined else first_cls.n) or 1 %}
+                        {% set labels = {
+                            'F4': 'Form 4', 'F3': 'Form 3',
+                            'G8': 'Grade 8', 'G7': 'Grade 7',
+                            '': 'Unclassified'
+                        } %}
+                        {% set colors = {
+                            'F4': 'c-blue', 'F3': 'c-green',
+                            'G8': 'c-amber', 'G7': 'c-primary',
+                            '': 'c-muted'
+                        } %}
                         {% for c in class_split %}
                             <div class="pd-bar-row">
                                 <span class="pd-bar-label">
-                                    {% if c.code == 'F4' %}Form 4
-                                    {% elif c.code == 'F3' %}Form 3
-                                    {% elif c.code == 'G8' %}Grade 8
-                                    {% elif c.code == 'G7' %}Grade 7
-                                    {% elif c.code == '' %}Unset
-                                    {% else %}{{ c.code }}{% endif %}
+                                    {% if c.code in labels %}{{ labels[c.code] }}
+                                    {% else %}{{ c.code or '—' }}{% endif %}
                                 </span>
                                 <span class="pd-bar-track">
-                                    <span class="pd-bar-fill c-amber"
-                                          style="width: {{ ((c.count / max_cls) * 100)|round(1) }}%;"></span>
+                                    <span class="pd-bar-fill {{ colors.get(c.code, 'c-primary') }}"
+                                          style="width: {{ (((c.count if c.count is defined else c.n) / max_cls) * 100)|round(1) }}%;"></span>
                                 </span>
-                                <span class="pd-bar-count">{{ c.count }}</span>
+                                <span class="pd-bar-count">{{ c.count if c.count is defined else c.n }}</span>
                             </div>
                         {% endfor %}
+                        {% if class_split_other and class_split_other > 0 %}
+                            <div class="pd-bar-row">
+                                <span class="pd-bar-label" style="color:var(--pd-muted);">
+                                    Other ({{ (class_split|length + 1) }}+ categories)
+                                </span>
+                                <span class="pd-bar-track">
+                                    <span class="pd-bar-fill c-muted"
+                                          style="width: {{ ((class_split_other / max_cls) * 100)|round(1) }}%;"></span>
+                                </span>
+                                <span class="pd-bar-count">{{ class_split_other }}</span>
+                            </div>
+                        {% endif %}
                     {% else %}
-                        <div class="pd-empty-mini">No data yet.</div>
+                        <div class="pd-empty-mini">No PDFs classified by class yet.</div>
                     {% endif %}
                 </div>
             </div>
@@ -716,9 +880,9 @@
                             <div class="pd-storage-item__sub">file_id stored</div>
                         </div>
                         <div class="pd-storage-item">
-                            <div class="pd-storage-item__label">Both</div>
+                            <div class="pd-storage-item__label">Both copies</div>
                             <div class="pd-storage-item__value">{{ storage.both }}</div>
-                            <div class="pd-storage-item__sub">safe copies</div>
+                            <div class="pd-storage-item__sub">redundant safety</div>
                         </div>
                         <div class="pd-storage-item">
                             <div class="pd-storage-item__label">Orphan</div>
@@ -726,7 +890,7 @@
                                  style="color: {{ 'var(--pd-red)' if storage.orphan else 'var(--pd-text)' }};">
                                 {{ storage.orphan }}
                             </div>
-                            <div class="pd-storage-item__sub">no file source</div>
+                            <div class="pd-storage-item__sub">no source file</div>
                         </div>
                     </div>
                 </div>
@@ -734,45 +898,155 @@
 
         </div>
 
-        {# RIGHT COLUMN #}
+        {# ═══ RIGHT COLUMN ═══ #}
         <div class="pd-col">
 
-            {# TODAY'S ACTIVITY #}
+            {# Recent edits timeline #}
             <div class="pd-card">
                 <div class="pd-card__head">
-                    <div class="pd-card__title"><i class="fas fa-bolt"></i> Today's activity</div>
-                    <span class="pd-card__sub">since midnight</span>
+                    <div class="pd-card__title"><i class="fas fa-clock-rotate-left"></i> Recent edits</div>
+                    <span class="pd-card__sub">last 8 admin actions</span>
                 </div>
                 <div class="pd-card__body">
-                    <div class="pd-today">
-                        <div class="pd-today-item">
-                            <div class="pd-today-item__value">{{ today_activity.views }}</div>
-                            <div class="pd-today-item__label">Views</div>
+                    {% if recent_edits %}
+                        <div class="pd-edits">
+                            {% for e in recent_edits %}
+                                {% set icons = {
+                                    'edit': 'fa-pen',
+                                    'verify': 'fa-circle-check',
+                                    'code_change': 'fa-barcode',
+                                    'premium_on': 'fa-gem',
+                                    'premium_off': 'fa-gem',
+                                    'delete': 'fa-trash',
+                                    'publish': 'fa-cloud-upload-alt',
+                                    'create': 'fa-plus'
+                                } %}
+                                <a href="{% if e.pdf_id %}{{ url_for('admin_content.pdf_edit', pdf_id=e.pdf_id) }}{% else %}#{% endif %}"
+                                   class="pd-edit">
+                                    <span class="pd-edit__icon">
+                                        <i class="fas {{ icons.get(e.event_type, 'fa-circle') }}"></i>
+                                    </span>
+                                    <div class="pd-edit__body">
+                                        <div class="pd-edit__line">
+                                            <strong>{{ e.actor_name or 'System' }}</strong>
+                                            <span class="action">{{ e.event_type.replace('_', ' ') }}</span>
+                                            {% if e.pdf_code %}<code>{{ e.pdf_code }}</code>{% endif %}
+                                        </div>
+                                        <div class="pd-edit__time">
+                                            {{ e.created_at[5:16] if e.created_at else '—' }}
+                                        </div>
+                                    </div>
+                                </a>
+                            {% endfor %}
                         </div>
-                        <div class="pd-today-item">
-                            <div class="pd-today-item__value">{{ today_activity.downloads }}</div>
-                            <div class="pd-today-item__label">Downloads</div>
+                    {% else %}
+                        <div class="pd-empty-mini">
+                            No admin activity recorded yet.
+                            <div style="margin-top:6px;font-size:11px;">
+                                Events appear here as soon as admins edit PDFs.
+                            </div>
                         </div>
-                        <div class="pd-today-item">
-                            <div class="pd-today-item__value">{{ today_activity.telegram_fetches }}</div>
-                            <div class="pd-today-item__label">TG fetches</div>
-                        </div>
-                        <div class="pd-today-item">
-                            <div class="pd-today-item__value">{{ today_activity.reports }}</div>
-                            <div class="pd-today-item__label">Reports</div>
-                        </div>
-                    </div>
-                    <a href="{{ url_for('admin_content.pdfs_activity') }}" class="pd-today-more">
-                        See full activity feed →
-                    </a>
+                    {% endif %}
                 </div>
             </div>
 
-            {# Uploads trend #}
+            {# Trending (last 7 days) #}
             <div class="pd-card">
                 <div class="pd-card__head">
-                    <div class="pd-card__title"><i class="fas fa-chart-line"></i> Uploads · 30 days</div>
-                    <span class="pd-card__sub">{{ kpis.uploads_30d }} total</span>
+                    <div class="pd-card__title"><i class="fas fa-fire"></i> Trending · 7 days</div>
+                    <span class="pd-card__sub">views + downloads</span>
+                </div>
+                <div class="pd-card__body">
+                    {% if trending_pdfs %}
+                        <div class="pd-mini-list">
+                            {% for p in trending_pdfs %}
+                                <a href="{{ url_for('admin_content.pdf_edit', pdf_id=p.pdf_id) }}"
+                                   class="pd-mini-item">
+                                    <span class="pd-mini-item__rank {{ 'gold' if loop.index == 1 else 'silver' if loop.index == 2 else 'bronze' if loop.index == 3 else '' }}">
+                                        {{ loop.index }}
+                                    </span>
+                                    <div class="pd-mini-item__body">
+                                        <div class="pd-mini-item__title" title="{{ p.pdf_title }}">
+                                            {{ p.pdf_title or 'Untitled' }}
+                                        </div>
+                                        <div class="pd-mini-item__meta">{{ p.pdf_code or '—' }}</div>
+                                    </div>
+                                    <span class="pd-mini-item__value">{{ p.hits }}</span>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="pd-empty-mini">
+                            No PDF activity in the last 7 days.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Top viewed (all-time) #}
+            <div class="pd-card">
+                <div class="pd-card__head">
+                    <div class="pd-card__title"><i class="fas fa-trophy"></i> Most viewed</div>
+                    <span class="pd-card__sub">all-time</span>
+                </div>
+                <div class="pd-card__body">
+                    {% if top_viewed %}
+                        <div class="pd-mini-list">
+                            {% for p in top_viewed %}
+                                <a href="{{ url_for('admin_content.pdf_edit', pdf_id=p.id) }}"
+                                   class="pd-mini-item">
+                                    <span class="pd-mini-item__rank {{ 'gold' if loop.index == 1 else 'silver' if loop.index == 2 else 'bronze' if loop.index == 3 else '' }}">
+                                        {{ loop.index }}
+                                    </span>
+                                    <div class="pd-mini-item__body">
+                                        <div class="pd-mini-item__title" title="{{ p.title }}">{{ p.title }}</div>
+                                        <div class="pd-mini-item__meta">{{ p.code }} · {{ p.subject or '—' }}</div>
+                                    </div>
+                                    <span class="pd-mini-item__value">
+                                        <i class="fas fa-eye" style="font-size:10px;opacity:0.7;"></i>
+                                        {{ p.view_count }}
+                                    </span>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="pd-empty-mini">No views recorded yet.</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Top contributors #}
+            <div class="pd-card">
+                <div class="pd-card__head">
+                    <div class="pd-card__title"><i class="fas fa-user-tie"></i> Top contributors</div>
+                    <span class="pd-card__sub">uploads · 90 days</span>
+                </div>
+                <div class="pd-card__body">
+                    {% if top_contributors %}
+                        {% set max_c = top_contributors[0].n or 1 %}
+                        <div class="pd-contrib">
+                            {% for c in top_contributors %}
+                                <div class="pd-contrib-row">
+                                    <span class="pd-contrib-row__name">{{ c.actor_name or 'Unknown' }}</span>
+                                    <span class="pd-contrib-row__bar">
+                                        <span class="pd-contrib-row__fill"
+                                              style="width: {{ ((c.n / max_c) * 100)|round(1) }}%;"></span>
+                                    </span>
+                                    <span class="pd-contrib-row__value">{{ c.n }}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="pd-empty-mini">No upload activity recorded yet.</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Upload trend sparkline #}
+            <div class="pd-card">
+                <div class="pd-card__head">
+                    <div class="pd-card__title"><i class="fas fa-chart-line"></i> Upload trend</div>
+                    <span class="pd-card__sub">{{ kpis.uploads_30d }} · 30 days</span>
                 </div>
                 <div class="pd-card__body">
                     {% if uploads_by_day %}
@@ -794,39 +1068,7 @@
                 </div>
             </div>
 
-            {# Top viewed #}
-            <div class="pd-card">
-                <div class="pd-card__head">
-                    <div class="pd-card__title"><i class="fas fa-trophy"></i> Most viewed</div>
-                </div>
-                <div class="pd-card__body">
-                    {% if top_viewed %}
-                        <div class="pd-mini-list">
-                            {% for p in top_viewed %}
-                                <a href="{{ url_for('admin_content.pdf_edit', pdf_id=p.id) }}"
-                                   class="pd-mini-item">
-                                    <span class="pd-mini-item__rank {{ 'gold' if loop.index == 1 else 'silver' if loop.index == 2 else 'bronze' if loop.index == 3 else '' }}">
-                                        {{ loop.index }}
-                                    </span>
-                                    <div class="pd-mini-item__body">
-                                        <div class="pd-mini-item__title" title="{{ p.title }}">{{ p.title }}</div>
-                                        <div class="pd-mini-item__meta">{{ p.code }}</div>
-                                    </div>
-                                    <span class="pd-mini-item__value">
-                                        <i class="fas fa-eye" style="font-size:10px;opacity:0.7;"></i>
-                                        {{ p.view_count }}
-                                    </span>
-                                </a>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <div class="pd-empty-mini">No views recorded yet.</div>
-                    {% endif %}
-                </div>
-            </div>
-
         </div>
-
     </div>
 
     {# ─── LIST ─── #}
@@ -982,7 +1224,13 @@
             <div class="pd-empty">
                 <i class="fas fa-inbox"></i>
                 <h3>No matches</h3>
-                <p>Try adjusting the filters.</p>
+                <p>Try adjusting the filters or clear them to see everything.</p>
+                {% if search or subject_filter or class_filter %}
+                    <a href="{{ url_for('admin_content.pdfs', status=status_filter) }}"
+                       class="pd-btn pd-btn--primary">
+                        <i class="fas fa-times"></i> Clear filters
+                    </a>
+                {% endif %}
             </div>
         </div>
     {% endif %}
@@ -996,14 +1244,16 @@
 <script>
 (function () {
     'use strict';
+    // "/" focuses search
     document.addEventListener('keydown', function (e) {
         var tag = (document.activeElement || {}).tagName || '';
-        if (e.key === '/' && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+        if (e.key === '/' && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
             e.preventDefault();
             var s = document.getElementById('pdSearchInput');
             if (s) s.focus();
         }
     });
+    // Quick status dropdown submits
     var qs = document.getElementById('pdStatusQuick');
     if (qs) {
         qs.addEventListener('change', function () {
@@ -1014,6 +1264,13 @@
             }
         });
     }
+    // Auto-submit on filter change
+    document.querySelectorAll('[data-autofilter]').forEach(function (el) {
+        el.addEventListener('change', function () {
+            var form = document.getElementById('pdFilterForm');
+            if (form) form.submit();
+        });
+    });
 })();
 </script>
 {% endblock %}

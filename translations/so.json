@@ -1401,15 +1401,13 @@
   "settings.notifications.types.admin_announcement.desc": "Ogeysiisyada muhiimka ah ee madasha.",
 "settings.notifications.push.types.telegram_broadcast": "Ogeysiiska tartamada Telegram",
 "settings.notifications.types.telegram_broadcast.desc": "Hel fariin Telegram marka tartan cusub oo dadweyne la abuuro.",
-"settings.notifications.push.types.telegram_broadcast": "Ogeysiiska tartamada Telegram",
-"settings.notifications.types.telegram_broadcast.desc": "Hel fariin Telegram marka tartan cusub oo dadweyne la abuuro.",
   "pdfs.filters_btn":         "Shaandheynta",
 "pdfs.apply_filters_btn":   "Codso shaandheynta",
 "pdfs.reset_filters_btn":   "Nadiifi",
 "pdfs.filters_locked_premium": "Kor u qaado si aad u hesho shaandheynta",
 "pdfs.filters_locked_login":   "Gal si aad u isticmaasho shaandheynta",
-  "lock_stream": "Qaybta",
-"lock_verified": "La xaqiijiyay",
-"upgrade_stream_msg": "Kooxdan waxay u gaar tahay qayb gaar ah oo Puntland ah. Kor u qaad si aad u hesho galka manhajka oo dhan.",
-"upgrade_verified_msg": "Kooxdan waxaa furan oo keliya akoonnada la xaqiijiyay. La xiriir taageerada si aad u xaqiijiso akoonkaaga."
+  "groups.lock_stream": "Qaybta",
+  "groups.lock_verified": "La xaqiijiyay",
+  "groups.upgrade_stream_msg": "Kooxdan waxay u gaar tahay qayb gaar ah oo Puntland ah. Kor u qaad si aad u hesho galka manhajka oo dhan.",
+  "groups.upgrade_verified_msg": "Kooxdan waxaa furan oo keliya akoonnada la xaqiijiyay. La xiriir taageerada si aad u xaqiijiso akoonkaaga."
 }

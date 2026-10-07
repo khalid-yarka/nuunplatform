@@ -3104,14 +3104,14 @@ def refresh_question_miss_stats(days: int = 90) -> int:
 # GROUP FUNCTIONS – Enhanced with curriculum support
 # ============================================
 
-def get_all_groups_advanced(limit=50, offset=0, curriculum=None, platform=None, category=None, status=None):
+def get_all_groups_advanced(limit=50, offset=0, location=None, platform=None, category=None, status=None):
     """Get groups with advanced filtering for admin panel."""
     try:
         query = "SELECT * FROM groups WHERE 1=1"
         params = []
-        if curriculum:
-            query += " AND curriculum = ?"
-            params.append(curriculum)
+        if location:
+            query += " AND location = ?"
+            params.append(location)
         if platform:
             query += " AND platform = ?"
             params.append(platform)
@@ -3137,17 +3137,19 @@ def create_group_advanced(data):
         cursor = execute_with_retry("""
             INSERT INTO groups (
                 name, platform, invite_link, description, category,
-                curriculum, subjects, tier_required, is_active,
+                location, stream, subjects, tier_required, is_active,
                 is_featured, display_order, group_type, icon,
+                is_visible, requires_verified,
                 click_count, created_by, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data['name'],
             data['platform'],
             data['invite_link'],
             data.get('description', ''),
             data.get('category', ''),
-            data.get('curriculum', ''),
+            data.get('location', ''),
+            data.get('stream', ''),
             data.get('subjects', ''),
             normalize_tier(data.get('tier_required') or 'free'),
             data.get('is_active', 1),
@@ -3155,6 +3157,8 @@ def create_group_advanced(data):
             data.get('display_order', 0),
             data.get('group_type', 'community'),
             data.get('icon', '📚'),
+            data.get('is_visible', 1),
+            data.get('requires_verified', 0),
             0,
             data.get('created_by'),
             now(),
@@ -3165,7 +3169,6 @@ def create_group_advanced(data):
         logger.error(f"Error creating group: {e}")
         return False
 
-
 def update_group_advanced(group_id, data):
     """Update a group with all fields."""
     try:
@@ -3173,8 +3176,9 @@ def update_group_advanced(group_id, data):
         params = []
         allowed = [
             'name', 'platform', 'invite_link', 'description', 'category',
-            'curriculum', 'subjects', 'tier_required', 'is_active',
-            'is_featured', 'display_order', 'group_type', 'icon'
+            'location', 'stream', 'subjects', 'tier_required', 'is_active',
+            'is_featured', 'display_order', 'group_type', 'icon',
+            'is_visible', 'requires_verified',
         ]
         for key in allowed:
             if key in data:
@@ -3320,17 +3324,17 @@ def get_featured_groups(limit=5):
         return []
 
 
-def get_groups_by_curriculum(user_curriculum=None):
-    """Get groups filtered by user's curriculum. If None, show all."""
+def get_groups_by_location(user_location=None):
+    """Get groups filtered by user's location. If None, show all."""
     try:
-        if user_curriculum:
+        if user_location:
             query = """
                 SELECT * FROM groups
                 WHERE is_active = 1
-                AND (curriculum = ? OR curriculum = '' OR curriculum IS NULL)
+                AND (location = ? OR location = '' OR location IS NULL)
                 ORDER BY is_featured DESC, display_order ASC, click_count DESC
             """
-            cursor = execute_with_retry(query, (user_curriculum,))
+            cursor = execute_with_retry(query, (user_location,))
         else:
             query = """
                 SELECT * FROM groups
@@ -3340,21 +3344,26 @@ def get_groups_by_curriculum(user_curriculum=None):
             cursor = execute_with_retry(query)
         return [dict(row) for row in cursor.fetchall()]
     except Exception as e:
-        logger.error(f"Error fetching groups by curriculum: {e}")
+        logger.error(f"Error fetching groups by location: {e}")
         return []
 
 
-def get_groups_by_platform(platform, user_curriculum=None):
-    """Get groups filtered by platform and curriculum."""
+def get_groups_by_curriculum(user_curriculum=None):
+    """Backward-compat alias."""
+    return get_groups_by_location(user_curriculum)
+
+
+def get_groups_by_platform(platform, user_location=None):
+    """Get groups filtered by platform and location."""
     try:
         query = """
             SELECT * FROM groups
             WHERE is_active = 1 AND platform = ?
         """
         params = [platform]
-        if user_curriculum:
-            query += " AND (curriculum = ? OR curriculum = '' OR curriculum IS NULL)"
-            params.append(user_curriculum)
+        if user_location:
+            query += " AND (location = ? OR location = '' OR location IS NULL)"
+            params.append(user_location)
         query += " ORDER BY is_featured DESC, display_order ASC, click_count DESC"
         cursor = execute_with_retry(query, params)
         return [dict(row) for row in cursor.fetchall()]
@@ -3363,17 +3372,17 @@ def get_groups_by_platform(platform, user_curriculum=None):
         return []
 
 
-def get_groups_by_category(category, user_curriculum=None):
-    """Get groups filtered by category and curriculum."""
+def get_groups_by_category(category, user_location=None):
+    """Get groups filtered by category and location."""
     try:
         query = """
             SELECT * FROM groups
             WHERE is_active = 1 AND category = ?
         """
         params = [category]
-        if user_curriculum:
-            query += " AND (curriculum = ? OR curriculum = '' OR curriculum IS NULL)"
-            params.append(user_curriculum)
+        if user_location:
+            query += " AND (location = ? OR location = '' OR location IS NULL)"
+            params.append(user_location)
         query += " ORDER BY is_featured DESC, display_order ASC, click_count DESC"
         cursor = execute_with_retry(query, params)
         return [dict(row) for row in cursor.fetchall()]
@@ -3382,7 +3391,7 @@ def get_groups_by_category(category, user_curriculum=None):
         return []
 
 
-def get_group_categories_with_count(user_curriculum=None):
+def get_group_categories_with_count(user_location=None):
     """Get categories with group counts for filtering."""
     try:
         query = """
@@ -3391,9 +3400,9 @@ def get_group_categories_with_count(user_curriculum=None):
             WHERE is_active = 1 AND category IS NOT NULL AND category != ''
         """
         params = []
-        if user_curriculum:
-            query += " AND (curriculum = ? OR curriculum = '' OR curriculum IS NULL)"
-            params.append(user_curriculum)
+        if user_location:
+            query += " AND (location = ? OR location = '' OR location IS NULL)"
+            params.append(user_location)
         query += " GROUP BY category ORDER BY count DESC"
         cursor = execute_with_retry(query, params)
         return [dict(row) for row in cursor.fetchall()]
@@ -3402,7 +3411,7 @@ def get_group_categories_with_count(user_curriculum=None):
         return []
 
 
-def get_group_platforms_with_count(user_curriculum=None):
+def get_group_platforms_with_count(user_location=None):
     """Get platforms with group counts for filtering."""
     try:
         query = """
@@ -3411,9 +3420,9 @@ def get_group_platforms_with_count(user_curriculum=None):
             WHERE is_active = 1
         """
         params = []
-        if user_curriculum:
-            query += " AND (curriculum = ? OR curriculum = '' OR curriculum IS NULL)"
-            params.append(user_curriculum)
+        if user_location:
+            query += " AND (location = ? OR location = '' OR location IS NULL)"
+            params.append(user_location)
         query += " GROUP BY platform ORDER BY count DESC"
         cursor = execute_with_retry(query, params)
         return [dict(row) for row in cursor.fetchall()]
@@ -3422,18 +3431,23 @@ def get_group_platforms_with_count(user_curriculum=None):
         return []
 
 
-def get_available_curricula():
-    """Get distinct curricula from groups."""
+def get_available_locations():
+    """Get distinct locations from groups."""
     try:
         cursor = execute_with_retry("""
-            SELECT DISTINCT curriculum FROM groups
-            WHERE curriculum IS NOT NULL AND curriculum != ''
-            ORDER BY curriculum
+            SELECT DISTINCT location FROM groups
+            WHERE location IS NOT NULL AND location != ''
+            ORDER BY location
         """)
-        return [row['curriculum'] for row in cursor.fetchall()]
+        return [row['location'] for row in cursor.fetchall()]
     except Exception as e:
-        logger.error(f"Error fetching curricula: {e}")
+        logger.error(f"Error fetching group locations: {e}")
         return []
+
+
+def get_available_curricula():
+    """Backward-compat alias — old callers still use the 'curricula' name."""
+    return get_available_locations()
 
 
 def get_question_stats() -> dict:

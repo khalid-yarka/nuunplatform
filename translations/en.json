@@ -1408,8 +1408,8 @@
 "pdfs.reset_filters_btn":   "Reset",
 "pdfs.filters_locked_premium": "Upgrade to unlock filters",
 "pdfs.filters_locked_login":   "Log in to use filters",
-  "lock_stream": "Stream",
-"lock_verified": "Verified",
-"upgrade_stream_msg": "This group is restricted to a specific stream in Puntland. Upgrade to unlock curriculum-wide access.",
-"upgrade_verified_msg": "This group is open only to verified accounts. Contact support to verify your account."
+  "groups.lock_stream": "Stream",
+  "groups.lock_verified": "Verified",
+  "groups.upgrade_stream_msg": "This group is restricted to a specific stream in Puntland. Upgrade to unlock curriculum-wide access.",
+  "groups.upgrade_verified_msg": "This group is open only to verified accounts. Contact support to verify your account."
 }

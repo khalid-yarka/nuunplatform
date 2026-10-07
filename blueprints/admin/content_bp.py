@@ -1,6 +1,7 @@
 # ============================================================
 # blueprints/admin/content_bp.py
-# Content domain — questions, PDFs (library / intake / staging).
+# Content domain — questions, PDFs (library / intake / staging),
+# PDF event history, and PDF admin analytics.
 # ============================================================
 
 from flask import (
@@ -453,6 +454,20 @@ def _pdfs_dashboard_analytics():
     """
     Compute every analytic panel the PDF dashboard needs.
     One function, one pass — all raw SQL, no N+1.
+
+    Includes:
+      · KPIs (live/pending/staged/flagged/premium/broken/uploads)
+      · Today's activity summary
+      · Top subjects (bar chart, top 8)
+      · Class distribution (bar chart, top 6 + "other")
+      · Uploads by day (30-day sparkline)
+      · Top viewed (all-time top 5)
+      · Trending PDFs (7-day top 5)
+      · Top contributors (admin leaderboard)
+      · Recent edits (last 8 admin edits, timeline)
+      · Storage health (local/telegram/both/orphan)
+      · Coverage (questions linked to PDFs)
+      · Health score (0-100 composite)
     """
     out = {
         'kpis': {
@@ -462,13 +477,25 @@ def _pdfs_dashboard_analytics():
         },
         'subject_split': [],
         'class_split': [],
+        'class_split_other': 0,
+        'class_split_total': 0,
         'uploads_by_day': [],
         'top_viewed': [],
+        'trending_pdfs': [],
+        'top_contributors': [],
+        'recent_edits': [],
         'storage': {'local': 0, 'telegram': 0, 'both': 0, 'orphan': 0},
         'today_activity': {
             'views': 0, 'downloads': 0, 'telegram_fetches': 0,
             'saves': 0, 'reports': 0, 'quota_hits': 0, 'total_today': 0,
         },
+        'coverage': {
+            'questions_total': 0, 'questions_linked': 0,
+            'pdfs_with_links': 0, 'pdfs_orphan_questions': 0,
+            'coverage_pct': 0,
+        },
+        'health_score': 100,
+        'health_breakdown': {},
     }
 
     # ── Today's PDF activity ────────────────────────────
@@ -570,7 +597,7 @@ def _pdfs_dashboard_analytics():
     except Exception:
         pass
 
-    # ── Class split ─────────────────────────────────────
+    # ── Class split (top 6 + "other") ───────────────────
     try:
         cursor = execute_with_retry("""
             SELECT COALESCE(class, '') AS code, COUNT(*) AS n
@@ -578,10 +605,14 @@ def _pdfs_dashboard_analytics():
             GROUP BY code
             ORDER BY n DESC
         """)
-        for row in cursor.fetchall():
-            out['class_split'].append({
-                'code': row['code'], 'count': row['n'],
-            })
+        all_rows = [dict(r) for r in cursor.fetchall()]
+        out['class_split_total'] = sum(r['n'] for r in all_rows)
+        out['class_split'] = [
+            {'code': r['code'], 'count': r['n']}
+            for r in all_rows[:6]
+        ]
+        if len(all_rows) > 6:
+            out['class_split_other'] = sum(r['n'] for r in all_rows[6:])
     except Exception:
         pass
 
@@ -606,15 +637,64 @@ def _pdfs_dashboard_analytics():
     except Exception:
         pass
 
-    # ── Top viewed ──────────────────────────────────────
+    # ── Top viewed (all-time) ───────────────────────────
     try:
         cursor = execute_with_retry("""
-            SELECT id, title, code, view_count
+            SELECT id, title, code, view_count, subject
             FROM pdfs
             ORDER BY view_count DESC
             LIMIT 5
         """)
         out['top_viewed'] = [dict(r) for r in cursor.fetchall()]
+    except Exception:
+        pass
+
+    # ── Trending PDFs (last 7 days) ─────────────────────
+    try:
+        cursor = execute_with_retry("""
+            SELECT pdf_id, pdf_code, pdf_title, COUNT(*) AS hits
+            FROM pdf_events
+            WHERE event_type IN ('view', 'download', 'telegram_fetch')
+              AND created_at >= datetime('now', '-7 days')
+              AND pdf_id IS NOT NULL
+            GROUP BY pdf_id
+            ORDER BY hits DESC
+            LIMIT 5
+        """)
+        out['trending_pdfs'] = [dict(r) for r in cursor.fetchall()]
+    except Exception:
+        pass
+
+    # ── Top contributors (admins who uploaded most) ─────
+    try:
+        cursor = execute_with_retry("""
+            SELECT actor_name, COUNT(*) AS n
+            FROM pdf_events
+            WHERE event_type = 'create'
+              AND actor_name IS NOT NULL
+              AND created_at >= datetime('now', '-90 days')
+            GROUP BY actor_name
+            ORDER BY n DESC
+            LIMIT 5
+        """)
+        out['top_contributors'] = [dict(r) for r in cursor.fetchall()]
+    except Exception:
+        pass
+
+    # ── Recent edits (last 8 admin edits) ───────────────
+    try:
+        cursor = execute_with_retry("""
+            SELECT pdf_id, pdf_code, pdf_title, actor_name,
+                   event_type, created_at
+            FROM pdf_events
+            WHERE event_category = 'admin'
+              AND event_type IN ('edit', 'verify', 'code_change',
+                                 'premium_on', 'premium_off', 'delete',
+                                 'publish', 'create')
+            ORDER BY created_at DESC
+            LIMIT 8
+        """)
+        out['recent_edits'] = [dict(r) for r in cursor.fetchall()]
     except Exception:
         pass
 
@@ -643,6 +723,82 @@ def _pdfs_dashboard_analytics():
             }
     except Exception:
         pass
+
+    # ── Coverage (questions ↔ PDFs) ─────────────────────
+    try:
+        row = execute_with_retry(
+            "SELECT COUNT(*) AS n FROM questions WHERE status = 'active'"
+        ).fetchone()
+        out['coverage']['questions_total'] = row['n'] if row else 0
+
+        row = execute_with_retry(
+            "SELECT COUNT(*) AS n FROM questions "
+            "WHERE status = 'active' AND pdf_code IS NOT NULL AND pdf_code != ''"
+        ).fetchone()
+        out['coverage']['questions_linked'] = row['n'] if row else 0
+
+        if out['coverage']['questions_total'] > 0:
+            out['coverage']['coverage_pct'] = round(
+                100.0 * out['coverage']['questions_linked']
+                / out['coverage']['questions_total'], 1
+            )
+
+        row = execute_with_retry("""
+            SELECT COUNT(DISTINCT p.id) AS n
+            FROM pdfs p
+            JOIN questions q ON q.pdf_code = p.code AND q.status = 'active'
+        """).fetchone()
+        out['coverage']['pdfs_with_links'] = row['n'] if row else 0
+    except Exception:
+        pass
+
+    # ── Health score (0-100 composite) ──────────────────
+    # Breakdown of deductions:
+    #   broken links       : -3 per broken code (max -25)
+    #   orphan files       : -2 per orphan (max -20)
+    #   flagged > 10       : -15
+    #   flagged > 0        : -5
+    #   pending > 20       : -10 (backlog)
+    #   coverage < 50%     : -15
+    #   coverage < 80%     : -5
+    deductions = {}
+    score = 100
+
+    broken = out['kpis']['broken']
+    if broken > 0:
+        d = min(25, broken * 3)
+        deductions['Broken links'] = -d
+        score -= d
+
+    orphan = out['storage'].get('orphan', 0)
+    if orphan > 0:
+        d = min(20, orphan * 2)
+        deductions['Orphan files'] = -d
+        score -= d
+
+    flagged = out['kpis']['flagged']
+    if flagged > 10:
+        deductions['Flagged backlog'] = -15
+        score -= 15
+    elif flagged > 0:
+        deductions['Flagged queue'] = -5
+        score -= 5
+
+    pending = out['kpis']['pending']
+    if pending > 20:
+        deductions['Intake backlog'] = -10
+        score -= 10
+
+    cov = out['coverage']['coverage_pct']
+    if cov > 0 and cov < 50:
+        deductions['Low link coverage'] = -15
+        score -= 15
+    elif 0 < cov < 80:
+        deductions['Partial link coverage'] = -5
+        score -= 5
+
+    out['health_score'] = max(0, score)
+    out['health_breakdown'] = deductions
 
     return out
 
@@ -2301,7 +2457,6 @@ def pdfs():
     can_edit = admin_can('pdfs.edit')
     can_delete = admin_can('pdfs.delete')
 
-    # ── Action queue ────────────────────────────────────
     actions = []
     if dash['kpis']['pending'] > 0:
         actions.append({
@@ -2479,10 +2634,18 @@ def pdfs():
         'actions': actions,
         'subject_split': dash['subject_split'],
         'class_split': dash['class_split'],
+        'class_split_other': dash.get('class_split_other', 0),
+        'class_split_total': dash.get('class_split_total', 0),
         'uploads_by_day': dash['uploads_by_day'],
         'top_viewed': dash['top_viewed'],
         'storage': dash['storage'],
         'today_activity': dash.get('today_activity', {}),
+        'trending_pdfs': dash.get('trending_pdfs', []),
+        'top_contributors': dash.get('top_contributors', []),
+        'recent_edits': dash.get('recent_edits', []),
+        'coverage': dash.get('coverage', {}),
+        'health_score': dash.get('health_score', 100),
+        'health_breakdown': dash.get('health_breakdown', {}),
         'can_intake': can_intake,
         'can_publish': can_publish,
         'can_edit': can_edit,
@@ -2562,7 +2725,7 @@ def pdf_download(pdf_id):
 
 
 # ============================================================
-# PDFs — LIBRARY EDIT
+# PDFs — REFETCH SIZE
 # ============================================================
 
 @admin_content_bp.route('/pdfs/<int:pdf_id>/refetch-size', methods=['POST'],
@@ -2671,6 +2834,10 @@ def pdf_refetch_size(pdf_id):
     })
 
 
+# ============================================================
+# PDFs — EDIT
+# ============================================================
+
 @admin_content_bp.route('/pdfs/<int:pdf_id>/edit', methods=['GET'],
                         endpoint='pdf_edit')
 @admin_can('pdfs.edit')
@@ -2688,7 +2855,6 @@ def pdf_edit(pdf_id):
     except Exception:
         pass
 
-    # ── Verification state ──────────────────────────────
     is_verified = False
     try:
         row = execute_with_retry(
@@ -2817,7 +2983,6 @@ def pdf_update(pdf_id):
             pdf_id,
         ), commit=True)
 
-        # ── Verification — only if explicitly requested ──
         if mark_verified:
             try:
                 execute_with_retry(
@@ -2827,7 +2992,6 @@ def pdf_update(pdf_id):
             except Exception:
                 pass
 
-        # ── Bot-side sync ────────────────────────────────
         try:
             from bot.db import get_bot_pdf_by_code, update_bot_pdf
             if pdf.get('code'):
@@ -2846,7 +3010,6 @@ def pdf_update(pdf_id):
         except Exception as e:
             logger.warning(f"pdf_update: bot sync failed (non-fatal): {e}")
 
-        # ── Write PDF-specific events ────────────────────
         try:
             admin_actor = {
                 'id': session.get('user_id'),
@@ -2980,7 +3143,7 @@ def pdf_intake_process(pending_id):
     pending = get_pending_pdf_by_id(pending_id)
     if not pending:
         flash('Pending PDF not found.', 'error')
-        return redirect(url_for('admin_content.pdfs', tab='intake'))
+        return redirect(url_for('admin_content.pdfs', status='pending'))
 
     filename = pending.get('filename') or ''
 
@@ -3059,7 +3222,7 @@ def pdf_intake_process(pending_id):
         flash(f'PDF staged with code {code}.', 'success')
         return redirect(url_for('admin_content.pdfs', status='staged'))
 
-    # ── GET: render the unified edit room in "pending" mode ──
+    # ── GET: render unified edit room in "pending" mode ──
     auto_code = _generate_staging_pdf_code()
     suggested = suggest_from_filename(filename)
 
@@ -3141,10 +3304,6 @@ def pdf_intake_preview(pending_id):
     return _pdf_preview_response(data, disposition)
 
 
-# ============================================================
-# PDFs — LEGACY REDIRECT
-# ============================================================
-
 @admin_content_bp.route('/pdfs/intake/publish-direct', methods=['POST'],
                         endpoint='pdf_intake_publish_direct')
 @admin_can('pdfs.publish')
@@ -3155,7 +3314,7 @@ def pdf_intake_publish_direct():
     pending_ids = request.form.getlist('pending_ids')
     if not pending_ids:
         flash('No PDFs selected.', 'info')
-        return redirect(url_for('admin_content.pdfs', tab='intake'))
+        return redirect(url_for('admin_content.pdfs', status='pending'))
 
     clean_ids = []
     for pid in pending_ids:
@@ -3182,7 +3341,7 @@ def pdf_intake_publish_commit():
 
 
 # ============================================================
-# PDFs — STAGING (renders the unified edit room)
+# PDFs — STAGING
 # ============================================================
 
 @admin_content_bp.route('/pdfs/staging/<int:staging_id>/edit',
@@ -3244,7 +3403,7 @@ def pdf_staging_edit(staging_id):
         return redirect(url_for('admin_content.pdf_staging_edit',
                                 staging_id=staging_id))
 
-    # ── GET: render the unified edit room in "staged" mode ──
+    # ── GET: render unified edit room in "staged" mode ──
     pseudo_pdf = {
         'id': staging_id,
         'code': bot_pdf.get('code'),
@@ -3310,7 +3469,7 @@ def pdf_staging_delete(staging_id):
     else:
         flash('Failed to delete staging PDF.', 'error')
 
-    return redirect(url_for('admin_content.pdfs', tab='staging'))
+    return redirect(url_for('admin_content.pdfs', status='staged'))
 
 
 @admin_content_bp.route('/pdfs/staging/publish',
@@ -3323,7 +3482,7 @@ def pdf_staging_publish():
     ids = request.form.getlist('staging_ids')
     if not ids:
         flash('No PDFs selected.', 'error')
-        return redirect(url_for('admin_content.pdfs', tab='staging'))
+        return redirect(url_for('admin_content.pdfs', status='staged'))
 
     succeeded = 0
     failed = 0
@@ -3409,7 +3568,7 @@ def pdf_staging_publish_all():
     except Exception as e:
         logger.error(f"publish-all load failed: {e}")
         flash('Could not load staging PDFs.', 'error')
-        return redirect(url_for('admin_content.pdfs', tab='staging'))
+        return redirect(url_for('admin_content.pdfs', status='staged'))
 
     succeeded = 0
     failed = 0
@@ -3486,7 +3645,7 @@ def pdf_unverified_confirm():
     ids = request.form.getlist('unverified_ids')
     if not ids:
         flash('No PDFs selected.', 'error')
-        return redirect(url_for('admin_content.pdfs', tab='unverified'))
+        return redirect(url_for('admin_content.pdfs', status='flagged'))
 
     clean_ids = []
     for i in ids:
@@ -3497,7 +3656,7 @@ def pdf_unverified_confirm():
 
     if not clean_ids:
         flash('No valid records selected.', 'error')
-        return redirect(url_for('admin_content.pdfs', tab='unverified'))
+        return redirect(url_for('admin_content.pdfs', status='flagged'))
 
     placeholders = ','.join('?' for _ in clean_ids)
     try:
@@ -3532,7 +3691,7 @@ def pdf_unverified_delete():
     ids = request.form.getlist('unverified_ids')
     if not ids:
         flash('No records selected.', 'error')
-        return redirect(url_for('admin_content.pdfs', tab='unverified'))
+        return redirect(url_for('admin_content.pdfs', status='flagged'))
 
     clean_ids = []
     for i in ids:
@@ -3543,7 +3702,7 @@ def pdf_unverified_delete():
 
     if not clean_ids:
         flash('No valid records selected.', 'error')
-        return redirect(url_for('admin_content.pdfs', tab='unverified'))
+        return redirect(url_for('admin_content.pdfs', status='flagged'))
 
     placeholders = ','.join('?' for _ in clean_ids)
     try:
