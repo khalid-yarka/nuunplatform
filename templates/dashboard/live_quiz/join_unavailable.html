@@ -11,7 +11,7 @@
     /* ══════════════════════════════════════════════════════════
        join_unavailable — shown when a direct join link cannot
        land the visitor in a quiz.
-       Reasons: active · full · not_found
+       Reasons: finished · active · full · not_found
        ══════════════════════════════════════════════════════════ */
 
     .ju-wrap {
@@ -57,6 +57,9 @@
         top: 0; left: 0; right: 0;
         height: 3px;
     }
+    .ju-hero--finished::before {
+        background: linear-gradient(90deg, #3B82F6 0%, #60A5FA 50%, #3B82F6 100%);
+    }
     .ju-hero--active::before {
         background: linear-gradient(90deg, #F59E0B 0%, #FBBF24 50%, #F59E0B 100%);
     }
@@ -79,6 +82,10 @@
         margin-bottom: 16px;
         box-shadow: 0 10px 28px rgba(0, 0, 0, 0.10);
     }
+    .ju-hero--finished .ju-hero__icon {
+        background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
+        box-shadow: 0 10px 28px rgba(59, 130, 246, 0.22);
+    }
     .ju-hero--active .ju-hero__icon {
         background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
         box-shadow: 0 10px 28px rgba(245, 158, 11, 0.24);
@@ -90,6 +97,9 @@
     .ju-hero--not_found .ju-hero__icon {
         background: linear-gradient(135deg, #FEF2F2 0%, #FECACA 100%);
         box-shadow: 0 10px 28px rgba(239, 68, 68, 0.22);
+    }
+    [data-theme="dark"] .ju-hero--finished .ju-hero__icon {
+        background: linear-gradient(135deg, #1A2A4A 0%, #1E3A6A 100%);
     }
     [data-theme="dark"] .ju-hero--active .ju-hero__icon {
         background: linear-gradient(135deg, #3A2E1A 0%, #5A4520 100%);
@@ -117,7 +127,6 @@
         max-width: 420px;
     }
 
-    /* Attempted code badge — shown only for the not_found state. */
     .ju-code-chip {
         display: inline-flex;
         align-items: center;
@@ -274,7 +283,11 @@
 
     <div class="ju-card">
 
-        {% if reason == 'active' %}
+        {% if reason == 'finished' %}
+            {% set _icon  = '🏁' %}
+            {% set _title = _('live_quiz.unavailable.finished_title') %}
+            {% set _sub   = _('live_quiz.unavailable.finished_sub') %}
+        {% elif reason == 'active' %}
             {% set _icon  = '⏱️' %}
             {% set _title = _('live_quiz.unavailable.active_title') %}
             {% set _sub   = _('live_quiz.unavailable.active_sub') %}
@@ -343,14 +356,30 @@
         {% endif %}
 
         <div class="ju-actions">
-            <a href="{{ url_for('live_quiz.lobby') }}" class="ju-btn ju-btn--primary">
-                <i class="fas fa-arrow-left" aria-hidden="true"></i>
-                {{ _('live_quiz.unavailable.back_to_lobby') }}
-            </a>
-            <a href="{{ url_for('live_quiz.join') }}" class="ju-btn ju-btn--ghost">
-                <i class="fas fa-key" aria-hidden="true"></i>
-                {{ _('live_quiz.unavailable.enter_another') }}
-            </a>
+            {% if reason == 'finished' and quiz %}
+                {# Primary CTA on a finished quiz is the results page. #}
+                <a href="{{ url_for('live_quiz.results', quiz_id=quiz.id) }}"
+                   class="ju-btn ju-btn--primary">
+                    <i class="fas fa-chart-bar" aria-hidden="true"></i>
+                    {{ _('live_quiz.unavailable.view_results') }}
+                </a>
+                <a href="{{ url_for('live_quiz.lobby') }}"
+                   class="ju-btn ju-btn--ghost">
+                    <i class="fas fa-arrow-left" aria-hidden="true"></i>
+                    {{ _('live_quiz.unavailable.back_to_lobby') }}
+                </a>
+            {% else %}
+                <a href="{{ url_for('live_quiz.lobby') }}"
+                   class="ju-btn ju-btn--primary">
+                    <i class="fas fa-arrow-left" aria-hidden="true"></i>
+                    {{ _('live_quiz.unavailable.back_to_lobby') }}
+                </a>
+                <a href="{{ url_for('live_quiz.join') }}"
+                   class="ju-btn ju-btn--ghost">
+                    <i class="fas fa-key" aria-hidden="true"></i>
+                    {{ _('live_quiz.unavailable.enter_another') }}
+                </a>
+            {% endif %}
         </div>
 
     </div>

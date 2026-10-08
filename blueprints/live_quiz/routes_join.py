@@ -129,22 +129,20 @@ def _resolve_non_joinable(code):
     fallback = _lookup_quiz_any_status(code)
 
     if not fallback:
-        # Truly unknown code.
         return _render_unavailable(None, 'not_found', attempted_code=code)
 
     status = (fallback.get('status') or '').strip().lower()
 
     if status == 'finished':
-        return redirect(url_for('live_quiz.results', quiz_id=fallback['id']))
+        # The quiz is over. Show a dedicated page so the user
+        # understands why the link did not join them, and offer a
+        # clear "view results" button as the next step.
+        return _render_unavailable(fallback, 'finished')
 
     if status == 'active':
         return _render_unavailable(fallback, 'active')
 
-    # scheduled / waiting / anything else reaching here means the
-    # quiz is technically joinable but blocked for another reason
-    # (full, or a state we don't recognise). Show the "full" page.
     return _render_unavailable(fallback, 'full')
-
 
 # ============================================================
 # ROUTES
@@ -268,11 +266,13 @@ def direct_join(code):
         return _resolve_non_joinable(code_norm)
 
     quiz_status = (quiz.get('status') or '').strip().lower()
-
-    # ── Finished: even if get_active_live_quiz returned it (some
-    #    deployments do), land on the results page. ──
+    
+    # ── Finished: get_active_live_quiz only returns waiting /
+    #    scheduled, so this branch is defensive. Some deployments
+    #    do return finished rows; handle it the same way as the
+    #    fallback path — show the page, not a redirect. ──
     if quiz_status == 'finished':
-        return redirect(url_for('live_quiz.results', quiz_id=quiz['id']))
+        return _render_unavailable(quiz, 'finished')
 
     if is_grade_locked_for_viewer(quiz, user_id, user_tier):
         flash(
