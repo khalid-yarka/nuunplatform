@@ -1026,7 +1026,20 @@ def apple_touch_icon_probe(size=None):
     """
     return '', 204
 
-
+@app.route('/.well-known/traffic-advice', methods=['GET'])
+def well_known_traffic_advice():
+    """
+    Chrome periodically probes this path for its Fraud Prevention /
+    Private State Tokens API. Returning an empty array (200) is the
+    spec-compliant way to say "no traffic advice published" — cleaner
+    than a 404 and stops the error dashboard from filling up with
+    phantom "NotFound" events.
+    """
+    return Response(
+        '[]',
+        mimetype='application/json',
+        headers={'Cache-Control': 'public, max-age=86400'},
+    )
 
 
 @app.route('/manifest.json')
@@ -1227,6 +1240,41 @@ def index():
         return redirect(url_for('dashboard.home'))
     return render_template('start.html')
 
+
+# ============================================================
+# LEGACY URL REDIRECTS
+# ============================================================
+# These paths existed in earlier versions of the platform or were
+# captured by installed PWAs. They no longer resolve to any route,
+# but users still hit them via bookmarks, cached launcher shortcuts,
+# or stale links in docs. A permanent redirect preserves their query
+# string and sends them to the correct page.
+# ============================================================
+
+@app.route('/dashboard')
+def legacy_dashboard_redirect():
+    """
+    Legacy path. The authenticated dashboard lives at /home.
+    Preserves the query string (e.g. ?source=pwa from PWA installs).
+    """
+    qs = request.query_string.decode('utf-8')
+    target = url_for('dashboard.home')
+    if qs:
+        target = f'{target}?{qs}'
+    return redirect(target, code=301)
+
+
+@app.route('/quiz/setup')
+def legacy_quiz_setup_redirect():
+    """
+    Legacy path. The quiz setup page lives at /quiz/.
+    Preserves any query params.
+    """
+    qs = request.query_string.decode('utf-8')
+    target = url_for('quiz.index')
+    if qs:
+        target = f'{target}?{qs}'
+    return redirect(target, code=301)
 
 # ============================================
 # BACKUP TRIGGER ENDPOINT

@@ -10,6 +10,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 
     <style>
+        /* ═══════════════════════════════════════════════════════
+           BASE PAGE
+           ═══════════════════════════════════════════════════════ */
         body {
             min-height: 100vh;
             display: flex;
@@ -89,7 +92,7 @@
             font-size: 13.5px;
             color: var(--text-secondary);
             line-height: 1.65;
-            margin: 0 auto 26px auto;
+            margin: 0 auto 24px auto;
             max-width: 440px;
             padding: 14px 18px;
             background: var(--background);
@@ -109,6 +112,10 @@
             margin-right: 6px;
             color: #F59E0B;
         }
+
+        /* ═══════════════════════════════════════════════════════
+           BACK-TO-DASHBOARD CTA (secondary)
+           ═══════════════════════════════════════════════════════ */
         .so-cta {
             display: inline-flex;
             align-items: center;
@@ -132,6 +139,7 @@
             box-shadow: 0 8px 24px rgba(255, 49, 56, 0.38);
         }
         .so-cta i { font-size: 14px; }
+
         .so-footer {
             font-size: 12px;
             color: var(--text-muted);
@@ -140,12 +148,351 @@
             border-top: 1px solid var(--border-light);
             line-height: 1.6;
         }
+
+        /* ═══════════════════════════════════════════════════════
+           WHATSAPP COMMUNITY SECTION
+           ═══════════════════════════════════════════════════════ */
+        .so-wa {
+            position: relative;
+            margin: 0 0 22px 0;
+            padding: 24px 22px 20px;
+            background:
+                radial-gradient(600px 200px at 100% -20%,
+                    rgba(255, 255, 255, 0.55), transparent 62%),
+                linear-gradient(155deg,
+                    #ECFDF5 0%,
+                    #D1FAE5 55%,
+                    #A7F3D0 100%);
+            border: 1.5px solid #86EFAC;
+            border-radius: 20px;
+            text-align: left;
+            overflow: hidden;
+            isolation: isolate;
+            box-shadow:
+                0 1px 2px rgba(22, 163, 74, 0.08),
+                0 12px 32px -16px rgba(22, 163, 74, 0.22),
+                inset 0 1px 0 rgba(255, 255, 255, 0.72);
+        }
+
+        /* ── Decorative background strokes (chat-like bars) ── */
+        .so-wa__bg {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+        .so-wa__bg-bar {
+            position: absolute;
+            height: 6px;
+            border-radius: 6px;
+            background: rgba(22, 163, 74, 0.09);
+            animation: soWaDrift 12s ease-in-out infinite;
+        }
+        .so-wa__bg-bar--1 {
+            top: 18%; left: -10%; width: 42%;
+            animation-delay: 0s;
+        }
+        .so-wa__bg-bar--2 {
+            top: 62%; right: -12%; width: 38%;
+            animation-delay: 3s;
+        }
+        .so-wa__bg-bar--3 {
+            bottom: 22%; left: 8%; width: 24%;
+            animation-delay: 6s;
+        }
+        @keyframes soWaDrift {
+            0%, 100% { transform: translateX(0);   opacity: 0.9; }
+            50%      { transform: translateX(8px); opacity: 0.55; }
+        }
+
+        /* ── Head: icon + text ── */
+        .so-wa__head {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 14px;
+            position: relative;
+            z-index: 1;
+        }
+        .so-wa__icon-wrap {
+            position: relative;
+            width: 56px;
+            height: 56px;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .so-wa__pulse {
+            position: absolute;
+            inset: 0;
+            border-radius: 16px;
+            border: 2px solid #25D366;
+            background: transparent;
+            z-index: 1;
+            pointer-events: none;
+            animation: soWaPulse 2.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            will-change: transform, opacity;
+        }
+        .so-wa__pulse--delay { animation-delay: 1.4s; }
+        @keyframes soWaPulse {
+            0%   { transform: scale(1);    opacity: 0.65; }
+            100% { transform: scale(1.65); opacity: 0; }
+        }
+        .so-wa__icon {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            height: 100%;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            box-shadow:
+                0 4px 14px rgba(37, 211, 102, 0.38),
+                inset 0 1px 0 rgba(255, 255, 255, 0.28);
+            backface-visibility: hidden;
+        }
+
+        .so-wa__head-text {
+            flex: 1;
+            min-width: 0;
+            position: relative;
+            z-index: 2;
+        }
+        .so-wa__eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 10.5px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            color: #15803D;
+            margin-bottom: 4px;
+        }
+        .so-wa__live-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #16A34A;
+            flex-shrink: 0;
+            animation: soWaLive 2s ease-out infinite;
+        }
+        @keyframes soWaLive {
+            0%   { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.55); }
+            100% { box-shadow: 0 0 0 8px rgba(22, 163, 74, 0); }
+        }
+        .so-wa__title {
+            font-size: 17px;
+            font-weight: 800;
+            color: #14532D;
+            margin: 0;
+            line-height: 1.25;
+            letter-spacing: -0.2px;
+        }
+
+        /* ── Description ── */
+        .so-wa__desc {
+            font-size: 13.5px;
+            line-height: 1.6;
+            color: #166534;
+            margin: 0 0 14px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ── Feature list ── */
+        .so-wa__features {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            position: relative;
+            z-index: 1;
+        }
+        .so-wa__features li {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #166534;
+        }
+        .so-wa__features i {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #16A34A;
+            color: #fff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            flex-shrink: 0;
+            box-shadow: 0 1px 3px rgba(22, 163, 74, 0.38);
+        }
+
+        /* ── CTA button ── */
+        .so-wa__cta {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 18px 14px 20px;
+            background: linear-gradient(135deg, #25D366 0%, #16A34A 100%);
+            color: #ffffff;
+            border-radius: 14px;
+            font-size: 15px;
+            font-weight: 800;
+            text-decoration: none;
+            overflow: hidden;
+            isolation: isolate;
+            box-shadow:
+                0 4px 14px rgba(37, 211, 102, 0.38),
+                inset 0 1px 0 rgba(255, 255, 255, 0.22);
+            transition:
+                transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.22s ease;
+            z-index: 1;
+        }
+        .so-wa__cta:hover {
+            transform: translateY(-2px);
+            box-shadow:
+                0 10px 26px rgba(37, 211, 102, 0.48),
+                inset 0 1px 0 rgba(255, 255, 255, 0.30);
+            color: #ffffff;
+            text-decoration: none;
+        }
+        .so-wa__cta:active { transform: translateY(0); }
+        .so-wa__cta > i.fab { font-size: 20px; flex-shrink: 0; }
+        .so-wa__cta-shimmer {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                115deg,
+                transparent 28%,
+                rgba(255, 255, 255, 0.50) 48%,
+                transparent 68%
+            );
+            transform: translateX(-130%);
+            animation: soWaShimmer 3.6s ease-in-out infinite;
+            pointer-events: none;
+            z-index: -1;
+        }
+        @keyframes soWaShimmer {
+            0%, 42%   { transform: translateX(-130%); }
+            72%, 100% { transform: translateX(130%); }
+        }
+        .so-wa__cta-arrow {
+            margin-left: auto;
+            font-size: 13px;
+            transition: transform 0.22s ease;
+        }
+        .so-wa__cta:hover .so-wa__cta-arrow {
+            transform: translateX(4px);
+        }
+
+        /* ── Meta row (typing + students chatting) ── */
+        .so-wa__meta {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 12px;
+            font-size: 11.5px;
+            color: #15803D;
+            font-weight: 600;
+            position: relative;
+            z-index: 1;
+        }
+        .so-wa__typing {
+            display: inline-flex;
+            gap: 3px;
+            align-items: center;
+        }
+        .so-wa__typing span {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #16A34A;
+            animation: soWaTyping 1.4s ease-in-out infinite;
+        }
+        .so-wa__typing span:nth-child(2) { animation-delay: 0.18s; }
+        .so-wa__typing span:nth-child(3) { animation-delay: 0.36s; }
+        @keyframes soWaTyping {
+            0%, 60%, 100% { transform: translateY(0);    opacity: 0.4; }
+            30%           { transform: translateY(-4px); opacity: 1; }
+        }
+
+        /* ── Dark mode ── */
+        [data-theme="dark"] .so-wa {
+            background:
+                radial-gradient(600px 200px at 100% -20%,
+                    rgba(37, 211, 102, 0.10), transparent 62%),
+                linear-gradient(155deg,
+                    #0F2A1A 0%,
+                    #112719 55%,
+                    #0A1F14 100%);
+            border-color: rgba(37, 211, 102, 0.28);
+            box-shadow:
+                0 1px 2px rgba(0, 0, 0, 0.28),
+                0 12px 32px -16px rgba(37, 211, 102, 0.22),
+                inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        }
+        [data-theme="dark"] .so-wa__bg-bar {
+            background: rgba(37, 211, 102, 0.10);
+        }
+        [data-theme="dark"] .so-wa__title { color: #86EFAC; }
+        [data-theme="dark"] .so-wa__eyebrow { color: #4ADE80; }
+        [data-theme="dark"] .so-wa__desc { color: #A7F3D0; }
+        [data-theme="dark"] .so-wa__features li { color: #A7F3D0; }
+        [data-theme="dark"] .so-wa__meta { color: #4ADE80; }
+        [data-theme="dark"] .so-wa__live-dot,
+        [data-theme="dark"] .so-wa__typing span { background: #4ADE80; }
+        [data-theme="dark"] .so-wa__live-dot {
+            animation: soWaLiveDark 2s ease-out infinite;
+        }
+        @keyframes soWaLiveDark {
+            0%   { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55); }
+            100% { box-shadow: 0 0 0 8px rgba(74, 222, 128, 0); }
+        }
+
+        /* ── Responsive ── */
         @media (max-width: 480px) {
-            .so-card { padding: 36px 24px; }
+            .so-card { padding: 36px 22px; }
             .so-icon { font-size: 58px; }
             .so-title { font-size: 20px; }
             .so-body { font-size: 14px; }
-            .so-note { font-size: 12.5px; padding: 12px 14px; }
+            .so-note { font-size: 12.5px; padding: 12px 14px; margin-bottom: 20px; }
+
+            .so-wa { padding: 20px 18px 18px; }
+            .so-wa__icon-wrap { width: 48px; height: 48px; }
+            .so-wa__icon { font-size: 24px; border-radius: 14px; }
+            .so-wa__title { font-size: 15.5px; }
+            .so-wa__desc { font-size: 13px; }
+            .so-wa__features li { font-size: 12.5px; }
+            .so-wa__cta { padding: 13px 16px 13px 18px; font-size: 14px; }
+            .so-wa__cta > i.fab { font-size: 18px; }
+        }
+
+        /* ── Reduced motion ── */
+        @media (prefers-reduced-motion: reduce) {
+            .so-wa__pulse,
+            .so-wa__live-dot,
+            .so-wa__typing span,
+            .so-wa__cta-shimmer,
+            .so-wa__bg-bar {
+                animation: none !important;
+            }
+            .so-wa__pulse { opacity: 0.35; transform: scale(1.15); }
+            .so-wa__cta-shimmer { display: none; }
         }
     </style>
 </head>
@@ -174,6 +521,61 @@
             PDF-yada, Group-yada, Diiradda, Taariikhda, iyo dhammaan
             astaamaha kale ayaa si caadi ah u shaqaynaya.
         </div>
+
+        {% if whatsapp_group_url %}
+        <div class="so-wa">
+            <div class="so-wa__bg" aria-hidden="true">
+                <span class="so-wa__bg-bar so-wa__bg-bar--1"></span>
+                <span class="so-wa__bg-bar so-wa__bg-bar--2"></span>
+                <span class="so-wa__bg-bar so-wa__bg-bar--3"></span>
+            </div>
+
+            <div class="so-wa__head">
+                <div class="so-wa__icon-wrap" aria-hidden="true">
+                    <span class="so-wa__pulse"></span>
+                    <span class="so-wa__pulse so-wa__pulse--delay"></span>
+                    <div class="so-wa__icon">
+                        <i class="fab fa-whatsapp"></i>
+                    </div>
+                </div>
+                <div class="so-wa__head-text">
+                    <div class="so-wa__eyebrow">
+                        <span class="so-wa__live-dot"></span>
+                        Community
+                    </div>
+                    <h2 class="so-wa__title">Stay in the loop on WhatsApp</h2>
+                </div>
+            </div>
+
+            <p class="so-wa__desc">
+                Join our student community on WhatsApp — study tips,
+                PDF drops, and quiz announcements, straight to your phone.
+            </p>
+
+            <ul class="so-wa__features">
+                <li><i class="fas fa-check"></i> Study tips &amp; exam prep</li>
+                <li><i class="fas fa-check"></i> PDF drops &amp; new resources</li>
+                <li><i class="fas fa-check"></i> Ask questions, get answers</li>
+            </ul>
+
+            <a href="{{ whatsapp_group_url }}"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="so-wa__cta">
+                <span class="so-wa__cta-shimmer" aria-hidden="true"></span>
+                <i class="fab fa-whatsapp" aria-hidden="true"></i>
+                <span>Join the Group</span>
+                <i class="fas fa-arrow-right so-wa__cta-arrow" aria-hidden="true"></i>
+            </a>
+
+            <div class="so-wa__meta">
+                <div class="so-wa__typing" aria-hidden="true">
+                    <span></span><span></span><span></span>
+                </div>
+                <span>Students are chatting now</span>
+            </div>
+        </div>
+        {% endif %}
 
         <a href="{{ url_for('dashboard.home') }}" class="so-cta">
             <i class="fas fa-arrow-left"></i>
