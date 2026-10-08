@@ -1,9 +1,17 @@
 {# ============================================================
    templates/dashboard/admin/content/pdfs.html
-   PDF Management — tab-based dashboard.
+   PDF Management — tab-based admin dashboard.
 
    Tabs: Library · Insights · People · Activity
    Library shows a compact snapshot + the full PDF list.
+
+   Highlights:
+     · Curriculum donut in Insights (PL / SO / SL)
+     · Advanced intelligent select-all checkbox
+     · Rich bulk bar with 10 actions
+     · Row click → quick-view drawer
+     · Activity PDF chips are clickable
+     · Filter banner with quick presets
    ============================================================ #}
 {% extends "dashboard/admin/_base.html" %}
 
@@ -36,7 +44,7 @@
 .pm-page { --pm-radius: 14px; --pm-radius-sm: 10px; font-size: 14px; color: var(--text); }
 [hidden] { display: none !important; }
 
-/* ══════════════ TAB BAR ══════════════ */
+/* ══════════════════ TAB BAR ══════════════════ */
 .pm-tabs {
     display: flex;
     gap: 6px;
@@ -108,7 +116,6 @@
     background: var(--surface-alt, var(--background));
     color: var(--text);
 }
-
 .pm-tab__label { display: inline-block; }
 .pm-tab__count {
     font-size: 11.5px;
@@ -124,16 +131,14 @@
     background: rgba(255, 49, 56, 0.12);
     color: var(--primary);
 }
-
 @media (max-width: 640px) {
     .pm-tab { padding: 12px 12px 14px; font-size: 13px; }
     .pm-tab__label { display: none; }
     .pm-tab__count { font-size: 10.5px; padding: 2px 6px; }
 }
 
-/* ══════════════ GENERAL SNAPSHOT (Library tab) ══════════════ */
+/* ══════════════════ SNAPSHOT ══════════════════ */
 .pm-snapshot { margin-bottom: 18px; }
-
 .pm-kpis {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -150,11 +155,15 @@
     border-radius: var(--pm-radius);
     overflow: hidden;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    text-decoration: none;
+    color: inherit;
 }
 .pm-kpi:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 22px rgba(0,0,0,0.06);
     border-color: var(--pm-accent, var(--primary));
+    text-decoration: none;
+    color: inherit;
 }
 .pm-kpi::before {
     content: '';
@@ -196,10 +205,6 @@
     color: var(--text-muted);
     margin-top: 6px;
 }
-.pm-kpi__trend { font-weight: 700; }
-.pm-kpi__trend.up { color: #10B981; }
-.pm-kpi__trend.down { color: #EF4444; }
-
 .pm-kpi--live    { --pm-accent: #10B981; }
 .pm-kpi--pending { --pm-accent: #F59E0B; }
 .pm-kpi--flagged { --pm-accent: #EF4444; }
@@ -243,8 +248,20 @@
     display: flex; align-items: center; gap: 10px;
     padding: 7px 0;
     border-top: 1px dashed var(--border);
+    cursor: pointer;
+    transition: background 0.15s ease;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 6px;
 }
 .pm-mini__row:first-of-type { border-top: none; padding-top: 0; }
+.pm-mini__row:hover {
+    background: var(--background);
+    padding-left: 6px;
+    padding-right: 6px;
+    margin-left: -6px;
+    margin-right: -6px;
+}
 .pm-mini__medal {
     width: 22px; height: 22px;
     border-radius: 7px;
@@ -253,7 +270,7 @@
     background: var(--background); color: var(--text-muted);
     flex-shrink: 0;
 }
-.pm-mini__medal.gold { background: linear-gradient(135deg, #FCD34D, #F59E0B); color: #78350F; }
+.pm-mini__medal.gold   { background: linear-gradient(135deg, #FCD34D, #F59E0B); color: #78350F; }
 .pm-mini__medal.silver { background: linear-gradient(135deg, #E5E7EB, #9CA3AF); color: #374151; }
 .pm-mini__medal.bronze { background: linear-gradient(135deg, #FBBF24, #B45309); color: #ffffff; }
 .pm-mini__body { flex: 1; min-width: 0; }
@@ -278,7 +295,7 @@
     color: var(--text-muted); font-size: 12px;
 }
 
-/* ══════════════ STATUS CHIPS ══════════════ */
+/* ══════════════════ STATUS CHIPS ══════════════════ */
 .pm-status-chips {
     display: flex; gap: 6px; flex-wrap: wrap;
     margin-bottom: 14px;
@@ -329,7 +346,7 @@
 .pm-chip--staged  { --chip-accent: #3B82F6; }
 .pm-chip--flagged { --chip-accent: #EF4444; }
 
-/* ══════════════ TOOLBAR ══════════════ */
+/* ══════════════════ TOOLBAR ══════════════════ */
 .pm-toolbar {
     display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
     padding: 12px 14px;
@@ -418,7 +435,7 @@
 }
 .pm-toolbar__count strong { color: var(--text); font-weight: 800; }
 
-/* ══════════════ ADVANCED FILTERS ══════════════ */
+/* ══════════════════ ADVANCED FILTERS ══════════════════ */
 .pm-advanced {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -493,83 +510,325 @@
     border-top: 1px solid var(--border);
 }
 
-/* ══════════════ ACTIVE FILTER CHIPS ══════════════ */
-.pm-active-filters {
-    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
-    padding: 10px 14px;
-    background: linear-gradient(90deg, var(--primary-light, #FFEBE8), transparent 80%);
+/* ══════════════════ FILTER BANNER ══════════════════ */
+.pm-filter-banner {
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--primary) 6%, var(--surface)),
+        var(--surface) 55%);
     border: 1px solid var(--border);
+    border-left: 4px solid var(--primary);
     border-radius: var(--pm-radius);
+    padding: 14px 18px;
     margin-bottom: 12px;
-    font-size: 12px;
 }
-.pm-active-filters__label {
-    color: var(--text-secondary); font-weight: 700;
-    display: inline-flex; align-items: center; gap: 6px;
-    margin-right: 4px;
+.pm-filter-banner__head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.pm-filter-banner__title {
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text);
+    display: flex; align-items: center; gap: 8px;
+}
+.pm-filter-banner__title i { color: var(--primary); }
+.pm-filter-banner__count {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+.pm-filter-banner__count strong { color: var(--primary); font-weight: 800; }
+
+.pm-filter-chips {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin-bottom: 12px;
 }
 .pm-filter-chip {
     display: inline-flex; align-items: center; gap: 6px;
-    padding: 5px 10px;
+    padding: 6px 10px 6px 12px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 20px;
     color: var(--text-secondary);
     text-decoration: none;
+    font-size: 12px;
     font-weight: 600;
     transition: all 0.15s ease;
-    max-width: 220px;
+    max-width: 240px;
 }
 .pm-filter-chip:hover {
     background: var(--primary); color: #fff; border-color: var(--primary);
     text-decoration: none;
 }
-.pm-filter-chip__key { opacity: 0.75; }
+.pm-filter-chip__key {
+    opacity: 0.75;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
 .pm-filter-chip__value {
-    max-width: 120px; overflow: hidden; text-overflow: ellipsis;
+    max-width: 140px; overflow: hidden; text-overflow: ellipsis;
     white-space: nowrap; color: var(--text);
 }
 .pm-filter-chip:hover .pm-filter-chip__value { color: #fff; }
-.pm-filter-chip__close { font-size: 10px; opacity: 0.7; }
+.pm-filter-chip__close { font-size: 10px; opacity: 0.7; margin-left: 2px; }
 .pm-filter-chip:hover .pm-filter-chip__close { opacity: 1; }
-.pm-active-filters__clear {
-    margin-left: auto;
+
+.pm-filter-banner__presets {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+    align-items: center;
+}
+.pm-filter-banner__presets-label {
+    font-size: 10.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-right: 4px;
+}
+.pm-preset {
+    display: inline-flex; align-items: center; gap: 6px;
     padding: 6px 12px;
+    border-radius: 20px;
+    background: var(--background);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+.pm-preset:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    text-decoration: none;
+}
+.pm-preset i { font-size: 10px; }
+
+.pm-filter-banner__clear {
+    margin-left: auto;
+    padding: 6px 14px;
     border-radius: 20px;
     color: var(--text-muted);
     text-decoration: none;
-    font-weight: 600;
+    font-weight: 700;
+    font-size: 12px;
+    display: inline-flex; align-items: center; gap: 6px;
 }
-.pm-active-filters__clear:hover { color: var(--primary); background: var(--surface); text-decoration: none; }
+.pm-filter-banner__clear:hover {
+    color: var(--primary);
+    background: var(--surface);
+    text-decoration: none;
+}
 
-/* ══════════════ BULK BAR ══════════════ */
+/* ══════════════════ BULK BAR (RICH) ══════════════════ */
 .pm-bulk {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 16px;
-    background: var(--primary-light, #FFEBE8);
-    border: 1px solid var(--primary);
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--primary) 8%, var(--surface)),
+        var(--surface) 70%);
+    border: 1.5px solid var(--primary);
     border-radius: var(--pm-radius);
     margin-bottom: 12px;
+    padding: 14px 18px;
     animation: pmFade 0.2s ease;
 }
-.pm-bulk__count {
-    font-size: 13px; font-weight: 700; color: var(--primary);
+.pm-bulk__head {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
 }
-.pm-bulk__count strong { font-size: 15px; }
-.pm-bulk__actions { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
-.pm-bulk__btn {
+.pm-bulk__count {
+    font-size: 14px; font-weight: 800;
+    color: var(--primary);
+    display: flex; align-items: center; gap: 8px;
+}
+.pm-bulk__count strong {
+    font-size: 20px;
+    font-variant-numeric: tabular-nums;
+}
+.pm-bulk__hint {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+.pm-bulk__clear {
+    margin-left: auto;
+    padding: 6px 14px;
+    border-radius: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
     display: inline-flex; align-items: center; gap: 6px;
-    padding: 6px 12px; font-size: 12px; font-weight: 700;
-    background: var(--surface); color: var(--text-secondary);
-    border: 1px solid var(--border); border-radius: 8px;
-    cursor: pointer; font-family: inherit;
     transition: all 0.15s ease;
 }
-.pm-bulk__btn:hover { color: var(--primary); border-color: var(--primary); }
-.pm-bulk__btn--danger:hover { color: #DC2626; border-color: #DC2626; background: #FEF2F2; }
+.pm-bulk__clear:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
 
-/* ══════════════ PDF LIST ══════════════ */
-.pm-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.pm-bulk__cluster {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    padding: 10px 0;
+    border-top: 1px dashed var(--border);
+    align-items: center;
+}
+.pm-bulk__cluster:first-of-type { border-top: none; padding-top: 0; }
+.pm-bulk__cluster-label {
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+    min-width: 82px;
+    display: inline-flex; align-items: center; gap: 6px;
+}
+.pm-bulk__cluster-label i { font-size: 10px; color: var(--primary); }
+
+.pm-bulk__btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 13px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+.pm-bulk__btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-light, #FFEBE8);
+}
+.pm-bulk__btn i { font-size: 11px; }
+.pm-bulk__btn--danger:hover {
+    border-color: #DC2626;
+    color: #DC2626;
+    background: #FEF2F2;
+}
+.pm-bulk__btn--accent {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+}
+.pm-bulk__btn--accent:hover {
+    filter: brightness(0.93);
+    color: #fff;
+    background: var(--primary);
+}
+
+.pm-bulk__select {
+    padding: 7px 11px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+.pm-bulk__select:focus { outline: none; border-color: var(--primary); }
+
+/* ══════════════════ PDF LIST (with header) ══════════════════ */
+.pm-list-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--pm-radius) var(--pm-radius) 0 0;
+    border-bottom: none;
+    margin-bottom: 0;
+}
+.pm-list-header__check {
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding: 4px;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+}
+.pm-list-header__check:hover { background: var(--background); }
+.pm-list-header__check input {
+    width: 18px; height: 18px;
+    accent-color: var(--primary);
+    cursor: pointer;
+    pointer-events: none;
+}
+.pm-list-header__check-label {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text);
+    cursor: pointer;
+}
+.pm-list-header__hint {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    font-weight: 500;
+    display: none;
+    margin-left: 6px;
+}
+.pm-list-header__check:hover .pm-list-header__hint { display: inline; }
+
+.pm-list-header__spacer { flex: 1; }
+
+.pm-list-header__stat {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+    padding: 4px 10px;
+    background: var(--background);
+    border-radius: 20px;
+    font-variant-numeric: tabular-nums;
+    display: inline-flex; align-items: center; gap: 6px;
+}
+.pm-list-header__stat strong { color: var(--text); }
+
+.pm-list-header__btn {
+    padding: 6px 11px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: all 0.15s ease;
+}
+.pm-list-header__btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.pm-list {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0 0 var(--pm-radius) var(--pm-radius);
+    padding: 4px;
+    gap: 4px;
+    margin-bottom: 16px;
+}
 
 .pm-row {
     position: relative;
@@ -578,22 +837,22 @@
     gap: 14px;
     padding: 14px 18px;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--pm-radius);
+    border: 1px solid transparent;
+    border-radius: var(--pm-radius-sm);
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     outline: none;
 }
 .pm-row:hover {
+    background: var(--background);
     border-color: var(--primary);
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.06);
 }
 .pm-row:focus-visible { box-shadow: 0 0 0 3px rgba(255,49,56,0.15); }
 .pm-row.is-selected {
     background: var(--primary-light, #FFEBE8);
     border-color: var(--primary);
 }
+.pm-row.is-selected .pm-row__check input { box-shadow: 0 0 0 2px rgba(255,49,56,0.25); }
 
 .pm-row__check {
     display: flex; align-items: flex-start;
@@ -603,6 +862,7 @@
     width: 17px; height: 17px;
     accent-color: var(--primary);
     cursor: pointer;
+    transition: box-shadow 0.15s ease;
 }
 
 .pm-row__icon {
@@ -620,7 +880,6 @@
 }
 
 .pm-row__body { min-width: 0; }
-
 .pm-row__line1 {
     display: flex; align-items: center; gap: 8px;
     flex-wrap: wrap;
@@ -652,11 +911,7 @@
 [data-theme="dark"] .pm-status--pending { background: #78350F; color: #FCD34D; }
 [data-theme="dark"] .pm-status--staged  { background: #1E3A8A; color: #93C5FD; }
 [data-theme="dark"] .pm-status--flagged { background: #7F1D1D; color: #FCA5A5; }
-
-.pm-row__gem {
-    font-size: 14px;
-    flex-shrink: 0;
-}
+.pm-row__gem { font-size: 14px; flex-shrink: 0; }
 
 .pm-row__line2 {
     display: flex; align-items: center; gap: 6px;
@@ -707,37 +962,61 @@
     font-size: 14px;
 }
 .pm-row__menu-btn:hover {
-    background: var(--background);
+    background: var(--surface);
     border-color: var(--border);
     color: var(--text);
 }
 
-.pm-empty {
-    text-align: center;
-    padding: 70px 24px;
+/* Row menu popover */
+.pm-row-menu {
+    position: fixed;
+    z-index: 9500;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--pm-radius);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+    padding: 6px;
+    min-width: 200px;
 }
-.pm-empty i {
-    font-size: 56px;
-    opacity: 0.35;
-    color: var(--text-muted);
-    display: inline-block;
-    margin-bottom: 14px;
+.pm-row-menu__item {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.12s ease;
 }
-.pm-empty h3 {
-    font-size: 17px; font-weight: 700;
-    color: var(--text); margin: 0 0 6px;
+.pm-row-menu__item:hover {
+    background: var(--primary-light, #FFEBE8);
+    color: var(--primary);
+    text-decoration: none;
 }
-.pm-empty p {
-    font-size: 13.5px;
-    color: var(--text-secondary);
-    margin: 0 0 18px;
-    line-height: 1.5;
+.pm-row-menu__item i {
+    width: 18px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--primary);
+}
+.pm-row-menu__item--danger:hover {
+    background: #FEF2F2;
+    color: #DC2626;
+}
+.pm-row-menu__item--danger i { color: #DC2626; }
+.pm-row-menu__sep {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
 }
 
-/* ══════════════ PAGINATION ══════════════ */
+/* ══════════════════ PAGINATION ══════════════════ */
 .pm-pager {
     display: flex; align-items: center; justify-content: center;
     gap: 4px; flex-wrap: wrap;
@@ -774,7 +1053,33 @@
 }
 .pm-pager__info strong { color: var(--text); }
 
-/* ══════════════ DRAWER ══════════════ */
+.pm-empty {
+    text-align: center;
+    padding: 70px 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--pm-radius);
+    margin-bottom: 16px;
+}
+.pm-empty i {
+    font-size: 56px;
+    opacity: 0.35;
+    color: var(--text-muted);
+    display: inline-block;
+    margin-bottom: 14px;
+}
+.pm-empty h3 {
+    font-size: 17px; font-weight: 700;
+    color: var(--text); margin: 0 0 6px;
+}
+.pm-empty p {
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    margin: 0 0 18px;
+    line-height: 1.5;
+}
+
+/* ══════════════════ DRAWER ══════════════════ */
 .pm-drawer-backdrop {
     position: fixed; inset: 0;
     background: rgba(15,23,42,0.32);
@@ -784,7 +1089,7 @@
 .pm-drawer {
     position: fixed;
     top: 0; right: 0; bottom: 0;
-    width: 500px; max-width: 100vw;
+    width: 520px; max-width: 100vw;
     background: var(--surface);
     border-left: 1px solid var(--border);
     z-index: 9100;
@@ -918,21 +1223,6 @@
     border-radius: 8px;
     font-size: 12px;
 }
-.pm-drawer__event-icon {
-    width: 22px; height: 22px;
-    border-radius: 6px;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: 10px;
-    flex-shrink: 0;
-    background: var(--surface);
-    color: var(--text-muted);
-}
-.pm-drawer__event-icon.student { background: #EFF6FF; color: #2563EB; }
-.pm-drawer__event-icon.admin   { background: #FEF3C7; color: #B45309; }
-.pm-drawer__event-icon.system  { background: #F3F4F6; color: #6B7280; }
-[data-theme="dark"] .pm-drawer__event-icon.student { background: #1E3A8A; color: #93C5FD; }
-[data-theme="dark"] .pm-drawer__event-icon.admin   { background: #78350F; color: #FCD34D; }
-[data-theme="dark"] .pm-drawer__event-icon.system  { background: #374151; color: #9CA3AF; }
 .pm-drawer__event-body { flex: 1; min-width: 0; }
 .pm-drawer__event-line {
     color: var(--text);
@@ -952,9 +1242,8 @@
     flex-wrap: wrap;
 }
 
-/* ══════════════ INSIGHTS TAB ══════════════ */
+/* ══════════════════ INSIGHTS ══════════════════ */
 .pm-insights { display: flex; flex-direction: column; gap: 16px; }
-
 .pm-card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -981,37 +1270,66 @@
 }
 .pm-card__body { padding: 18px; }
 
-/* Dual gauge */
-.pm-gauges {
+/* ── Curriculum + Coverage donuts ── */
+.pm-donuts {
     display: grid;
-    grid-template-columns: 200px 1fr 1fr;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+@media (max-width: 800px) { .pm-donuts { grid-template-columns: 1fr; } }
+
+.pm-donut-block {
+    display: grid;
+    grid-template-columns: 220px 1fr;
     gap: 20px;
     align-items: center;
 }
-@media (max-width: 900px) { .pm-gauges { grid-template-columns: 1fr; } }
-.pm-gauge { display: flex; flex-direction: column; align-items: center; }
-.pm-gauge__wrap { position: relative; width: 140px; height: 140px; }
-.pm-gauge__svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-.pm-gauge__track { fill: none; stroke: var(--background); stroke-width: 10; }
-.pm-gauge__arc {
-    fill: none;
-    stroke-width: 10;
-    stroke-linecap: round;
-    transition: stroke-dashoffset 0.8s ease;
+@media (max-width: 600px) {
+    .pm-donut-block { grid-template-columns: 1fr; justify-items: center; }
 }
-.pm-gauge__center {
+
+.pm-donut {
+    position: relative;
+    width: 220px;
+    height: 220px;
+}
+.pm-donut svg {
+    width: 100%; height: 100%;
+    transform: rotate(-90deg);
+}
+.pm-donut__track {
+    fill: none;
+    stroke: var(--background);
+    stroke-width: 22;
+}
+.pm-donut__seg {
+    fill: none;
+    stroke-width: 22;
+    transition: stroke-width 0.2s ease, opacity 0.2s ease;
+    cursor: pointer;
+}
+.pm-donut__seg:hover {
+    stroke-width: 26;
+}
+.pm-donut__center {
     position: absolute; inset: 0;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
+    pointer-events: none;
 }
-.pm-gauge__value {
-    font-size: 32px; font-weight: 800;
+.pm-donut__center-value {
+    font-size: 34px;
+    font-weight: 800;
     color: var(--text);
     line-height: 1;
     letter-spacing: -0.02em;
 }
-.pm-gauge__unit { font-size: 14px; font-weight: 600; color: var(--text-muted); }
-.pm-gauge__label {
+.pm-donut__center-unit {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.pm-donut__center-label {
     font-size: 10.5px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1019,27 +1337,60 @@
     color: var(--text-muted);
     margin-top: 6px;
 }
-.pm-gauge--health-good .pm-gauge__arc  { stroke: #10B981; }
-.pm-gauge--health-warn .pm-gauge__arc  { stroke: #F59E0B; }
-.pm-gauge--health-danger .pm-gauge__arc { stroke: #EF4444; }
-.pm-gauge--cov-good .pm-gauge__arc     { stroke: #3B82F6; }
-.pm-gauge--cov-warn .pm-gauge__arc     { stroke: #F59E0B; }
-.pm-gauge--cov-danger .pm-gauge__arc   { stroke: #EF4444; }
 
-.pm-gauge-list { display: flex; flex-direction: column; gap: 8px; }
-.pm-gauge-list__item {
-    display: flex; align-items: center; justify-content: space-between;
-    font-size: 12.5px;
-    padding: 6px 10px;
+.pm-donut-legend {
+    display: flex; flex-direction: column; gap: 6px;
+}
+.pm-donut-legend__item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
     background: var(--background);
     border-radius: 8px;
+    font-size: 12.5px;
+    transition: background 0.15s ease;
+    cursor: pointer;
 }
-.pm-gauge-list__label { color: var(--text-secondary); font-weight: 600; }
-.pm-gauge-list__value { color: var(--text); font-weight: 800; font-variant-numeric: tabular-nums; }
-.pm-gauge-list__value.neg { color: #DC2626; }
-.pm-gauge-list__value.pos { color: #10B981; }
+.pm-donut-legend__item:hover { background: var(--surface-alt, #f8f9fb); }
+.pm-donut-legend__swatch {
+    width: 12px; height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+.pm-donut-legend__label {
+    flex: 1;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+.pm-donut-legend__count {
+    color: var(--text);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+.pm-donut-legend__pct {
+    color: var(--text-muted);
+    font-weight: 700;
+    font-size: 11px;
+    min-width: 40px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
 
-/* Class distribution bars */
+.pm-donut-block__note {
+    grid-column: 1 / -1;
+    padding: 10px 14px;
+    background: #FFFBEB;
+    border: 1px solid #FDE68A;
+    border-radius: 8px;
+    font-size: 12.5px;
+    color: #92400E;
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 4px;
+}
+[data-theme="dark"] .pm-donut-block__note {
+    background: #3A2E1A; border-color: #6B5320; color: #FCD34D;
+}
+
+/* ── Class distribution bars ── */
 .pm-bars { display: flex; flex-direction: column; gap: 14px; }
 .pm-bar { display: flex; flex-direction: column; gap: 4px; }
 .pm-bar__head {
@@ -1054,9 +1405,7 @@
     width: 8px; height: 8px; border-radius: 50%;
     background: var(--pm-color, var(--primary));
 }
-.pm-bar__value {
-    display: flex; align-items: baseline; gap: 8px;
-}
+.pm-bar__value { display: flex; align-items: baseline; gap: 8px; }
 .pm-bar__count {
     font-weight: 800; color: var(--text);
     font-size: 14px;
@@ -1098,7 +1447,7 @@
 .pm-warn a { color: inherit; font-weight: 700; margin-left: auto; text-decoration: none; }
 .pm-warn a:hover { text-decoration: underline; }
 
-/* Subject chips grid */
+/* ── Subject grid ── */
 .pm-subject-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -1122,15 +1471,9 @@
     text-decoration: none;
     color: inherit;
 }
-.pm-subject-card.is-empty {
-    opacity: 0.5;
-    border-style: dashed;
-}
+.pm-subject-card.is-empty { opacity: 0.5; border-style: dashed; }
 .pm-subject-card.is-empty:hover { opacity: 1; }
-.pm-subject-card__left {
-    display: flex; align-items: center; gap: 8px;
-    min-width: 0;
-}
+.pm-subject-card__left { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .pm-subject-card__icon { font-size: 18px; }
 .pm-subject-card__name {
     font-size: 12.5px; font-weight: 600;
@@ -1145,14 +1488,13 @@
 }
 .pm-subject-card.is-empty .pm-subject-card__count { color: var(--text-muted); }
 
-/* Leaderboard */
+/* ── Leaderboards ── */
 .pm-leaderboards {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 16px;
 }
 @media (max-width: 800px) { .pm-leaderboards { grid-template-columns: 1fr; } }
-
 .pm-lb { display: flex; flex-direction: column; gap: 6px; }
 .pm-lb__item {
     display: flex; align-items: center; gap: 10px;
@@ -1162,6 +1504,11 @@
     text-decoration: none;
     color: inherit;
     transition: all 0.15s ease;
+    cursor: pointer;
+    border: none;
+    font-family: inherit;
+    text-align: left;
+    width: 100%;
 }
 .pm-lb__item:hover {
     background: var(--surface);
@@ -1169,22 +1516,12 @@
     text-decoration: none;
     color: inherit;
 }
-.pm-lb__item--gold {
-    background: linear-gradient(135deg, #FEF3C7, var(--background));
-    border: 1.5px solid #FCD34D;
-}
-.pm-lb__item--silver {
-    background: linear-gradient(135deg, #F1F5F9, var(--background));
-    border: 1.5px solid #CBD5E1;
-}
-.pm-lb__item--bronze {
-    background: linear-gradient(135deg, #FEF3C7, var(--background));
-    border: 1.5px solid #FBBF24;
-}
+.pm-lb__item--gold   { background: linear-gradient(135deg, #FEF3C7, var(--background)); border: 1.5px solid #FCD34D; }
+.pm-lb__item--silver { background: linear-gradient(135deg, #F1F5F9, var(--background)); border: 1.5px solid #CBD5E1; }
+.pm-lb__item--bronze { background: linear-gradient(135deg, #FEF3C7, var(--background)); border: 1.5px solid #FBBF24; }
 [data-theme="dark"] .pm-lb__item--gold   { background: linear-gradient(135deg, #3A2E1A, var(--background)); border-color: #B45309; }
 [data-theme="dark"] .pm-lb__item--silver { background: linear-gradient(135deg, #2A2A3A, var(--background)); border-color: #64748B; }
 [data-theme="dark"] .pm-lb__item--bronze { background: linear-gradient(135deg, #3A2E1A, var(--background)); border-color: #B45309; }
-
 .pm-lb__medal {
     width: 26px; height: 26px;
     border-radius: 8px;
@@ -1194,10 +1531,9 @@
     color: var(--text-muted);
     flex-shrink: 0;
 }
-.pm-lb__item--gold .pm-lb__medal { background: linear-gradient(135deg, #FCD34D, #F59E0B); color: #78350F; }
+.pm-lb__item--gold .pm-lb__medal   { background: linear-gradient(135deg, #FCD34D, #F59E0B); color: #78350F; }
 .pm-lb__item--silver .pm-lb__medal { background: linear-gradient(135deg, #E5E7EB, #9CA3AF); color: #374151; }
 .pm-lb__item--bronze .pm-lb__medal { background: linear-gradient(135deg, #FBBF24, #B45309); color: #ffffff; }
-
 .pm-lb__body { flex: 1; min-width: 0; }
 .pm-lb__name {
     font-size: 13px; font-weight: 700;
@@ -1220,40 +1556,7 @@
 }
 .pm-lb__value i { font-size: 11px; opacity: 0.7; }
 
-/* Storage rows */
-.pm-storage-row {
-    display: flex; align-items: center; gap: 12px;
-    padding: 8px 0;
-}
-.pm-storage-row__label {
-    flex: 0 0 130px;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--text);
-}
-.pm-storage-row__track {
-    flex: 1;
-    height: 8px;
-    background: var(--background);
-    border-radius: 6px;
-    overflow: hidden;
-}
-.pm-storage-row__fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--primary), #F97316);
-    border-radius: 6px;
-    transition: width 0.6s ease;
-}
-.pm-storage-row__value {
-    flex: 0 0 90px;
-    text-align: right;
-    font-size: 12.5px;
-    color: var(--text);
-    font-variant-numeric: tabular-nums;
-    font-weight: 700;
-}
-
-/* Sparkline */
+/* ── Upload trend ── */
 .pm-spark {
     display: flex;
     align-items: flex-end;
@@ -1277,7 +1580,7 @@
     padding: 6px 2px 0;
 }
 
-/* ══════════════ PEOPLE TAB ══════════════ */
+/* ══════════════════ PEOPLE ══════════════════ */
 .pm-team-strip {
     display: flex; align-items: center; gap: 28px;
     padding: 16px 20px;
@@ -1287,9 +1590,7 @@
     margin-bottom: 16px;
     flex-wrap: wrap;
 }
-.pm-team-strip__item {
-    display: flex; align-items: center; gap: 10px;
-}
+.pm-team-strip__item { display: flex; align-items: center; gap: 10px; }
 .pm-team-strip__value {
     font-size: 24px; font-weight: 800;
     color: var(--text);
@@ -1303,14 +1604,8 @@
     text-transform: uppercase;
     letter-spacing: 0.4px;
 }
-.pm-team-strip__delta {
-    font-size: 12px;
-    font-weight: 700;
-    color: #10B981;
-}
 
 .pm-contrib-list { display: flex; flex-direction: column; gap: 10px; }
-
 .pm-contrib {
     display: grid;
     grid-template-columns: 56px 1fr;
@@ -1321,10 +1616,7 @@
     border-radius: var(--pm-radius);
     transition: all 0.2s ease;
 }
-.pm-contrib:hover {
-    border-color: var(--primary);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.06);
-}
+.pm-contrib:hover { border-color: var(--primary); box-shadow: 0 6px 20px rgba(0,0,0,0.06); }
 .pm-contrib__avatar {
     width: 56px; height: 56px;
     border-radius: 16px;
@@ -1336,21 +1628,8 @@
     flex-shrink: 0;
 }
 .pm-contrib__body { min-width: 0; }
-.pm-contrib__head {
-    display: flex; align-items: baseline; gap: 8px;
-    margin-bottom: 4px;
-    flex-wrap: wrap;
-}
-.pm-contrib__name {
-    font-size: 15px; font-weight: 800;
-    color: var(--text);
-    letter-spacing: -0.01em;
-}
-.pm-contrib__handle {
-    font-size: 12px;
-    color: var(--text-muted);
-    font-family: ui-monospace, Menlo, monospace;
-}
+.pm-contrib__head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+.pm-contrib__name { font-size: 15px; font-weight: 800; color: var(--text); letter-spacing: -0.01em; }
 .pm-contrib__badge {
     font-size: 10px;
     font-weight: 800;
@@ -1361,44 +1640,12 @@
     background: var(--primary-light, #FFEBE8);
     color: var(--primary);
 }
-.pm-contrib__stats {
-    display: flex;
-    gap: 14px;
-    flex-wrap: wrap;
-    margin: 8px 0 10px;
-    font-size: 12.5px;
-    color: var(--text-secondary);
-}
-.pm-contrib__stat strong {
-    color: var(--text);
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-}
-.pm-contrib__bar {
-    height: 6px;
-    background: var(--background);
-    border-radius: 6px;
-    overflow: hidden;
-    margin-bottom: 8px;
-}
-.pm-contrib__fill {
-    height: 100%;
-    border-radius: 6px;
-    background: linear-gradient(90deg, var(--primary), #F97316);
-    transition: width 0.6s ease;
-}
-.pm-contrib__last {
-    font-size: 11.5px;
-    color: var(--text-muted);
-}
-.pm-contrib__last strong { color: var(--text); font-weight: 600; }
+.pm-contrib__stats { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 10px; font-size: 12.5px; color: var(--text-secondary); }
+.pm-contrib__stat strong { color: var(--text); font-weight: 800; font-variant-numeric: tabular-nums; }
+.pm-contrib__bar { height: 6px; background: var(--background); border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
+.pm-contrib__fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--primary), #F97316); transition: width 0.6s ease; }
 
-/* Heatmap */
-.pm-heatmap {
-    display: grid;
-    grid-template-columns: 40px 1fr;
-    gap: 8px;
-}
+.pm-heatmap { display: grid; grid-template-columns: 40px 1fr; gap: 8px; }
 .pm-heatmap__days {
     display: grid;
     grid-template-rows: repeat(7, 1fr);
@@ -1408,12 +1655,7 @@
     font-weight: 700;
     padding-top: 2px;
 }
-.pm-heatmap__days span {
-    height: 14px;
-    line-height: 14px;
-    text-align: right;
-    padding-right: 4px;
-}
+.pm-heatmap__days span { height: 14px; line-height: 14px; text-align: right; padding-right: 4px; }
 .pm-heatmap__grid {
     display: grid;
     grid-auto-flow: column;
@@ -1423,8 +1665,7 @@
     padding-bottom: 4px;
 }
 .pm-heatmap__cell {
-    width: 14px;
-    height: 14px;
+    width: 14px; height: 14px;
     border-radius: 3px;
     background: var(--background);
     transition: transform 0.15s ease;
@@ -1442,11 +1683,8 @@
     margin-top: 10px;
     padding-left: 48px;
 }
-.pm-heatmap__legend .pm-heatmap__cell {
-    width: 12px; height: 12px;
-}
+.pm-heatmap__legend .pm-heatmap__cell { width: 12px; height: 12px; }
 
-/* Recent edits as cards */
 .pm-edits { display: flex; flex-direction: column; gap: 8px; }
 .pm-edit {
     display: flex; gap: 12px;
@@ -1464,11 +1702,7 @@
     flex-shrink: 0;
 }
 .pm-edit__body { flex: 1; min-width: 0; }
-.pm-edit__line {
-    font-size: 13px;
-    color: var(--text);
-    line-height: 1.4;
-}
+.pm-edit__line { font-size: 13px; color: var(--text); line-height: 1.4; }
 .pm-edit__line strong { font-weight: 700; }
 .pm-edit__line code {
     font-family: ui-monospace, Menlo, monospace;
@@ -1479,59 +1713,23 @@
     border-radius: 5px;
     margin: 0 3px;
 }
-.pm-edit__desc {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-top: 3px;
-    line-height: 1.45;
-}
-.pm-edit__time {
-    font-size: 11px;
-    color: var(--text-muted);
-    font-family: ui-monospace, Menlo, monospace;
-    margin-top: 4px;
-}
-.pm-edit--edit      { --edit-accent: #3B82F6; }
-.pm-edit--verify    { --edit-accent: #10B981; }
-.pm-edit--premium_on { --edit-accent: #F59E0B; }
+.pm-edit__desc { font-size: 12px; color: var(--text-secondary); margin-top: 3px; line-height: 1.45; }
+.pm-edit__time { font-size: 11px; color: var(--text-muted); font-family: ui-monospace, Menlo, monospace; margin-top: 4px; }
+.pm-edit--edit        { --edit-accent: #3B82F6; }
+.pm-edit--verify      { --edit-accent: #10B981; }
+.pm-edit--premium_on  { --edit-accent: #F59E0B; }
 .pm-edit--premium_off { --edit-accent: #9CA3AF; }
-.pm-edit--delete    { --edit-accent: #EF4444; }
-.pm-edit--publish   { --edit-accent: #8B5CF6; }
-.pm-edit--create    { --edit-accent: #10B981; }
+.pm-edit--delete      { --edit-accent: #EF4444; }
+.pm-edit--publish     { --edit-accent: #8B5CF6; }
+.pm-edit--create      { --edit-accent: #10B981; }
 
-/* Upload sources */
-.pm-source-row {
-    display: flex; align-items: center; gap: 12px;
-    padding: 8px 0;
-}
-.pm-source-row__label {
-    flex: 0 0 150px;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--text);
-}
-.pm-source-row__track {
-    flex: 1;
-    height: 8px;
-    background: var(--background);
-    border-radius: 6px;
-    overflow: hidden;
-}
-.pm-source-row__fill {
-    height: 100%;
-    background: linear-gradient(90deg, #3B82F6, #8B5CF6);
-    border-radius: 6px;
-}
-.pm-source-row__value {
-    flex: 0 0 120px;
-    text-align: right;
-    font-size: 12.5px;
-    font-weight: 700;
-    color: var(--text);
-    font-variant-numeric: tabular-nums;
-}
+.pm-source-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+.pm-source-row__label { flex: 0 0 150px; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.pm-source-row__track { flex: 1; height: 8px; background: var(--background); border-radius: 6px; overflow: hidden; }
+.pm-source-row__fill { height: 100%; background: linear-gradient(90deg, #3B82F6, #8B5CF6); border-radius: 6px; }
+.pm-source-row__value { flex: 0 0 120px; text-align: right; font-size: 12.5px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 
-/* ══════════════ ACTIVITY TAB ══════════════ */
+/* ══════════════════ ACTIVITY ══════════════════ */
 .pm-pulse {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
@@ -1543,10 +1741,7 @@
     margin-bottom: 14px;
 }
 @media (max-width: 700px) { .pm-pulse { grid-template-columns: repeat(2, 1fr); } }
-
-.pm-pulse__item {
-    display: flex; flex-direction: column; gap: 2px;
-}
+.pm-pulse__item { display: flex; flex-direction: column; gap: 2px; }
 .pm-pulse__value {
     font-size: 24px; font-weight: 800;
     color: var(--text);
@@ -1561,17 +1756,8 @@
     letter-spacing: 0.4px;
     font-weight: 700;
 }
-.pm-pulse__delta {
-    font-size: 11px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-}
-.pm-pulse__delta.up { color: #10B981; }
-.pm-pulse__delta.down { color: #EF4444; }
-.pm-pulse__delta.flat { color: var(--text-muted); }
 
 .pm-feed { display: flex; flex-direction: column; gap: 8px; }
-
 .pm-feed__day {
     display: flex; align-items: center; gap: 12px;
     margin: 18px 0 6px;
@@ -1635,28 +1821,52 @@
     font-size: 13px;
 }
 .pm-event__actor { font-weight: 700; color: var(--text); }
+.pm-event__actor--link {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 5px;
+    background: var(--primary-light, #FFEBE8);
+    font-size: 12px;
+    font-family: ui-monospace, Menlo, monospace;
+}
+.pm-event__actor--link:hover { text-decoration: underline; }
 .pm-event__action { color: var(--text-secondary); }
 .pm-event__target {
+    display: inline-flex; align-items: center; gap: 4px;
     font-family: ui-monospace, Menlo, monospace;
     font-size: 11.5px;
     color: var(--primary);
     background: var(--primary-light, #FFEBE8);
-    padding: 1px 6px;
+    padding: 2px 8px;
     border-radius: 5px;
     font-weight: 700;
-}
-.pm-event__detail {
-    font-size: 11.5px;
-    color: var(--text-secondary);
-    margin-top: 4px;
-    line-height: 1.45;
-}
-.pm-event__meta {
-    font-size: 10.5px;
-    color: var(--text-muted);
-    margin-top: 4px;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
     font-family: ui-monospace, Menlo, monospace;
+    transition: all 0.15s ease;
 }
+.pm-event__target:hover {
+    background: var(--primary);
+    color: #fff;
+    text-decoration: none;
+    transform: translateY(-1px);
+}
+.pm-event__target--deleted {
+    color: var(--text-muted);
+    background: var(--background);
+    cursor: default;
+    font-style: italic;
+}
+.pm-event__target--deleted:hover {
+    background: var(--background);
+    color: var(--text-muted);
+    transform: none;
+}
+.pm-event__detail { font-size: 11.5px; color: var(--text-secondary); margin-top: 4px; line-height: 1.45; }
+.pm-event__meta { font-size: 10.5px; color: var(--text-muted); margin-top: 4px; font-family: ui-monospace, Menlo, monospace; }
 .pm-event__time {
     font-size: 11px;
     color: var(--text-muted);
@@ -1664,17 +1874,17 @@
     flex-shrink: 0;
     padding-top: 2px;
 }
-.pm-event--view      { --event-accent: #3B82F6; }
-.pm-event--download  { --event-accent: #10B981; }
-.pm-event--telegram_fetch { --event-accent: #8B5CF6; }
-.pm-event--save      { --event-accent: #F59E0B; }
-.pm-event--report    { --event-accent: #EF4444; }
-.pm-event--edit      { --event-accent: #F59E0B; }
-.pm-event--verify    { --event-accent: #10B981; }
-.pm-event--publish   { --event-accent: #8B5CF6; }
-.pm-event--delete    { --event-accent: #EF4444; }
-.pm-event--create    { --event-accent: #10B981; }
-.pm-event--system    { --event-accent: #94A3B8; }
+.pm-event--view            { --event-accent: #3B82F6; }
+.pm-event--download        { --event-accent: #10B981; }
+.pm-event--telegram_fetch  { --event-accent: #8B5CF6; }
+.pm-event--save            { --event-accent: #F59E0B; }
+.pm-event--report          { --event-accent: #EF4444; }
+.pm-event--edit            { --event-accent: #F59E0B; }
+.pm-event--verify          { --event-accent: #10B981; }
+.pm-event--publish         { --event-accent: #8B5CF6; }
+.pm-event--delete          { --event-accent: #EF4444; }
+.pm-event--create          { --event-accent: #10B981; }
+.pm-event--system          { --event-accent: #94A3B8; }
 
 .pm-event-filters {
     display: flex; flex-wrap: wrap; gap: 8px;
@@ -1700,22 +1910,52 @@
     display: inline-flex; align-items: center; gap: 6px;
     transition: all 0.15s ease;
 }
-.pm-quick-chip:hover {
-    border-color: var(--primary); color: var(--primary); text-decoration: none;
-}
-.pm-quick-chip.is-active {
-    background: var(--primary); border-color: var(--primary); color: #fff;
-}
+.pm-quick-chip:hover { border-color: var(--primary); color: var(--primary); text-decoration: none; }
+.pm-quick-chip.is-active { background: var(--primary); border-color: var(--primary); color: #fff; }
 
-/* ══════════════ DARK MODE ══════════════ */
-[data-theme="dark"] .pm-kpi:hover { box-shadow: 0 8px 22px rgba(0,0,0,0.32); }
-[data-theme="dark"] .pm-row:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.32); }
-[data-theme="dark"] .pm-drawer { box-shadow: -16px 0 48px rgba(0,0,0,0.5); }
+/* ══════════════════ TOAST ══════════════════ */
+.pm-toast {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--text);
+    color: var(--surface);
+    padding: 12px 20px;
+    border-radius: 12px;
+    display: flex; align-items: center; gap: 12px;
+    font-size: 13px; font-weight: 600;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.28);
+    z-index: 9500;
+    max-width: calc(100vw - 32px);
+    animation: pmToastIn 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes pmToastIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.pm-toast button {
+    background: rgba(255,255,255,0.16);
+    color: inherit;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.pm-toast button:hover { background: rgba(255,255,255,0.26); }
+
+/* ══════════════════ DARK MODE ══════════════════ */
 [data-theme="dark"] .pm-tab.is-active .pm-tab__icon {
     box-shadow:
         0 4px 14px rgba(255, 49, 56, 0.35),
         0 0 0 3px rgba(255, 49, 56, 0.15);
 }
+[data-theme="dark"] .pm-kpi:hover { box-shadow: 0 8px 22px rgba(0,0,0,0.32); }
+[data-theme="dark"] .pm-row:hover { box-shadow: none; }
+[data-theme="dark"] .pm-drawer { box-shadow: -16px 0 48px rgba(0,0,0,0.5); }
+[data-theme="dark"] .pm-row-menu { box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
 </style>
 {% endblock %}
 
@@ -1726,7 +1966,7 @@
 
 <div class="pm-page" id="pmPage">
 
-    {# ═══════════════ TAB BAR ═══════════════ #}
+    {# ══════════════════════ TAB BAR ══════════════════════ #}
     <nav class="pm-tabs" role="tablist">
         <a href="{{ url_for('admin_content.pdfs', tab='library') }}"
            class="pm-tab {% if active_tab == 'library' %}is-active{% endif %}"
@@ -1755,35 +1995,27 @@
         </a>
     </nav>
 
-    {# ═════════════════════════════════════════════════════════
+    {# ═════════════════════════════════════════════════════════════
        TAB · LIBRARY
-       ═════════════════════════════════════════════════════════ #}
+       ═════════════════════════════════════════════════════════════ #}
     {% if active_tab == 'library' %}
 
-        {# ─── Snapshot ─── #}
+        {# ── Snapshot ── #}
         <section class="pm-snapshot">
             <div class="pm-kpis">
-                <a href="{{ url_for('admin_content.pdfs', status='live') }}"
-                   class="pm-kpi pm-kpi--live" style="text-decoration:none;color:inherit;">
+                <a href="{{ url_for('admin_content.pdfs', tab='library', status='live') }}"
+                   class="pm-kpi pm-kpi--live">
                     <div class="pm-kpi__head">
                         <span class="pm-kpi__icon"><i class="fas fa-circle-check"></i></span>
                         <span class="pm-kpi__label">Live</span>
                     </div>
                     <div class="pm-kpi__value">{{ kpis.live }}</div>
                     <div class="pm-kpi__sub">
-                        {% if kpis.live_trend %}
-                            <span class="pm-kpi__trend up">
-                                <i class="fas fa-arrow-up"></i> {{ kpis.live_trend|abs }}
-                            </span>
-                            this week
-                        {% else %}
-                            published PDFs
-                        {% endif %}
+                        {% if kpis.live_trend %}+{{ kpis.live_trend }} this week{% else %}published PDFs{% endif %}
                     </div>
                 </a>
-
-                <a href="{{ url_for('admin_content.pdfs', status='pending') }}"
-                   class="pm-kpi pm-kpi--pending" style="text-decoration:none;color:inherit;">
+                <a href="{{ url_for('admin_content.pdfs', tab='library', status='pending') }}"
+                   class="pm-kpi pm-kpi--pending">
                     <div class="pm-kpi__head">
                         <span class="pm-kpi__icon"><i class="fas fa-inbox"></i></span>
                         <span class="pm-kpi__label">Pending</span>
@@ -1793,9 +2025,8 @@
                         {% if kpis.pending > 0 %}awaiting processing{% else %}intake clear{% endif %}
                     </div>
                 </a>
-
-                <a href="{{ url_for('admin_content.pdfs', status='flagged') }}"
-                   class="pm-kpi pm-kpi--flagged" style="text-decoration:none;color:inherit;">
+                <a href="{{ url_for('admin_content.pdfs', tab='library', status='flagged') }}"
+                   class="pm-kpi pm-kpi--flagged">
                     <div class="pm-kpi__head">
                         <span class="pm-kpi__icon"><i class="fas fa-flag"></i></span>
                         <span class="pm-kpi__label">Flagged</span>
@@ -1805,16 +2036,17 @@
                         {% if kpis.flagged > 0 %}need review{% else %}all reviewed{% endif %}
                     </div>
                 </a>
-
                 <div class="pm-kpi pm-kpi--health">
                     <div class="pm-kpi__head">
                         <span class="pm-kpi__icon"><i class="fas fa-heart-pulse"></i></span>
                         <span class="pm-kpi__label">Health</span>
                     </div>
-                    <div class="pm-kpi__value">{{ health_score }}<span style="font-size:16px;opacity:0.6;">/100</span></div>
+                    <div class="pm-kpi__value">
+                        {{ health_score }}<span style="font-size:16px;opacity:0.6;">/100</span>
+                    </div>
                     <div class="pm-kpi__sub">
                         {% if health_breakdown %}
-                            {{ health_breakdown|length }} issue{{ '' if health_breakdown|length == 1 else 's' }} detected
+                            {{ health_breakdown|length }} issue{{ '' if health_breakdown|length == 1 else 's' }}
                         {% else %}
                             all systems clean
                         {% endif %}
@@ -1823,17 +2055,14 @@
             </div>
 
             <div class="pm-mini-boards">
-                {# Top of the week #}
                 <div class="pm-mini">
                     <div class="pm-mini__head">
-                        <div class="pm-mini__title">
-                            <i class="fas fa-fire"></i> Top of the week
-                        </div>
+                        <div class="pm-mini__title"><i class="fas fa-fire"></i> Top of the week</div>
                         <a href="{{ url_for('admin_content.pdfs', tab='insights') }}" class="pm-mini__link">View all →</a>
                     </div>
                     {% if trending_pdfs %}
                         {% for p in trending_pdfs[:3] %}
-                            <div class="pm-mini__row">
+                            <a href="#" class="pm-mini__row" data-open-drawer="{{ p.pdf_id }}">
                                 <span class="pm-mini__medal {% if loop.index == 1 %}gold{% elif loop.index == 2 %}silver{% else %}bronze{% endif %}">
                                     {{ loop.index }}
                                 </span>
@@ -1842,19 +2071,16 @@
                                     <div class="pm-mini__meta">{{ p.pdf_code or '—' }}</div>
                                 </div>
                                 <span class="pm-mini__value">{{ p.hits }}</span>
-                            </div>
+                            </a>
                         {% endfor %}
                     {% else %}
-                        <div class="pm-mini__empty">No activity yet this week</div>
+                        <div class="pm-mini__empty">No activity this week</div>
                     {% endif %}
                 </div>
 
-                {# Today #}
                 <div class="pm-mini">
                     <div class="pm-mini__head">
-                        <div class="pm-mini__title">
-                            <i class="fas fa-bolt"></i> Today
-                        </div>
+                        <div class="pm-mini__title"><i class="fas fa-bolt"></i> Today</div>
                         <a href="{{ url_for('admin_content.pdfs', tab='activity') }}" class="pm-mini__link">Activity →</a>
                     </div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
@@ -1879,35 +2105,27 @@
             </div>
         </section>
 
-        {# ─── Status chips ─── #}
+        {# ── Status chips ── #}
         <div class="pm-status-chips">
-            <a href="?tab=library&status=live"
-               class="pm-chip pm-chip--live {% if status_filter == 'live' %}is-active{% endif %}">
-                <span class="pm-chip__dot"></span>
-                Live
+            <a href="?tab=library&status=live" class="pm-chip pm-chip--live {% if status_filter == 'live' %}is-active{% endif %}">
+                <span class="pm-chip__dot"></span> Live
                 <span class="pm-chip__count">{{ kpis.live }}</span>
             </a>
-            <a href="?tab=library&status=pending"
-               class="pm-chip pm-chip--pending {% if status_filter == 'pending' %}is-active{% endif %}">
-                <span class="pm-chip__dot"></span>
-                Pending
+            <a href="?tab=library&status=pending" class="pm-chip pm-chip--pending {% if status_filter == 'pending' %}is-active{% endif %}">
+                <span class="pm-chip__dot"></span> Pending
                 <span class="pm-chip__count">{{ kpis.pending }}</span>
             </a>
-            <a href="?tab=library&status=staged"
-               class="pm-chip pm-chip--staged {% if status_filter == 'staged' %}is-active{% endif %}">
-                <span class="pm-chip__dot"></span>
-                Staged
+            <a href="?tab=library&status=staged" class="pm-chip pm-chip--staged {% if status_filter == 'staged' %}is-active{% endif %}">
+                <span class="pm-chip__dot"></span> Staged
                 <span class="pm-chip__count">{{ kpis.staged }}</span>
             </a>
-            <a href="?tab=library&status=flagged"
-               class="pm-chip pm-chip--flagged {% if status_filter == 'flagged' %}is-active{% endif %}">
-                <span class="pm-chip__dot"></span>
-                Flagged
+            <a href="?tab=library&status=flagged" class="pm-chip pm-chip--flagged {% if status_filter == 'flagged' %}is-active{% endif %}">
+                <span class="pm-chip__dot"></span> Flagged
                 <span class="pm-chip__count">{{ kpis.flagged }}</span>
             </a>
         </div>
 
-        {# ─── Toolbar + filters ─── #}
+        {# ── Toolbar + filters ── #}
         <form method="GET" action="{{ url_for('admin_content.pdfs') }}" id="pmFilterForm">
             <input type="hidden" name="tab" value="library">
             <input type="hidden" name="status" value="{{ status_filter }}">
@@ -1921,7 +2139,6 @@
                            autocomplete="off" spellcheck="false">
                     <span class="pm-search__kbd">/</span>
                 </div>
-
                 <select name="subject" class="pm-select" data-autofilter>
                     <option value="">All subjects</option>
                     {% for s in subjects %}
@@ -1930,14 +2147,12 @@
                         </option>
                     {% endfor %}
                 </select>
-
                 <select name="class" class="pm-select" data-autofilter>
                     <option value="">All classes</option>
                     {% for c in classes %}
                         <option value="{{ c }}" {% if class_filter == c %}selected{% endif %}>{{ c }}</option>
                     {% endfor %}
                 </select>
-
                 <select name="curriculum" class="pm-select" data-autofilter>
                     <option value="">All curricula</option>
                     {% for c in curricula %}
@@ -1949,7 +2164,6 @@
                         </option>
                     {% endfor %}
                 </select>
-
                 <select name="sort" class="pm-select" data-autofilter>
                     <option value="newest"     {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
                     <option value="oldest"     {% if sort == 'oldest' %}selected{% endif %}>Oldest first</option>
@@ -1957,19 +2171,16 @@
                     <option value="title_desc" {% if sort == 'title_desc' %}selected{% endif %}>Title Z→A</option>
                     <option value="popular"    {% if sort == 'popular' %}selected{% endif %}>Most viewed</option>
                 </select>
-
                 <button type="button" class="pm-btn" id="pmToggleFilters"
                         aria-expanded="{{ 'true' if advanced_open else 'false' }}">
                     <i class="fas fa-sliders-h"></i> Filters
                 </button>
-
-                <select name="per_page" class="pm-select" id="pmPerPage" style="max-width:110px;">
+                <select name="per_page" class="pm-select" id="pmPerPage" style="max-width:110px;" data-autofilter>
                     <option value="50"  {% if per_page == 50  %}selected{% endif %}>50 / page</option>
                     <option value="100" {% if per_page == 100 %}selected{% endif %}>100 / page</option>
                     <option value="200" {% if per_page == 200 %}selected{% endif %}>200 / page</option>
                     <option value="500" {% if per_page == 500 %}selected{% endif %}>500 / page</option>
                 </select>
-
                 <span class="pm-toolbar__count">
                     <strong>{{ total }}</strong> result{{ '' if total == 1 else 's' }}
                 </span>
@@ -1982,7 +2193,6 @@
                         <i class="fas fa-times"></i> Reset
                     </a>
                 </div>
-
                 <div class="pm-advanced__grid">
                     <div class="pm-group">
                         <div class="pm-group__label"><i class="fas fa-file-pdf"></i> Source</div>
@@ -2001,7 +2211,6 @@
                             </div>
                         </div>
                     </div>
-
                     <div class="pm-group">
                         <div class="pm-group__label"><i class="fas fa-tags"></i> Attributes</div>
                         <div class="pm-group__body">
@@ -2023,23 +2232,6 @@
                             </div>
                         </div>
                     </div>
-
-                    <div class="pm-group">
-                        <div class="pm-group__label"><i class="fas fa-server"></i> Storage</div>
-                        <div class="pm-group__body">
-                            <div class="pm-field">
-                                <label>Source</label>
-                                <select name="storage" data-autofilter>
-                                    <option value="">Any</option>
-                                    <option value="local"    {% if storage_filter == 'local' %}selected{% endif %}>Local file</option>
-                                    <option value="telegram" {% if storage_filter == 'telegram' %}selected{% endif %}>Telegram only</option>
-                                    <option value="both"     {% if storage_filter == 'both' %}selected{% endif %}>Both copies</option>
-                                    <option value="orphan"   {% if storage_filter == 'orphan' %}selected{% endif %}>⚠ Orphan</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
                     <div class="pm-group">
                         <div class="pm-group__label"><i class="fas fa-chart-line"></i> Engagement</div>
                         <div class="pm-group__body">
@@ -2052,7 +2244,6 @@
                             </div>
                         </div>
                     </div>
-
                     <div class="pm-group">
                         <div class="pm-group__label"><i class="fas fa-calendar"></i> Date range</div>
                         <div class="pm-group__body">
@@ -2066,7 +2257,6 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="pm-advanced__foot">
                     <button type="submit" class="pm-btn pm-btn--primary">
                         <i class="fas fa-filter"></i> Apply filters
@@ -2075,51 +2265,149 @@
             </div>
         </form>
 
-        {# ─── Active filter chips ─── #}
+        {# ── Rich filter banner ── #}
         {% if active_filters and active_filters|length %}
-            <div class="pm-active-filters">
-                <span class="pm-active-filters__label">
-                    <i class="fas fa-filter"></i> Active:
-                </span>
-                {% for chip in active_filters %}
-                    <a href="{{ chip.clear_url }}" class="pm-filter-chip">
-                        <span class="pm-filter-chip__key">{{ chip.label }}:</span>
-                        <span class="pm-filter-chip__value">{{ chip.value }}</span>
-                        <i class="fas fa-times pm-filter-chip__close"></i>
+            <div class="pm-filter-banner">
+                <div class="pm-filter-banner__head">
+                    <div class="pm-filter-banner__title">
+                        <i class="fas fa-filter"></i> Applied filters
+                    </div>
+                    <div class="pm-filter-banner__count">
+                        <strong>{{ total }}</strong> of {{ kpis.live }} PDFs match
+                    </div>
+                </div>
+                <div class="pm-filter-chips">
+                    {% for chip in active_filters %}
+                        <a href="{{ chip.clear_url }}" class="pm-filter-chip">
+                            <span class="pm-filter-chip__key">{{ chip.label }}:</span>
+                            <span class="pm-filter-chip__value">{{ chip.value }}</span>
+                            <i class="fas fa-times pm-filter-chip__close"></i>
+                        </a>
+                    {% endfor %}
+                </div>
+                <div class="pm-filter-banner__presets">
+                    <span class="pm-filter-banner__presets-label">Quick presets:</span>
+                    {% for preset in quick_presets %}
+                        <a href="{{ preset.url }}" class="pm-preset">
+                            <i class="fas {{ preset.icon }}"></i> {{ preset.label }}
+                        </a>
+                    {% endfor %}
+                    <a href="{{ url_for('admin_content.pdfs', tab='library') }}" class="pm-filter-banner__clear">
+                        <i class="fas fa-times"></i> Clear all
                     </a>
-                {% endfor %}
-                <a href="{{ url_for('admin_content.pdfs', tab='library') }}" class="pm-active-filters__clear">
-                    Clear all
-                </a>
+                </div>
+            </div>
+        {% else %}
+            <div class="pm-filter-banner">
+                <div class="pm-filter-banner__head">
+                    <div class="pm-filter-banner__title">
+                        <i class="fas fa-sparkles"></i> Quick presets
+                    </div>
+                </div>
+                <div class="pm-filter-banner__presets" style="border-top:none;padding-top:0;">
+                    {% for preset in quick_presets %}
+                        <a href="{{ preset.url }}" class="pm-preset">
+                            <i class="fas {{ preset.icon }}"></i> {{ preset.label }}
+                        </a>
+                    {% endfor %}
+                </div>
             </div>
         {% endif %}
 
-        {# ─── Bulk bar ─── #}
+        {# ── Rich bulk bar ── #}
         <div class="pm-bulk" id="pmBulkBar" hidden>
-            <span class="pm-bulk__count">
-                <strong id="pmBulkCount">0</strong> selected
-            </span>
-            <div class="pm-bulk__actions">
+            <div class="pm-bulk__head">
+                <div class="pm-bulk__count">
+                    <i class="fas fa-check-circle"></i>
+                    <strong id="pmBulkCount">0</strong>
+                    <span>selected</span>
+                </div>
+                <span class="pm-bulk__hint" id="pmBulkHint"></span>
+                <button type="button" class="pm-bulk__clear" id="pmClearSelection">
+                    <i class="fas fa-times"></i> Clear selection
+                </button>
+            </div>
+
+            <div class="pm-bulk__cluster">
+                <span class="pm-bulk__cluster-label"><i class="fas fa-toggle-on"></i> Attributes</span>
                 <button type="button" class="pm-bulk__btn" data-bulk-action="premium_on">
                     <i class="fas fa-gem"></i> Mark premium
                 </button>
                 <button type="button" class="pm-bulk__btn" data-bulk-action="premium_off">
-                    <i class="fas fa-gem"></i> Remove premium
+                    <i class="fas fa-circle-minus"></i> Remove premium
+                </button>
+                <button type="button" class="pm-bulk__btn" data-bulk-action="verify">
+                    <i class="fas fa-circle-check"></i> Verify
+                </button>
+                <button type="button" class="pm-bulk__btn" data-bulk-action="unverify">
+                    <i class="fas fa-circle-xmark"></i> Unverify
+                </button>
+            </div>
+
+            <div class="pm-bulk__cluster">
+                <span class="pm-bulk__cluster-label"><i class="fas fa-tags"></i> Classify</span>
+                <select class="pm-bulk__select" data-bulk-select="set_subject">
+                    <option value="">📚 Change subject…</option>
+                    {% for s in subjects %}
+                        <option value="{{ s.code }}">{{ s.icon or '📚' }} {{ s.name }}</option>
+                    {% endfor %}
+                </select>
+                <select class="pm-bulk__select" data-bulk-select="set_class">
+                    <option value="">🎓 Change class…</option>
+                    {% for c in classes %}
+                        <option value="{{ c }}">{{ c }}</option>
+                    {% endfor %}
+                </select>
+                <select class="pm-bulk__select" data-bulk-select="set_curriculum">
+                    <option value="">🌍 Change curriculum…</option>
+                    {% for c in curricula %}
+                        <option value="{{ c }}">
+                            {% if c == 'PL' %}Puntland
+                            {% elif c == 'SO' %}Somalia
+                            {% elif c == 'SL' %}Somaliland
+                            {% else %}{{ c }}{% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="pm-bulk__cluster">
+                <span class="pm-bulk__cluster-label"><i class="fas fa-bolt"></i> Actions</span>
+                <button type="button" class="pm-bulk__btn" data-bulk-action="export_csv">
+                    <i class="fas fa-file-csv"></i> Export CSV
+                </button>
+                <button type="button" class="pm-bulk__btn" data-bulk-action="add_to_batch_prompt">
+                    <i class="fas fa-layer-group"></i> Add to batch…
                 </button>
                 {% if can_delete %}
                     <button type="button" class="pm-bulk__btn pm-bulk__btn--danger" data-bulk-action="delete">
                         <i class="fas fa-trash"></i> Delete
                     </button>
                 {% endif %}
-                <button type="button" class="pm-bulk__btn" id="pmClearSelection">
-                    <i class="fas fa-times"></i> Clear
-                </button>
             </div>
         </div>
 
-        {# ─── PDF LIST ─── #}
+        {# ── PDF list with intelligent header ── #}
         {% if pdfs %}
-            <div class="pm-list" id="pmList">
+            <div class="pm-list-header">
+                <div class="pm-list-header__check" id="pmSelectAllZone">
+                    <input type="checkbox" id="pmSelectAll" aria-label="Select all">
+                    <label for="pmSelectAll" class="pm-list-header__check-label">
+                        <span id="pmSelectAllLabel">Select all on page</span>
+                    </label>
+                    <span class="pm-list-header__hint">click · hold for all filtered</span>
+                </div>
+                <div class="pm-list-header__spacer"></div>
+                <span class="pm-list-header__stat">
+                    <i class="fas fa-list" style="font-size:10px;opacity:0.6;"></i>
+                    Showing <strong>{{ pdfs|length }}</strong> of <strong>{{ total }}</strong>
+                </span>
+                <button type="button" class="pm-list-header__btn" id="pmDensityToggle" title="Toggle density">
+                    <i class="fas fa-bars" id="pmDensityIcon"></i>
+                </button>
+            </div>
+
+            <div class="pm-list" id="pmList" data-density="comfortable">
                 {% for p in pdfs %}
                     {% set state = 'live' %}
                     {% if p.is_flagged %}{% set state = 'flagged' %}
@@ -2132,7 +2420,7 @@
                          data-state="{{ state }}"
                          role="button">
 
-                        <div class="pm-row__check" onclick="event.stopPropagation();">
+                        <div class="pm-row__check" data-check-zone>
                             <input type="checkbox" class="pm-row__check-input"
                                    data-id="{{ p.id }}"
                                    aria-label="Select PDF {{ p.code or p.id }}">
@@ -2192,7 +2480,7 @@
                             </div>
                         </div>
 
-                        <div class="pm-row__actions" onclick="event.stopPropagation();">
+                        <div class="pm-row__actions" data-actions-zone>
                             <button type="button" class="pm-row__menu-btn"
                                     data-row-menu data-id="{{ p.id }}"
                                     aria-label="More actions">
@@ -2203,7 +2491,6 @@
                 {% endfor %}
             </div>
 
-            {# ─── Pagination ─── #}
             {% if total_pages > 1 %}
                 {% set base_qs = {
                     'tab': 'library',
@@ -2216,7 +2503,6 @@
                     'per_page': per_page,
                     'premium': premium_filter,
                     'verified': verified_filter,
-                    'storage': storage_filter,
                     'pdf_code_filter': pdf_code_filter,
                     'chapter': chapter_filter,
                     'views_min': views_min,
@@ -2226,11 +2512,13 @@
                 } | urlencode %}
                 <nav class="pm-pager" aria-label="Pagination">
                     <a href="?page=1&{{ base_qs }}"
-                       class="pm-pager__btn {% if page == 1 %}is-disabled{% endif %}"
-                       aria-label="First page"><i class="fas fa-angle-double-left"></i></a>
+                       class="pm-pager__btn {% if page == 1 %}is-disabled{% endif %}">
+                        <i class="fas fa-angle-double-left"></i>
+                    </a>
                     <a href="?page={{ page - 1 }}&{{ base_qs }}"
-                       class="pm-pager__btn {% if page == 1 %}is-disabled{% endif %}"
-                       aria-label="Previous page"><i class="fas fa-angle-left"></i></a>
+                       class="pm-pager__btn {% if page == 1 %}is-disabled{% endif %}">
+                        <i class="fas fa-angle-left"></i>
+                    </a>
                     {% for p in range(1, total_pages + 1) %}
                         {% if p == page %}
                             <span class="pm-pager__btn is-active">{{ p }}</span>
@@ -2239,11 +2527,13 @@
                         {% endif %}
                     {% endfor %}
                     <a href="?page={{ page + 1 }}&{{ base_qs }}"
-                       class="pm-pager__btn {% if page == total_pages %}is-disabled{% endif %}"
-                       aria-label="Next page"><i class="fas fa-angle-right"></i></a>
+                       class="pm-pager__btn {% if page == total_pages %}is-disabled{% endif %}">
+                        <i class="fas fa-angle-right"></i>
+                    </a>
                     <a href="?page={{ total_pages }}&{{ base_qs }}"
-                       class="pm-pager__btn {% if page == total_pages %}is-disabled{% endif %}"
-                       aria-label="Last page"><i class="fas fa-angle-double-right"></i></a>
+                       class="pm-pager__btn {% if page == total_pages %}is-disabled{% endif %}">
+                        <i class="fas fa-angle-double-right"></i>
+                    </a>
                     <span class="pm-pager__info">
                         Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong>
                     </span>
@@ -2263,75 +2553,108 @@
             </div>
         {% endif %}
 
-    {# ═════════════════════════════════════════════════════════
+    {# ═════════════════════════════════════════════════════════════
        TAB · INSIGHTS
-       ═════════════════════════════════════════════════════════ #}
+       ═════════════════════════════════════════════════════════════ #}
     {% elif active_tab == 'insights' %}
         <div class="pm-insights">
 
-            {# ── Gauges ── #}
-            {% set score = health_score or 0 %}
-            {% set score_class = 'good' if score >= 80 else ('warn' if score >= 50 else 'danger') %}
-            {% set cov = coverage.coverage_pct|default(0) %}
-            {% set cov_class = 'good' if cov >= 80 else ('warn' if cov >= 50 else 'danger') %}
-
+            {# ── Curriculum + coverage donuts ── #}
             <div class="pm-card">
                 <div class="pm-card__head">
-                    <h3 class="pm-card__title"><i class="fas fa-heart-pulse"></i> Library health &amp; coverage</h3>
-                    <span class="pm-card__sub">updated moments ago</span>
+                    <h3 class="pm-card__title"><i class="fas fa-chart-pie"></i> Library composition</h3>
+                    <span class="pm-card__sub">by curriculum &amp; question coverage</span>
                 </div>
                 <div class="pm-card__body">
-                    <div class="pm-gauges">
-                        <div class="pm-gauge pm-gauge--health-{{ score_class }}">
-                            <div class="pm-gauge__wrap">
-                                <svg class="pm-gauge__svg" viewBox="0 0 140 140">
-                                    <circle class="pm-gauge__track" cx="70" cy="70" r="60"></circle>
-                                    <circle class="pm-gauge__arc" cx="70" cy="70" r="60"
-                                            stroke-dasharray="377"
-                                            stroke-dashoffset="{{ 377 - (377 * score / 100) }}"></circle>
+                    <div class="pm-donuts">
+
+                        {# Curriculum donut #}
+                        <div class="pm-donut-block">
+                            <div class="pm-donut">
+                                <svg viewBox="0 0 220 220">
+                                    <circle class="pm-donut__track" cx="110" cy="110" r="90"></circle>
+                                    {% set curr_colors = {'PL': '#3B82F6', 'SO': '#10B981', 'SL': '#F59E0B'} %}
+                                    {% for seg in curriculum_split %}
+                                        {% if seg.count > 0 %}
+                                            <circle class="pm-donut__seg"
+                                                    cx="110" cy="110" r="90"
+                                                    stroke="{{ curr_colors.get(seg.code, '#94A3B8') }}"
+                                                    stroke-dasharray="{{ seg.dasharray }}"
+                                                    stroke-dashoffset="{{ seg.dashoffset }}"
+                                                    stroke-linecap="butt"
+                                                    data-legend="curr-{{ seg.code }}"></circle>
+                                        {% endif %}
+                                    {% endfor %}
                                 </svg>
-                                <div class="pm-gauge__center">
-                                    <div class="pm-gauge__value">{{ score }}<span class="pm-gauge__unit">/100</span></div>
-                                    <div class="pm-gauge__label">Health</div>
+                                <div class="pm-donut__center">
+                                    <div class="pm-donut__center-value">{{ curriculum_total }}</div>
+                                    <div class="pm-donut__center-label">PDFs classified</div>
+                                </div>
+                            </div>
+                            <div class="pm-donut-legend">
+                                {% for seg in curriculum_split %}
+                                    <div class="pm-donut-legend__item" data-legend="curr-{{ seg.code }}">
+                                        <span class="pm-donut-legend__swatch"
+                                              style="background: {% if seg.code == 'PL' %}#3B82F6{% elif seg.code == 'SO' %}#10B981{% elif seg.code == 'SL' %}#F59E0B{% else %}#94A3B8{% endif %};"></span>
+                                        <span class="pm-donut-legend__label">{{ seg.label }}</span>
+                                        <span class="pm-donut-legend__count">{{ seg.count }}</span>
+                                        <span class="pm-donut-legend__pct">{{ seg.percent }}%</span>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            {% if curriculum_unclassified and curriculum_unclassified > 0 %}
+                                <div class="pm-donut-block__note">
+                                    <i class="fas fa-triangle-exclamation"></i>
+                                    <span><strong>{{ curriculum_unclassified }}</strong> PDFs have no curriculum set</span>
+                                    <a href="{{ url_for('admin_content.pdfs', tab='library') }}"
+                                       style="margin-left:auto;color:inherit;font-weight:700;text-decoration:none;">Fix →</a>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {# Coverage donut #}
+                        <div class="pm-donut-block">
+                            <div class="pm-donut">
+                                <svg viewBox="0 0 220 220">
+                                    <circle class="pm-donut__track" cx="110" cy="110" r="90"></circle>
+                                    {% for seg in coverage_segments %}
+                                        {% if seg.count > 0 %}
+                                            <circle class="pm-donut__seg"
+                                                    cx="110" cy="110" r="90"
+                                                    stroke="{% if seg.code == 'linked' %}#10B981{% else %}#94A3B8{% endif %}"
+                                                    stroke-dasharray="{{ seg.dasharray }}"
+                                                    stroke-dashoffset="{{ seg.dashoffset }}"
+                                                    stroke-linecap="butt"
+                                                    data-legend="cov-{{ seg.code }}"></circle>
+                                        {% endif %}
+                                    {% endfor %}
+                                </svg>
+                                <div class="pm-donut__center">
+                                    <div class="pm-donut__center-value">
+                                        {{ coverage.coverage_pct|default(0) }}<span style="font-size:14px;color:var(--text-muted);">%</span>
+                                    </div>
+                                    <div class="pm-donut__center-label">Questions linked</div>
+                                </div>
+                            </div>
+                            <div class="pm-donut-legend">
+                                {% for seg in coverage_segments %}
+                                    <div class="pm-donut-legend__item" data-legend="cov-{{ seg.code }}">
+                                        <span class="pm-donut-legend__swatch"
+                                              style="background: {% if seg.code == 'linked' %}#10B981{% else %}#94A3B8{% endif %};"></span>
+                                        <span class="pm-donut-legend__label">{{ seg.label }}</span>
+                                        <span class="pm-donut-legend__count">{{ seg.count }}</span>
+                                        <span class="pm-donut-legend__pct">{{ seg.percent }}%</span>
+                                    </div>
+                                {% endfor %}
+                                <div class="pm-donut-legend__item" style="background:transparent;cursor:default;">
+                                    <span class="pm-donut-legend__swatch" style="background:transparent;"></span>
+                                    <span class="pm-donut-legend__label" style="font-size:11px;">Total questions</span>
+                                    <span class="pm-donut-legend__count">{{ coverage.questions_total|default(0) }}</span>
+                                    <span class="pm-donut-legend__pct"></span>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="pm-gauge pm-gauge--cov-{{ cov_class }}">
-                            <div class="pm-gauge__wrap">
-                                <svg class="pm-gauge__svg" viewBox="0 0 140 140">
-                                    <circle class="pm-gauge__track" cx="70" cy="70" r="60"></circle>
-                                    <circle class="pm-gauge__arc" cx="70" cy="70" r="60"
-                                            stroke-dasharray="377"
-                                            stroke-dashoffset="{{ 377 - (377 * cov / 100) }}"></circle>
-                                </svg>
-                                <div class="pm-gauge__center">
-                                    <div class="pm-gauge__value">{{ cov }}<span class="pm-gauge__unit">%</span></div>
-                                    <div class="pm-gauge__label">Coverage</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="pm-gauge-list">
-                            <div class="pm-gauge-list__item">
-                                <span class="pm-gauge-list__label">Questions total</span>
-                                <span class="pm-gauge-list__value">{{ coverage.questions_total|default(0) }}</span>
-                            </div>
-                            <div class="pm-gauge-list__item">
-                                <span class="pm-gauge-list__label">Linked to PDFs</span>
-                                <span class="pm-gauge-list__value pos">{{ coverage.questions_linked|default(0) }}</span>
-                            </div>
-                            <div class="pm-gauge-list__item">
-                                <span class="pm-gauge-list__label">PDFs with questions</span>
-                                <span class="pm-gauge-list__value">{{ coverage.pdfs_with_links|default(0) }}</span>
-                            </div>
-                            {% for reason, delta in health_breakdown.items() %}
-                                <div class="pm-gauge-list__item">
-                                    <span class="pm-gauge-list__label">{{ reason }}</span>
-                                    <span class="pm-gauge-list__value neg">{{ delta }}</span>
-                                </div>
-                            {% endfor %}
-                        </div>
                     </div>
                 </div>
             </div>
@@ -2345,6 +2668,7 @@
                 <div class="pm-card__body">
                     <div class="pm-bars">
                         {% set total_for_pct = (class_split_total or 1) %}
+                        {% set max_count = class_split[0].count if class_split and class_split[0].count > 0 else 1 %}
                         {% for row in class_split %}
                             {% set cls_key = (row.code or '')|lower %}
                             <div class="pm-bar pm-bar--{{ cls_key }}">
@@ -2364,7 +2688,7 @@
                                 </div>
                                 <div class="pm-bar__track">
                                     <div class="pm-bar__fill"
-                                         style="width: {{ ((row.count / (class_split[0].count if class_split and class_split[0].count > 0 else 1)) * 100)|round(1) }}%;"></div>
+                                         style="width: {{ ((row.count / max_count) * 100)|round(1) }}%;"></div>
                                 </div>
                             </div>
                         {% endfor %}
@@ -2379,7 +2703,7 @@
                 </div>
             </div>
 
-            {# ── Subject distribution ── #}
+            {# ── Subject coverage ── #}
             <div class="pm-card">
                 <div class="pm-card__head">
                     <h3 class="pm-card__title"><i class="fas fa-book"></i> Subject coverage</h3>
@@ -2403,7 +2727,6 @@
 
             {# ── Leaderboards ── #}
             <div class="pm-leaderboards">
-
                 <div class="pm-card">
                     <div class="pm-card__head">
                         <h3 class="pm-card__title"><i class="fas fa-eye"></i> Most viewed</h3>
@@ -2412,19 +2735,17 @@
                     <div class="pm-card__body">
                         <div class="pm-lb">
                             {% for p in top_viewed %}
-                                <a href="{{ url_for('admin_content.pdf_edit', pdf_id=p.id) }}"
-                                   class="pm-lb__item {% if loop.index == 1 %}pm-lb__item--gold{% elif loop.index == 2 %}pm-lb__item--silver{% elif loop.index == 3 %}pm-lb__item--bronze{% endif %}">
+                                <button type="button" class="pm-lb__item {% if loop.index == 1 %}pm-lb__item--gold{% elif loop.index == 2 %}pm-lb__item--silver{% elif loop.index == 3 %}pm-lb__item--bronze{% endif %}"
+                                        data-open-drawer="{{ p.id }}">
                                     <span class="pm-lb__medal">{{ loop.index }}</span>
                                     <div class="pm-lb__body">
                                         <div class="pm-lb__name">{{ p.title or 'Untitled' }}</div>
                                         <div class="pm-lb__code">{{ p.code or '—' }}</div>
                                     </div>
                                     <span class="pm-lb__value"><i class="fas fa-eye"></i>{{ p.view_count or 0 }}</span>
-                                </a>
+                                </button>
                             {% else %}
-                                <div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12.5px;">
-                                    No views recorded yet
-                                </div>
+                                <div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12.5px;">No views recorded yet</div>
                             {% endfor %}
                         </div>
                     </div>
@@ -2438,19 +2759,17 @@
                     <div class="pm-card__body">
                         <div class="pm-lb">
                             {% for p in most_downloaded %}
-                                <a href="{{ url_for('admin_content.pdf_edit', pdf_id=p.pdf_id) }}"
-                                   class="pm-lb__item {% if loop.index == 1 %}pm-lb__item--gold{% elif loop.index == 2 %}pm-lb__item--silver{% elif loop.index == 3 %}pm-lb__item--bronze{% endif %}">
+                                <button type="button" class="pm-lb__item {% if loop.index == 1 %}pm-lb__item--gold{% elif loop.index == 2 %}pm-lb__item--silver{% elif loop.index == 3 %}pm-lb__item--bronze{% endif %}"
+                                        data-open-drawer="{{ p.pdf_id }}">
                                     <span class="pm-lb__medal">{{ loop.index }}</span>
                                     <div class="pm-lb__body">
                                         <div class="pm-lb__name">{{ p.pdf_title or 'Untitled' }}</div>
                                         <div class="pm-lb__code">{{ p.pdf_code or '—' }}</div>
                                     </div>
                                     <span class="pm-lb__value"><i class="fas fa-download"></i>{{ p.n }}</span>
-                                </a>
+                                </button>
                             {% else %}
-                                <div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12.5px;">
-                                    No downloads recorded yet
-                                </div>
+                                <div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12.5px;">No downloads yet</div>
                             {% endfor %}
                         </div>
                     </div>
@@ -2464,19 +2783,17 @@
                     <div class="pm-card__body">
                         <div class="pm-lb">
                             {% for p in most_tg_fetched %}
-                                <a href="{{ url_for('admin_content.pdf_edit', pdf_id=p.pdf_id) }}"
-                                   class="pm-lb__item {% if loop.index == 1 %}pm-lb__item--gold{% elif loop.index == 2 %}pm-lb__item--silver{% elif loop.index == 3 %}pm-lb__item--bronze{% endif %}">
+                                <button type="button" class="pm-lb__item {% if loop.index == 1 %}pm-lb__item--gold{% elif loop.index == 2 %}pm-lb__item--silver{% elif loop.index == 3 %}pm-lb__item--bronze{% endif %}"
+                                        data-open-drawer="{{ p.pdf_id }}">
                                     <span class="pm-lb__medal">{{ loop.index }}</span>
                                     <div class="pm-lb__body">
                                         <div class="pm-lb__name">{{ p.pdf_title or 'Untitled' }}</div>
                                         <div class="pm-lb__code">{{ p.pdf_code or '—' }}</div>
                                     </div>
                                     <span class="pm-lb__value"><i class="fab fa-telegram-plane"></i>{{ p.n }}</span>
-                                </a>
+                                </button>
                             {% else %}
-                                <div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12.5px;">
-                                    No Telegram fetches yet
-                                </div>
+                                <div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12.5px;">No Telegram fetches yet</div>
                             {% endfor %}
                         </div>
                     </div>
@@ -2490,59 +2807,19 @@
                     <div class="pm-card__body">
                         <div class="pm-lb">
                             {% for p in trending_pdfs %}
-                                <a href="{{ url_for('admin_content.pdf_edit', pdf_id=p.pdf_id) }}"
-                                   class="pm-lb__item {% if loop.index == 1 %}pm-lb__item--gold{% elif loop.index == 2 %}pm-lb__item--silver{% elif loop.index == 3 %}pm-lb__item--bronze{% endif %}">
+                                <button type="button" class="pm-lb__item {% if loop.index == 1 %}pm-lb__item--gold{% elif loop.index == 2 %}pm-lb__item--silver{% elif loop.index == 3 %}pm-lb__item--bronze{% endif %}"
+                                        data-open-drawer="{{ p.pdf_id }}">
                                     <span class="pm-lb__medal">{{ loop.index }}</span>
                                     <div class="pm-lb__body">
                                         <div class="pm-lb__name">{{ p.pdf_title or 'Untitled' }}</div>
                                         <div class="pm-lb__code">{{ p.pdf_code or '—' }}</div>
                                     </div>
                                     <span class="pm-lb__value"><i class="fas fa-fire"></i>{{ p.hits }}</span>
-                                </a>
+                                </button>
                             {% else %}
-                                <div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12.5px;">
-                                    No activity this week
-                                </div>
+                                <div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12.5px;">No activity this week</div>
                             {% endfor %}
                         </div>
-                    </div>
-                </div>
-            </div>
-
-            {# ── Storage ── #}
-            <div class="pm-card">
-                <div class="pm-card__head">
-                    <h3 class="pm-card__title"><i class="fas fa-server"></i> Storage health</h3>
-                </div>
-                <div class="pm-card__body">
-                    {% set total_pdfs = kpis.live or 1 %}
-                    <div class="pm-storage-row">
-                        <div class="pm-storage-row__label">Local file</div>
-                        <div class="pm-storage-row__track">
-                            <div class="pm-storage-row__fill" style="width: {{ (storage.local / total_pdfs * 100)|round(1) }}%;"></div>
-                        </div>
-                        <div class="pm-storage-row__value">{{ storage.local }} · {{ (storage.local / total_pdfs * 100)|round(0) }}%</div>
-                    </div>
-                    <div class="pm-storage-row">
-                        <div class="pm-storage-row__label">Telegram backup</div>
-                        <div class="pm-storage-row__track">
-                            <div class="pm-storage-row__fill" style="width: {{ (storage.telegram / total_pdfs * 100)|round(1) }}%;"></div>
-                        </div>
-                        <div class="pm-storage-row__value">{{ storage.telegram }} · {{ (storage.telegram / total_pdfs * 100)|round(0) }}%</div>
-                    </div>
-                    <div class="pm-storage-row">
-                        <div class="pm-storage-row__label">Both copies</div>
-                        <div class="pm-storage-row__track">
-                            <div class="pm-storage-row__fill" style="width: {{ (storage.both / total_pdfs * 100)|round(1) }}%;"></div>
-                        </div>
-                        <div class="pm-storage-row__value">{{ storage.both }} · {{ (storage.both / total_pdfs * 100)|round(0) }}%</div>
-                    </div>
-                    <div class="pm-storage-row">
-                        <div class="pm-storage-row__label">Orphan</div>
-                        <div class="pm-storage-row__track">
-                            <div class="pm-storage-row__fill" style="width: {{ (storage.orphan / total_pdfs * 100)|round(1) }}%;{% if storage.orphan > 0 %}background:#EF4444;{% endif %}"></div>
-                        </div>
-                        <div class="pm-storage-row__value">{{ storage.orphan }}</div>
                     </div>
                 </div>
             </div>
@@ -2568,20 +2845,18 @@
                             <span>{{ uploads_by_day[-1].date }}</span>
                         </div>
                     {% else %}
-                        <div style="text-align:center;padding:30px;color:var(--text-muted);">
-                            No uploads recorded
-                        </div>
+                        <div style="text-align:center;padding:30px;color:var(--text-muted);">No uploads recorded</div>
                     {% endif %}
                 </div>
             </div>
+
         </div>
 
-    {# ═════════════════════════════════════════════════════════
+    {# ═════════════════════════════════════════════════════════════
        TAB · PEOPLE
-       ═════════════════════════════════════════════════════════ #}
+       ═════════════════════════════════════════════════════════════ #}
     {% elif active_tab == 'people' %}
 
-        {# ── Team overview ── #}
         <div class="pm-team-strip">
             <div class="pm-team-strip__item">
                 <div>
@@ -2608,7 +2883,6 @@
             {% endif %}
         </div>
 
-        {# ── Contributors ── #}
         <div class="pm-card" style="margin-bottom:16px;">
             <div class="pm-card__head">
                 <h3 class="pm-card__title"><i class="fas fa-users"></i> Top contributors</h3>
@@ -2653,7 +2927,6 @@
             </div>
         </div>
 
-        {# ── Heatmap ── #}
         {% if heatmap_weeks %}
             <div class="pm-card" style="margin-bottom:16px;">
                 <div class="pm-card__head">
@@ -2663,13 +2936,8 @@
                 <div class="pm-card__body">
                     <div class="pm-heatmap">
                         <div class="pm-heatmap__days">
-                            <span>Mon</span>
-                            <span>Tue</span>
-                            <span>Wed</span>
-                            <span>Thu</span>
-                            <span>Fri</span>
-                            <span>Sat</span>
-                            <span>Sun</span>
+                            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span>
+                            <span>Fri</span><span>Sat</span><span>Sun</span>
                         </div>
                         <div class="pm-heatmap__grid">
                             {% for week in heatmap_weeks %}
@@ -2693,7 +2961,6 @@
             </div>
         {% endif %}
 
-        {# ── Recent edits as rich cards ── #}
         <div class="pm-card" style="margin-bottom:16px;">
             <div class="pm-card__head">
                 <h3 class="pm-card__title"><i class="fas fa-pen"></i> Recent edits</h3>
@@ -2729,14 +2996,11 @@
                         {% endfor %}
                     </div>
                 {% else %}
-                    <div style="text-align:center;padding:40px;color:var(--text-muted);">
-                        No edits recorded yet
-                    </div>
+                    <div style="text-align:center;padding:40px;color:var(--text-muted);">No edits recorded yet</div>
                 {% endif %}
             </div>
         </div>
 
-        {# ── Upload sources ── #}
         {% if upload_sources %}
             <div class="pm-card">
                 <div class="pm-card__head">
@@ -2757,12 +3021,11 @@
             </div>
         {% endif %}
 
-    {# ═════════════════════════════════════════════════════════
+    {# ═════════════════════════════════════════════════════════════
        TAB · ACTIVITY
-       ═════════════════════════════════════════════════════════ #}
+       ═════════════════════════════════════════════════════════════ #}
     {% elif active_tab == 'activity' %}
 
-        {# ── Pulse ── #}
         <div class="pm-pulse">
             <div class="pm-pulse__item">
                 <div class="pm-pulse__value">{{ today_activity.views|default(0) }}</div>
@@ -2786,7 +3049,6 @@
             </div>
         </div>
 
-        {# ── Quick chips ── #}
         <div class="pm-event-filters__quick">
             <a href="{{ url_for('admin_content.pdfs', tab='activity') }}"
                class="pm-quick-chip {% if not activity_role and not activity_type %}is-active{% endif %}">
@@ -2810,7 +3072,6 @@
             </a>
         </div>
 
-        {# ── Filter form ── #}
         <form method="GET" action="{{ url_for('admin_content.pdfs') }}" class="pm-event-filters">
             <input type="hidden" name="tab" value="activity">
             <select name="type" class="pm-select" data-autofilter>
@@ -2823,10 +3084,10 @@
                     <option value="report"         {% if activity_type == 'report' %}selected{% endif %}>Reports</option>
                 </optgroup>
                 <optgroup label="Admin">
-                    <option value="edit"        {% if activity_type == 'edit' %}selected{% endif %}>Edits</option>
-                    <option value="verify"      {% if activity_type == 'verify' %}selected{% endif %}>Verifications</option>
-                    <option value="publish"     {% if activity_type == 'publish' %}selected{% endif %}>Publishes</option>
-                    <option value="delete"      {% if activity_type == 'delete' %}selected{% endif %}>Deletes</option>
+                    <option value="edit"    {% if activity_type == 'edit' %}selected{% endif %}>Edits</option>
+                    <option value="verify"  {% if activity_type == 'verify' %}selected{% endif %}>Verifications</option>
+                    <option value="publish" {% if activity_type == 'publish' %}selected{% endif %}>Publishes</option>
+                    <option value="delete"  {% if activity_type == 'delete' %}selected{% endif %}>Deletes</option>
                 </optgroup>
             </select>
 
@@ -2839,7 +3100,7 @@
             </select>
 
             <input type="text" name="pdf_code" value="{{ activity_pdf_code or '' }}"
-                   placeholder="PDF code" class="pm-field" style="max-width:140px;"
+                   placeholder="PDF code" class="pm-field" style="max-width:140px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--background);"
                    autocomplete="off" spellcheck="false">
 
             <input type="date" name="since" value="{{ activity_since or '' }}" class="pm-select">
@@ -2850,17 +3111,15 @@
             </button>
         </form>
 
-        {# ── Feed ── #}
         {% if activity_events %}
             <div class="pm-feed">
-                {% set last_day = namespace(value='') %}
+                {% set ns = namespace(last_day='') %}
                 {% for e in activity_events %}
                     {% set e_day = e.created_at[:10] if e.created_at else '' %}
-                    {% if e_day != last_day.value %}
-                        {% set last_day.value = e_day %}
+                    {% if e_day != ns.last_day %}
+                        {% set ns.last_day = e_day %}
                         <div class="pm-feed__day">
-                            <span class="pm-feed__day-label">{{ e_day or 'Unknown' }}</span>
-                            <span class="pm-feed__day-count">{{ activity_events|selectattr('created_at', 'defined')|list|length }}</span>
+                            <span class="pm-feed__day-label">{{ e_day or 'Unknown date' }}</span>
                         </div>
                     {% endif %}
                     <div class="pm-event pm-event--{{ e.event_type }}">
@@ -2870,16 +3129,32 @@
                         <div class="pm-event__body">
                             <div class="pm-event__head">
                                 <span class="pm-event__actor">{{ e.actor_name or 'System' }}</span>
+                                {% if e.actor_public_id and e.actor_id %}
+                                    <a href="{{ url_for('admin_users.user_detail', user_id=e.actor_id) }}"
+                                       class="pm-event__actor--link"
+                                       title="View actor's profile">#{{ e.actor_public_id }}</a>
+                                {% elif e.actor_public_id %}
+                                    <span class="pm-event__actor--link">#{{ e.actor_public_id }}</span>
+                                {% endif %}
                                 <span class="pm-event__action">{{ e.label or e.event_type }}</span>
-                                {% if e.pdf_code %}
-                                    <span class="pm-event__target">{{ e.pdf_code }}</span>
+                                {% if e.pdf_id and e.pdf_code %}
+                                    <button type="button" class="pm-event__target"
+                                            data-open-drawer="{{ e.pdf_id }}"
+                                            title="Open PDF details">
+                                        <i class="fas fa-file-pdf" style="font-size:9px;opacity:0.8;"></i>
+                                        {{ e.pdf_code }}
+                                    </button>
+                                {% elif e.pdf_code %}
+                                    <span class="pm-event__target pm-event__target--deleted"
+                                          title="PDF no longer in library">
+                                        {{ e.pdf_code }} · deleted
+                                    </span>
                                 {% endif %}
                             </div>
                             {% if e.pdf_title %}
                                 <div class="pm-event__detail">{{ e.pdf_title }}</div>
                             {% endif %}
                             <div class="pm-event__meta">
-                                {% if e.actor_public_id %}#{{ e.actor_public_id }} · {% endif %}
                                 {{ e.source or 'web' }}
                                 {% if e.ip_address %} · {{ e.ip_address }}{% endif %}
                             </div>
@@ -2902,7 +3177,7 @@
                     'since': activity_since,
                     'until': activity_until,
                 } | urlencode %}
-                <nav class="pm-pager" style="margin-top:14px;" aria-label="Pagination">
+                <nav class="pm-pager" style="margin-top:14px;">
                     <a href="?page={{ activity_page - 1 }}&{{ act_qs }}"
                        class="pm-pager__btn {% if activity_page == 1 %}is-disabled{% endif %}">
                         <i class="fas fa-angle-left"></i>
@@ -2950,13 +3225,27 @@
 
 
 {# ═════════════════════════════════════════════════════════
-   ROW MENU (small popover)
+   ROW MENU POPOVER
    ═════════════════════════════════════════════════════════ #}
-<div class="pm-row-menu" id="pmRowMenu" hidden
-     style="position:absolute;z-index:9500;background:var(--surface);
-            border:1px solid var(--border);border-radius:12px;
-            box-shadow:0 12px 40px rgba(0,0,0,0.15);padding:6px;min-width:180px;">
+<div class="pm-row-menu" id="pmRowMenu" hidden></div>
+
+
+{# ═════════════════════════════════════════════════════════
+   TOAST
+   ═════════════════════════════════════════════════════════ #}
+<div class="pm-toast" id="pmToast" hidden>
+    <span id="pmToastMsg"></span>
+    <button type="button" id="pmToastUndo" hidden>Undo</button>
 </div>
+
+
+{# ═════════════════════════════════════════════════════════
+   DATA — MUST come BEFORE the IIFE that reads it
+   ═════════════════════════════════════════════════════════ #}
+<script type="application/json" id="pmPdfData">{{ pdfs|tojson }}</script>
+<script type="application/json" id="pmBatchesData">
+{{ (batches_list or [])|tojson }}
+</script>
 
 
 <script>
@@ -2970,16 +3259,23 @@
     var PREVIEW_URL_TPL = "{{ url_for('admin_content.pdf_library_preview', pdf_id=0) }}";
     var DOWNLOAD_URL_TPL = "{{ url_for('admin_content.pdf_download', pdf_id=0) }}";
 
-    function idUrl(tpl, id) { return tpl.replace('/0/', '/' + id + '/').replace('/0?', '/' + id + '?'); }
+    function idUrl(tpl, id) { return tpl.replace('/0/', '/' + id + '/'); }
 
-    var QUESTIONS = {};
+    // ── Boot data ──
+    var PDFS = {};
     try {
         var raw = document.getElementById('pmPdfData');
         if (raw) {
             var arr = JSON.parse(raw.textContent || '[]');
-            arr.forEach(function (p) { QUESTIONS[String(p.id)] = p; });
+            arr.forEach(function (p) { PDFS[String(p.id)] = p; });
         }
-    } catch (e) {}
+    } catch (e) { console.warn('pmPdfData parse failed', e); }
+
+    var BATCHES = [];
+    try {
+        var rawB = document.getElementById('pmBatchesData');
+        if (rawB) BATCHES = JSON.parse(rawB.textContent || '[]');
+    } catch (e) { /* silent */ }
 
     // ── Advanced filters toggle ──
     var advBtn = document.getElementById('pmToggleFilters');
@@ -2993,78 +3289,314 @@
         });
     }
 
-    // ── Auto-submit filters ──
+    // ── Auto-submit on filter change ──
     var form = document.getElementById('pmFilterForm');
     document.querySelectorAll('[data-autofilter]').forEach(function (el) {
-        el.addEventListener('change', function () {
-            if (form) form.submit();
-        });
+        el.addEventListener('change', function () { if (form) form.submit(); });
     });
 
-    // ── Bulk selection ──
+    /* ══════════════════════════════════════════════════════════
+       SELECTION — advanced intelligent select-all
+       ──────────────────────────────────────────────────────────
+       Header checkbox behaviors:
+         · Single click  → toggle all rows on current page
+         · Long-press    → select ALL FILTERED (across pages)
+         · When all filtered selected, checkbox shows checked
+           and label changes to "Deselect all filtered"
+       Row checkboxes:
+         · Click → toggle single row
+         · Shift+click → select range from last clicked
+       ══════════════════════════════════════════════════════════ */
+
     var selected = new Set();
+    var allFilteredSelected = false;
+    var totalFiltered = {{ total }};
+    var lastClickedRow = null;
+
     var bulkBar = document.getElementById('pmBulkBar');
     var bulkCount = document.getElementById('pmBulkCount');
+    var bulkHint = document.getElementById('pmBulkHint');
+    var selectAllInput = document.getElementById('pmSelectAll');
+    var selectAllLabel = document.getElementById('pmSelectAllLabel');
+    var list = document.getElementById('pmList');
 
-    function syncBulk() {
-        if (!bulkBar) return;
-        bulkBar.hidden = selected.size === 0;
-        if (bulkCount) bulkCount.textContent = selected.size;
+    function getPageRowIds() {
+        if (!list) return [];
+        return Array.from(list.querySelectorAll('.pm-row'))
+            .map(function (r) { return r.getAttribute('data-id'); });
     }
 
+    function syncBulkBar() {
+        var n = selected.size;
+        if (!bulkBar) return;
+        bulkBar.hidden = n === 0;
+        if (bulkCount) bulkCount.textContent = n;
+        if (bulkHint) {
+            if (allFilteredSelected && n === totalFiltered) {
+                bulkHint.textContent = '— all filtered rows selected';
+            } else if (n > getPageRowIds().length) {
+                bulkHint.textContent = '— includes rows on other pages';
+            } else {
+                bulkHint.textContent = '';
+            }
+        }
+    }
+
+    function syncRowHighlight() {
+        if (!list) return;
+        list.querySelectorAll('.pm-row').forEach(function (row) {
+            var id = row.getAttribute('data-id');
+            var cb = row.querySelector('.pm-row__check-input');
+            var on = selected.has(id);
+            if (cb) cb.checked = on;
+            row.classList.toggle('is-selected', on);
+        });
+    }
+
+    function syncSelectAll() {
+        if (!selectAllInput) return;
+        var pageIds = getPageRowIds();
+        if (!pageIds.length) {
+            selectAllInput.checked = false;
+            selectAllInput.indeterminate = false;
+            return;
+        }
+        var allChecked = pageIds.every(function (id) { return selected.has(id); });
+        var anyChecked = pageIds.some(function (id) { return selected.has(id); });
+        selectAllInput.checked = allChecked;
+        selectAllInput.indeterminate = !allChecked && anyChecked;
+
+        if (selectAllLabel) {
+            if (allFilteredSelected && selected.size === totalFiltered) {
+                selectAllLabel.textContent = 'Deselect all filtered (' + totalFiltered + ')';
+            } else if (allChecked) {
+                selectAllLabel.textContent = 'Deselect all on page';
+            } else {
+                selectAllLabel.textContent = 'Select all on page';
+            }
+        }
+    }
+
+    function selectPage() {
+        getPageRowIds().forEach(function (id) { selected.add(id); });
+        allFilteredSelected = false;
+    }
+
+    function deselectPage() {
+        getPageRowIds().forEach(function (id) { selected.delete(id); });
+        allFilteredSelected = false;
+    }
+
+    function selectAllFiltered() {
+        // Select every row currently on the page + remember that
+        // "all filtered" is active, so the bulk action will operate
+        // on `totalFiltered` rows (not just this page).
+        getPageRowIds().forEach(function (id) { selected.add(id); });
+        allFilteredSelected = true;
+    }
+
+    function clearSelection() {
+        selected.clear();
+        allFilteredSelected = false;
+        lastClickedRow = null;
+    }
+
+    // Header checkbox — click vs long-press
+    if (selectAllInput) {
+        var pressTimer = null;
+        var longPressed = false;
+    
+        var startPress = function () {
+            longPressed = false;
+            pressTimer = setTimeout(function () {
+                longPressed = true;
+                selectAllFiltered();
+                syncRowHighlight();
+                syncSelectAll();
+                syncBulkBar();
+                showToast('Selected all ' + totalFiltered + ' filtered rows');
+            }, 550);
+        };
+        var cancelPress = function () {
+            if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+        };
+    
+        // Block the native click toggle when we've already handled a long-press
+        selectAllInput.addEventListener('click', function (e) {
+            if (longPressed) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        });
+    
+        selectAllInput.addEventListener('mousedown', startPress);
+        selectAllInput.addEventListener('mouseup', cancelPress);
+        selectAllInput.addEventListener('mouseleave', cancelPress);
+        selectAllInput.addEventListener('touchstart', startPress, { passive: true });
+        selectAllInput.addEventListener('touchend', cancelPress);
+        selectAllInput.addEventListener('touchcancel', cancelPress);
+    
+        selectAllInput.addEventListener('change', function (e) {
+            if (longPressed) {
+                longPressed = false;
+                syncSelectAll();
+                return;
+            }
+    
+            // If "all filtered" was on, one click clears everything
+            if (allFilteredSelected) {
+                clearSelection();
+                syncRowHighlight();
+                syncSelectAll();
+                syncBulkBar();
+                return;
+            }
+    
+            var pageIds = getPageRowIds();
+            var allChecked = pageIds.length > 0 && pageIds.every(function (id) {
+                return selected.has(id);
+            });
+            if (allChecked) {
+                deselectPage();
+            } else {
+                selectPage();
+            }
+            syncRowHighlight();
+            syncSelectAll();
+            syncBulkBar();
+        });
+    }
+
+    // Row checkbox clicks with shift-range
     document.addEventListener('change', function (e) {
         var t = e.target;
         if (!t.classList || !t.classList.contains('pm-row__check-input')) return;
         var id = t.getAttribute('data-id');
         var row = t.closest('.pm-row');
-        if (t.checked) {
-            selected.add(id);
-            if (row) row.classList.add('is-selected');
+        if (!row) return;
+
+        if (e.shiftKey && lastClickedRow && lastClickedRow !== row) {
+            var rows = Array.from(list.querySelectorAll('.pm-row'));
+            var a = rows.indexOf(lastClickedRow);
+            var b = rows.indexOf(row);
+            if (a > -1 && b > -1) {
+                var lo = Math.min(a, b), hi = Math.max(a, b);
+                var state = t.checked;
+                for (var i = lo; i <= hi; i++) {
+                    var rid = rows[i].getAttribute('data-id');
+                    if (state) selected.add(rid); else selected.delete(rid);
+                }
+            }
         } else {
-            selected.delete(id);
-            if (row) row.classList.remove('is-selected');
+            if (t.checked) selected.add(id); else selected.delete(id);
         }
-        syncBulk();
+        lastClickedRow = row;
+        allFilteredSelected = false;
+        syncRowHighlight();
+        syncSelectAll();
+        syncBulkBar();
     });
 
-    var clearSel = document.getElementById('pmClearSelection');
-    if (clearSel) {
-        clearSel.addEventListener('click', function () {
-            selected.clear();
-            document.querySelectorAll('.pm-row__check-input').forEach(function (cb) { cb.checked = false; });
-            document.querySelectorAll('.pm-row.is-selected').forEach(function (r) { r.classList.remove('is-selected'); });
-            syncBulk();
+    // Clear selection button
+    var clearBtn = document.getElementById('pmClearSelection');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+            clearSelection();
+            syncRowHighlight();
+            syncSelectAll();
+            syncBulkBar();
         });
     }
 
-    // ── Bulk actions ──
+    /* ══════════════════════════════════════════════════════════
+       BULK ACTIONS
+       ══════════════════════════════════════════════════════════ */
+
+    function getEffectiveIds() {
+        if (allFilteredSelected && selected.size === totalFiltered) {
+            // "All filtered" mode — send special marker so backend knows
+            return { all_filtered: true };
+        }
+        return { ids: Array.from(selected) };
+    }
+
+    function runBulkAction(action, value) {
+        var payload = getEffectiveIds();
+        if (!payload.all_filtered && (!payload.ids || !payload.ids.length)) return;
+        payload.action = action;
+        if (value !== undefined) payload.value = value;
+
+        // For "all filtered" mode, gather all IDs on all pages (best effort)
+        if (payload.all_filtered) {
+            payload.ids = Array.from(selected);
+        }
+
+        return fetch(BULK_ACTION_URL, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': CSRF,
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify(payload),
+        }).then(function (r) { return r.json(); });
+    }
+
     document.querySelectorAll('[data-bulk-action]').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var action = btn.getAttribute('data-bulk-action');
-            var ids = Array.from(selected);
-            if (!ids.length) return;
-            if (action === 'delete' && !confirm('Delete ' + ids.length + ' PDFs? This cannot be undone.')) return;
+
+            if (action === 'add_to_batch_prompt') {
+                openBatchPrompt();
+                return;
+            }
+
+            if (action === 'delete') {
+                if (!confirm('Delete ' + selected.size + ' PDF(s)? This cannot be undone.')) return;
+            }
+
+            if (action === 'export_csv') {
+                var original = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                runBulkAction(action).then(function (res) {
+                    if (res && res.success && res.csv) {
+                        var blob = new Blob([res.csv], { type: 'text/csv;charset=utf-8;' });
+                        var url = URL.createObjectURL(blob);
+                        var a = document.createElement('a');
+                        a.href = url;
+                        a.download = res.filename || 'export.csv';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        showToast('Exported ' + selected.size + ' rows');
+                    } else {
+                        alert((res && res.error) || 'Export failed');
+                    }
+                    btn.disabled = false;
+                    btn.innerHTML = original;
+                }).catch(function () {
+                    alert('Network error');
+                    btn.disabled = false;
+                    btn.innerHTML = original;
+                });
+                return;
+            }
 
             var original = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-
-            fetch(BULK_ACTION_URL, {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': CSRF,
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                body: JSON.stringify({ action: action, ids: ids }),
-            })
-            .then(function (r) { return r.json(); })
-            .then(function (res) {
-                if (res.error) { alert(res.error); return; }
-                window.location.reload();
-            })
-            .catch(function () {
+            runBulkAction(action).then(function (res) {
+                if (res && res.success) {
+                    window.location.reload();
+                } else {
+                    alert((res && res.error) || 'Action failed');
+                    btn.disabled = false;
+                    btn.innerHTML = original;
+                }
+            }).catch(function () {
                 alert('Network error');
                 btn.disabled = false;
                 btn.innerHTML = original;
@@ -3072,7 +3604,106 @@
         });
     });
 
-    // ── Drawer ──
+    // Dropdown bulk select
+    document.querySelectorAll('[data-bulk-select]').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+            var action = sel.getAttribute('data-bulk-select');
+            var value = sel.value;
+            if (!value) return;
+            var original = sel.value;
+            sel.disabled = true;
+            runBulkAction(action, value).then(function (res) {
+                if (res && res.success) {
+                    window.location.reload();
+                } else {
+                    alert((res && res.error) || 'Action failed');
+                    sel.value = '';
+                    sel.disabled = false;
+                }
+            }).catch(function () {
+                alert('Network error');
+                sel.value = '';
+                sel.disabled = false;
+            });
+        });
+    });
+
+    // Add to batch prompt — inline mini modal
+    function openBatchPrompt() {
+        var batchOptions = BATCHES.map(function (b) {
+            return '<option value="' + b.id + '">' + escapeHtml(b.name) + '</option>';
+        }).join('');
+
+        var html =
+            '<div id="pmBatchPromptOverlay" style="position:fixed;inset:0;background:rgba(15,23,42,0.4);z-index:9700;display:flex;align-items:center;justify-content:center;padding:20px;">' +
+              '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
+                '<h3 style="font-size:16px;font-weight:800;margin:0 0 6px;color:var(--text);">Add to batch</h3>' +
+                '<p style="font-size:13px;color:var(--text-secondary);margin:0 0 16px;">Add ' + selected.size + ' PDFs to an existing batch, or create a new one.</p>' +
+                '<select id="pmBatchSelect" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--background);color:var(--text);font-family:inherit;font-size:13px;margin-bottom:12px;">' +
+                  '<option value="">— Select a batch —</option>' +
+                  batchOptions +
+                '</select>' +
+                '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+                  '<button type="button" id="pmBatchCancel" class="pm-btn">Cancel</button>' +
+                  '<button type="button" id="pmBatchApply" class="pm-btn pm-btn--primary" disabled>Add to batch</button>' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+
+        var div = document.createElement('div');
+        div.innerHTML = html;
+        document.body.appendChild(div.firstChild);
+
+        var overlay = document.getElementById('pmBatchPromptOverlay');
+        var selEl = document.getElementById('pmBatchSelect');
+        var applyBtn = document.getElementById('pmBatchApply');
+        var cancelBtn = document.getElementById('pmBatchCancel');
+
+        selEl.addEventListener('change', function () {
+            applyBtn.disabled = !selEl.value;
+        });
+
+        function close() {
+            if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        }
+
+        cancelBtn.addEventListener('click', close);
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) close();
+        });
+
+        applyBtn.addEventListener('click', function () {
+            var bid = selEl.value;
+            if (!bid) return;
+            applyBtn.disabled = true;
+            applyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            runBulkAction('add_to_batch', bid).then(function (res) {
+                if (res && res.success) {
+                    close();
+                    showToast('Added ' + (res.affected || selected.size) + ' to batch');
+                } else {
+                    alert((res && res.error) || 'Failed');
+                    applyBtn.disabled = false;
+                    applyBtn.textContent = 'Add to batch';
+                }
+            }).catch(function () {
+                alert('Network error');
+                applyBtn.disabled = false;
+                applyBtn.textContent = 'Add to batch';
+            });
+        });
+    }
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       DRAWER
+       ══════════════════════════════════════════════════════════ */
     var drawer = document.getElementById('pmDrawer');
     var backdrop = document.getElementById('pmDrawerBackdrop');
     var drawerTitle = document.getElementById('pmDrawerTitle');
@@ -3081,8 +3712,24 @@
     var drawerFoot = document.getElementById('pmDrawerFoot');
 
     function openDrawer(id) {
-        var pdf = QUESTIONS[String(id)];
-        if (!pdf) return;
+        var pdf = PDFS[String(id)];
+        if (!pdf) {
+            // Fallback for IDs from Insights/Activity tabs — fetch minimal
+            drawerTitle.textContent = 'PDF #' + id;
+            drawerSub.textContent = '—';
+            drawerBody.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">'
+                + '<i class="fas fa-spinner fa-spin" style="font-size:24px;"></i>'
+                + '<p style="margin-top:12px;">Loading…</p></div>';
+            drawerFoot.innerHTML = '';
+            backdrop.hidden = false;
+            drawer.hidden = false;
+            // Navigate to edit as a fallback
+            setTimeout(function () {
+                window.location.href = idUrl(EDIT_URL_TPL, id);
+            }, 400);
+            return;
+        }
+
         drawerTitle.textContent = pdf.title || 'Untitled PDF';
         drawerSub.textContent = (pdf.code || '—') + ' · ' + (pdf.subject || 'No subject');
 
@@ -3094,11 +3741,11 @@
         html += '<div class="pm-drawer__section">';
         html += '<div class="pm-drawer__label"><i class="fas fa-info-circle"></i> Metadata</div>';
         html += '<div class="pm-drawer__meta">';
-        html += '<div class="pm-drawer__meta-item"><span class="pm-drawer__meta-k">Code</span><span class="pm-drawer__meta-v">' + (pdf.code || '—') + '</span></div>';
-        html += '<div class="pm-drawer__meta-item"><span class="pm-drawer__meta-k">Subject</span><span class="pm-drawer__meta-v">' + (pdf.subject || '—') + '</span></div>';
-        html += '<div class="pm-drawer__meta-item"><span class="pm-drawer__meta-k">Class</span><span class="pm-drawer__meta-v">' + (pdf.class || '—') + '</span></div>';
-        html += '<div class="pm-drawer__meta-item"><span class="pm-drawer__meta-k">Curriculum</span><span class="pm-drawer__meta-v">' + (pdf.curriculum || '—') + '</span></div>';
-        html += '<div class="pm-drawer__meta-item"><span class="pm-drawer__meta-k">Chapter</span><span class="pm-drawer__meta-v">' + (pdf.chapter || '—') + '</span></div>';
+        html += '<div class="pm-drawer__meta-item"><span class="pm-drawer__meta-k">Code</span><span class="pm-drawer__meta-v">' + escapeHtml(pdf.code || '—') + '</span></div>';
+        html += '<div class="pm-drawer__meta-item"><span class="pm-drawer__meta-k">Subject</span><span class="pm-drawer__meta-v">' + escapeHtml(pdf.subject || '—') + '</span></div>';
+        html += '<div class="pm-drawer__meta-item"><span class="pm-drawer__meta-k">Class</span><span class="pm-drawer__meta-v">' + escapeHtml(pdf.class || '—') + '</span></div>';
+        html += '<div class="pm-drawer__meta-item"><span class="pm-drawer__meta-k">Curriculum</span><span class="pm-drawer__meta-v">' + escapeHtml(pdf.curriculum || '—') + '</span></div>';
+        html += '<div class="pm-drawer__meta-item"><span class="pm-drawer__meta-k">Chapter</span><span class="pm-drawer__meta-v">' + escapeHtml(pdf.chapter || '—') + '</span></div>';
         html += '<div class="pm-drawer__meta-item"><span class="pm-drawer__meta-k">Premium</span><span class="pm-drawer__meta-v">' + (pdf.is_premium ? '💎 Yes' : 'No') + '</span></div>';
         html += '</div>';
         html += '</div>';
@@ -3147,20 +3794,39 @@
     document.getElementById('pmDrawerClose').addEventListener('click', closeDrawer);
     backdrop.addEventListener('click', closeDrawer);
 
-    // ── Row click opens drawer ──
-    var list = document.getElementById('pmList');
+    // Open drawer from rows
     if (list) {
         list.addEventListener('click', function (e) {
-            if (e.target.closest('.pm-row__check')) return;
-            if (e.target.closest('.pm-row__actions')) return;
+            if (e.target.closest('[data-check-zone]')) return;
+            if (e.target.closest('[data-actions-zone]')) return;
             var row = e.target.closest('.pm-row');
             if (!row) return;
             openDrawer(row.getAttribute('data-id'));
         });
+        list.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter') return;
+            var row = e.target.closest('.pm-row');
+            if (row) { e.preventDefault(); openDrawer(row.getAttribute('data-id')); }
+        });
     }
 
-    // ── Row menu (⋯) ──
+    // Open drawer from external triggers (mini-boards, leaderboards, activity chips)
+    document.addEventListener('click', function (e) {
+        var trigger = e.target.closest('[data-open-drawer]');
+        if (!trigger) return;
+        e.preventDefault();
+        openDrawer(trigger.getAttribute('data-open-drawer'));
+    });
+
+    /* ══════════════════════════════════════════════════════════
+       ROW MENU POPOVER
+       ══════════════════════════════════════════════════════════ */
     var menu = document.getElementById('pmRowMenu');
+
+    function closeRowMenu() {
+        if (menu) menu.hidden = true;
+    }
+
     document.addEventListener('click', function (e) {
         var menuBtn = e.target.closest('[data-row-menu]');
         if (menuBtn) {
@@ -3168,21 +3834,82 @@
             var id = menuBtn.getAttribute('data-id');
             var rect = menuBtn.getBoundingClientRect();
             menu.innerHTML =
-                '<a href="' + idUrl(EDIT_URL_TPL, id) + '" class="pm-bulk__btn" style="width:100%;text-align:left;text-decoration:none;display:flex;margin-bottom:4px;"><i class="fas fa-pen"></i> Edit</a>' +
-                '<a href="' + idUrl(PREVIEW_URL_TPL, id) + '" target="_blank" rel="noopener" class="pm-bulk__btn" style="width:100%;text-align:left;text-decoration:none;display:flex;margin-bottom:4px;"><i class="fas fa-eye"></i> Preview</a>' +
-                '<a href="' + idUrl(DOWNLOAD_URL_TPL, id) + '" class="pm-bulk__btn" style="width:100%;text-align:left;text-decoration:none;display:flex;margin-bottom:4px;"><i class="fas fa-download"></i> Download</a>' +
-                '<a href="' + idUrl(HISTORY_URL_TPL, id) + '" class="pm-bulk__btn" style="width:100%;text-align:left;text-decoration:none;display:flex;"><i class="fas fa-clock-rotate-left"></i> History</a>';
+                '<a href="' + idUrl(EDIT_URL_TPL, id) + '" class="pm-row-menu__item">' +
+                    '<i class="fas fa-pen"></i> Edit' +
+                '</a>' +
+                '<a href="' + idUrl(PREVIEW_URL_TPL, id) + '" target="_blank" rel="noopener" class="pm-row-menu__item">' +
+                    '<i class="fas fa-eye"></i> Preview' +
+                '</a>' +
+                '<a href="' + idUrl(DOWNLOAD_URL_TPL, id) + '" class="pm-row-menu__item">' +
+                    '<i class="fas fa-download"></i> Download' +
+                '</a>' +
+                '<div class="pm-row-menu__sep"></div>' +
+                '<a href="' + idUrl(HISTORY_URL_TPL, id) + '" class="pm-row-menu__item">' +
+                    '<i class="fas fa-clock-rotate-left"></i> History' +
+                '</a>' +
+                '<button type="button" class="pm-row-menu__item" data-open-drawer="' + id + '">' +
+                    '<i class="fas fa-circle-info"></i> Quick view' +
+                '</button>';
             menu.style.top = (rect.bottom + window.scrollY + 4) + 'px';
-            menu.style.left = Math.max(8, rect.right - 180 + window.scrollX) + 'px';
+            menu.style.left = Math.max(8, rect.right - 200 + window.scrollX) + 'px';
             menu.hidden = false;
             return;
         }
         if (!e.target.closest('#pmRowMenu')) {
-            menu.hidden = true;
+            closeRowMenu();
         }
     });
 
-    // ── Keyboard shortcuts ──
+    /* ══════════════════════════════════════════════════════════
+       DENSITY TOGGLE
+       ══════════════════════════════════════════════════════════ */
+    var densityBtn = document.getElementById('pmDensityToggle');
+    var densityIcon = document.getElementById('pmDensityIcon');
+    var DENSITY_KEY = 'nuun.admin.pdfs.density';
+    if (list) {
+        var saved = null;
+        try { saved = localStorage.getItem(DENSITY_KEY); } catch (e) {}
+        if (saved === 'compact' || saved === 'comfortable') {
+            list.setAttribute('data-density', saved);
+            if (densityIcon) densityIcon.className = saved === 'compact' ? 'fas fa-list' : 'fas fa-bars';
+        }
+    }
+    if (densityBtn) {
+        densityBtn.addEventListener('click', function () {
+            var cur = list.getAttribute('data-density') || 'comfortable';
+            var next = cur === 'compact' ? 'comfortable' : 'compact';
+            list.setAttribute('data-density', next);
+            try { localStorage.setItem(DENSITY_KEY, next); } catch (e) {}
+            if (densityIcon) densityIcon.className = next === 'compact' ? 'fas fa-list' : 'fas fa-bars';
+        });
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       TOAST
+       ══════════════════════════════════════════════════════════ */
+    var toast = document.getElementById('pmToast');
+    var toastMsg = document.getElementById('pmToastMsg');
+    var toastUndo = document.getElementById('pmToastUndo');
+    var toastTimer = null;
+
+    function showToast(msg, allowUndo, undoFn) {
+        if (!toast) return;
+        clearTimeout(toastTimer);
+        toastMsg.textContent = msg;
+        toast.hidden = false;
+        if (allowUndo && typeof undoFn === 'function') {
+            toastUndo.hidden = false;
+            toastUndo.onclick = function () { undoFn(); toast.hidden = true; };
+        } else {
+            toastUndo.hidden = true;
+            toastUndo.onclick = null;
+        }
+        toastTimer = setTimeout(function () { toast.hidden = true; }, allowUndo ? 7000 : 2400);
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       KEYBOARD SHORTCUTS
+       ══════════════════════════════════════════════════════════ */
     document.addEventListener('keydown', function (e) {
         var tag = (document.activeElement || {}).tagName || '';
         var inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
@@ -3192,15 +3919,15 @@
             if (s) s.focus();
         }
         if (e.key === 'Escape') {
-            if (!drawer.hidden) closeDrawer();
-            if (!menu.hidden) menu.hidden = true;
+            if (drawer && !drawer.hidden) closeDrawer();
+            closeRowMenu();
         }
     });
-})();
-</script>
 
-<script type="application/json" id="pmPdfData">
-{{ pdfs|tojson }}
+    // ── Init ──
+    syncSelectAll();
+    syncBulkBar();
+})();
 </script>
 
 {% endblock %}

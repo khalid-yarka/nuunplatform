@@ -70,7 +70,8 @@
             font-size:13px;color:#92400E;line-height:1.6;">
     <i class="fas fa-info-circle"></i>
     To fix a missing code: either upload a PDF with that code via
-    <a href="{{ url_for('pdf_admin.dashboard') }}" style="color:#92400E;font-weight:700;">pending intake</a>,
+    <a href="{{ url_for('admin_content.pdfs', tab='library', status='pending') }}"
+       style="color:#92400E;font-weight:700;">pending intake</a>,
     or edit the questions to remove the broken link.
 </div>
 
