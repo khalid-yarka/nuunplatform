@@ -597,6 +597,162 @@ def enforce_maintenance_mode():
 
     return redirect(url_for('maintenance_page'))
 
+# ============================================================
+# SO-LOCATION LOCKDOWN (temporary — see SO_LOCKDOWN.md)
+# ============================================================
+# Users whose students.location is 'SO' cannot reach Practice
+# (/quiz/*) or Competitions (/live-quiz/*).
+#
+# Bypass rules (in order):
+#   1. Kill switch off           → no-op
+#   2. Static, webhook, whitelist → passthrough
+#   3. Not authenticated          → passthrough (login flow decides)
+#   4. is_admin                   → passthrough
+#   5. is_impersonating           → passthrough (admin preview)
+#   6. Location != 'SO'           → passthrough
+#   7. Path not gated             → passthrough
+#
+# Otherwise:
+#   · HTML request → 302 → /so-unavailable
+#   · JSON/AJAX    → 503 with {error: 'so_lockdown', message: ...}
+#
+# Removal: delete this block, delete the /so-unavailable route
+# (below it), delete the SO_LOCKDOWN_ENABLED block from config.py,
+# delete the session['location'] line from refresh_user_state_if_needed,
+# and delete templates/so_unavailable.html.
+# See SO_LOCKDOWN.md for the full reversal procedure.
+# ============================================================
+
+_SO_GATED_PREFIXES = ('/quiz', '/live-quiz')
+
+_SO_ALWAYS_ALLOWED = frozenset({
+    '/login',
+    '/logout',
+    '/auth/check-phone',
+    '/favicon.ico',
+    '/health',
+    '/maintenance',
+    '/so-unavailable',
+    '/daily/trigger',
+})
+
+
+def _get_session_location():
+    """
+    Return the current user's location, upper-cased.
+
+    Cached in the session, populated by refresh_user_state_if_needed.
+    Lazily fetched from the DB on first read if the session has not
+    been populated yet (e.g. a user who logged in before this code
+    shipped).
+
+    Fails open — returns '' on any error — so a DB hiccup never
+    locks a user out of the platform.
+    """
+    if 'location' in session:
+        return (session.get('location') or '').strip().upper()
+
+    loc = ''
+    try:
+        row = execute_with_retry(
+            "SELECT location FROM students WHERE id = ?",
+            (session['user_id'],),
+        ).fetchone()
+        loc = ((row['location'] if row else '') or '').strip().upper()
+    except Exception as e:
+        try:
+            logger.warning(f"so.lockdown.location_lookup_failed: {e}")
+        except Exception:
+            pass
+        loc = ''
+
+    session['location'] = loc
+    session.modified = True
+    return loc
+
+
+@app.before_request
+def enforce_so_lockdown():
+    """
+    Redirect SO-location users away from Practice and Competitions.
+    Runs after enforce_maintenance_mode, before CSRF and session
+    version checks. See SO_LOCKDOWN.md for the full policy.
+    """
+    # ── 1. Kill switch ──
+    if not getattr(Config, 'SO_LOCKDOWN_ENABLED', False):
+        return None
+
+    path = request.path or '/'
+
+    # ── 2. Always-allowed paths ──
+    if path.startswith('/static/'):
+        return None
+    if path in _SO_ALWAYS_ALLOWED:
+        return None
+    if path.startswith('/webhook/') or path.startswith('/telegram/'):
+        return None
+
+    # ── 3. Not authenticated — login flow decides ──
+    if 'user_id' not in session:
+        return None
+
+    # ── 4. Admin bypass (any admin, not just super) ──
+    if session.get('is_admin'):
+        return None
+
+    # ── 5. Impersonation bypass (admins previewing the SO view) ──
+    if session.get('is_impersonating'):
+        return None
+
+    # ── 6. Only SO users are gated ──
+    if _get_session_location() != 'SO':
+        return None
+
+    # ── 7. Is this path gated? ──
+    gated = False
+    for prefix in _SO_GATED_PREFIXES:
+        if path == prefix or path.startswith(prefix + '/'):
+            gated = True
+            break
+    if not gated:
+        return None
+
+    # ── Log the block (one line per request) ──
+    try:
+        logger.info(
+            f"so.lockdown.blocked user={session.get('user_id')} "
+            f"loc=SO path={path}"
+        )
+    except Exception:
+        pass
+
+    # ── Respond: JSON for API/AJAX, redirect for HTML ──
+    wants_json = (
+        path.startswith('/api/')
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or request.accept_mimetypes.best == 'application/json'
+    )
+    if wants_json:
+        return jsonify({
+            'error': 'so_lockdown',
+            'message': (
+                'Tababarka iyo Tartannada hadda lama heli karo '
+                'isticmaalayaasha Soomaaliya.'
+            ),
+        }), 503
+
+    return redirect(url_for('so_unavailable_page'))
+
+
+@app.route('/so-unavailable', endpoint='so_unavailable_page')
+def so_unavailable_page():
+    """
+    Landing page for SO users who hit a locked feature.
+    Somali-only by design — no i18n lookup.
+    """
+    return render_template('so_unavailable.html'), 200
+
+  
 # ============================================
 # CSRF PROTECTION
 # ============================================
@@ -664,6 +820,7 @@ def refresh_user_state_if_needed():
             session['session_version'] = int(student.get('session_version', 0) or 0)
             session['user_state_loaded_at'] = time.time()
             session['created_at'] = student.get('created_at')
+            session['location'] = (student.get('location') or '').strip().upper()
             try:
                 session['first_discount_used'] = int(student.get('first_discount_used') or 0)
             except (TypeError, ValueError):

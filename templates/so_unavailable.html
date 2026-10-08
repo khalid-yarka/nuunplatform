@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="so">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Tababarka iyo Tartannada Waa La Joojiyay — NuunPlatform</title>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: var(--background);
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text);
+        }
+        .so-card {
+            max-width: 560px;
+            width: 100%;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 48px 40px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.10);
+            position: relative;
+            overflow: hidden;
+        }
+        .so-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #F59E0B, #FBBF24);
+        }
+        .so-logo {
+            height: 40px;
+            width: auto;
+            margin-bottom: 24px;
+            opacity: 0.85;
+        }
+        .so-icon {
+            font-size: 72px;
+            display: block;
+            margin-bottom: 12px;
+            line-height: 1;
+        }
+        .so-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text);
+            margin: 0 0 10px 0;
+            letter-spacing: -0.3px;
+            line-height: 1.25;
+        }
+        .so-subtitle {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            background: #FEF3C7;
+            color: #92400E;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            margin-bottom: 22px;
+        }
+        [data-theme="dark"] .so-subtitle {
+            background: #3A2E1A;
+            color: #FCD34D;
+        }
+        .so-body {
+            font-size: 15px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin: 0 auto 18px auto;
+            max-width: 440px;
+        }
+        .so-note {
+            font-size: 13.5px;
+            color: var(--text-secondary);
+            line-height: 1.65;
+            margin: 0 auto 26px auto;
+            max-width: 440px;
+            padding: 14px 18px;
+            background: var(--background);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            text-align: left;
+        }
+        .so-note strong {
+            color: var(--text);
+            display: block;
+            margin-bottom: 6px;
+            font-size: 12.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .so-note i {
+            margin-right: 6px;
+            color: #F59E0B;
+        }
+        .so-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 30px;
+            background: var(--primary);
+            color: #ffffff;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 700;
+            text-decoration: none;
+            box-shadow: 0 4px 16px rgba(255, 49, 56, 0.28);
+            transition: transform 0.2s ease, box-shadow 0.2s ease,
+                        background 0.2s ease;
+        }
+        .so-cta:hover {
+            background: var(--primary-hover);
+            color: #ffffff;
+            text-decoration: none;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(255, 49, 56, 0.38);
+        }
+        .so-cta i { font-size: 14px; }
+        .so-footer {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 28px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-light);
+            line-height: 1.6;
+        }
+        @media (max-width: 480px) {
+            .so-card { padding: 36px 24px; }
+            .so-icon { font-size: 58px; }
+            .so-title { font-size: 20px; }
+            .so-body { font-size: 14px; }
+            .so-note { font-size: 12.5px; padding: 12px 14px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="so-card">
+        <img src="{{ url_for('static', filename='images/logo.png') }}"
+             alt="NuunPlatform" class="so-logo" />
+
+        <span class="so-icon" aria-hidden="true">⏳</span>
+
+        <h1 class="so-title">Tababarka iyo Tartannada Waa La Joojiyay</h1>
+
+        <div class="so-subtitle">
+            <i class="fas fa-clock"></i>
+            Si ku meel gaar ah
+        </div>
+
+        <p class="so-body">
+            Tababarka iyo Tartannada hadda lama heli karo isticmaalayaasha
+            Soomaaliya. Waan ka xunnahay cakanaanta — waxaan si dhaqso ah
+            u soo celin doonaa.
+        </p>
+
+        <div class="so-note">
+            <strong><i class="fas fa-check-circle"></i>Astaamaha kale</strong>
+            PDF-yada, Group-yada, Diiradda, Taariikhda, iyo dhammaan
+            astaamaha kale ayaa si caadi ah u shaqaynaya.
+        </div>
+
+        <a href="{{ url_for('dashboard.home') }}" class="so-cta">
+            <i class="fas fa-arrow-left"></i>
+            Ku noqo Dashboard-ka
+        </a>
+
+        <div class="so-footer">
+            Waad ku mahadsan tahay samirkaaga.
+        </div>
+    </div>
+</body>
+</html>

@@ -260,6 +260,20 @@ class Config:
     FLASK_DEBUG = DEBUG
     PORT = int(os.getenv('PORT', 5000))
 
+
+
+    # ============================================
+    # TEMPORARY POLICY GATES
+    # ============================================
+    # SO-location lockdown: when true, users whose students.location
+    # is 'SO' cannot reach Practice (/quiz/*) or Competitions
+    # (/live-quiz/*). Admins and impersonators bypass.
+    #
+    # Flip to false in .env to lift the restriction without touching
+    # any code:
+    #     SO_LOCKDOWN_ENABLED=false
+    SO_LOCKDOWN_ENABLED = _env_bool('SO_LOCKDOWN_ENABLED', 'true')
+  
     # ============================================
     # DIRECTORY CREATION & VALIDATION
     # ============================================
