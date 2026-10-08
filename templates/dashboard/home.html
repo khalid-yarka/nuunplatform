@@ -5,6 +5,7 @@
 
 {% block dashboard_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard-home.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/social-marquee.css') }}" />
 {% endblock %}
 
 {% block dashboard_content %}
@@ -136,7 +137,7 @@
             {% if total_points > 0 %}
                 {{ _('home.hero.earned_xp', n=total_points) }}
                 {% if xp_to_next > 0 %}
-                    {{ _('home.hero.to_next_level', n=xp_to_next, level=level + 1) }}
+                    {{ _('home.hero.to_next_level', n=next_level, level=level + 1) }}
                 {% endif %}
             {% else %}
                 {{ _('home.hero.ready') }}
@@ -275,6 +276,11 @@
     </button>
 </div>
 {% endif %}
+
+{# ============================================
+   SOCIAL MARQUEE
+   ============================================ #}
+{% include 'partials/_social_marquee.html' %}
 
 {# ============================================
    MASTERY + CHART

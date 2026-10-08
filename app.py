@@ -1506,8 +1506,14 @@ def utility_processor():
     social_whatsapp = f"https://wa.me/{_sa_phone}" if _sa_phone else ''
     social_tiktok   = Config.TIKTOK_URL or ''
     social_youtube  = Config.YOUTUBE_URL or ''
-
+    
     whatsapp_group_url = Config.WHATSAPP_GROUP_URL or ''
+    
+    # Telegram public links for the social marquee.
+    _tg_user = (Config.TELEGRAM_BOT_USERNAME or '').strip().lstrip('@')
+    social_telegram_bot     = f"https://t.me/{_tg_user}" if _tg_user else ''
+    social_telegram_channel = (Config.TELEGRAM_CHANNEL_URL or '').strip()
+    social_telegram_group   = (Config.TELEGRAM_GROUP_URL   or '').strip()
 
     from services.admin.capabilities import admin_can as _admin_can
     from services.admin.roles import is_any_admin as _is_any_admin
@@ -1549,6 +1555,9 @@ def utility_processor():
         'social_whatsapp': social_whatsapp,
         'social_tiktok': social_tiktok,
         'social_youtube': social_youtube,
+        'social_telegram_bot': social_telegram_bot,
+        'social_telegram_channel': social_telegram_channel,
+        'social_telegram_group': social_telegram_group,
         'whatsapp_group_url': whatsapp_group_url,
         'push_enabled': Config.PUSH_ENABLED,
         'discount_chip': discount_chip,

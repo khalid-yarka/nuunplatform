@@ -1,0 +1,557 @@
+/* ============================================
+   SOCIAL MARQUEE
+   ============================================
+   Loaded only on /home. Reuses .dh-card and .dh-card-head
+   primitives from dashboard-home.css.
+
+   Design principles
+   -----------------
+   · Surface stays quiet — soft neutral with a light brand tint.
+   · Foreground icon tile carries the platform brand (WHICH).
+   · Background ghost icon carries the type (WHAT) — the same
+     glyph used in the badge pill, enlarged and faded.
+   · Badge pill names the type in words.
+   · Hover blooms a soft brand glow — attractive, not loud.
+   ============================================ */
+
+/* ============================================
+   1. CARD SHELL
+   ============================================ */
+.dh-social-marquee {
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 22px;
+    background:
+        linear-gradient(
+            90deg,
+            rgba(37, 211, 102, 0.030) 0%,
+            rgba(55, 174, 226, 0.030) 55%,
+            rgba(0, 0, 0, 0.012) 100%
+        ),
+        var(--surface);
+}
+
+/* Top-edge identity stripe — WhatsApp → Telegram → TikTok. */
+.dh-social-marquee::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(
+        90deg,
+        #25D366 0%,
+        #37AEE2 40%,
+        #37AEE2 62%,
+        #2B2B2B 100%
+    );
+    z-index: 3;
+    pointer-events: none;
+}
+
+.dh-social-marquee .dh-card-head {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 15px 20px 14px;
+    background: transparent;
+    border-bottom: 1px solid var(--border);
+}
+
+.dh-social-marquee .dh-card-head h3 {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.25px;
+    line-height: 1.35;
+    margin: 0;
+    min-width: 0;
+}
+
+/* Slow pulsing live dot — decorative, marks the strip active. */
+.dh-social-marquee__pulse {
+    position: relative;
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10B981;
+    flex-shrink: 0;
+}
+
+.dh-social-marquee__pulse::before,
+.dh-social-marquee__pulse::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: #10B981;
+    animation: dhSocialPulse 3.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.dh-social-marquee__pulse::after {
+    animation-delay: 1.6s;
+}
+
+@keyframes dhSocialPulse {
+    0%   { transform: scale(1);   opacity: 0.55; }
+    100% { transform: scale(3.0); opacity: 0; }
+}
+
+/* ============================================
+   2. VIEWPORT + TRACK
+   ============================================ */
+.dh-social-marquee__viewport {
+    position: relative;
+    overflow: hidden;
+    padding: 20px 0;
+    -webkit-mask-image: linear-gradient(
+        90deg,
+        transparent 0,
+        #000 56px,
+        #000 calc(100% - 56px),
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        90deg,
+        transparent 0,
+        #000 56px,
+        #000 calc(100% - 56px),
+        transparent 100%
+    );
+}
+
+.dh-social-marquee__track {
+    display: flex;
+    width: max-content;
+    animation: dhSocialScroll 32s linear infinite;
+    will-change: transform;
+}
+
+.dh-social-marquee__copy {
+    display: flex;
+    gap: 14px;
+    padding-right: 14px;
+    flex: 0 0 auto;
+}
+
+.dh-social-marquee__viewport:hover .dh-social-marquee__track,
+.dh-social-marquee__viewport:focus-within .dh-social-marquee__track {
+    animation-play-state: paused;
+}
+
+@keyframes dhSocialScroll {
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(-50%, 0, 0); }
+}
+
+/* ============================================
+   3. CHIP — soft surface + brand accents
+   ============================================ */
+.dh-social-marquee__chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 11px;
+    padding: 10px 16px 10px 10px;
+    min-width: 194px;
+    border-radius: 16px;
+    text-decoration: none;
+    color: var(--text);
+    flex-shrink: 0;
+    overflow: hidden;
+    isolation: isolate;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow:
+        0 2px 8px  rgba(0, 0, 0, 0.05),
+        0 1px 2px  rgba(0, 0, 0, 0.03);
+    transition:
+        transform 0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
+        box-shadow 0.28s ease,
+        border-color 0.28s ease;
+}
+
+.dh-social-marquee__chip:hover {
+    transform: translateY(-3px);
+    text-decoration: none;
+    color: var(--text);
+}
+
+/* ── Brand tints: surface wash + border tint per brand ── */
+.dh-social-marquee__chip--wa {
+    background:
+        linear-gradient(140deg, rgba(37, 211, 102, 0.07) 0%, rgba(37, 211, 102, 0.02) 55%, transparent 100%),
+        var(--surface);
+    border-color: rgba(37, 211, 102, 0.24);
+}
+.dh-social-marquee__chip--wa:hover {
+    border-color: rgba(37, 211, 102, 0.50);
+    box-shadow:
+        0 14px 32px rgba(37, 211, 102, 0.24),
+        0 4px 10px  rgba(7, 94, 84, 0.14);
+}
+
+.dh-social-marquee__chip--tg {
+    background:
+        linear-gradient(140deg, rgba(55, 174, 226, 0.07) 0%, rgba(55, 174, 226, 0.02) 55%, transparent 100%),
+        var(--surface);
+    border-color: rgba(55, 174, 226, 0.24);
+}
+.dh-social-marquee__chip--tg:hover {
+    border-color: rgba(55, 174, 226, 0.50);
+    box-shadow:
+        0 14px 32px rgba(55, 174, 226, 0.24),
+        0 4px 10px  rgba(0, 90, 140, 0.14);
+}
+
+.dh-social-marquee__chip--tt {
+    background:
+        linear-gradient(140deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.015) 55%, transparent 100%),
+        var(--surface);
+    border-color: rgba(0, 0, 0, 0.18);
+}
+.dh-social-marquee__chip--tt:hover {
+    border-color: rgba(0, 0, 0, 0.36);
+    box-shadow:
+        0 14px 32px rgba(0, 0, 0, 0.18),
+        0 4px 10px  rgba(0, 0, 0, 0.10);
+}
+
+/* ============================================
+   4. GHOST WATERMARK — the "what is this" cue
+   ============================================
+   The badge's TYPE icon, enlarged, faded, rotated.
+   Distinct from the platform glyph in the icon tile —
+   no duplication, two different pieces of information.
+   ============================================ */
+.dh-social-marquee__ghost {
+    position: absolute;
+    right: -12px;
+    bottom: -18px;
+    font-size: 104px;
+    line-height: 1;
+    opacity: 0.08;
+    pointer-events: none;
+    z-index: 0;
+    transform: rotate(-8deg);
+    transition:
+        opacity 0.35s ease,
+        transform 0.35s ease;
+}
+
+.dh-social-marquee__chip--wa .dh-social-marquee__ghost { color: #25D366; }
+.dh-social-marquee__chip--tg .dh-social-marquee__ghost { color: #37AEE2; }
+.dh-social-marquee__chip--tt .dh-social-marquee__ghost { color: #010101; }
+
+.dh-social-marquee__chip:hover .dh-social-marquee__ghost {
+    opacity: 0.14;
+    transform: rotate(-8deg) scale(1.06);
+}
+
+/* ============================================
+   5. ICON TILE — the foreground brand mark
+   ============================================ */
+.dh-social-marquee__icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    color: #ffffff;
+    font-size: 18px;
+    flex-shrink: 0;
+    z-index: 2;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+    transition: transform 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.dh-social-marquee__chip:hover .dh-social-marquee__icon {
+    transform: scale(1.08);
+}
+
+.dh-social-marquee__icon::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.34) 0%,
+        rgba(255, 255, 255, 0.04) 48%,
+        transparent 62%
+    );
+    pointer-events: none;
+}
+
+.dh-social-marquee__chip--wa .dh-social-marquee__icon {
+    background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+}
+.dh-social-marquee__chip--tg .dh-social-marquee__icon {
+    background: linear-gradient(135deg, #37AEE2 0%, #1E96C8 100%);
+}
+.dh-social-marquee__chip--tt .dh-social-marquee__icon {
+    background: linear-gradient(135deg, #2B2B2B 0%, #000000 100%);
+}
+
+/* ============================================
+   6. TEXT + BADGE PILL
+   ============================================ */
+.dh-social-marquee__text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+    z-index: 2;
+}
+
+.dh-social-marquee__name {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.1px;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+/* Badge pill — declares what the channel is (Bot / Channel / Group / ...) */
+.dh-social-marquee__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px 2px 7px;
+    border-radius: 20px;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    line-height: 1.55;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+
+.dh-social-marquee__badge i {
+    font-size: 9px;
+    line-height: 1;
+}
+
+.dh-social-marquee__chip--wa .dh-social-marquee__badge {
+    background: rgba(37, 211, 102, 0.14);
+    color: #075E54;
+    border-color: rgba(37, 211, 102, 0.28);
+}
+.dh-social-marquee__chip--tg .dh-social-marquee__badge {
+    background: rgba(55, 174, 226, 0.14);
+    color: #005A8C;
+    border-color: rgba(55, 174, 226, 0.28);
+}
+.dh-social-marquee__chip--tt .dh-social-marquee__badge {
+    background: rgba(0, 0, 0, 0.07);
+    color: #1A1A1A;
+    border-color: rgba(0, 0, 0, 0.20);
+}
+
+/* Bot pulse dot — only the bot chip gets this. */
+.dh-social-marquee__badge-dot {
+    position: relative;
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #10B981;
+    margin-left: 2px;
+    flex-shrink: 0;
+}
+
+.dh-social-marquee__badge-dot::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: #10B981;
+    animation: dhSocialBotPulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes dhSocialBotPulse {
+    0%   { transform: scale(1);   opacity: 0.75; }
+    100% { transform: scale(2.8); opacity: 0; }
+}
+
+/* ============================================
+   7. ARROW — directional cue
+   ============================================ */
+.dh-social-marquee__arrow {
+    margin-left: auto;
+    font-size: 12px;
+    flex-shrink: 0;
+    z-index: 2;
+    transition: transform 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.dh-social-marquee__chip--wa .dh-social-marquee__arrow { color: rgba(7, 94, 84, 0.55); }
+.dh-social-marquee__chip--tg .dh-social-marquee__arrow { color: rgba(0, 90, 140, 0.55); }
+.dh-social-marquee__chip--tt .dh-social-marquee__arrow { color: rgba(0, 0, 0, 0.45); }
+
+.dh-social-marquee__chip:hover .dh-social-marquee__arrow {
+    transform: translateX(4px);
+}
+
+.dh-social-marquee__chip--wa:hover .dh-social-marquee__arrow { color: #075E54; }
+.dh-social-marquee__chip--tg:hover .dh-social-marquee__arrow { color: #005A8C; }
+.dh-social-marquee__chip--tt:hover .dh-social-marquee__arrow { color: #010101; }
+
+/* ============================================
+   8. RESPONSIVE
+   ============================================ */
+@media (max-width: 480px) {
+    .dh-social-marquee .dh-card-head {
+        padding: 13px 16px 12px;
+    }
+    .dh-social-marquee .dh-card-head h3 {
+        font-size: 12.5px;
+    }
+    .dh-social-marquee__viewport {
+        padding: 16px 0;
+    }
+    .dh-social-marquee__copy {
+        gap: 12px;
+        padding-right: 12px;
+    }
+    .dh-social-marquee__chip {
+        min-width: 172px;
+        padding: 9px 13px 9px 9px;
+        gap: 9px;
+        border-radius: 14px;
+    }
+    .dh-social-marquee__icon {
+        width: 34px;
+        height: 34px;
+        font-size: 16px;
+        border-radius: 10px;
+    }
+    .dh-social-marquee__name  { font-size: 12.5px; }
+    .dh-social-marquee__badge { font-size: 9px; padding: 2px 8px 2px 6px; }
+    .dh-social-marquee__arrow { font-size: 11px; }
+    .dh-social-marquee__ghost { font-size: 84px; right: -10px; bottom: -14px; }
+}
+
+/* ============================================
+   9. REDUCED MOTION
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+    .dh-social-marquee__viewport {
+        -webkit-mask-image: none;
+        mask-image: none;
+        padding: 18px 20px;
+    }
+    .dh-social-marquee__track {
+        animation: none;
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    .dh-social-marquee__copy {
+        flex-wrap: wrap;
+        justify-content: center;
+        width: 100%;
+        padding-right: 0;
+        gap: 10px;
+    }
+    .dh-social-marquee__copy:not(:first-child) {
+        display: none;
+    }
+    .dh-social-marquee__pulse::before,
+    .dh-social-marquee__pulse::after,
+    .dh-social-marquee__badge-dot::before {
+        animation: none;
+        opacity: 0;
+    }
+    .dh-social-marquee__chip,
+    .dh-social-marquee__chip:hover,
+    .dh-social-marquee__chip:hover .dh-social-marquee__icon,
+    .dh-social-marquee__chip:hover .dh-social-marquee__arrow,
+    .dh-social-marquee__chip:hover .dh-social-marquee__ghost {
+        transform: none;
+        transition: none;
+    }
+}
+
+/* ============================================
+   10. DARK MODE
+   ============================================ */
+[data-theme="dark"] .dh-social-marquee {
+    background:
+        linear-gradient(
+            90deg,
+            rgba(37, 211, 102, 0.045) 0%,
+            rgba(55, 174, 226, 0.045) 55%,
+            rgba(255, 255, 255, 0.008) 100%
+        ),
+        var(--surface);
+}
+
+[data-theme="dark"] .dh-social-marquee__chip {
+    background: var(--surface-alt);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .dh-social-marquee__chip--wa {
+    background:
+        linear-gradient(140deg, rgba(37, 211, 102, 0.10) 0%, rgba(37, 211, 102, 0.02) 55%, transparent 100%),
+        var(--surface-alt);
+    border-color: rgba(37, 211, 102, 0.30);
+}
+[data-theme="dark"] .dh-social-marquee__chip--tg {
+    background:
+        linear-gradient(140deg, rgba(55, 174, 226, 0.10) 0%, rgba(55, 174, 226, 0.02) 55%, transparent 100%),
+        var(--surface-alt);
+    border-color: rgba(55, 174, 226, 0.30);
+}
+[data-theme="dark"] .dh-social-marquee__chip--tt {
+    background:
+        linear-gradient(140deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.01) 55%, transparent 100%),
+        var(--surface-alt);
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+/* Ghost icon needs more presence on dark surfaces. */
+[data-theme="dark"] .dh-social-marquee__ghost {
+    opacity: 0.14;
+}
+[data-theme="dark"] .dh-social-marquee__chip:hover .dh-social-marquee__ghost {
+    opacity: 0.22;
+}
+[data-theme="dark"] .dh-social-marquee__chip--tt .dh-social-marquee__ghost {
+    color: #FFFFFF;
+}
+
+/* Badge text flips bright on dark surfaces. */
+[data-theme="dark"] .dh-social-marquee__chip--wa .dh-social-marquee__badge {
+    background: rgba(37, 211, 102, 0.20);
+    color: #6EE7A7;
+    border-color: rgba(37, 211, 102, 0.34);
+}
+[data-theme="dark"] .dh-social-marquee__chip--tg .dh-social-marquee__badge {
+    background: rgba(55, 174, 226, 0.20);
+    color: #7FCBED;
+    border-color: rgba(55, 174, 226, 0.34);
+}
+[data-theme="dark"] .dh-social-marquee__chip--tt .dh-social-marquee__badge {
+    background: rgba(255, 255, 255, 0.08);
+    color: #D4D4D4;
+    border-color: rgba(255, 255, 255, 0.20);
+}
+
+/* Arrow tint on dark. */
+[data-theme="dark"] .dh-social-marquee__chip--wa .dh-social-marquee__arrow { color: rgba(110, 231, 167, 0.60); }
+[data-theme="dark"] .dh-social-marquee__chip--tg .dh-social-marquee__arrow { color: rgba(127, 203, 237, 0.60); }
+[data-theme="dark"] .dh-social-marquee__chip--tt .dh-social-marquee__arrow { color: rgba(212, 212, 212, 0.55); }
+
+[data-theme="dark"] .dh-social-marquee__chip--wa:hover .dh-social-marquee__arrow { color: #6EE7A7; }
+[data-theme="dark"] .dh-social-marquee__chip--tg:hover .dh-social-marquee__arrow { color: #7FCBED; }
+[data-theme="dark"] .dh-social-marquee__chip--tt:hover .dh-social-marquee__arrow { color: #FFFFFF; }

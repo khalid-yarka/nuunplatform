@@ -243,6 +243,13 @@ class Config:
     TIKTOK_URL = os.getenv('TIKTOK_URL', 'https://www.tiktok.com/@nuunplatform')
     YOUTUBE_URL = os.getenv('YOUTUBE_URL', 'https://www.youtube.com/@nuunplatform')
     WHATSAPP_GROUP_URL = os.getenv('WHATSAPP_GROUP_URL', '')
+    
+    # Telegram public join links — used by the dashboard social marquee.
+    # The bot URL is derived at runtime from TELEGRAM_BOT_USERNAME.
+    # These two are independent of the force-join gate keys below; do
+    # not merge them.
+    TELEGRAM_CHANNEL_URL = os.getenv('TELEGRAM_CHANNEL_URL', '')
+    TELEGRAM_GROUP_URL   = os.getenv('TELEGRAM_GROUP_URL', '')
 
     if not TELEGRAM_BOT_TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN environment variable must be set for Telegram bot functionality")

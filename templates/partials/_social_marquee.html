@@ -1,0 +1,119 @@
+{# ============================================================
+   SOCIAL MARQUEE
+   ------------------------------------------------------------
+   Continuous horizontal strip of the platform's social channels.
+   Renders only when at least one URL is configured. No JavaScript.
+
+   Each chip carries:
+     · a brand-coloured icon tile (foreground → WHICH platform)
+     · an oversized type-icon watermark (background → WHAT it is)
+     · a badge pill that names the type
+     · a directional arrow cue
+
+   Foreground icon  = the platform's brand mark (wa / tg / tt).
+   Background ghost = the badge's type icon, enlarged. Two
+                      distinct glyphs, no duplication.
+
+   Context processor dependencies (app.py → utility_processor):
+     whatsapp_group_url
+     social_telegram_bot
+     social_telegram_channel
+     social_telegram_group
+     social_tiktok
+
+   Reduced-motion users see the chips as a centred wrapping row.
+   Duplicate copies are aria-hidden and tabindex="-1".
+   ============================================================ #}
+
+{% set _platforms = [
+    {
+        'url':   whatsapp_group_url,
+        'name':  'WhatsApp',
+        'badge': 'Community',
+        'bicon': 'fa-users',
+        'icon':  'fa-whatsapp',
+        'brand': 'wa',
+        'pulse': false
+    },
+    {
+        'url':   social_telegram_bot,
+        'name':  'Telegram',
+        'badge': 'Bot',
+        'bicon': 'fa-robot',
+        'icon':  'fa-telegram',
+        'brand': 'tg',
+        'pulse': true
+    },
+    {
+        'url':   social_telegram_channel,
+        'name':  'Telegram',
+        'badge': 'Channel',
+        'bicon': 'fa-bullhorn',
+        'icon':  'fa-telegram',
+        'brand': 'tg',
+        'pulse': false
+    },
+    {
+        'url':   social_telegram_group,
+        'name':  'Telegram',
+        'badge': 'Group',
+        'bicon': 'fa-comments',
+        'icon':  'fa-telegram',
+        'brand': 'tg',
+        'pulse': false
+    },
+    {
+        'url':   social_tiktok,
+        'name':  'TikTok',
+        'badge': 'Videos',
+        'bicon': 'fa-video',
+        'icon':  'fa-tiktok',
+        'brand': 'tt',
+        'pulse': false
+    }
+] | selectattr('url') | list %}
+
+{% if _platforms %}
+<section class="dh-card dh-social-marquee" aria-label="Social channels">
+    <div class="dh-card-head">
+        <h3>📣 Nala soco si aad u hesho wax kasta oo cusub.</h3>
+        <span class="dh-social-marquee__pulse" aria-hidden="true"></span>
+    </div>
+
+    <div class="dh-social-marquee__viewport">
+        <div class="dh-social-marquee__track">
+            {% for copy in range(4) %}
+            {% set _dup = copy > 0 %}
+            <div class="dh-social-marquee__copy"{% if _dup %} aria-hidden="true"{% endif %}>
+                {% for p in _platforms %}
+                <a class="dh-social-marquee__chip dh-social-marquee__chip--{{ p.brand }}"
+                   href="{{ p.url }}"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   {% if _dup %}tabindex="-1"{% endif %}>
+                    <i class="fas {{ p.bicon }} dh-social-marquee__ghost" aria-hidden="true"></i>
+
+                    <span class="dh-social-marquee__icon" aria-hidden="true">
+                        <i class="fab {{ p.icon }}"></i>
+                    </span>
+
+                    <span class="dh-social-marquee__text">
+                        <span class="dh-social-marquee__name">{{ p.name }}</span>
+                        <span class="dh-social-marquee__badge">
+                            <i class="fas {{ p.bicon }}" aria-hidden="true"></i>
+                            <span>{{ p.badge }}</span>
+                            {% if p.pulse %}
+                            <span class="dh-social-marquee__badge-dot" aria-hidden="true"></span>
+                            {% endif %}
+                        </span>
+                    </span>
+
+                    <i class="fas fa-arrow-right dh-social-marquee__arrow" aria-hidden="true"></i>
+                </a>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
