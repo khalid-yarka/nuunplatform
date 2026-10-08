@@ -243,6 +243,8 @@ class Config:
     TIKTOK_URL = os.getenv('TIKTOK_URL', 'https://www.tiktok.com/@nuunplatform')
     YOUTUBE_URL = os.getenv('YOUTUBE_URL', 'https://www.youtube.com/@nuunplatform')
     WHATSAPP_GROUP_URL = os.getenv('WHATSAPP_GROUP_URL', '')
+
+    WHATSAPP_SO_GROUP_URL = os.getenv('WHATSAPP_SO_GROUP_URL', '')
     
     # Telegram public join links — used by the dashboard social marquee.
     # The bot URL is derived at runtime from TELEGRAM_BOT_USERNAME.

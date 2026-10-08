@@ -12,6 +12,11 @@
 #   It survives POST form submission and the register → login round-trip,
 #   and is consumed on successful authentication. Values older than
 #   AUTH_NEXT_MAX_AGE seconds are ignored.
+#
+# Phone policy:
+#   Somali local numbers are 9 digits. The country code (+252) is shown
+#   as a static prefix in the UI. The first digit must not be '0' —
+#   common prefixes are 61, 62, 63, 65, 66, 67, 68, 69, 90.
 
 import time
 import secrets
@@ -199,8 +204,22 @@ def _login_clear_failures(phone: str) -> None:
 # ============================================
 
 def _valid_phone(phone: str) -> bool:
+    """
+    Somali local number: exactly 9 digits, no leading zero.
+
+    The +252 country code is stripped in the UI as a static prefix, so
+    the user only ever types the 9-digit local part. Rejecting a leading
+    zero is a hard rule — Somali mobile numbers begin with 6 or 9
+    (61/62/63/65/66/67/68/69/90). A user typing '0' as the first
+    character is either confusing the format with a landline (which
+    starts with 0) or pasting a number that already had one.
+    """
     digits = re.sub(r'\D', '', phone or '')
-    return len(digits) == 9
+    if len(digits) != 9:
+        return False
+    if digits.startswith('0'):
+        return False
+    return True
 
 
 def _valid_name(name: str) -> bool:
@@ -416,9 +435,6 @@ def register():
         return redirect(url_for('dashboard.home'))
 
     if request.method == 'GET':
-        # Capture `next` from the URL (if any). Never overwrites an
-        # existing session value when the request doesn't provide one,
-        # so the register → login handoff can carry it forward.
         _capture_next_from_request()
         ensure_csrf_token()
         return render_template(
@@ -447,7 +463,12 @@ def register():
     curriculum = (request.form.get('curriculum') or '').strip()
 
     if not _valid_phone(phone_raw):
-        flash('Please enter a valid 9-digit phone number.', 'error')
+        flash(
+            'Please enter a valid Somali phone number. '
+            'Use 9 digits without the leading zero — common prefixes '
+            'are 61, 63, and 90.',
+            'error',
+        )
         return render_template('auth/register.html')
 
     if len(password) < 8:
@@ -573,7 +594,7 @@ def login():
             next_url=_peek_next(),
         )
 
-    # Layer 1: per-IP rate limit (existing behavior).
+    # Layer 1: per-IP rate limit.
     if not _rate_limit(f'login:{_client_ip()}', max_calls=5, window_seconds=60):
         flash('Too many login attempts. Please wait a minute.', 'error')
         return render_template('auth/login.html')
@@ -665,18 +686,18 @@ def login():
         session['settings'] = {}
 
     session.modified = True
-    
+
     # ── First-login onboarding gate ──
     try:
         onboarding_done = int(student.get('onboarding_dismissed') or 0)
     except (TypeError, ValueError):
         onboarding_done = 0
-    
+
     session['onboarding_dismissed'] = onboarding_done
-    
+
     if not onboarding_done:
         return redirect(url_for('onboarding.welcome'))
-    
+
     if next_url:
         return redirect(next_url)
     return redirect(url_for('dashboard.home'))
@@ -756,9 +777,11 @@ def help():
         help_prefill=prefill,
     )
 
+
 @auth_bp.route('/reset-app')
 def reset_app():
     return render_template('pwa_reset.html')
+
 
 # ============================================
 # INTERNAL HELPERS

@@ -5,7 +5,6 @@ SUBJECTS = {
     'mathematics': {'name': 'Mathematics',        'name_so': 'Xisaab',       'icon': '📐'},
     'english':     {'name': 'English',            'name_so': 'Af Ingiriis',  'icon': '🇬🇧'},
     'af_somali':   {'name': 'Af-Somali',          'name_so': 'Af Soomaali',  'icon': '🇸🇴'},
-    'somali':      {'name': 'Somali',             'name_so': 'Af Soomaali',  'icon': '🇸🇴'},
     'arabic':      {'name': 'Arabic',             'name_so': 'Af Carabi',    'icon': '📖'},
     'islamic':     {'name': 'Islamic Studies',    'name_so': 'Tarbiya',      'icon': '🕌'},
     'geography':   {'name': 'Geography',          'name_so': 'Juqraafi',     'icon': '🌍'},

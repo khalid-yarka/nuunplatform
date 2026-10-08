@@ -50,8 +50,16 @@
         <label>📞 Phone Number <span class="required">*</span></label>
         <div class="input-wrapper">
             <span class="phone-prefix">+252</span>
-            <input type="tel" name="phone" placeholder="90 7XX XXXX"
-                   maxlength="9" required autofocus />
+            <input type="tel" name="phone" id="loginPhone"
+                   placeholder="61 234 5678"
+                   maxlength="9" inputmode="numeric"
+                   pattern="[1-9][0-9]{8}"
+                   autocomplete="tel" required autofocus
+                   oninput="this.value = this.value.replace(/\D/g, '').replace(/^0+/, '')" />
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--text-muted);line-height:1.5;display:flex;align-items:flex-start;gap:6px;">
+            <i class="fas fa-info-circle" style="color:var(--primary);flex-shrink:0;margin-top:2px;"></i>
+            <span>Same number you registered with. Common prefixes: <strong style="color:var(--text);">61</strong> · <strong style="color:var(--text);">90</strong> · <strong style="color:var(--text);">63</strong></span>
         </div>
     </div>
 
@@ -98,6 +106,35 @@
             icon.className = 'fas fa-eye';
         }
     }
+
+    // ── Phone input guard ──
+    // Beyond the inline oninput attribute, this adds paste and keydown
+    // protection so a leading 0 can never enter the field.
+    (function () {
+        var phoneInput = document.getElementById('loginPhone');
+        if (!phoneInput) return;
+
+        function clean(v) {
+            return String(v || '').replace(/\D/g, '').replace(/^0+/, '');
+        }
+
+        phoneInput.addEventListener('paste', function (e) {
+            var pasted = (e.clipboardData || window.clipboardData).getData('text');
+            if (pasted) {
+                e.preventDefault();
+                this.value = clean(pasted).slice(0, 9);
+                this.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        });
+
+        phoneInput.addEventListener('keydown', function (e) {
+            if (e.key !== '0') return;
+            if (this.selectionStart !== 0) return;
+            if (this.value === '') {
+                e.preventDefault();
+            }
+        });
+    })();
 
     document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('.auth-alert').forEach(function (alert) {

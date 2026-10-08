@@ -52,9 +52,14 @@
                 <span class="phone-prefix">+252</span>
                 <input type="tel" name="phone" id="phone"
                        placeholder="61 234 5678" maxlength="9"
-                       inputmode="numeric" pattern="[0-9]*"
-                       autocomplete="tel" required />
+                       inputmode="numeric" pattern="[1-9][0-9]{8}"
+                       autocomplete="tel" required
+                       oninput="this.value = this.value.replace(/\D/g, '').replace(/^0+/, '')" />
                 <span class="input-status" id="phoneStatus"></span>
+            </div>
+            <div style="margin-top:8px;font-size:12px;color:var(--text-muted);line-height:1.5;display:flex;align-items:flex-start;gap:6px;">
+                <i class="fas fa-info-circle" style="color:var(--primary);flex-shrink:0;margin-top:2px;"></i>
+                <span>Somali number without <strong style="color:var(--text);">+252</strong>. Common prefixes: <strong style="color:var(--text);">61</strong> · <strong style="color:var(--text);">90</strong> · <strong style="color:var(--text);">63</strong></span>
             </div>
             <div class="error-message" id="phoneError">
                 Please enter a valid 9-digit phone number
@@ -380,5 +385,37 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+    // ── Phone input guard ──
+    // Two extra layers on top of the inline oninput attribute:
+    //   · paste handler catches paste events with a leading 0
+    //   · keydown handler blocks the 0 key as the FIRST character
+    (function () {
+        var phoneInput = document.getElementById('phone');
+        if (!phoneInput) return;
+
+        function clean(v) {
+            return String(v || '').replace(/\D/g, '').replace(/^0+/, '');
+        }
+
+        phoneInput.addEventListener('paste', function (e) {
+            var pasted = (e.clipboardData || window.clipboardData).getData('text');
+            if (pasted) {
+                e.preventDefault();
+                var cleaned = clean(pasted);
+                this.value = cleaned.slice(0, 9);
+                this.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        });
+
+        phoneInput.addEventListener('keydown', function (e) {
+            if (e.key !== '0') return;
+            if (this.selectionStart !== 0) return;
+            if (this.value === '') {
+                e.preventDefault();
+            }
+        });
+    })();
+</script>
 <script src="{{ url_for('static', filename='js/register.js') }}"></script>
 {% endblock %}
