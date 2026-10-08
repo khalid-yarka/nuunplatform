@@ -453,37 +453,44 @@ def _build_active_filters(**kw):
 def _pdfs_dashboard_analytics():
     """
     Compute every analytic panel the PDF dashboard needs.
-    One function, one pass — all raw SQL, no N+1.
 
     Includes:
       · KPIs (live/pending/staged/flagged/premium/broken/uploads)
       · Today's activity summary
-      · Top subjects (bar chart, top 8)
-      · Class distribution (bar chart, top 6 + "other")
+      · Class distribution (forced to exactly F4, F3, G8, G7)
+      · Subject distribution (all subjects, zeros filled)
       · Uploads by day (30-day sparkline)
       · Top viewed (all-time top 5)
+      · Most downloaded (all-time top 5)
+      · Most Telegram-fetched (all-time top 5)
       · Trending PDFs (7-day top 5)
-      · Top contributors (admin leaderboard)
-      · Recent edits (last 8 admin edits, timeline)
+      · Top contributors (broadened query, 180 days)
+      · Recent edits (last 12 admin edits)
+      · Upload sources breakdown
       · Storage health (local/telegram/both/orphan)
       · Coverage (questions linked to PDFs)
       · Health score (0-100 composite)
     """
+    from datetime import date as _date, timedelta as _td
+
     out = {
         'kpis': {
             'live': 0, 'pending': 0, 'staged': 0, 'flagged': 0,
             'premium': 0, 'premium_pct': 0,
             'broken': 0, 'uploads_30d': 0, 'live_trend': 0,
         },
-        'subject_split': [],
         'class_split': [],
-        'class_split_other': 0,
+        'class_unclassified': 0,
         'class_split_total': 0,
+        'subject_split_full': [],
         'uploads_by_day': [],
         'top_viewed': [],
+        'most_downloaded': [],
+        'most_tg_fetched': [],
         'trending_pdfs': [],
         'top_contributors': [],
         'recent_edits': [],
+        'upload_sources': {},
         'storage': {'local': 0, 'telegram': 0, 'both': 0, 'orphan': 0},
         'today_activity': {
             'views': 0, 'downloads': 0, 'telegram_fetches': 0,
@@ -491,8 +498,7 @@ def _pdfs_dashboard_analytics():
         },
         'coverage': {
             'questions_total': 0, 'questions_linked': 0,
-            'pdfs_with_links': 0, 'pdfs_orphan_questions': 0,
-            'coverage_pct': 0,
+            'pdfs_with_links': 0, 'coverage_pct': 0,
         },
         'health_score': 100,
         'health_breakdown': {},
@@ -577,44 +583,55 @@ def _pdfs_dashboard_analytics():
     except Exception:
         pass
 
-    # ── Subject split ───────────────────────────────────
+    # ── CLASS DISTRIBUTION — forced to exactly 4 classes ──
     try:
         cursor = execute_with_retry("""
-            SELECT subject, COUNT(*) AS n
-            FROM pdfs
+            SELECT class, COUNT(*) AS n FROM pdfs
+            WHERE class IN ('F4','F3','G8','G7')
+            GROUP BY class
+        """)
+        counts = {r['class']: r['n'] for r in cursor.fetchall()}
+
+        cursor = execute_with_retry("""
+            SELECT COUNT(*) AS n FROM pdfs
+            WHERE class IS NULL OR class = '' OR class NOT IN ('F4','F3','G8','G7')
+        """)
+        out['class_unclassified'] = cursor.fetchone()['n']
+
+        total = sum(counts.values())
+        out['class_split_total'] = total
+        out['class_split'] = [
+            {'code': c, 'count': counts.get(c, 0)}
+            for c in ('F4', 'F3', 'G8', 'G7')
+        ]
+    except Exception as e:
+        logger.warning(f"class_split query failed: {e}")
+        out['class_split'] = [{'code': c, 'count': 0} for c in ('F4', 'F3', 'G8', 'G7')]
+
+    # ── SUBJECT DISTRIBUTION — all subjects with zeros ──
+    try:
+        cursor = execute_with_retry("""
+            SELECT subject, COUNT(*) AS n FROM pdfs
             WHERE subject IS NOT NULL AND subject != ''
             GROUP BY subject
-            ORDER BY n DESC
-            LIMIT 8
         """)
-        for row in cursor.fetchall():
-            subj = get_subject(row['subject'])
-            out['subject_split'].append({
-                'code': row['subject'],
-                'name': subj['name'] if subj else row['subject'],
-                'count': row['n'],
-            })
-    except Exception:
-        pass
+        counts = {r['subject']: r['n'] for r in cursor.fetchall()}
 
-    # ── Class split (top 6 + "other") ───────────────────
-    try:
-        cursor = execute_with_retry("""
-            SELECT COALESCE(class, '') AS code, COUNT(*) AS n
-            FROM pdfs
-            GROUP BY code
-            ORDER BY n DESC
-        """)
-        all_rows = [dict(r) for r in cursor.fetchall()]
-        out['class_split_total'] = sum(r['n'] for r in all_rows)
-        out['class_split'] = [
-            {'code': r['code'], 'count': r['n']}
-            for r in all_rows[:6]
-        ]
-        if len(all_rows) > 6:
-            out['class_split_other'] = sum(r['n'] for r in all_rows[6:])
-    except Exception:
-        pass
+        all_subjects = get_all_subjects()
+        out['subject_split_full'] = sorted(
+            [
+                {
+                    'code': s['code'],
+                    'name': s['name'],
+                    'icon': s.get('icon', '📚'),
+                    'count': counts.get(s['code'], 0),
+                }
+                for s in all_subjects
+            ],
+            key=lambda x: -x['count'],
+        )
+    except Exception as e:
+        logger.warning(f"subject_split_full query failed: {e}")
 
     # ── Uploads by day (30d) ────────────────────────────
     try:
@@ -626,7 +643,6 @@ def _pdfs_dashboard_analytics():
             ORDER BY d
         """)
         rows = {r['d']: r['n'] for r in cursor.fetchall()}
-        from datetime import date as _date, timedelta as _td
         today = _date.today()
         for i in range(29, -1, -1):
             d = (today - _td(days=i)).isoformat()
@@ -637,7 +653,7 @@ def _pdfs_dashboard_analytics():
     except Exception:
         pass
 
-    # ── Top viewed (all-time) ───────────────────────────
+    # ── Most viewed (all-time) ──────────────────────────
     try:
         cursor = execute_with_retry("""
             SELECT id, title, code, view_count, subject
@@ -646,6 +662,34 @@ def _pdfs_dashboard_analytics():
             LIMIT 5
         """)
         out['top_viewed'] = [dict(r) for r in cursor.fetchall()]
+    except Exception:
+        pass
+
+    # ── Most downloaded (all-time) ──────────────────────
+    try:
+        cursor = execute_with_retry("""
+            SELECT pdf_id, pdf_code, pdf_title, COUNT(*) AS n
+            FROM pdf_events
+            WHERE event_type = 'download' AND pdf_id IS NOT NULL
+            GROUP BY pdf_id
+            ORDER BY n DESC
+            LIMIT 5
+        """)
+        out['most_downloaded'] = [dict(r) for r in cursor.fetchall()]
+    except Exception:
+        pass
+
+    # ── Most Telegram-fetched (all-time) ────────────────
+    try:
+        cursor = execute_with_retry("""
+            SELECT pdf_id, pdf_code, pdf_title, COUNT(*) AS n
+            FROM pdf_events
+            WHERE event_type = 'telegram_fetch' AND pdf_id IS NOT NULL
+            GROUP BY pdf_id
+            ORDER BY n DESC
+            LIMIT 5
+        """)
+        out['most_tg_fetched'] = [dict(r) for r in cursor.fetchall()]
     except Exception:
         pass
 
@@ -665,23 +709,46 @@ def _pdfs_dashboard_analytics():
     except Exception:
         pass
 
-    # ── Top contributors (admins who uploaded most) ─────
+    # ── TOP CONTRIBUTORS — broadened query ──────────────
     try:
         cursor = execute_with_retry("""
             SELECT actor_name, COUNT(*) AS n
             FROM pdf_events
-            WHERE event_type = 'create'
+            WHERE event_category = 'admin'
               AND actor_name IS NOT NULL
-              AND created_at >= datetime('now', '-90 days')
+              AND actor_name != ''
+              AND created_at >= datetime('now', '-180 days')
             GROUP BY actor_name
             ORDER BY n DESC
-            LIMIT 5
+            LIMIT 8
         """)
-        out['top_contributors'] = [dict(r) for r in cursor.fetchall()]
-    except Exception:
-        pass
+        rows = [dict(r) for r in cursor.fetchall()]
 
-    # ── Recent edits (last 8 admin edits) ───────────────
+        # Fallback to admin_audit_log if pdf_events yields nothing
+        if not rows:
+            try:
+                cursor = execute_with_retry("""
+                    SELECT
+                        COALESCE(s.first_name || ' ' || s.last_name,
+                                 'Admin #' || aal.actor_id) AS actor_name,
+                        COUNT(*) AS n
+                    FROM admin_audit_log aal
+                    LEFT JOIN students s ON s.id = aal.actor_id
+                    WHERE aal.action LIKE 'pdf.%'
+                      AND aal.created_at >= datetime('now', '-180 days')
+                    GROUP BY aal.actor_id
+                    ORDER BY n DESC
+                    LIMIT 8
+                """)
+                rows = [dict(r) for r in cursor.fetchall()]
+            except Exception:
+                pass
+
+        out['top_contributors'] = rows
+    except Exception as e:
+        logger.warning(f"top_contributors query failed: {e}")
+
+    # ── Recent edits ────────────────────────────────────
     try:
         cursor = execute_with_retry("""
             SELECT pdf_id, pdf_code, pdf_title, actor_name,
@@ -692,9 +759,30 @@ def _pdfs_dashboard_analytics():
                                  'premium_on', 'premium_off', 'delete',
                                  'publish', 'create')
             ORDER BY created_at DESC
-            LIMIT 8
+            LIMIT 12
         """)
         out['recent_edits'] = [dict(r) for r in cursor.fetchall()]
+    except Exception:
+        pass
+
+    # ── Upload sources ──────────────────────────────────
+    try:
+        cursor = execute_with_retry("""
+            SELECT
+                COALESCE(NULLIF(actor_role, ''), 'other') AS src,
+                COUNT(*) AS n
+            FROM pdf_events
+            WHERE event_type = 'create'
+            GROUP BY src
+        """)
+        for r in cursor.fetchall():
+            label = {
+                'admin': 'Admin upload',
+                'super_admin': 'Super admin upload',
+                'system': 'System',
+                'other': 'Script / other',
+            }.get(r['src'], r['src'].replace('_', ' ').title())
+            out['upload_sources'][label] = r['n']
     except Exception:
         pass
 
@@ -724,7 +812,7 @@ def _pdfs_dashboard_analytics():
     except Exception:
         pass
 
-    # ── Coverage (questions ↔ PDFs) ─────────────────────
+    # ── Coverage ────────────────────────────────────────
     try:
         row = execute_with_retry(
             "SELECT COUNT(*) AS n FROM questions WHERE status = 'active'"
@@ -752,15 +840,7 @@ def _pdfs_dashboard_analytics():
     except Exception:
         pass
 
-    # ── Health score (0-100 composite) ──────────────────
-    # Breakdown of deductions:
-    #   broken links       : -3 per broken code (max -25)
-    #   orphan files       : -2 per orphan (max -20)
-    #   flagged > 10       : -15
-    #   flagged > 0        : -5
-    #   pending > 20       : -10 (backlog)
-    #   coverage < 50%     : -15
-    #   coverage < 80%     : -5
+    # ── Health score ────────────────────────────────────
     deductions = {}
     score = 100
 
@@ -790,7 +870,7 @@ def _pdfs_dashboard_analytics():
         score -= 10
 
     cov = out['coverage']['coverage_pct']
-    if cov > 0 and cov < 50:
+    if 0 < cov < 50:
         deductions['Low link coverage'] = -15
         score -= 15
     elif 0 < cov < 80:
@@ -801,6 +881,56 @@ def _pdfs_dashboard_analytics():
     out['health_breakdown'] = deductions
 
     return out
+
+
+def _pdfs_heatmap_weeks():
+    """
+    12-week activity heatmap for the People tab.
+    Returns a list of weeks; each week is 7 day-dicts
+    {date, count, level}. Level 0 = no activity, 1-4 = intensity.
+    """
+    from datetime import date as _date, timedelta as _td
+
+    try:
+        cursor = execute_with_retry("""
+            SELECT DATE(created_at) AS d, COUNT(*) AS n
+            FROM pdf_events
+            WHERE event_category = 'admin'
+              AND created_at >= datetime('now', '-12 weeks')
+            GROUP BY d
+        """)
+        counts = {r['d']: r['n'] for r in cursor.fetchall()}
+    except Exception:
+        counts = {}
+
+    if not counts:
+        return []
+
+    max_n = max(counts.values()) or 1
+
+    today = _date.today()
+    start = today - _td(days=today.weekday()) - _td(weeks=11)
+
+    weeks = []
+    for w in range(12):
+        week = []
+        for d in range(7):
+            day = start + _td(weeks=w, days=d)
+            iso = day.isoformat()
+            n = counts.get(iso, 0)
+            if n == 0:
+                level = 0
+            elif n <= max(1, max_n * 0.25):
+                level = 1
+            elif n <= max_n * 0.5:
+                level = 2
+            elif n <= max_n * 0.75:
+                level = 3
+            else:
+                level = 4
+            week.append({'date': iso, 'count': n, 'level': level})
+        weeks.append(week)
+    return weeks
 
 
 # ============================================================
@@ -878,7 +1008,6 @@ def _build_preview_info(pdf, file_url=None):
             info['size_status'] = 'unknown'
         return info
 
-    # Fall through to Telegram lookup
     try:
         from bot.db import get_bot_pdf_by_code
         bot_pdf = get_bot_pdf_by_code((pdf or {}).get('code') or '')
@@ -2425,19 +2554,21 @@ def bulk_preview():
 
 
 # ============================================================
-# PDFs — DASHBOARD + LIST
+# PDFs — DASHBOARD + LIST (tab-based)
 # ============================================================
 
 @admin_content_bp.route('/pdfs', methods=['GET'], endpoint='pdfs')
 @admin_can('pdfs.view')
 def pdfs():
-    PER_PAGE = 50
+    # ── Tab routing ──
+    active_tab = (request.args.get('tab') or 'library').strip().lower()
+    if active_tab not in ('library', 'insights', 'people', 'activity'):
+        active_tab = 'library'
 
+    # ── Library tab filters ──
     status_filter = (request.args.get('status') or 'live').strip().lower()
     if status_filter not in ('live', 'flagged', 'pending', 'staged', 'all'):
         status_filter = 'live'
-
-    premium_filter = request.args.get('premium') == '1'
 
     search = (request.args.get('search') or '').strip()
     subject_filter = (request.args.get('subject') or '').strip()
@@ -2445,183 +2576,266 @@ def pdfs():
     class_filter = (request.args.get('class') or '').strip()
     sort = (request.args.get('sort') or 'newest').strip()
 
+    premium_filter = (request.args.get('premium') or '').strip()
+    verified_filter = (request.args.get('verified') or '').strip()
+    storage_filter = (request.args.get('storage') or '').strip()
+    pdf_code_filter = (request.args.get('pdf_code_filter') or '').strip().upper()
+    chapter_filter = (request.args.get('chapter') or '').strip()
+    date_from = (request.args.get('date_from') or '').strip()
+    date_to = (request.args.get('date_to') or '').strip()
+
+    views_min = _int_or_none(request.args.get('views_min'))
+    views_max = _int_or_none(request.args.get('views_max'))
+
+    # ── Per-page ──
+    try:
+        per_page = int(request.args.get('per_page') or 100)
+    except (ValueError, TypeError):
+        per_page = 100
+    if per_page not in (50, 100, 200, 500):
+        per_page = 100
+
     try:
         page = max(1, int(request.args.get('page') or 1))
     except (TypeError, ValueError):
         page = 1
 
-    dash = _pdfs_dashboard_analytics()
+    # ── Activity tab filters ──
+    activity_type = (request.args.get('type') or '').strip()
+    activity_role = (request.args.get('role') or '').strip()
+    activity_pdf_code = (request.args.get('pdf_code') or '').strip().upper()
+    activity_since = (request.args.get('since') or '').strip()
+    activity_until = (request.args.get('until') or '').strip()
 
+    try:
+        activity_page = max(1, int(request.args.get('page') or 1))
+    except (TypeError, ValueError):
+        activity_page = 1
+
+    # ── Analytics (single pass) ──
+    dash = _pdfs_dashboard_analytics()
+    heatmap_weeks = _pdfs_heatmap_weeks()
+
+    # ── Library list ──
+    pdfs_list = []
+    total = 0
+    total_pages = 1
+
+    if active_tab == 'library':
+        if status_filter in ('pending', 'staged'):
+            offset = (page - 1) * per_page
+            try:
+                if status_filter == 'pending':
+                    from bot.db import get_pending_pdf_list, count_pending_pdfs
+                    raw = get_pending_pdf_list(limit=per_page, offset=offset, search=search or '')
+                    total = count_pending_pdfs(search or '')
+                    for p in raw:
+                        pdfs_list.append({
+                            'id': p['id'],
+                            'title': p.get('filename') or 'Untitled',
+                            'filename': p.get('filename'),
+                            'code': None, 'subject': None,
+                            'curriculum': None, 'class': None,
+                            'is_premium': 0, 'view_count': 0,
+                            'uploaded_at': p.get('uploaded_at'),
+                            'created_at': p.get('uploaded_at'),
+                            'is_pending': True, 'is_staged': False, 'is_flagged': False,
+                        })
+                else:
+                    from bot.db import get_bot_pdfs, count_bot_pdfs
+                    raw = get_bot_pdfs(limit=per_page, offset=offset, published_filter=False)
+                    total = count_bot_pdfs(published_filter=False)
+                    for p in raw:
+                        pdfs_list.append({
+                            'id': p['id'],
+                            'title': p.get('title') or 'Untitled',
+                            'filename': p.get('original_filename'),
+                            'code': p.get('code'),
+                            'subject': p.get('subject'),
+                            'curriculum': p.get('curriculum'),
+                            'class': p.get('class'),
+                            'is_premium': bool(p.get('is_premium')),
+                            'view_count': 0,
+                            'uploaded_at': p.get('uploaded_at'),
+                            'created_at': p.get('uploaded_at'),
+                            'is_pending': False, 'is_staged': True, 'is_flagged': False,
+                        })
+            except Exception as e:
+                logger.error(f"pdfs(): {status_filter} fetch failed: {e}", exc_info=True)
+            total_pages = (total + per_page - 1) // per_page if total > 0 else 1
+        else:
+            offset = (page - 1) * per_page
+
+            where = ["1=1"]
+            params = []
+            if search:
+                where.append("(title LIKE ? OR code LIKE ? OR description LIKE ? OR tags LIKE ?)")
+                like = f"%{search}%"
+                params.extend([like, like, like, like])
+            if subject_filter:
+                where.append("subject = ?"); params.append(subject_filter)
+            if curriculum_filter:
+                where.append("curriculum = ?"); params.append(curriculum_filter)
+            if class_filter:
+                where.append("class = ?"); params.append(class_filter)
+            if premium_filter == '1':
+                where.append("is_premium = 1")
+            elif premium_filter == '0':
+                where.append("is_premium = 0")
+            if pdf_code_filter:
+                where.append("code = ?"); params.append(pdf_code_filter)
+            if chapter_filter:
+                where.append("chapter LIKE ?"); params.append(f"%{chapter_filter}%")
+            if views_min is not None:
+                where.append("view_count >= ?"); params.append(views_min)
+            if views_max is not None:
+                where.append("view_count <= ?"); params.append(views_max)
+            if date_from:
+                where.append("uploaded_at >= ?"); params.append(date_from)
+            if date_to:
+                where.append("uploaded_at <= ?"); params.append(date_to + ' 23:59:59')
+
+            if status_filter == 'flagged':
+                where.append("id IN (SELECT pdf_id FROM unverified_pdfs WHERE confirmed = 0)")
+            elif status_filter == 'live':
+                where.append("id NOT IN (SELECT pdf_id FROM unverified_pdfs WHERE confirmed = 0)")
+
+            order = {
+                'newest': 'uploaded_at DESC, id DESC',
+                'oldest': 'uploaded_at ASC, id ASC',
+                'title_asc': 'title COLLATE NOCASE ASC',
+                'title_desc': 'title COLLATE NOCASE DESC',
+                'popular': 'view_count DESC, id DESC',
+            }.get(sort, 'uploaded_at DESC, id DESC')
+
+            where_sql = " AND ".join(where)
+
+            try:
+                cursor = execute_with_retry(
+                    f"SELECT * FROM pdfs WHERE {where_sql} ORDER BY {order} LIMIT ? OFFSET ?",
+                    tuple(params + [per_page, offset])
+                )
+                rows = [dict(r) for r in cursor.fetchall()]
+            except Exception as e:
+                logger.error(f"pdfs(): library fetch failed: {e}", exc_info=True)
+                rows = []
+
+            try:
+                cursor = execute_with_retry(
+                    f"SELECT COUNT(*) AS n FROM pdfs WHERE {where_sql}",
+                    tuple(params)
+                )
+                row = cursor.fetchone()
+                total = row['n'] if row else 0
+            except Exception:
+                total = len(rows)
+
+            flagged_ids = set()
+            try:
+                cursor = execute_with_retry(
+                    "SELECT pdf_id FROM unverified_pdfs WHERE confirmed = 0"
+                )
+                flagged_ids = {r['pdf_id'] for r in cursor.fetchall()}
+            except Exception:
+                pass
+
+            for p in rows:
+                p['is_pending'] = False
+                p['is_staged'] = False
+                p['is_flagged'] = p['id'] in flagged_ids
+
+            pdfs_list = rows
+            total_pages = (total + per_page - 1) // per_page if total > 0 else 1
+
+    # ── Activity tab data ──
+    activity_events = []
+    activity_total_pages = 1
+    if active_tab == 'activity':
+        PER_PAGE_ACT = 100
+
+        event_types = [activity_type] if activity_type else None
+        role_filter = activity_role or None
+
+        try:
+            activity_events = get_global_events(
+                limit=PER_PAGE_ACT,
+                offset=(activity_page - 1) * PER_PAGE_ACT,
+                event_types=event_types,
+                actor_role=role_filter,
+                pdf_code=activity_pdf_code or None,
+                since=activity_since or None,
+                until=activity_until or None,
+            )
+        except Exception as e:
+            logger.warning(f"activity events load failed: {e}")
+
+        try:
+            act_total = count_global_events(
+                event_types=event_types,
+                actor_role=role_filter,
+                pdf_code=activity_pdf_code or None,
+                since=activity_since or None,
+                until=activity_until or None,
+            )
+            activity_total_pages = (act_total + PER_PAGE_ACT - 1) // PER_PAGE_ACT if act_total > 0 else 1
+        except Exception:
+            activity_total_pages = 1
+
+    # ── Active filter chips ──
+    active_filters = []
+    base_clear = lambda: url_for('admin_content.pdfs', tab='library', status=status_filter)
+    if search:
+        active_filters.append({'label': 'Search', 'value': search, 'clear_url': base_clear()})
+    if subject_filter:
+        subj = get_subject(subject_filter)
+        active_filters.append({'label': 'Subject',
+                               'value': subj['name'] if subj else subject_filter,
+                               'clear_url': base_clear()})
+    if class_filter:
+        active_filters.append({'label': 'Class', 'value': class_filter, 'clear_url': base_clear()})
+    if curriculum_filter:
+        active_filters.append({'label': 'Curriculum', 'value': curriculum_filter, 'clear_url': base_clear()})
+    if premium_filter in ('0', '1'):
+        label = 'Premium' if premium_filter == '1' else 'Free'
+        active_filters.append({'label': 'Access', 'value': label, 'clear_url': base_clear()})
+    if pdf_code_filter:
+        active_filters.append({'label': 'Code', 'value': pdf_code_filter, 'clear_url': base_clear()})
+    if chapter_filter:
+        active_filters.append({'label': 'Chapter', 'value': chapter_filter, 'clear_url': base_clear()})
+
+    # ── Permissions ──
     can_intake = admin_can('pdfs.intake')
     can_publish = admin_can('pdfs.publish')
     can_edit = admin_can('pdfs.edit')
     can_delete = admin_can('pdfs.delete')
 
-    actions = []
-    if dash['kpis']['pending'] > 0:
-        actions.append({
-            'icon': 'fas fa-inbox',
-            'headline': f"{dash['kpis']['pending']} Telegram upload"
-                        f"{'s' if dash['kpis']['pending'] != 1 else ''} need metadata",
-            'hint': 'Process each file, then stage it.',
-            'cta': 'Open intake',
-            'url': url_for('admin_content.pdfs', status='pending'),
-        })
-    if dash['kpis']['staged'] > 0:
-        actions.append({
-            'icon': 'fas fa-layer-group',
-            'headline': f"{dash['kpis']['staged']} staged PDF"
-                        f"{'s' if dash['kpis']['staged'] != 1 else ''} ready to publish",
-            'hint': 'Review and publish when the metadata is ready.',
-            'cta': 'See staged',
-            'url': url_for('admin_content.pdfs', status='staged'),
-        })
-    if dash['kpis']['flagged'] > 0:
-        actions.append({
-            'icon': 'fas fa-flag',
-            'headline': f"{dash['kpis']['flagged']} published PDF"
-                        f"{'s' if dash['kpis']['flagged'] != 1 else ''} awaiting verification",
-            'hint': 'Open each, tick "Verified", save.',
-            'cta': 'Review queue',
-            'url': url_for('admin_content.pdfs', status='flagged'),
-        })
-    if dash['kpis']['broken'] > 0:
-        actions.append({
-            'icon': 'fas fa-link-slash',
-            'headline': f"{dash['kpis']['broken']} question PDF code"
-                        f"{'s' if dash['kpis']['broken'] != 1 else ''} point to missing files",
-            'hint': 'Fix the source, or remove the reference from the question.',
-            'cta': 'See broken',
-            'url': url_for('admin_content.pdfs_broken'),
-        })
-
-    pdfs_list = []
-    total = 0
-    total_pages = 1
-
-    if status_filter in ('pending', 'staged'):
-        offset = (page - 1) * PER_PAGE
-        try:
-            if status_filter == 'pending':
-                from bot.db import get_pending_pdf_list, count_pending_pdfs
-                raw = get_pending_pdf_list(limit=PER_PAGE, offset=offset, search=search or '')
-                total = count_pending_pdfs(search or '')
-                for p in raw:
-                    pdfs_list.append({
-                        'id': p['id'],
-                        'title': p.get('filename') or 'Untitled',
-                        'filename': p.get('filename'),
-                        'code': None, 'subject': None,
-                        'curriculum': None, 'class': None,
-                        'is_premium': 0, 'view_count': 0,
-                        'uploaded_at': p.get('uploaded_at'),
-                        'created_at': p.get('uploaded_at'),
-                        'is_pending': True, 'is_staged': False, 'is_flagged': False,
-                    })
-            else:
-                from bot.db import get_bot_pdfs, count_bot_pdfs
-                raw = get_bot_pdfs(limit=PER_PAGE, offset=offset, published_filter=False)
-                total = count_bot_pdfs(published_filter=False)
-                for p in raw:
-                    pdfs_list.append({
-                        'id': p['id'],
-                        'title': p.get('title') or 'Untitled',
-                        'filename': p.get('original_filename'),
-                        'code': p.get('code'),
-                        'subject': p.get('subject'),
-                        'curriculum': p.get('curriculum'),
-                        'class': p.get('class'),
-                        'is_premium': bool(p.get('is_premium')),
-                        'view_count': 0,
-                        'uploaded_at': p.get('uploaded_at'),
-                        'created_at': p.get('uploaded_at'),
-                        'is_pending': False, 'is_staged': True, 'is_flagged': False,
-                    })
-        except Exception as e:
-            logger.error(f"pdfs(): {status_filter} fetch failed: {e}", exc_info=True)
-
-        total_pages = (total + PER_PAGE - 1) // PER_PAGE if total > 0 else 1
-
-    else:
-        offset = (page - 1) * PER_PAGE
-
-        where = ["1=1"]
-        params = []
-        if search:
-            where.append("(title LIKE ? OR code LIKE ? OR description LIKE ? OR tags LIKE ?)")
-            like = f"%{search}%"
-            params.extend([like, like, like, like])
-        if subject_filter:
-            where.append("subject = ?")
-            params.append(subject_filter)
-        if curriculum_filter:
-            where.append("curriculum = ?")
-            params.append(curriculum_filter)
-        if class_filter:
-            where.append("class = ?")
-            params.append(class_filter)
-        if premium_filter:
-            where.append("is_premium = 1")
-
-        if status_filter == 'flagged':
-            where.append("id IN (SELECT pdf_id FROM unverified_pdfs WHERE confirmed = 0)")
-        elif status_filter == 'live':
-            where.append("id NOT IN (SELECT pdf_id FROM unverified_pdfs WHERE confirmed = 0)")
-
-        order = {
-            'newest': 'uploaded_at DESC, id DESC',
-            'oldest': 'uploaded_at ASC, id ASC',
-            'title_asc': 'title COLLATE NOCASE ASC',
-            'title_desc': 'title COLLATE NOCASE DESC',
-            'popular': 'view_count DESC, id DESC',
-        }.get(sort, 'uploaded_at DESC, id DESC')
-
-        where_sql = " AND ".join(where)
-
-        try:
-            cursor = execute_with_retry(
-                f"SELECT * FROM pdfs WHERE {where_sql} ORDER BY {order} LIMIT ? OFFSET ?",
-                tuple(params + [PER_PAGE, offset])
-            )
-            rows = [dict(r) for r in cursor.fetchall()]
-        except Exception as e:
-            logger.error(f"pdfs(): library fetch failed: {e}", exc_info=True)
-            rows = []
-
-        try:
-            cursor = execute_with_retry(
-                f"SELECT COUNT(*) AS n FROM pdfs WHERE {where_sql}",
-                tuple(params)
-            )
-            row = cursor.fetchone()
-            total = row['n'] if row else 0
-        except Exception:
-            total = len(rows)
-
-        flagged_ids = set()
-        try:
-            cursor = execute_with_retry(
-                "SELECT pdf_id FROM unverified_pdfs WHERE confirmed = 0"
-            )
-            flagged_ids = {r['pdf_id'] for r in cursor.fetchall()}
-        except Exception:
-            pass
-
-        for p in rows:
-            p['is_pending'] = False
-            p['is_staged'] = False
-            p['is_flagged'] = p['id'] in flagged_ids
-
-        pdfs_list = rows
-        total_pages = (total + PER_PAGE - 1) // PER_PAGE if total > 0 else 1
+    # ── Advanced panel state ──
+    advanced_open = bool(
+        premium_filter or verified_filter or storage_filter or
+        pdf_code_filter or chapter_filter or
+        views_min is not None or views_max is not None or
+        date_from or date_to
+    )
 
     ctx = {
+        'active_tab': active_tab,
+
+        # Library
         'pdfs': pdfs_list,
         'total': total,
         'page': page,
+        'per_page': per_page,
         'total_pages': total_pages,
         'status_filter': status_filter,
         'premium_filter': premium_filter,
+        'verified_filter': verified_filter,
+        'storage_filter': storage_filter,
+        'pdf_code_filter': pdf_code_filter,
+        'chapter_filter': chapter_filter,
+        'views_min': views_min,
+        'views_max': views_max,
+        'date_from': date_from,
+        'date_to': date_to,
         'search': search,
         'subject_filter': subject_filter,
         'curriculum_filter': curriculum_filter,
@@ -2630,22 +2844,45 @@ def pdfs():
         'subjects': get_all_subjects(),
         'curricula': [c[0] for c in _PDF_CURRICULA],
         'classes': list(_PDF_CLASSES),
+        'active_filters': active_filters,
+        'advanced_open': advanced_open,
+
+        # KPI + snapshot
         'kpis': dash['kpis'],
-        'actions': actions,
-        'subject_split': dash['subject_split'],
-        'class_split': dash['class_split'],
-        'class_split_other': dash.get('class_split_other', 0),
-        'class_split_total': dash.get('class_split_total', 0),
-        'uploads_by_day': dash['uploads_by_day'],
-        'top_viewed': dash['top_viewed'],
-        'storage': dash['storage'],
         'today_activity': dash.get('today_activity', {}),
         'trending_pdfs': dash.get('trending_pdfs', []),
-        'top_contributors': dash.get('top_contributors', []),
-        'recent_edits': dash.get('recent_edits', []),
+
+        # Insights
+        'class_split': dash['class_split'],
+        'class_split_total': dash.get('class_split_total', 0),
+        'class_unclassified': dash.get('class_unclassified', 0),
+        'subject_split_full': dash.get('subject_split_full', []),
+        'top_viewed': dash['top_viewed'],
+        'most_downloaded': dash.get('most_downloaded', []),
+        'most_tg_fetched': dash.get('most_tg_fetched', []),
+        'storage': dash['storage'],
         'coverage': dash.get('coverage', {}),
         'health_score': dash.get('health_score', 100),
         'health_breakdown': dash.get('health_breakdown', {}),
+        'uploads_by_day': dash['uploads_by_day'],
+
+        # People
+        'top_contributors': dash.get('top_contributors', []),
+        'recent_edits': dash.get('recent_edits', []),
+        'upload_sources': dash.get('upload_sources', {}),
+        'heatmap_weeks': heatmap_weeks,
+
+        # Activity
+        'activity_events': activity_events,
+        'activity_page': activity_page,
+        'activity_total_pages': activity_total_pages,
+        'activity_type': activity_type,
+        'activity_role': activity_role,
+        'activity_pdf_code': activity_pdf_code,
+        'activity_since': activity_since,
+        'activity_until': activity_until,
+
+        # Permissions
         'can_intake': can_intake,
         'can_publish': can_publish,
         'can_edit': can_edit,
@@ -3127,7 +3364,7 @@ def pdfs_broken():
 
 
 # ============================================================
-# PDFs — INTAKE (renders the unified edit room)
+# PDFs — INTAKE
 # ============================================================
 
 @admin_content_bp.route('/pdfs/intake/<int:pending_id>/process',
@@ -3222,7 +3459,7 @@ def pdf_intake_process(pending_id):
         flash(f'PDF staged with code {code}.', 'success')
         return redirect(url_for('admin_content.pdfs', status='staged'))
 
-    # ── GET: render unified edit room in "pending" mode ──
+    # GET: render edit room in "pending" mode
     auto_code = _generate_staging_pdf_code()
     suggested = suggest_from_filename(filename)
 
@@ -3403,7 +3640,6 @@ def pdf_staging_edit(staging_id):
         return redirect(url_for('admin_content.pdf_staging_edit',
                                 staging_id=staging_id))
 
-    # ── GET: render unified edit room in "staged" mode ──
     pseudo_pdf = {
         'id': staging_id,
         'code': bot_pdf.get('code'),
