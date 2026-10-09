@@ -3151,3 +3151,738 @@ def pdfs_activity_export():
         + '.csv"'
     )
     return resp
+
+
+
+# ============================================================
+# PDFs — SINGLE-FILE OPERATIONS
+# ============================================================
+# These routes complete the PDF pipeline:
+#
+#   pending_pdfs  →  [intake_process]  →  bot.pdfs (staging)
+#   bot.pdfs      →  [staging_edit]    →  bot.pdfs (edited)
+#   bot.pdfs      →  [publish]         →  main pdfs (live)
+#   main pdfs     →  [edit / preview / download / history]
+#
+# Preview routes stream PDF bytes from either a local file
+# (file_url) or the Telegram Bot API (via the staging file_id).
+# Download routes do the same with an attachment disposition.
+# ============================================================
+
+
+# ── Internal helpers ─────────────────────────────────────
+
+def _current_admin_dict():
+    """
+    Return a dict shaped for log_admin_event, or None if the
+    caller has no usable session. Never raises.
+    """
+    uid = session.get('user_id')
+    if not uid:
+        return None
+    try:
+        from db import get_student_by_id
+        s = get_student_by_id(uid)
+        if not s:
+            return None
+        return {
+            'id': s.get('id'),
+            'public_id': s.get('public_id'),
+            'first_name': s.get('first_name') or '',
+            'last_name': s.get('last_name') or '',
+            'is_super': bool(s.get('is_admin')),
+        }
+    except Exception:
+        return None
+
+
+def _download_telegram_file_id(file_id):
+    """Fetch bytes from Telegram for a raw file_id. Never raises."""
+    if not file_id:
+        return None, 'No Telegram file_id'
+    try:
+        from bot.utils import get_bot
+        bot = get_bot()
+        tg_file = bot.get_file(file_id)
+        data = bot.download_file(tg_file.file_path)
+        if not data:
+            return None, 'Telegram returned an empty file'
+        return data, None
+    except Exception as e:
+        logger.warning(f"Telegram file_id download failed: {e}")
+        return None, str(e)
+
+
+# ── Intake: process a single pending PDF ─────────────────
+
+@admin_content_bp.route(
+    '/pdfs/intake/<int:pending_id>/process',
+    methods=['GET', 'POST'],
+    endpoint='pdf_intake_process',
+)
+@admin_can('pdfs.intake')
+def pdf_intake_process(pending_id):
+    from bot.db import (
+        get_pending_pdf_by_id, insert_bot_pdf, delete_pending_pdf,
+    )
+
+    pending = get_pending_pdf_by_id(pending_id)
+    if not pending:
+        flash('Pending upload not found.', 'error')
+        return redirect(url_for('admin_content.pdfs',
+                                tab='library', status='pending'))
+
+    # ── GET: render form ──
+    if request.method == 'GET':
+        suggested = suggest_full(pending.get('filename') or '')
+        auto_code = _generate_staging_pdf_code()
+        return render_template(
+            'dashboard/admin/content/pdf_process.html',
+            pending=pending,
+            suggested=suggested,
+            auto_code=auto_code,
+            curricula=_PDF_CURRICULA,
+            classes=_PDF_CLASSES,
+            subjects=get_all_subjects(),
+        )
+
+    # ── POST: fulfil ──
+    if not _csrf_ok():
+        abort(403)
+
+    code = _normalize_pdf_code(request.form.get('code'))
+    if not code or not _validate_pdf_code_format(code):
+        flash('Invalid code format. Expected XXXX-XXXX.', 'error')
+        return redirect(url_for('admin_content.pdf_intake_process',
+                                pending_id=pending_id))
+
+    title = (request.form.get('title') or '').strip()
+    if not title:
+        flash('Title is required.', 'error')
+        return redirect(url_for('admin_content.pdf_intake_process',
+                                pending_id=pending_id))
+
+    subject = (request.form.get('subject') or '').strip()
+    if not subject or not get_subject(subject):
+        flash('Please choose a subject.', 'error')
+        return redirect(url_for('admin_content.pdf_intake_process',
+                                pending_id=pending_id))
+
+    curriculum = (request.form.get('curriculum') or 'PL').strip()
+    if curriculum not in ('PL', 'SO', 'SL'):
+        curriculum = 'PL'
+
+    class_val = (request.form.get('class') or 'F4').strip()
+    if class_val not in _PDF_CLASSES:
+        class_val = 'F4'
+
+    data = {
+        'code': code,
+        'title': title[:200],
+        'description': (request.form.get('description') or '').strip()[:500],
+        'curriculum': curriculum,
+        'class': class_val,
+        'subject': subject,
+        'chapter': (request.form.get('chapter') or '').strip()[:100],
+        'tags': (request.form.get('tags') or '').strip()[:200],
+        'is_premium': 1 if request.form.get('is_premium') else 0,
+        'file_id': pending.get('file_id'),
+        'file_unique_id': pending.get('file_unique_id'),
+        'uploaded_by': pending.get('uploaded_by') or 'NUUN',
+        'original_filename': pending.get('filename') or '',
+    }
+
+    new_id = insert_bot_pdf(data)
+    if not new_id:
+        flash('Failed to stage PDF. The code may already be in use.', 'error')
+        return redirect(url_for('admin_content.pdf_intake_process',
+                                pending_id=pending_id))
+
+    try:
+        delete_pending_pdf(pending_id)
+    except Exception as e:
+        logger.warning(
+            f"intake_process: could not delete pending #{pending_id}: {e}"
+        )
+
+    try:
+        log_admin_event(
+            {'id': new_id, 'code': code, 'title': title},
+            'create',
+            admin=_current_admin_dict(),
+            request=request,
+            metadata={'source': 'intake', 'pending_id': pending_id},
+        )
+    except Exception:
+        pass
+
+    write_audit(
+        action='pdf.intake_process',
+        target_type='pdf',
+        target_id=new_id,
+        before=None,
+        after={'code': code, 'title': title, 'subject': subject,
+               'curriculum': curriculum, 'class': class_val},
+        severity='info',
+    )
+
+    flash(f'PDF {code} staged successfully.', 'success')
+    return redirect(url_for('admin_content.pdf_staging_edit',
+                            staging_id=new_id))
+
+
+# ── Intake: preview bytes for a pending PDF ──────────────
+
+@admin_content_bp.route(
+    '/pdfs/intake/<int:pending_id>/preview',
+    methods=['GET'],
+    endpoint='pdf_intake_preview',
+)
+@admin_can('pdfs.intake')
+def pdf_intake_preview(pending_id):
+    from bot.db import get_pending_pdf_by_id
+
+    pending = get_pending_pdf_by_id(pending_id)
+    if not pending:
+        abort(404)
+
+    file_id = pending.get('file_id')
+    if not file_id:
+        return Response(
+            'No Telegram file stored for this upload.',
+            status=404, mimetype='text/plain',
+        )
+
+    data, err = _download_telegram_file_id(file_id)
+    if not data:
+        return Response(
+            f'Telegram fetch failed: {err or "unknown error"}',
+            status=502, mimetype='text/plain',
+        )
+
+    filename = pending.get('filename') or f'pending-{pending_id}.pdf'
+    disposition = _encode_content_disposition('inline', filename)
+    return _pdf_preview_response(data, disposition)
+
+
+# ── Staging: edit a fulfilled PDF before publishing ──────
+
+@admin_content_bp.route(
+    '/pdfs/staging/<int:staging_id>/edit',
+    methods=['GET', 'POST'],
+    endpoint='pdf_staging_edit',
+)
+@admin_can('pdfs.edit')
+def pdf_staging_edit(staging_id):
+    from bot.db import get_bot_pdf_by_id, update_bot_pdf
+
+    pdf = get_bot_pdf_by_id(staging_id)
+    if not pdf:
+        abort(404)
+
+    if request.method == 'GET':
+        return render_template(
+            'dashboard/admin/content/pdf_staging_edit.html',
+            pdf=pdf,
+            curricula=_PDF_CURRICULA,
+            classes=_PDF_CLASSES,
+            subjects=get_all_subjects(),
+        )
+
+    if not _csrf_ok():
+        abort(403)
+
+    curriculum = (request.form.get('curriculum') or 'PL').strip()
+    if curriculum not in ('PL', 'SO', 'SL'):
+        curriculum = 'PL'
+
+    class_val = (request.form.get('class') or 'F4').strip()
+    if class_val not in _PDF_CLASSES:
+        class_val = 'F4'
+
+    subject = (request.form.get('subject') or '').strip()
+    title = (request.form.get('title') or '').strip()
+
+    data = {
+        'title': title[:200],
+        'description': (request.form.get('description') or '').strip()[:500],
+        'curriculum': curriculum,
+        'class': class_val,
+        'subject': subject,
+        'chapter': (request.form.get('chapter') or '').strip()[:100],
+        'tags': (request.form.get('tags') or '').strip()[:200],
+        'is_premium': 1 if request.form.get('is_premium') else 0,
+    }
+
+    ok = update_bot_pdf(staging_id, data)
+    if not ok:
+        flash('Failed to save changes.', 'error')
+    else:
+        try:
+            log_admin_event(
+                {'id': staging_id, 'code': pdf.get('code'), 'title': title},
+                'staging_edit',
+                admin=_current_admin_dict(),
+                request=request,
+            )
+        except Exception:
+            pass
+
+        write_audit(
+            action='pdf.staging_edit',
+            target_type='pdf',
+            target_id=staging_id,
+            before={'title': pdf.get('title'), 'subject': pdf.get('subject')},
+            after=data,
+            severity='info',
+        )
+        flash('Changes saved.', 'success')
+
+    return redirect(url_for('admin_content.pdf_staging_edit',
+                            staging_id=staging_id))
+
+
+# ── Library: inline preview (used by drawer + edit page) ─
+
+@admin_content_bp.route(
+    '/pdfs/<int:pdf_id>/preview',
+    methods=['GET'],
+    endpoint='pdf_library_preview',
+)
+@admin_can('pdfs.view')
+def pdf_library_preview(pdf_id):
+    pdf = get_pdf_by_id(pdf_id)
+    if not pdf:
+        abort(404)
+
+    filename = (pdf.get('code') or f'pdf-{pdf_id}') + '.pdf'
+
+    # ── Local file path (file_url) ──
+    file_url = pdf.get('file_url')
+    if file_url and os.path.exists(file_url):
+        try:
+            with open(file_url, 'rb') as f:
+                data = f.read()
+            disposition = _encode_content_disposition('inline', filename)
+            return _pdf_preview_response(data, disposition)
+        except Exception as e:
+            logger.warning(f"library_preview: local read failed for #{pdf_id}: {e}")
+
+    # ── Telegram fallback via bot staging row ──
+    code = pdf.get('code')
+    if not code:
+        return Response(
+            'No source file available for this PDF.',
+            status=404, mimetype='text/plain',
+        )
+
+    data, err = _fetch_telegram_pdf_bytes(code)
+    if not data:
+        status = 502 if err else 404
+        return Response(
+            f'Preview unavailable: {err or "no source file"}',
+            status=status, mimetype='text/plain',
+        )
+
+    disposition = _encode_content_disposition('inline', filename)
+    return _pdf_preview_response(data, disposition)
+
+
+# ── Library: attachment download ─────────────────────────
+
+@admin_content_bp.route(
+    '/pdfs/<int:pdf_id>/download',
+    methods=['GET'],
+    endpoint='pdf_download',
+)
+@admin_can('pdfs.view')
+def pdf_download(pdf_id):
+    pdf = get_pdf_by_id(pdf_id)
+    if not pdf:
+        abort(404)
+
+    filename = (pdf.get('code') or f'pdf-{pdf_id}') + '.pdf'
+
+    file_url = pdf.get('file_url')
+    if file_url and os.path.exists(file_url):
+        try:
+            with open(file_url, 'rb') as f:
+                data = f.read()
+            disposition = _encode_content_disposition('attachment', filename)
+            return _pdf_response(data, disposition)
+        except Exception as e:
+            logger.warning(f"pdf_download: local read failed for #{pdf_id}: {e}")
+
+    code = pdf.get('code')
+    if not code:
+        return Response(
+            'No source file available.',
+            status=404, mimetype='text/plain',
+        )
+
+    data, err = _fetch_telegram_pdf_bytes(code)
+    if not data:
+        status = 502 if err else 404
+        return Response(
+            f'Download unavailable: {err or "no source file"}',
+            status=status, mimetype='text/plain',
+        )
+
+    disposition = _encode_content_disposition('attachment', filename)
+    return _pdf_response(data, disposition)
+
+
+# ── Library: edit ────────────────────────────────────────
+
+@admin_content_bp.route(
+    '/pdfs/<int:pdf_id>/edit',
+    methods=['GET', 'POST'],
+    endpoint='pdf_edit',
+)
+@admin_can('pdfs.edit')
+def pdf_edit(pdf_id):
+    pdf = get_pdf_by_id(pdf_id)
+    if not pdf:
+        abort(404)
+
+    if request.method == 'GET':
+        preview_info = _build_preview_info(pdf, pdf.get('file_url'))
+        try:
+            from db import get_batches_for_item
+            batches = get_batches_for_item('pdf', pdf_id)
+        except Exception:
+            batches = []
+
+        return render_template(
+            'dashboard/admin/content/pdf_edit.html',
+            pdf=pdf,
+            subjects=get_all_subjects(),
+            curricula=_PDF_CURRICULA,
+            classes=_PDF_CLASSES,
+            preview_info=preview_info,
+            batches=batches,
+            can_delete_pdfs=admin_can('pdfs.delete'),
+        )
+
+    # ── POST ──
+    if not _csrf_ok():
+        abort(403)
+
+    new_code = _normalize_pdf_code(request.form.get('code'))
+    if not new_code or not _validate_pdf_code_format(new_code):
+        flash('Invalid code format. Expected XXXX-XXXX.', 'error')
+        return redirect(url_for('admin_content.pdf_edit', pdf_id=pdf_id))
+
+    # Code change: verify the new code isn't taken by another row
+    if new_code != pdf.get('code'):
+        existing = get_pdf_by_code(new_code)
+        if existing and existing.get('id') != pdf_id:
+            flash(f'Code {new_code} is already in use.', 'error')
+            return redirect(url_for('admin_content.pdf_edit', pdf_id=pdf_id))
+
+    title = (request.form.get('title') or '').strip()
+    if not title:
+        flash('Title is required.', 'error')
+        return redirect(url_for('admin_content.pdf_edit', pdf_id=pdf_id))
+
+    subject = (request.form.get('subject') or '').strip()
+    if not subject or not get_subject(subject):
+        flash('Please choose a subject.', 'error')
+        return redirect(url_for('admin_content.pdf_edit', pdf_id=pdf_id))
+
+    curriculum = (request.form.get('curriculum') or 'PL').strip()
+    if curriculum not in ('PL', 'SO', 'SL'):
+        curriculum = 'PL'
+
+    class_val = (request.form.get('class') or 'F4').strip()
+    if class_val not in _PDF_CLASSES:
+        class_val = 'F4'
+
+    is_premium = 1 if request.form.get('is_premium') else 0
+
+    try:
+        execute_with_retry("""
+            UPDATE pdfs SET
+                code = ?, title = ?, description = ?, curriculum = ?,
+                class = ?, subject = ?, chapter = ?, tags = ?, is_premium = ?
+            WHERE id = ?
+        """, (
+            new_code, title[:200],
+            (request.form.get('description') or '').strip()[:2000],
+            curriculum, class_val, subject,
+            (request.form.get('chapter') or '').strip()[:120],
+            (request.form.get('tags') or '').strip()[:300],
+            is_premium, pdf_id,
+        ), commit=True)
+    except Exception as e:
+        logger.error(f"pdf_edit: update failed for #{pdf_id}: {e}", exc_info=True)
+        flash('Failed to save changes.', 'error')
+        return redirect(url_for('admin_content.pdf_edit', pdf_id=pdf_id))
+
+    try:
+        if new_code != pdf.get('code'):
+            log_admin_event(
+                {'id': pdf_id, 'code': new_code, 'title': title},
+                'code_change',
+                admin=_current_admin_dict(), request=request,
+                metadata={'old_code': pdf.get('code'), 'new_code': new_code},
+            )
+        log_admin_event(
+            {'id': pdf_id, 'code': new_code, 'title': title},
+            'edit',
+            admin=_current_admin_dict(), request=request,
+        )
+    except Exception:
+        pass
+
+    write_audit(
+        action='pdf.edit',
+        target_type='pdf', target_id=pdf_id,
+        before={'code': pdf.get('code'), 'title': pdf.get('title'),
+                'subject': pdf.get('subject'), 'is_premium': pdf.get('is_premium')},
+        after={'code': new_code, 'title': title, 'subject': subject,
+               'curriculum': curriculum, 'class': class_val,
+               'is_premium': is_premium},
+        severity='info',
+    )
+
+    flash('Changes saved.', 'success')
+    return redirect(url_for('admin_content.pdf_edit', pdf_id=pdf_id))
+
+
+# ── Library: per-PDF history timeline ────────────────────
+
+@admin_content_bp.route(
+    '/pdfs/<int:pdf_id>/history',
+    methods=['GET'],
+    endpoint='pdf_history',
+)
+@admin_can('pdfs.view')
+def pdf_history(pdf_id):
+    pdf = get_pdf_by_id(pdf_id)
+    if not pdf:
+        abort(404)
+
+    type_filter = (request.args.get('type') or '').strip()
+    role_filter = (request.args.get('role') or '').strip()
+    since = (request.args.get('since') or '').strip()
+    until = (request.args.get('until') or '').strip()
+
+    try:
+        page = max(1, int(request.args.get('page') or 1))
+    except (TypeError, ValueError):
+        page = 1
+
+    PER_PAGE = 200
+
+    events = get_pdf_events(
+        pdf_id,
+        limit=PER_PAGE,
+        offset=(page - 1) * PER_PAGE,
+        event_types=[type_filter] if type_filter else None,
+        actor_role=role_filter or None,
+        since=since or None,
+        until=until or None,
+    )
+
+    try:
+        total = count_global_events(
+            event_types=[type_filter] if type_filter else None,
+            actor_role=role_filter or None,
+            pdf_id=pdf_id,
+            since=since or None,
+            until=until or None,
+        )
+    except Exception:
+        total = len(events)
+    total_pages = (total + PER_PAGE - 1) // PER_PAGE if total > 0 else 1
+
+    summary = get_pdf_event_summary(pdf_id)
+    day_groups = group_events_by_day(events)
+
+    return render_template(
+        'dashboard/admin/content/pdf_history.html',
+        pdf=pdf,
+        summary=summary,
+        day_groups=day_groups,
+        type_filter=type_filter,
+        role_filter=role_filter,
+        since=since,
+        until=until,
+        page=page,
+        total_pages=total_pages,
+    )
+
+
+# ── Library: bulk actions (JSON) ─────────────────────────
+
+@admin_content_bp.route(
+    '/pdfs/bulk-action',
+    methods=['POST'],
+    endpoint='pdfs_bulk_action',
+)
+@admin_can('pdfs.edit')
+def pdfs_bulk_action():
+    if not _csrf_ok():
+        return jsonify({'error': 'Invalid session.'}), 403
+
+    payload = request.get_json(silent=True) or {}
+    action = (payload.get('action') or '').strip()
+    raw_ids = payload.get('ids') or []
+    value = payload.get('value')
+
+    ids = []
+    for i in raw_ids:
+        try:
+            ids.append(int(i))
+        except (TypeError, ValueError):
+            continue
+
+    if action != 'export_csv' and not ids:
+        return jsonify({'error': 'No rows selected'}), 400
+
+    try:
+        # ── Attributes: premium on / off ──
+        if action in ('premium_on', 'premium_off'):
+            flag = 1 if action == 'premium_on' else 0
+            ph = ','.join('?' * len(ids))
+            execute_with_retry(
+                f"UPDATE pdfs SET is_premium = ? WHERE id IN ({ph})",
+                [flag] + ids, commit=True,
+            )
+            for pid in ids:
+                try:
+                    log_admin_event(
+                        {'id': pid, 'code': None, 'title': None},
+                        action,
+                        admin=_current_admin_dict(), request=request,
+                    )
+                except Exception:
+                    pass
+            return jsonify({'success': True, 'updated': len(ids)})
+
+        # ── Attributes: verify / unverify ──
+        if action in ('verify', 'unverify'):
+            confirmed = 1 if action == 'verify' else 0
+            ph = ','.join('?' * len(ids))
+            for pid in ids:
+                try:
+                    execute_with_retry(
+                        "INSERT OR IGNORE INTO unverified_pdfs "
+                        "(pdf_id, confirmed) VALUES (?, ?)",
+                        (pid, confirmed), commit=True,
+                    )
+                except Exception:
+                    pass
+            execute_with_retry(
+                f"UPDATE unverified_pdfs SET confirmed = ? "
+                f"WHERE pdf_id IN ({ph})",
+                [confirmed] + ids, commit=True,
+            )
+            for pid in ids:
+                try:
+                    log_admin_event(
+                        {'id': pid, 'code': None, 'title': None},
+                        action,
+                        admin=_current_admin_dict(), request=request,
+                    )
+                except Exception:
+                    pass
+            return jsonify({'success': True, 'updated': len(ids)})
+
+        # ── Classify: set subject / class / curriculum ──
+        if action in ('set_subject', 'set_class', 'set_curriculum'):
+            field = {
+                'set_subject':    'subject',
+                'set_class':      'class',
+                'set_curriculum': 'curriculum',
+            }[action]
+            if not value:
+                return jsonify({'error': 'Missing value'}), 400
+            ph = ','.join('?' * len(ids))
+            execute_with_retry(
+                f"UPDATE pdfs SET {field} = ? WHERE id IN ({ph})",
+                [value] + ids, commit=True,
+            )
+            return jsonify({'success': True, 'updated': len(ids)})
+
+        # ── Actions: delete ──
+        if action == 'delete':
+            deleted = 0
+            for pid in ids:
+                try:
+                    if delete_main_pdf(pid):
+                        deleted += 1
+                        try:
+                            log_admin_event(
+                                {'id': pid, 'code': None, 'title': None},
+                                'delete',
+                                admin=_current_admin_dict(),
+                                request=request,
+                            )
+                        except Exception:
+                            pass
+                except Exception as e:
+                    logger.warning(f"bulk delete failed for #{pid}: {e}")
+            return jsonify({'success': True, 'deleted': deleted})
+
+        # ── Actions: add to batch ──
+        if action == 'add_to_batch':
+            try:
+                batch_id = int(value) if value else 0
+            except (TypeError, ValueError):
+                batch_id = 0
+            if not batch_id:
+                return jsonify({'error': 'Missing batch id'}), 400
+            try:
+                from db import add_batch_items
+                added = add_batch_items(batch_id, 'pdf', ids)
+            except Exception as e:
+                return jsonify({'error': f'Batch add failed: {e}'}), 500
+            return jsonify({
+                'success': True, 'added': added, 'batch_id': batch_id,
+            })
+
+        # ── Actions: export CSV ──
+        if action == 'export_csv':
+            if not ids:
+                return jsonify({'error': 'Select rows to export'}), 400
+            ph = ','.join('?' * len(ids))
+            cur = execute_with_retry(
+                f"SELECT id, code, title, subject, curriculum, class, "
+                f"chapter, tags, is_premium, view_count, uploaded_at "
+                f"FROM pdfs WHERE id IN ({ph}) ORDER BY id",
+                tuple(ids),
+            )
+            rows = cur.fetchall()
+
+            import csv as _csv
+            from io import StringIO as _StringIO
+            buf = _StringIO()
+            writer = _csv.writer(buf)
+            writer.writerow([
+                'id', 'code', 'title', 'subject', 'curriculum',
+                'class', 'chapter', 'tags', 'is_premium',
+                'view_count', 'uploaded_at',
+            ])
+            for r in rows:
+                writer.writerow([
+                    r['id'], r['code'], r['title'], r['subject'],
+                    r['curriculum'], r['class'], r['chapter'], r['tags'],
+                    r['is_premium'], r['view_count'], r['uploaded_at'],
+                ])
+            return jsonify({
+                'success': True,
+                'csv': buf.getvalue(),
+                'filename': (
+                    f'pdf_export_{_dt.now().strftime("%Y%m%d_%H%M")}.csv'
+                ),
+            })
+
+        return jsonify({'error': f'Unknown action: {action}'}), 400
+
+    except Exception as e:
+        logger.error(
+            f"pdfs_bulk_action({action}) failed: {e}", exc_info=True,
+        )
+        return jsonify({'error': f'Action failed: {e}'}), 500
